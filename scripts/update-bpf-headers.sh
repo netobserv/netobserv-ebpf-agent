@@ -3,6 +3,8 @@
 # Version of libbpf to fetch headers from
 LIBBPF_VERSION=0.7.0
 
+cd $(dirname "$0")/../bpf/headers
+
 # The headers we want
 prefix=libbpf-"$LIBBPF_VERSION"
 headers=(
