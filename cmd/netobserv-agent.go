@@ -3,55 +3,49 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
-	"sort"
 	"syscall"
 	"time"
 
-	"github.com/netobserv/netobserv-agent/pkg/connect"
+	"github.com/netobserv/netobserv-agent/pkg/agent"
+	"github.com/sirupsen/logrus"
 )
 
-var (
-	interfaceName = flag.String("iface", "eth0", "interface to attach to")
-	reportFreq    = flag.Duration("freq", 5*time.Second, "frequency of on-screen reporting")
+// TODO: make configurable. NETOBSERV-201
+const (
+	maxStoredFlowEntries      = 1000
+	maxFlowEvictionPeriod     = 1 * time.Second
+	communicationBufferLength = 20
 )
 
 func main() {
 	flag.Parse()
 
-	monitor := connect.NewMonitor(*interfaceName)
-	if err := monitor.Start(); err != nil {
-		log.Fatalf("starting monitor: %s", err)
+	logrus.SetLevel(logrus.DebugLevel)
+
+	flowsAgent, err := agent.FlowsAgent(agent.Config{
+		ExcludeIfaces:      []string{"lo"},
+		BuffersLen:         communicationBufferLength,
+		AccountMaxEntries:  maxStoredFlowEntries,
+		AccountEvictPeriod: maxFlowEvictionPeriod,
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("can't instantiate netobserv-agent")
 	}
 
-	go func() {
-		for {
-			time.Sleep(*reportFreq)
-			fmt.Println("PROTOCOL SOURCE                DESTINATION           PACKETS BYTES")
-			stats := monitor.Stats()
-			sort.SliceStable(stats, func(i, j int) bool {
-				return stats[i].Bytes > stats[j].Bytes
-			})
-			for _, egress := range stats {
-				fmt.Printf("%-8s %-21s %-21s %-7d %-7s\n",
-					egress.Protocol,
-					fmt.Sprintf("%s:%d", egress.SrcIP, egress.SrcPort),
-					fmt.Sprintf("%s:%d", egress.DstIP, egress.DstPort),
-					egress.Packets, egress.Bytes)
-			}
-		}
-	}()
-
+	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")
+	ctx, canceler := context.WithCancel(context.Background())
 	// Subscribe to signals for terminating the program.
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-	<-stopper
-	log.Println("stopping server and closing resources")
-	if err := monitor.Stop(); err != nil {
-		log.Printf("error stopping server: %s", err)
+	go func() {
+		stopper := make(chan os.Signal, 1)
+		signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
+		<-stopper
+		canceler()
+	}()
+	if err := flowsAgent.Run(ctx); err != nil {
+		logrus.WithError(err).Fatal("can't start netobserv-agent")
 	}
 }

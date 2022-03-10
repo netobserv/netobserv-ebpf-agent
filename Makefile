@@ -55,8 +55,11 @@ generate: prereqs
 	go generate ./pkg/...
 
 .PHONY: build
-build: prereqs fmt lint
-	@echo "### Building project"
+build: prereqs fmt lint test compile
+
+.PHONY: compile
+compile:
+	@echo "### Compiling project"
 	GOOS=$(GOOS) go build -ldflags "-X main.version=${VERSION}" -mod vendor -a -o bin/netobserv-agent cmd/netobserv-agent.go
 
 .PHONY: test
