@@ -44,7 +44,7 @@ func FlowsAgent(cfg Config) (*Flows, error) {
 	}
 	return &Flows{
 		tracers:   tracers,
-		accounter: flow.NewAccounter(cfg.AccountMaxEntries, cfg.BuffersLen, cfg.AccountEvictPeriod),
+		accounter: flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLen, cfg.CacheActiveTimeout),
 		// For now, just print flows. TODO: NETOBSERV-202
 		exporter: func(in <-chan *flow.Record) {
 			for record := range in {

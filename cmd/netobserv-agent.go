@@ -29,8 +29,8 @@ func main() {
 	flowsAgent, err := agent.FlowsAgent(agent.Config{
 		ExcludeIfaces:      []string{"lo"},
 		BuffersLen:         communicationBufferLength,
-		AccountMaxEntries:  maxStoredFlowEntries,
-		AccountEvictPeriod: maxFlowEvictionPeriod,
+		CacheMaxFlows:      maxStoredFlowEntries,
+		CacheActiveTimeout: maxFlowEvictionPeriod,
 	})
 	if err != nil {
 		logrus.WithError(err).Fatal("can't instantiate netobserv-agent")
