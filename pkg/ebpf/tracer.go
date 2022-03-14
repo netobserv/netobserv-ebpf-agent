@@ -1,16 +1,18 @@
-package connect
+package ebpf
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"strings"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/netobserv/netobserv-agent/pkg/flow"
+	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
 
@@ -18,32 +20,33 @@ import (
 //go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
-	qdiscType       = "clsact"
-	readStatsBuffer = 100
+	qdiscType = "clsact"
 )
 
-type Monitor struct {
+var log = logrus.WithField("component", "ebpf.FlowTracer")
+
+// FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
+type FlowTracer struct {
 	interfaceName string
 	objects       bpfObjects
 	qdisc         *netlink.GenericQdisc
 	egressFilter  *netlink.BpfFilter
 	ingressFilter *netlink.BpfFilter
 	flows         *ringbuf.Reader
-	stats         Registry
-	readStats     chan RawStats
 }
 
-func NewMonitor(iface string) Monitor {
-	return Monitor{
+// NewFlowTracer fo a given interface type
+func NewFlowTracer(iface string) *FlowTracer {
+	log.WithField("iface", iface).Debug("Instantiating flow tracer")
+	return &FlowTracer{
 		interfaceName: iface,
-		readStats:     make(chan RawStats, readStatsBuffer),
-		stats:         Registry{elements: map[statsKey]*Stats{}},
 	}
 }
 
-func (m *Monitor) Start() error {
-	go m.stats.Accum(m.readStats)
-
+// Register and links the eBPF tracer into the system. The program should invoke Unregister
+// before exiting.
+func (m *FlowTracer) Register() error {
+	ilog := log.WithField("iface", m.interfaceName)
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("removing mem lock: %w", err)
@@ -67,10 +70,10 @@ func (m *Monitor) Start() error {
 	}
 	if err := netlink.QdiscAdd(m.qdisc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			log.Printf("qdisc clsact already exists. Ignoring")
+			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
 			m.qdisc = nil
-			return fmt.Errorf("failed to create clsact qdisc on %q: %s %T", m.interfaceName, err, err)
+			return fmt.Errorf("failed to create clsact qdisc on %q: %T %w", m.interfaceName, err, err)
 		}
 	}
 	// Fetch events on egress
@@ -89,7 +92,7 @@ func (m *Monitor) Start() error {
 	}
 	if err = netlink.FilterAdd(m.egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			log.Printf("egress filter already exists. Ignoring")
+			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
 		} else {
 			return fmt.Errorf("failed to create egress filter: %w", err)
 		}
@@ -110,7 +113,7 @@ func (m *Monitor) Start() error {
 	}
 	if err = netlink.FilterAdd(m.ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			log.Printf("ingress filter already exists. Ignoring")
+			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
 		} else {
 			return fmt.Errorf("failed to create ingress filter: %w", err)
 		}
@@ -120,34 +123,11 @@ func (m *Monitor) Start() error {
 	if m.flows, err = ringbuf.NewReader(m.objects.Flows); err != nil {
 		return fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
-	go func() {
-		for {
-			event, err := m.flows.Read()
-			if err != nil {
-				if errors.Is(err, ringbuf.ErrClosed) {
-					log.Println("Received signal, exiting..")
-					return
-				}
-				log.Printf("reading from reader: %s", err)
-				continue
-			}
-			// Parse the ringbuf event entry into an Event structure.
-			rawSample, err := ReadRaw(bytes.NewBuffer(event.RawSample))
-			if err != nil {
-				log.Printf("reading ringbuf event: %s", err)
-				continue
-			}
-			m.readStats <- rawSample
-		}
-	}()
 	return nil
 }
 
-func (m *Monitor) Stats() []*Stats {
-	return m.stats.List()
-}
-
-func (m *Monitor) Stop() error {
+// Unregister the eBPF tracer from the system.
+func (m *FlowTracer) Unregister() error {
 	var errs []error
 	doClose := func(o io.Closer) {
 		if o == nil {
@@ -157,22 +137,21 @@ func (m *Monitor) Stop() error {
 			errs = append(errs, err)
 		}
 	}
-	close(m.readStats)
 	doClose(m.flows)
 	doClose(&m.objects)
-	if m.qdisc != nil {
-		if err := netlink.QdiscDel(m.qdisc); err != nil {
-			errs = append(errs, err)
-		}
-	}
 	if m.egressFilter != nil {
 		if err := netlink.FilterDel(m.egressFilter); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
 	if m.ingressFilter != nil {
 		if err := netlink.FilterDel(m.ingressFilter); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
+		}
+	}
+	if m.qdisc != nil {
+		if err := netlink.QdiscDel(m.qdisc); err != nil {
+			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
 	}
 	if len(errs) == 0 {
@@ -182,5 +161,32 @@ func (m *Monitor) Stop() error {
 	for _, err := range errs {
 		errStrings = append(errStrings, err.Error())
 	}
-	return errors.New("errors during close: " + strings.Join(errStrings, ", "))
+	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
+}
+
+// Trace and forward the read flows until the passed context is Done
+func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			event, err := m.flows.Read()
+			if err != nil {
+				if errors.Is(err, ringbuf.ErrClosed) {
+					log.Info("Received signal, exiting..")
+					return
+				}
+				log.WithError(err).Warn("reading from reader")
+				continue
+			}
+			// Parse the ringbuf event entry into an Event structure.
+			rawSample, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
+			if err != nil {
+				log.WithError(err).Warn("reading ringbuf event")
+				continue
+			}
+			forwardFlows <- rawSample
+		}
+	}
 }

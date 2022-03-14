@@ -9,6 +9,24 @@ github.com/cilium/ebpf/internal/sys
 github.com/cilium/ebpf/internal/unix
 github.com/cilium/ebpf/ringbuf
 github.com/cilium/ebpf/rlimit
+# github.com/davecgh/go-spew v1.1.1
+## explicit
+github.com/davecgh/go-spew/spew
+# github.com/netobserv/gopipes v0.1.1
+## explicit; go 1.17
+github.com/netobserv/gopipes/pkg/internal/connect
+github.com/netobserv/gopipes/pkg/internal/refl
+github.com/netobserv/gopipes/pkg/node
+# github.com/pmezard/go-difflib v1.0.0
+## explicit
+github.com/pmezard/go-difflib/difflib
+# github.com/sirupsen/logrus v1.8.1
+## explicit; go 1.13
+github.com/sirupsen/logrus
+# github.com/stretchr/testify v1.7.0
+## explicit; go 1.13
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
 # github.com/vishvananda/netlink v1.1.0
 ## explicit; go 1.12
 github.com/vishvananda/netlink
@@ -20,3 +38,7 @@ github.com/vishvananda/netns
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
+golang.org/x/sys/windows
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+## explicit
+gopkg.in/yaml.v3

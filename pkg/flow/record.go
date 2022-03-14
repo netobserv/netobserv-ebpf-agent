@@ -1,4 +1,4 @@
-package connect
+package flow
 
 import (
 	"encoding/binary"
@@ -12,53 +12,31 @@ type Protocol uint8
 type RawIP uint32
 type HumanBytes uint64
 
-type statsKey struct {
+// what identifies a flow
+type key struct {
 	SrcIP    RawIP
 	SrcPort  uint16
 	DstIP    RawIP
 	DstPort  uint16
 	Protocol Protocol
+	// TODO: add service field
 }
-type RawStats struct {
-	statsKey
+
+// record structure as parsed from eBPF
+type rawRecord struct {
+	key
 	Bytes HumanBytes
 }
-type Stats struct {
-	RawStats
+
+// Record contains accumulated metrics from a flow
+type Record struct {
+	rawRecord
 	Packets int
 }
 
-// TODO: remove old items
-type Registry struct {
-	elements map[statsKey]*Stats
-}
-
-func ReadRaw(reader io.Reader) (RawStats, error) {
-	var egress RawStats
-	err := binary.Read(reader, binary.LittleEndian, &egress)
-	return egress, err
-}
-
-func (reg *Registry) Accum(stats <-chan RawStats) {
-	for entry := range stats {
-		if stored, ok := reg.elements[entry.statsKey]; !ok {
-			reg.elements[entry.statsKey] = &Stats{
-				RawStats: entry,
-				Packets:  1,
-			}
-		} else {
-			stored.Packets++
-			stored.Bytes += entry.Bytes
-		}
-	}
-}
-
-func (reg *Registry) List() []*Stats {
-	ret := make([]*Stats, 0, len(reg.elements))
-	for _, e := range reg.elements {
-		ret = append(ret, e)
-	}
-	return ret
+func (r *Record) Accumulate(src *Record) {
+	r.Bytes += src.Bytes
+	r.Packets += src.Packets
 }
 
 func (proto Protocol) String() string {
@@ -119,4 +97,11 @@ func (b HumanBytes) String() string {
 		return fmt.Sprintf("%.2f MiB", float64(b)/float64(mibi))
 	}
 	return fmt.Sprintf("%.2f MiB", float64(b)/float64(gibi))
+}
+
+// ReadFrom reads a Record from a binary source, in LittleEndian order
+func ReadFrom(reader io.Reader) (*Record, error) {
+	var fr rawRecord
+	err := binary.Read(reader, binary.LittleEndian, &fr)
+	return &Record{rawRecord: fr, Packets: 1}, err
 }
