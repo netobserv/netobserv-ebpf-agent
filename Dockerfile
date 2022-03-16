@@ -1,11 +1,12 @@
 # Build the manager binary
 FROM registry.access.redhat.com/ubi8/go-toolset:1.16.7-5 as builder
 ARG VERSION="unknown"
+ARG GOVERSION="1.17.8"
 
 WORKDIR /opt/app-root
 
 # TEMPORARY STEPS UNTIL ubi8 releases a go1.17 image
-RUN wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz && tar -xzf go1.17.8.linux-amd64.tar.gz
+RUN wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz && tar -xzf go$GOVERSION.linux-amd64.tar.gz
 ENV GOROOT /opt/app-root/go
 RUN mkdir -p /opt/app-root/gopath
 ENV GOPATH /opt/app-root/gopath

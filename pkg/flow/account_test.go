@@ -10,9 +10,18 @@ import (
 
 const timeout = 5 * time.Second
 
-var k1 = key{SrcIP: 0x12345678, SrcPort: 333, DstIP: 0x432100ff, DstPort: 8080}
-var k2 = key{SrcIP: 0xaabbccdd, SrcPort: 12, DstIP: 0x432100ff, DstPort: 8080}
-var k3 = key{SrcIP: 0x12345678, SrcPort: 333, DstIP: 0x11223344, DstPort: 443}
+var k1 = key{
+	Transport: Transport{SrcPort: 333, DstPort: 8080},
+	Network:   Network{SrcAddr: 0x12345678, DstAddr: 0x432100ff},
+}
+var k2 = key{
+	Transport: Transport{SrcPort: 12, DstPort: 8080},
+	Network:   Network{SrcAddr: 0xaabbccdd, DstAddr: 0x432100ff},
+}
+var k3 = key{
+	Transport: Transport{SrcPort: 333, DstPort: 443},
+	Network:   Network{SrcAddr: 0x12345678, DstAddr: 0x11223344},
+}
 
 func TestEvict_MaxEntries(t *testing.T) {
 	// GIVEN an accounter

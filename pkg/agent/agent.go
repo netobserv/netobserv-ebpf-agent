@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/netobserv/gopipes/pkg/node"
@@ -48,11 +49,11 @@ func FlowsAgent(cfg Config) (*Flows, error) {
 		// For now, just print flows. TODO: NETOBSERV-202
 		exporter: func(in <-chan *flow.Record) {
 			for record := range in {
-				fmt.Printf("%-8s %-21s %-21s %-7d %-7s\n",
-					record.Protocol,
-					fmt.Sprintf("%s:%d", record.SrcIP, record.SrcPort),
-					fmt.Sprintf("%s:%d", record.DstIP, record.DstPort),
-					record.Packets, record.Bytes)
+				str, err := json.Marshal(record)
+				if err != nil {
+					logrus.WithError(err).WithField("record", record).Warn("can't unmarshal record")
+				}
+				fmt.Println(string(str))
 			}
 		},
 	}, nil
@@ -73,6 +74,7 @@ func (f *Flows) Run(ctx context.Context) error {
 			return err
 		}
 		defer func() {
+			tlog.Debug("unregistering flow tracer")
 			if err := tracer.Unregister(); err != nil {
 				tlog.WithError(err).Warn("error unregistering flow tracer")
 			}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -68,6 +69,9 @@ func (m *FlowTracer) Register() error {
 		QdiscAttrs: qdiscAttrs,
 		QdiscType:  qdiscType,
 	}
+	if err := netlink.QdiscDel(m.qdisc); err == nil {
+		ilog.Warn("qdisc clsact already existed. Deleted it")
+	}
 	if err := netlink.QdiscAdd(m.qdisc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
@@ -86,9 +90,12 @@ func (m *FlowTracer) Register() error {
 	}
 	m.egressFilter = &netlink.BpfFilter{
 		FilterAttrs:  egressAttrs,
-		Fd:           m.objects.FlowParse.FD(),
-		Name:         "tc/flow_parse",
+		Fd:           m.objects.EgressFlowParse.FD(),
+		Name:         "tc/egress_flow_parse",
 		DirectAction: true,
+	}
+	if err := netlink.FilterDel(m.egressFilter); err == nil {
+		ilog.Warn("egress filter already existed. Deleted it")
 	}
 	if err = netlink.FilterAdd(m.egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
@@ -107,9 +114,12 @@ func (m *FlowTracer) Register() error {
 	}
 	m.ingressFilter = &netlink.BpfFilter{
 		FilterAttrs:  ingressAttrs,
-		Fd:           m.objects.FlowParse.FD(),
-		Name:         "tc/flow_parse",
+		Fd:           m.objects.IngressFlowParse.FD(),
+		Name:         "tc/ingress_flow_parse",
 		DirectAction: true,
+	}
+	if err := netlink.FilterDel(m.ingressFilter); err == nil {
+		ilog.Warn("ingress filter already existed. Deleted it")
 	}
 	if err = netlink.FilterAdd(m.ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
@@ -128,6 +138,7 @@ func (m *FlowTracer) Register() error {
 
 // Unregister the eBPF tracer from the system.
 func (m *FlowTracer) Unregister() error {
+	tlog := log.WithField("iface", m.interfaceName)
 	var errs []error
 	doClose := func(o io.Closer) {
 		if o == nil {
@@ -140,16 +151,19 @@ func (m *FlowTracer) Unregister() error {
 	doClose(m.flows)
 	doClose(&m.objects)
 	if m.egressFilter != nil {
+		tlog.WithField("filter", m.egressFilter).Debug("deleting egress filter")
 		if err := netlink.FilterDel(m.egressFilter); err != nil {
 			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
 	if m.ingressFilter != nil {
+		tlog.WithField("filter", m.ingressFilter).Debug("deleting ingress filter")
 		if err := netlink.FilterDel(m.ingressFilter); err != nil {
 			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
 		}
 	}
 	if m.qdisc != nil {
+		tlog.WithField("qdisc", m.qdisc).Debug("deleting Qdisc")
 		if err := netlink.QdiscDel(m.qdisc); err != nil {
 			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
@@ -166,27 +180,45 @@ func (m *FlowTracer) Unregister() error {
 
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	tlog := log.WithField("iface", m.interfaceName)
+	go func() {
+		<-ctx.Done()
+		// m.flows.Read is a blocking operation, so we need to close the ring buffer
+		// from another goroutine to avoid the system not being able to exit if there
+		// isn't traffic in a given interface
+		if err := m.flows.Close(); err != nil {
+			tlog.WithError(err).Warn("can't close ring buffer")
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
+			tlog.Debug("exiting flow tracer")
 			return
 		default:
 			event, err := m.flows.Read()
 			if err != nil {
 				if errors.Is(err, ringbuf.ErrClosed) {
-					log.Info("Received signal, exiting..")
+					tlog.Debug("Received signal, exiting..")
 					return
 				}
-				log.WithError(err).Warn("reading from reader")
+				tlog.WithError(err).Warn("reading from ring buffer")
 				continue
 			}
-			// Parse the ringbuf event entry into an Event structure.
-			rawSample, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
+			now := time.Now()
+			// Parses the ringbuf event entry into an Event structure.
+			readFlow, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
 			if err != nil {
-				log.WithError(err).Warn("reading ringbuf event")
+				tlog.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
-			forwardFlows <- rawSample
+			// Fills the Record with information that can't be provided by eBPF
+			readFlow.Packets = 1
+			readFlow.TimeFlowStart = now
+			readFlow.TimeFlowEnd = now
+			readFlow.Interface = m.interfaceName
+
+			forwardFlows <- readFlow
 		}
 	}
 }
