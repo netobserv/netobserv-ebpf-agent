@@ -26,6 +26,7 @@ type Config struct {
 	Verbose bool
 }
 
+// TODO: Ifaces and ExcludeIfaces should admit regexpes e.g. "exclude all the /^br-/ interfaces"
 func getInterfaces(cfg *Config) (map[string]struct{}, error) {
 	// get interfaces from configuration or acquire them from the system
 	ifaces := map[string]struct{}{}

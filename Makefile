@@ -12,6 +12,8 @@ IMAGE_TAG_BASE ?= quay.io/netobserv/netobserv-agent
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 
+LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
+
 CILIUM_EBPF_VERSION := v0.8.1
 GOLANGCI_LINT_VERSION = v1.42.1
 
@@ -47,12 +49,21 @@ lint: prereqs
 	@echo "### Linting code"
 	golangci-lint run ./...
 
+# As generated artifacts are part of the code repo (pkg/ebpf package) you don't have to run this
+# for each build. Only when you change the C code inside the bpf folder
+# You might need to use the docker-generate target instead of this
 .PHONY: generate
 generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
 generate: prereqs
 	@echo "### Generating BPF Go bindings"
 	go generate ./pkg/...
+
+.PHONY: docker-generate
+docker-generate:
+	@echo "### Creating the container that generates the eBPF binaries"
+	docker build . -f scripts/Dockerfile_ebpf_generator -t $(LOCAL_GENERATOR_IMAGE)
+	docker run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
 build: prereqs fmt lint test compile

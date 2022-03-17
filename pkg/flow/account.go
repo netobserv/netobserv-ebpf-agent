@@ -2,6 +2,8 @@ package flow
 
 import (
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Accounter accumulates flows metrics in memory and eventually evicts them via an evictor channel.
@@ -16,6 +18,8 @@ type Accounter struct {
 	evictTimeout   time.Duration
 	entries        map[key]*Record
 }
+
+var alog = logrus.WithField("component", "flow/Accounter")
 
 // NewAccounter creates a new Accounter.
 // The cache has no limit and it's assumed that eviction is done by the caller.
@@ -42,10 +46,12 @@ func (c *Accounter) Account(in <-chan *Record, out chan<- *Record) {
 			go evict(evictingEntries, out)
 		case record, ok := <-in:
 			if !ok {
+				alog.Debug("input channel closed. Evicting entries")
 				// if the records channel is closed, we evict the entries in the
 				// same goroutine to wait for all the entries to be sent before
 				// closing the channel
 				evict(c.entries, out)
+				alog.Debug("exiting account routine")
 				return
 			}
 			if stored, ok := c.entries[record.key]; ok {
