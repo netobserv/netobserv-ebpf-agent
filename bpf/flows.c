@@ -29,23 +29,23 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow
         return DISCARD;
     }
 
-    flow->network.src_ip = __bpf_htonl(ip->saddr);
-    flow->network.dst_ip = __bpf_htonl(ip->daddr);
+    flow->network.src_ip = __bpf_ntohl(ip->saddr);
+    flow->network.dst_ip = __bpf_ntohl(ip->daddr);
     flow->transport.protocol = ip->protocol;
 
     switch (ip->protocol) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            flow->transport.src_port = __bpf_htons(tcp->source);
-            flow->transport.dst_port = __bpf_htons(tcp->dest);
+            flow->transport.src_port = __bpf_ntohs(tcp->source);
+            flow->transport.dst_port = __bpf_ntohs(tcp->dest);
         }
     } break;
     case IPPROTO_UDP: {
         struct udphdr *udp = (void *)ip + sizeof(*ip);
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            flow->transport.src_port = __bpf_htons(udp->source);
-            flow->transport.dst_port = __bpf_htons(udp->dest);
+            flow->transport.src_port = __bpf_ntohs(udp->source);
+            flow->transport.dst_port = __bpf_ntohs(udp->dest);
         }
     } break;
     default:
@@ -61,9 +61,9 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, struct flow *f
     }
     __builtin_memcpy(flow->data_link.dst_mac, eth->h_dest, ETH_ALEN);
     __builtin_memcpy(flow->data_link.src_mac, eth->h_source, ETH_ALEN);
-    flow->protocol = eth->h_proto;
+    flow->protocol = __bpf_ntohs(eth->h_proto);
     // TODO: ETH_P_IPV6
-    if (flow->protocol == __bpf_constant_ntohs(ETH_P_IP)) {
+    if (flow->protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
         return fill_iphdr(ip, data_end, flow);
     }

@@ -20,6 +20,7 @@ GOLANGCI_LINT_VERSION = v1.42.1
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS := linux
+PROTOC_ARTIFACTS := pkg/pbflow
 
 # Image building tool (docker / podman)
 ifeq (,$(shell which podman 2>/dev/null))
@@ -38,6 +39,7 @@ prereqs:
 	@echo "### Check if prerequisites are met, and installing missing dependencies"
 	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
+	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -49,20 +51,22 @@ lint: prereqs
 	@echo "### Linting code"
 	golangci-lint run ./...
 
-# As generated artifacts are part of the code repo (pkg/ebpf package) you don't have to run this
-# for each build. Only when you change the C code inside the bpf folder
-# You might need to use the docker-generate target instead of this
+# As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
+# to run this target for each build. Only when you change the C code inside the bpf folder or the
+# protobuf definitions in the proto folder.
+# You might want to use the docker-generate target instead of this.
 .PHONY: generate
 generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
 generate: prereqs
 	@echo "### Generating BPF Go bindings"
 	go generate ./pkg/...
+	protoc --go_out=pkg proto/flow.proto
 
 .PHONY: docker-generate
 docker-generate:
 	@echo "### Creating the container that generates the eBPF binaries"
-	docker build . -f scripts/Dockerfile_ebpf_generator -t $(LOCAL_GENERATOR_IMAGE)
+	docker build . -f scripts/Dockerfile_generators -t $(LOCAL_GENERATOR_IMAGE)
 	docker run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
