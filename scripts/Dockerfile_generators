@@ -1,9 +1,10 @@
 FROM fedora:35
 
 ARG GOVERSION="1.17.8"
+ARG PROTOCVERSION="3.19.4"
 
 # Installs dependencies that are required to compile eBPF programs
-RUN dnf install -y kernel-devel make llvm clang glibc-devel.i686
+RUN dnf install -y kernel-devel make llvm clang glibc-devel.i686 unzip
 RUN dnf clean all
 
 VOLUME ["/src"]
@@ -18,10 +19,18 @@ RUN rm go.tar.gz
 ENV GOROOT /go
 RUN mkdir -p /gopath
 ENV GOPATH /gopath
-ENV PATH $GOROOT/bin:$GOPATH/bin:$PATH
+
+RUN mkdir -p /protoc
+WORKDIR /protoc
+
+# Installs Protoc compiler
+RUN curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-x86_64.zip -o protoc.zip
+RUN unzip protoc.zip
+RUN rm protoc.zip
+
+ENV PATH $GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
 
 WORKDIR /tmp
-
 # Copies some pre-required Go dependencies to avoid downloading them on each build
 COPY Makefile Makefile
 RUN make prereqs
