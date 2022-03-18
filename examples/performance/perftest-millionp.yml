@@ -1,0 +1,85 @@
+# This deployment generates a lot of packets (around 500,000 per replica)
+# but with a much lower throughtput, in Bytes, than iperf3 (megabytes vs gigabytes).
+# Code and images available at https://github.com/mariomac/million-packets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: million-packets-receiver
+  labels:
+    run: million-packets-receiver
+spec:
+  ports:
+    - port: 5201
+      protocol: UDP
+      targetPort: 5201
+  selector:
+    run: million-packets-receiver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: million-packets-receiver
+  labels:
+    run: million-packets-receiver
+spec:
+  selector:
+    matchLabels:
+      run: million-packets-receiver
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: million-packets-receiver
+    spec:
+      containers:
+        - name: million-packets-receiver
+          image: quay.io/mmaciasl/million-packets:main
+          ports:
+            - containerPort: 5201
+          command:
+            - /udpreceiver
+            - 0.0.0.0:5201
+      # colocate with the netobserv-agent to allow it capturing the generated traffic
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  run: netobserv-agent
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: million-packet-sender
+  labels:
+    run: million-packet-sender
+spec:
+  selector:
+    matchLabels:
+      run: million-packet-sender
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: million-packet-sender
+    spec:
+      containers:
+        - name: million-packet-sender
+          image: quay.io/mmaciasl/million-packets:main
+          command:
+            - bash
+            - -c
+            - |
+              export HOST=$(getent hosts million-packets-receiver.default.svc.cluster.local | awk '{ print $1 }')
+              echo \"host: $HOST\"
+              /udpsender $HOST:5201
+      # colocate outside the netobserv-agent host to bring load outside
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  run: netobserv-agent
+              topologyKey: kubernetes.io/hostname

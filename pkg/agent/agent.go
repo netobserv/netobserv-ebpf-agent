@@ -2,11 +2,10 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 )
@@ -27,15 +26,15 @@ type flowTracer interface {
 }
 
 type flowAccounter interface {
-	Account(in <-chan *flow.Record, out chan<- *flow.Record)
+	Account(in <-chan *flow.Record, out chan<- []*flow.Record)
 }
 
-type flowExporter func(in <-chan *flow.Record)
+type flowExporter func(in <-chan []*flow.Record)
 
 // FlowsAgent instantiates a new agent, given a configuration.
-func FlowsAgent(cfg Config) (*Flows, error) {
+func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
-	interfaces, err := getInterfaces(&cfg)
+	interfaces, err := getInterfaces(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -43,19 +42,14 @@ func FlowsAgent(cfg Config) (*Flows, error) {
 	for iface := range interfaces {
 		tracers[iface] = ebpf.NewFlowTracer(iface)
 	}
+	grpcExporter, err := exporter.StartGRPCProto(cfg.FlowsTarget)
+	if err != nil {
+		return nil, err
+	}
 	return &Flows{
 		tracers:   tracers,
 		accounter: flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLen, cfg.CacheActiveTimeout),
-		// For now, just print flows. TODO: NETOBSERV-202
-		exporter: func(in <-chan *flow.Record) {
-			for record := range in {
-				str, err := json.Marshal(record)
-				if err != nil {
-					logrus.WithError(err).WithField("record", record).Warn("can't unmarshal record")
-				}
-				fmt.Println(string(str))
-			}
-		},
+		exporter:  grpcExporter.ExportFlows,
 	}, nil
 }
 

@@ -7,6 +7,8 @@ import (
 
 // TODO: NETOBSERV-201: fill from CLI and env
 type Config struct {
+	// FlowsTarget is the host:port target of the Flow's collector
+	FlowsTarget string
 	// Ifaces contains the interface names where flow traces will be attached. If empty, the agent
 	// will fetch all the interfaces in the system, excepting the ones listed in ExcludeIfaces
 	Ifaces []string

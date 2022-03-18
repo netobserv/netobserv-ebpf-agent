@@ -1,6 +1,7 @@
 # Build the manager binary
 FROM registry.access.redhat.com/ubi8/go-toolset:1.16.7-5 as builder
-ARG VERSION="unknown"
+
+ARG SW_VERSION="unknown"
 ARG GOVERSION="1.17.8"
 
 WORKDIR /opt/app-root
@@ -24,7 +25,7 @@ COPY go.sum go.sum
 COPY Makefile Makefile
 
 # Build
-RUN make build
+RUN make compile
 
 # Create final image from minimal + built binary
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5-204

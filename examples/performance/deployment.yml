@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: packet-counter
+  labels:
+    run: packet-counter
+spec:
+  ports:
+    - port: 9999
+      protocol: TCP
+      targetPort: 9999
+  selector:
+    run: packet-counter
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: packet-counter
+  labels:
+    run: packet-counter
+spec:
+  selector:
+    matchLabels:
+      run: packet-counter
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: packet-counter
+    spec:
+      containers:
+        - name: packet-counter
+          image: quay.io/mmaciasl/packet-counter-collector:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9999
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: netobserv-agent
+  labels:
+    run: netobserv-agent
+spec:
+  # the agent must be privileged
+  hostNetwork: true
+  # needed to allow resolving collector hostname
+  dnsPolicy: ClusterFirstWithHostNet
+  # colocate with the packet-counter for more predictable measurements
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              run: packet-counter
+          topologyKey: kubernetes.io/hostname
+  containers:
+    - name: netobserv-agent
+      image: quay.io/mmaciasl/netobserv-agent:main
+#      imagePullPolicy: Always
+      securityContext:
+        privileged: true
+      env:
+        - name: GRPC_VERBOSITY
+          value: DEBUG
+        - name: GRPC_TRACE
+          value: call_error,cares_resolver,dns_resolver
+        - name: GRPC_DNS_RESOLVER
+          value: "ares"
+        - name: FLOWS_TARGET
+          value: "packet-counter:9999"
+      resources:
+        limits:
+          # increase or comment this to avoid limits in the number of processed packets
+          cpu: "1000m"
