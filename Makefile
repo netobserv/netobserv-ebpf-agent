@@ -1,16 +1,19 @@
-# VERSION defines the project version for the bundle.
+# SW_VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
-# - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
-# - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= main
+# - use the SW_VERSION as arg of the bundle target (e.g make bundle SW_VERSION=0.0.2)
+# - use environment variables to overwrite this value (e.g export SW_VERSION=0.0.2)
+SW_VERSION ?= main
+
+# In CI, to be replaced by `netobserv`
+IMAGE_ORG ?= $(USER)
 
 # IMAGE_TAG_BASE defines the namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
-IMAGE_TAG_BASE ?= quay.io/netobserv/netobserv-agent
+IMAGE_TAG_BASE ?= quay.io/$(IMAGE_ORG)/netobserv-agent
 
 # Image URL to use all building/pushing image targets
-IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
+IMG ?= $(IMAGE_TAG_BASE):$(SW_VERSION)
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 
@@ -21,6 +24,9 @@ CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS := linux
 PROTOC_ARTIFACTS := pkg/pbflow
+
+# regular expressions for excluded file patterns
+EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 
 # Image building tool (docker / podman)
 ifeq (,$(shell which podman 2>/dev/null))
@@ -40,6 +46,7 @@ prereqs:
 	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install  google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -61,7 +68,8 @@ generate: export BPF_CFLAGS := $(CFLAGS)
 generate: prereqs
 	@echo "### Generating BPF Go bindings"
 	go generate ./pkg/...
-	protoc --go_out=pkg proto/flow.proto
+	@echo "### Generating gRPC and Protocol Buffers code"
+	protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
 
 .PHONY: docker-generate
 docker-generate:
@@ -70,30 +78,35 @@ docker-generate:
 	docker run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
-build: prereqs fmt lint test compile
+build: prereqs fmt lint test vendors compile
 
 .PHONY: compile
 compile:
 	@echo "### Compiling project"
-	GOOS=$(GOOS) go build -ldflags "-X main.version=${VERSION}" -mod vendor -a -o bin/netobserv-agent cmd/netobserv-agent.go
+	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION}" -mod vendor -a -o bin/netobserv-agent cmd/netobserv-agent.go
 
 .PHONY: test
 test:
 	@echo "### Testing code"
 	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.out
 
+.PHONY: cov-exclude-generated
+cov-exclude-generated:
+	cat cover.out | grep -vE $(EXCLUDE_COVERAGE_FILES) > cover.clean.out
 .PHONY: coverage-report
-coverage-report:
+
+.PHONY: coverage-report
+coverage-report: cov-exclude-generated
 	@echo "### Generating coverage report"
-	go tool cover --func=./cover.out
+	go tool cover --func=./cover.clean.out
 
 .PHONY: coverage-report-html
-coverage-report-html:
+coverage-report-html: cov-exclude-generated
 	@echo "### Generating HTML coverage report"
-	go tool cover --html=./cover.out
+	go tool cover --html=./cover.clean.out
 
-image-build: test ## Build OCI image with the manager.
-	$(OCI_BIN) build --build-arg VERSION="$(VERSION)" -t ${IMG} .
+image-build: ## Build OCI image with the manager.
+	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .
 
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}

@@ -17,7 +17,7 @@ import (
 // TODO: make configurable. NETOBSERV-201
 const (
 	maxStoredFlowEntries      = 1000
-	maxFlowEvictionPeriod     = 1 * time.Second
+	maxFlowEvictionPeriod     = 5 * time.Second
 	communicationBufferLength = 20
 )
 
@@ -25,8 +25,15 @@ func main() {
 	flag.Parse()
 
 	logrus.SetLevel(logrus.DebugLevel)
+	// temporary hack until NETOBSERV-201
+	flowsTarget := os.Getenv("FLOWS_TARGET")
+	if flowsTarget == "" {
+		panic("expecting a collector target in the FLOWS_TARGET env var")
+	}
+	logrus.WithField("FLOWS_TARGET", flowsTarget).Infof("Starting eBFP flows' agent")
 
-	flowsAgent, err := agent.FlowsAgent(agent.Config{
+	flowsAgent, err := agent.FlowsAgent(&agent.Config{
+		FlowsTarget:        flowsTarget,
 		ExcludeIfaces:      []string{"lo"},
 		BuffersLen:         communicationBufferLength,
 		CacheMaxFlows:      maxStoredFlowEntries,

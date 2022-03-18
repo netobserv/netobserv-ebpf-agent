@@ -29,7 +29,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *Record, 20)
-	evictor := make(chan *Record, 20)
+	evictor := make(chan []*Record, 20)
 
 	go acc.Account(inputs, evictor)
 
@@ -47,9 +47,10 @@ func TestEvict_MaxEntries(t *testing.T) {
 	// THEN the old records are evicted
 	received := map[key]Record{}
 	r := receiveTimeout(t, evictor)
-	received[r.key] = *r
-	r = receiveTimeout(t, evictor)
-	received[r.key] = *r
+	require.Len(t, r, 2)
+	received[r[0].key] = *r[0]
+	received[r[1].key] = *r[1]
+
 	requireNoEviction(t, evictor)
 
 	// AND the returned records summarize the number of bytes and packages
@@ -66,7 +67,7 @@ func TestEvict_Period(t *testing.T) {
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *Record, 20)
-	evictor := make(chan *Record, 20)
+	evictor := make(chan []*Record, 20)
 	go acc.Account(inputs, evictor)
 
 	inputs <- &Record{rawRecord: rawRecord{key: k1, Bytes: 10}, Packets: 1}
@@ -84,8 +85,10 @@ func TestEvict_Period(t *testing.T) {
 	numberOfEvictions := 0
 	for sum.Packets != 5 {
 		select {
-		case r := <-evictor:
-			sum.Accumulate(r)
+		case rs := <-evictor:
+			for _, r := range rs {
+				sum.Accumulate(r)
+			}
 			numberOfEvictions++
 		case <-timeout:
 			require.Failf(t, "timeout while waiting for 5 evicted messages", "Got: %d", sum.Packets)
@@ -95,7 +98,7 @@ func TestEvict_Period(t *testing.T) {
 	assert.GreaterOrEqual(t, numberOfEvictions, 2)
 }
 
-func receiveTimeout(t *testing.T, evictor <-chan *Record) *Record {
+func receiveTimeout(t *testing.T, evictor <-chan []*Record) []*Record {
 	t.Helper()
 	select {
 	case r := <-evictor:
@@ -106,11 +109,11 @@ func receiveTimeout(t *testing.T, evictor <-chan *Record) *Record {
 	return nil
 }
 
-func requireNoEviction(t *testing.T, evictor <-chan *Record) {
+func requireNoEviction(t *testing.T, evictor <-chan []*Record) {
 	t.Helper()
 	select {
 	case r := <-evictor:
-		require.Failf(t, "unexpected evicted record", "%+v", *r)
+		require.Failf(t, "unexpected evicted record", "%+v", r)
 	default:
 		// ok!
 	}

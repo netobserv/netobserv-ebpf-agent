@@ -1,0 +1,86 @@
+# This performance test generates a high throughput in gigabytes, so the
+# maximum number of packets could not be reached if the network bandwidth
+# is the bottleneck. To generate more packets, use the perftest-millionp.yml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iperf3-server
+  labels:
+    run: iperf3-server
+spec:
+  ports:
+    - port: 5201
+      protocol: TCP
+      targetPort: 5201
+  selector:
+    run: iperf3-server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iperf3-server
+  labels:
+    run: iperf3-server
+spec:
+  selector:
+    matchLabels:
+      run: iperf3-server
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: iperf3-server
+    spec:
+      containers:
+        - name: iperf3-server
+          image: mlabbe/iperf3
+          ports:
+            - containerPort: 5201
+          command:
+            - iperf3
+            - -s
+      # colocate with the netobserv-agent to allow it capturing the generated traffic
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  run: netobserv-agent
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iperf3-clients
+  labels:
+    run: iperf3-clients
+spec:
+  selector:
+    matchLabels:
+      run: iperf3-clients
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: iperf3-clients
+    spec:
+      containers:
+        - name: iperf3-clients
+          image: mlabbe/iperf3
+          ports:
+            - containerPort: 5201
+          command:
+            - iperf3
+            - -c
+            - iperf3-server
+            - -t
+            - "0"
+      # colocate outside the netobserv-agent host to bring load outside
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  run: netobserv-agent
+              topologyKey: kubernetes.io/hostname

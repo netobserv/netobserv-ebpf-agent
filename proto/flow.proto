@@ -6,38 +6,18 @@ import 'google/protobuf/timestamp.proto';
 
 option go_package = "./pbflow";
 
+service Collector {
+  rpc Send(Records) returns (CollectorReply) {}
+}
+
+// intentionally empty
+message CollectorReply {}
+
 message Records {
   repeated Record entries = 1;
 }
 
 message Record {
-  message DataLink {
-    uint64 src_mac = 1;
-    uint64 dst_mac = 2;
-  }
-  message Network {
-    message IP {
-      oneof ip_family {
-        fixed32 ipv4 = 1;
-        bytes ipv6 = 2;
-      }
-    }
-    IP src_addr = 1;
-    IP dst_addr = 2;
-  }
-  message Transport {
-    uint32 src_port = 1;
-    uint32 dst_port = 2;
-    // protocol as defined by IPPROTO_* in linux/in.h
-    // https://github.com/torvalds/linux/blob/master/include/uapi/linux/in.h
-    uint32 protocol = 3;
-  }
-  // as defined by field 61 in
-  // https://www.iana.org/assignments/ipfix/ipfix.xhtml
-  enum Direction {
-    INGRESS = 0;
-    EGRESS = 1;
-  }
   // protocol as defined by ETH_P_* in linux/if_ether.h
   // https://github.com/torvalds/linux/blob/master/include/uapi/linux/if_ether.h
   uint32 eth_protocol = 1;
@@ -52,4 +32,37 @@ message Record {
 
   uint64 bytes = 8;
   uint64 packets = 9;
+  string interface = 10;
+}
+
+message DataLink {
+  uint64 src_mac = 1;
+  uint64 dst_mac = 2;
+}
+
+message Network {
+  IP src_addr = 1;
+  IP dst_addr = 2;
+}
+
+message IP {
+  oneof ip_family {
+    fixed32 ipv4 = 1;
+    bytes ipv6 = 2;
+  }
+}
+
+message Transport {
+  uint32 src_port = 1;
+  uint32 dst_port = 2;
+  // protocol as defined by IPPROTO_* in linux/in.h
+  // https://github.com/torvalds/linux/blob/master/include/uapi/linux/in.h
+  uint32 protocol = 3;
+}
+
+// as defined by field 61 in
+// https://www.iana.org/assignments/ipfix/ipfix.xhtml
+enum Direction {
+  INGRESS = 0;
+  EGRESS = 1;
 }
