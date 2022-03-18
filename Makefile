@@ -40,6 +40,7 @@ prereqs:
 	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install  google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -61,7 +62,7 @@ generate: export BPF_CFLAGS := $(CFLAGS)
 generate: prereqs
 	@echo "### Generating BPF Go bindings"
 	go generate ./pkg/...
-	protoc --go_out=pkg proto/flow.proto
+	protoc --go_out=export/pkg --go-grpc_out=export/pkg export/proto/flow.proto
 
 .PHONY: docker-generate
 docker-generate:
