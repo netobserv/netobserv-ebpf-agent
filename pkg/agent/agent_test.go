@@ -21,11 +21,9 @@ func TestFlowsAgent(t *testing.T) {
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
 	collectedRecords := make(chan *pbflow.Records, 10)
-	go func() {
-		collector, err := grpc.StartCollector(port, collectedRecords)
-		require.NoError(t, err)
-		defer collector.Close()
-	}()
+	collector, err := grpc.StartCollector(port, collectedRecords)
+	require.NoError(t, err)
+	defer collector.Close()
 
 	// GIVEN a flows agent
 	flowsAgent, err := FlowsAgent(&Config{
