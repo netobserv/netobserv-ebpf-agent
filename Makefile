@@ -4,6 +4,9 @@
 # - use the SW_VERSION as arg of the bundle target (e.g make bundle SW_VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export SW_VERSION=0.0.2)
 SW_VERSION ?= main
+BUILD_VERSION := $(shell git describe --long HEAD)
+BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
+BUILD_SHA := $(shell git rev-parse --short HEAD)
 
 # In CI, to be replaced by `netobserv`
 IMAGE_ORG ?= $(USER)
@@ -14,6 +17,7 @@ IMAGE_TAG_BASE ?= quay.io/$(IMAGE_ORG)/netobserv-agent
 
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):$(SW_VERSION)
+IMG_SHA = $(IMAGE_TAG_BASE):$(BUILD_SHA)
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 
@@ -74,7 +78,7 @@ generate: prereqs
 .PHONY: docker-generate
 docker-generate:
 	@echo "### Creating the container that generates the eBPF binaries"
-	docker build . -f scripts/Dockerfile_generators -t $(LOCAL_GENERATOR_IMAGE)
+	docker build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE)
 	docker run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
@@ -83,7 +87,7 @@ build: prereqs fmt lint test vendors compile
 .PHONY: compile
 compile:
 	@echo "### Compiling project"
-	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION}" -mod vendor -a -o bin/netobserv-agent cmd/netobserv-agent.go
+	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-agent cmd/netobserv-agent.go
 
 .PHONY: test
 test:
@@ -107,6 +111,9 @@ coverage-report-html: cov-exclude-generated
 
 image-build: ## Build OCI image with the manager.
 	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .
+
+ci-images-build: image-build
+	$(OCI_BIN) build --build-arg BASE_IMAGE=$(IMG) -t $(IMG_SHA) -f scripts/shortlived.Dockerfile .
 
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
