@@ -16,8 +16,8 @@ type CollectorServer struct {
 	grpcServer *grpc.Server
 }
 
-// StartCollector listens for gRPC+Protobuf flows in the given port, and forwards each set of
-// *pbflow.Records by the provided channel.
+// StartCollector listens in background for gRPC+Protobuf flows in the given port, and forwards each
+// set of *pbflow.Records by the provided channel.
 func StartCollector(port int, recordForwarder chan<- *pbflow.Records) (*CollectorServer, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -29,10 +29,11 @@ func StartCollector(port int, recordForwarder chan<- *pbflow.Records) (*Collecto
 		recordForwarder: recordForwarder,
 	})
 	reflection.Register(grpcServer)
-	// TODO: shall it run in background? otherwise it does not have sense to return the collector server
-	if err := grpcServer.Serve(lis); err != nil {
-		return nil, err
-	}
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			panic("error connecting to server: " + err.Error())
+		}
+	}()
 	return &CollectorServer{
 		grpcServer: grpcServer,
 	}, nil

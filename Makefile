@@ -92,22 +92,21 @@ compile:
 .PHONY: test
 test:
 	@echo "### Testing code"
-	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.out
+	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.all.out
 
 .PHONY: cov-exclude-generated
 cov-exclude-generated:
-	cat cover.out | grep -vE $(EXCLUDE_COVERAGE_FILES) > cover.clean.out
-.PHONY: coverage-report
+	grep -vE "(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)" cover.all.out > cover.out
 
 .PHONY: coverage-report
 coverage-report: cov-exclude-generated
 	@echo "### Generating coverage report"
-	go tool cover --func=./cover.clean.out
+	go tool cover --func=./cover.out
 
 .PHONY: coverage-report-html
 coverage-report-html: cov-exclude-generated
 	@echo "### Generating HTML coverage report"
-	go tool cover --html=./cover.clean.out
+	go tool cover --html=./cover.out
 
 image-build: ## Build OCI image with the manager.
 	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .

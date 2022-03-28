@@ -28,7 +28,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
       - name: build images
-        run: make ci-image-build
+        run: make ci-images-build
       - name: podman login to quay.io
         uses: redhat-actions/podman-login@v1
         with:

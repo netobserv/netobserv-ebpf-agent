@@ -22,7 +22,7 @@ jobs:
     - name: Install make
       run: sudo apt -y install make
     - name: Run verification and tests
-      run: make fmt lint test
+      run: make fmt lint test cov-exclude-generated
     - name: Report coverage
       uses: codecov/codecov-action@v2.1.0
       with:
