@@ -56,7 +56,7 @@ spec:
           topologyKey: kubernetes.io/hostname
   containers:
     - name: netobserv-agent
-      image: quay.io/mmaciasl/netobserv-agent:main
+      image: quay.io/netobserv/netobserv-agent:main
 #      imagePullPolicy: Always
       securityContext:
         privileged: true
@@ -69,7 +69,6 @@ spec:
           value: "ares"
         - name: FLOWS_TARGET
           value: "packet-counter:9999"
-      resources:
-        limits:
-          # increase or comment this to avoid limits in the number of processed packets
-          cpu: "1000m"
+#      resources:
+#        limits:
+#          cpu: "1000m"

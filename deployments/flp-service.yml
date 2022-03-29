@@ -1,0 +1,155 @@
+# Example deployment for manual testing with flp
+# It requires loki to be installed
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netobserv-agent
+  labels:
+    k8s-app: netobserv-agent
+spec:
+  selector:
+    matchLabels:
+      k8s-app: netobserv-agent
+  template:
+    metadata:
+      labels:
+        k8s-app: netobserv-agent
+    spec:
+      serviceAccountName: netobserv-account
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: netobserv-agent
+        image: quay.io/mmaciasl/netobserv-agent:main
+        #      imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        env:
+          - name: FLOWS_TARGET_HOST
+            value: "flp"
+          - name: FLOWS_TARGET_PORT
+            value: "9999"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flp
+  labels:
+    k8s-app: flp
+spec:
+  ports:
+    - port: 9999
+      protocol: TCP
+      targetPort: 9999
+      name: flp
+  selector:
+    k8s-app: flp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flp
+  labels:
+    k8s-app: flp
+spec:
+  selector:
+    matchLabels:
+      k8s-app: flp
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: flp
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: netobserv-controller-manager
+      containers:
+        - name: packet-counter
+          image: quay.io/mmaciasl/flowlogs-pipeline:latest
+          ports:
+            - containerPort: 9999
+          args:
+            - --config=/etc/flp/config.yaml
+          volumeMounts:
+            - mountPath: /etc/flp
+              name: config-volume
+      volumes:
+        - name: config-volume
+          configMap:
+            name: flp-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flp-config
+data:
+  config.yaml: |
+    log-level: debug
+    pipeline:
+      - name: ingest
+      - name: decode
+        follows: ingest
+      - name: enrich
+        follows: decode
+      - name: encode
+        follows: enrich
+      - name: loki
+        follows: encode
+    parameters:
+      - name: ingest
+        ingest:
+          type: grpc
+          grpc:
+            port: 9999
+      - name: decode
+        decode:
+          type: protobuf
+      - name: enrich
+        transform:
+          type: network
+          network:
+            rules:
+              - input: SrcAddr
+                output: SrcK8S
+                type: "add_kubernetes"
+              - input: DstAddr
+                output: DstK8S
+                type: "add_kubernetes"
+      - name: encode
+        encode:
+          type: none
+      - name: loki
+        write:
+          type: loki
+          loki:
+            type: loki
+            staticLabels:
+              app: netobserv-flowcollector
+            labels:
+              - "SrcK8S_Namespace"
+              - "SrcK8S_OwnerName"
+              - "DstK8S_Namespace"
+              - "DstK8S_OwnerName"
+              - "FlowDirection"
+            url: http://loki:3100
+            timestampLabel: TimeFlowEnd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: netobserv-account
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: example
+allowPrivilegedContainer: true
+allowHostDirVolumePlugin: true
+allowHostNetwork: true
+allowHostPorts: true
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+users:
+  - system:serviceaccount:network-observability:netobserv-account

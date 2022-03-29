@@ -26,11 +26,20 @@ func main() {
 
 	logrus.SetLevel(logrus.DebugLevel)
 	// temporary hack until NETOBSERV-201
-	flowsTarget := os.Getenv("FLOWS_TARGET")
-	if flowsTarget == "" {
-		panic("expecting a collector target in the FLOWS_TARGET env var")
+	flowsTargetHost := os.Getenv("FLOWS_TARGET_HOST")
+	if flowsTargetHost == "" {
+		panic("expecting a collector target in the FLOWS_TARGET_HOST env var")
 	}
-	logrus.WithField("FLOWS_TARGET", flowsTarget).Infof("Starting eBFP flows' agent")
+	flowsTargetPort := os.Getenv("FLOWS_TARGET_PORT")
+	if flowsTargetPort == "" {
+		panic("expecting a collector target in the FLOWS_TARGET_PORT env var")
+	}
+	logrus.WithFields(logrus.Fields{
+		"FLOWS_TARGET_HOST": flowsTargetHost,
+		"FLOWS_TARGET_PORT": flowsTargetPort,
+	}).Infof("Starting eBFP flows' agent")
+
+	flowsTarget := flowsTargetHost + ":" + flowsTargetPort
 
 	flowsAgent, err := agent.FlowsAgent(&agent.Config{
 		FlowsTarget:        flowsTarget,
