@@ -28,11 +28,11 @@ func main() {
 	// temporary hack until NETOBSERV-201
 	flowsTargetHost := os.Getenv("FLOWS_TARGET_HOST")
 	if flowsTargetHost == "" {
-		panic("expecting a collector target in the FLOWS_TARGET_HOST env var")
+		panic("expecting a collector target host in the FLOWS_TARGET_HOST env var")
 	}
 	flowsTargetPort := os.Getenv("FLOWS_TARGET_PORT")
 	if flowsTargetPort == "" {
-		panic("expecting a collector target in the FLOWS_TARGET_PORT env var")
+		panic("expecting a collector target port in the FLOWS_TARGET_PORT env var")
 	}
 	logrus.WithFields(logrus.Fields{
 		"FLOWS_TARGET_HOST": flowsTargetHost,
