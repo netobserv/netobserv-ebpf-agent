@@ -20,7 +20,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: netobserv-agent
-        image: quay.io/mmaciasl/netobserv-agent:main
+        image: quay.io/netobserv/netobserv-agent:main
         #      imagePullPolicy: Always
         securityContext:
           privileged: true
@@ -51,7 +51,7 @@ spec:
       serviceAccountName: netobserv-controller-manager
       containers:
         - name: packet-counter
-          image: quay.io/mmaciasl/flowlogs-pipeline:latest
+          image: quay.io/netobserv/flowlogs-pipeline:latest
           ports:
             - containerPort: 9999
           args:
