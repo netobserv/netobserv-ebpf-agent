@@ -2,7 +2,7 @@
 package grpc
 
 import (
-	"github.com/netobserv/netobserv-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

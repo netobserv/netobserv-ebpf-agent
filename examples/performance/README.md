@@ -6,7 +6,7 @@ How to test your setup performance:
 $ oc apply -f deployment.yml
 $ oc get pods
 NAME                              READY   STATUS    RESTARTS   AGE
-netobserv-agent                   1/1     Running   0          20s
+netobserv-ebpf-agent              1/1     Running   0          20s
 packet-counter-7b6df8b766-dbv8d   1/1     Running   0          20s
 $ oc logs -f packet-counter-7b6df8b766-dbv8d
 ```

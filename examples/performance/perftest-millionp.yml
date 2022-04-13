@@ -40,13 +40,13 @@ spec:
           command:
             - /udpreceiver
             - 0.0.0.0:5201
-      # colocate with the netobserv-agent to allow it capturing the generated traffic
+      # colocate with the netobserv-ebpf-agent to allow it capturing the generated traffic
       affinity:
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  run: netobserv-agent
+                  run: netobserv-ebpf-agent
               topologyKey: kubernetes.io/hostname
 ---
 apiVersion: apps/v1
@@ -75,11 +75,11 @@ spec:
               export HOST=$(getent hosts million-packets-receiver.default.svc.cluster.local | awk '{ print $1 }')
               echo \"host: $HOST\"
               /udpsender $HOST:5201
-      # colocate outside the netobserv-agent host to bring load outside
+      # colocate outside the netobserv-ebpf-agent host to bring load outside
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  run: netobserv-agent
+                  run: netobserv-ebpf-agent
               topologyKey: kubernetes.io/hostname

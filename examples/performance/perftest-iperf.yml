@@ -40,13 +40,13 @@ spec:
           command:
             - iperf3
             - -s
-      # colocate with the netobserv-agent to allow it capturing the generated traffic
+      # colocate with the netobserv-ebpf-agent to allow it capturing the generated traffic
       affinity:
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  run: netobserv-agent
+                  run: netobserv-ebpf-agent
               topologyKey: kubernetes.io/hostname
 ---
 apiVersion: apps/v1
@@ -76,11 +76,11 @@ spec:
             - iperf3-server
             - -t
             - "0"
-      # colocate outside the netobserv-agent host to bring load outside
+      # colocate outside the netobserv-ebpf-agent host to bring load outside
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  run: netobserv-agent
+                  run: netobserv-ebpf-agent
               topologyKey: kubernetes.io/hostname

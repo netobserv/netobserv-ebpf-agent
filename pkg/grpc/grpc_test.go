@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/mariomac/guara/pkg/test"
-	"github.com/netobserv/netobserv-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"

@@ -1,4 +1,4 @@
-module github.com/netobserv/netobserv-agent
+module github.com/netobserv/netobserv-ebpf-agent
 
 go 1.17
 

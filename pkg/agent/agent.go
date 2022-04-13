@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/netobserv/gopipes/pkg/node"
-	"github.com/netobserv/netobserv-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-agent/pkg/exporter"
-	"github.com/netobserv/netobserv-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 )
 
