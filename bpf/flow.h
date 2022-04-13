@@ -14,7 +14,7 @@ typedef __u64 u64;
 struct data_link {
     u8 src_mac[ETH_ALEN];
     u8 dst_mac[ETH_ALEN];
-};
+} __attribute__((packed));
 
 // L3 network layer
 struct network {
@@ -22,14 +22,14 @@ struct network {
     // todo: support ipv6
     u32 src_ip;
     u32 dst_ip;
-};
+} __attribute__((packed));
 
 // L4 transport layer
 struct transport {
     u16 src_port;
     u16 dst_port;
     u8 protocol;
-};
+} __attribute__((packed));
 
 // TODO: L5 session layer to bound flows to connections?
 

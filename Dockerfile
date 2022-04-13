@@ -16,6 +16,7 @@ WORKDIR /opt/app-root/src
 # END OF LINES TO REMOVE
 
 # Copy the go manifests and source
+COPY .git/ .git/
 COPY bpf/ bpf/
 COPY cmd/ cmd/
 COPY pkg/ pkg/

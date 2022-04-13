@@ -67,8 +67,10 @@ spec:
           value: call_error,cares_resolver,dns_resolver
         - name: GRPC_DNS_RESOLVER
           value: "ares"
-        - name: FLOWS_TARGET
-          value: "packet-counter:9999"
+        - name: FLOWS_TARGET_HOST
+          value: "packet-counter"
+        - name: FLOWS_TARGET_PORT
+          value: "9999"
 #      resources:
 #        limits:
 #          cpu: "1000m"
