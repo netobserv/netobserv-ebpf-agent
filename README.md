@@ -36,3 +36,10 @@ make generate
 ```
 
 Tested in Fedora 35 and Red Hat Enterprise Linux 8.
+
+## Known issues
+
+## Extrenal Traffic in Openshift (OVN-Kubernetes CNI)
+
+For egress traffic, you can see the source Pod metadata. For ingress traffic (e.g. an HTTP response),
+you see the destination **Host** metadata.
