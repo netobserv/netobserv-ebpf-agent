@@ -1,6 +1,6 @@
 # Deployment example files
 
-This directory contains some example files that show how the netobserv-agent
+This directory contains some example files that show how the netobserv-ebpf-agent
 can be deployed. In production, the agent is deployed by the Network Observability Operator
 but the files contained here are useful for documentation and manual testing.
 

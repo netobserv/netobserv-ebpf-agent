@@ -3,24 +3,24 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: netobserv-agent
+  name: netobserv-ebpf-agent
   labels:
-    k8s-app: netobserv-agent
+    k8s-app: netobserv-ebpf-agent
 spec:
   selector:
     matchLabels:
-      k8s-app: netobserv-agent
+      k8s-app: netobserv-ebpf-agent
   template:
     metadata:
       labels:
-        k8s-app: netobserv-agent
+        k8s-app: netobserv-ebpf-agent
     spec:
       serviceAccountName: netobserv-account
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-      - name: netobserv-agent
-        image: quay.io/netobserv/netobserv-agent:main
+      - name: netobserv-ebpf-agent
+        image: quay.io/netobserv/netobserv-ebpf-agent:main
         #      imagePullPolicy: Always
         securityContext:
           privileged: true

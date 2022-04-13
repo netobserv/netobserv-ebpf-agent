@@ -38,9 +38,9 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: netobserv-agent
+  name: netobserv-ebpf-agent
   labels:
-    run: netobserv-agent
+    run: netobserv-ebpf-agent
 spec:
   # the agent must be privileged
   hostNetwork: true
@@ -55,8 +55,8 @@ spec:
               run: packet-counter
           topologyKey: kubernetes.io/hostname
   containers:
-    - name: netobserv-agent
-      image: quay.io/netobserv/netobserv-agent:main
+    - name: netobserv-ebpf-agent
+      image: quay.io/netobserv/netobserv-ebpf-agent:main
 #      imagePullPolicy: Always
       securityContext:
         privileged: true

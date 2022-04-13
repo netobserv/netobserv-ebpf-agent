@@ -12,7 +12,7 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/netobserv/netobserv-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -49,6 +49,7 @@ func NewFlowTracer(iface string) *FlowTracer {
 func (m *FlowTracer) Register() error {
 	ilog := log.WithField("iface", m.interfaceName)
 	// Allow the current process to lock memory for eBPF resources.
+	// TODO: manually invoke unix.Prlimit with lower/reasonable rlimit
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("removing mem lock: %w", err)
 	}

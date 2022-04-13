@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/netobserv/netobserv-agent/pkg/grpc"
-	"github.com/netobserv/netobserv-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/paulbellamy/ratecounter"
 )
 

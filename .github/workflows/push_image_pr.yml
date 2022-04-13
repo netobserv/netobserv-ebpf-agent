@@ -6,7 +6,7 @@ on:
 env:
   REGISTRY_USER: netobserv+github_ci
   REGISTRY: quay.io/netobserv
-  IMAGE: netobserv-agent
+  IMAGE: netobserv-ebpf-agent
   IMAGE_ORG: netobserv
 
 jobs:

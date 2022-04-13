@@ -6,9 +6,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/netobserv/netobserv-agent/pkg/flow"
-	"github.com/netobserv/netobserv-agent/pkg/grpc"
-	"github.com/netobserv/netobserv-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 )
 
 var glog = logrus.WithField("component", "exporter/GRPCProto")

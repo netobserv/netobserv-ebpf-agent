@@ -1,6 +1,6 @@
-# Network Observability Agent
+# Network Observability eBPF Agent
 
-Network Observability Agent
+Network Observability eBPF Agent.
 
 ## How to compile
 
@@ -11,7 +11,7 @@ make build
 ## How to run
 
 ```
-sudo bin/netobserv-agent
+sudo bin/netobserv-ebpf-agent
 ```
 (Pod deployment will come soon)
 

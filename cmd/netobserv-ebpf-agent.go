@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/netobserv/netobserv-agent/pkg/agent"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
 	"github.com/sirupsen/logrus"
 )
 
@@ -49,7 +49,7 @@ func main() {
 		CacheActiveTimeout: maxFlowEvictionPeriod,
 	})
 	if err != nil {
-		logrus.WithError(err).Fatal("can't instantiate netobserv-agent")
+		logrus.WithError(err).Fatal("can't instantiate netobserv-ebpf-agent")
 	}
 
 	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")
@@ -62,6 +62,6 @@ func main() {
 		canceler()
 	}()
 	if err := flowsAgent.Run(ctx); err != nil {
-		logrus.WithError(err).Fatal("can't start netobserv-agent")
+		logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
 	}
 }
