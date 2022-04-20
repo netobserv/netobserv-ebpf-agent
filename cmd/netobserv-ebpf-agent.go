@@ -4,52 +4,32 @@ package main
 
 import (
 	"context"
-	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
+
+	"github.com/caarlos0/env/v6"
+	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
-	"github.com/sirupsen/logrus"
-)
-
-// TODO: make configurable. NETOBSERV-201
-const (
-	maxStoredFlowEntries      = 1000
-	maxFlowEvictionPeriod     = 5 * time.Second
-	communicationBufferLength = 20
 )
 
 func main() {
-	flag.Parse()
-
-	logrus.SetLevel(logrus.DebugLevel)
-	// temporary hack until NETOBSERV-201
-	flowsTargetHost := os.Getenv("FLOWS_TARGET_HOST")
-	if flowsTargetHost == "" {
-		panic("expecting a collector target host in the FLOWS_TARGET_HOST env var")
+	logrus.Infof("starting NetObserv eBPF Agent")
+	config := agent.Config{}
+	if err := env.Parse(&config); err != nil {
+		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
-	flowsTargetPort := os.Getenv("FLOWS_TARGET_PORT")
-	if flowsTargetPort == "" {
-		panic("expecting a collector target port in the FLOWS_TARGET_PORT env var")
+	if config.Verbose {
+		logrus.SetLevel(logrus.DebugLevel)
 	}
-	logrus.WithFields(logrus.Fields{
-		"FLOWS_TARGET_HOST": flowsTargetHost,
-		"FLOWS_TARGET_PORT": flowsTargetPort,
-	}).Infof("Starting eBFP flows' agent")
 
-	flowsTarget := flowsTargetHost + ":" + flowsTargetPort
+	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
-	flowsAgent, err := agent.FlowsAgent(&agent.Config{
-		FlowsTarget:        flowsTarget,
-		ExcludeIfaces:      []string{"lo"},
-		BuffersLen:         communicationBufferLength,
-		CacheMaxFlows:      maxStoredFlowEntries,
-		CacheActiveTimeout: maxFlowEvictionPeriod,
-	})
+	flowsAgent, err := agent.FlowsAgent(&config)
 	if err != nil {
-		logrus.WithError(err).Fatal("can't instantiate netobserv-ebpf-agent")
+		logrus.WithError(err).Fatal("can't instantiate NetObserv eBPF Agent")
 	}
 
 	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")

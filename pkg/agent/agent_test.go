@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -27,11 +26,12 @@ func TestFlowsAgent(t *testing.T) {
 
 	// GIVEN a flows agent
 	flowsAgent, err := FlowsAgent(&Config{
-		FlowsTarget:        fmt.Sprintf("127.0.0.1:%d", port),
+		TargetHost:         "127.0.0.1",
+		TargetPort:         port,
 		Verbose:            true,
 		CacheMaxFlows:      1,
 		CacheActiveTimeout: 5 * time.Second,
-		BuffersLen:         10,
+		BuffersLength:      10,
 	})
 	require.NoError(t, err)
 	// replacing the real eBPF tracer (requires running as root in kernel space)

@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"net"
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -34,7 +36,7 @@ type flowExporter func(in <-chan []*flow.Record)
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
-	interfaces, err := getInterfaces(cfg)
+	interfaces, err := getInterfaces(cfg, net.Interfaces)
 	if err != nil {
 		return nil, err
 	}
@@ -42,14 +44,17 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	for iface := range interfaces {
 		tracers[iface] = ebpf.NewFlowTracer(iface)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.FlowsTarget)
+	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+	grpcExporter, err := exporter.StartGRPCProto(target)
 	if err != nil {
 		return nil, err
 	}
 	return &Flows{
-		tracers:   tracers,
-		accounter: flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLen, cfg.CacheActiveTimeout),
-		exporter:  grpcExporter.ExportFlows,
+		tracers: tracers,
+		accounter: flow.NewAccounter(cfg.CacheMaxFlows,
+			cfg.BuffersLength,
+			cfg.CacheActiveTimeout),
+		exporter: grpcExporter.ExportFlows,
 	}, nil
 }
 
