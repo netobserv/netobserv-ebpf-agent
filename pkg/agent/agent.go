@@ -42,7 +42,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 	tracers := map[string]flowTracer{}
 	for iface := range interfaces {
-		tracers[iface] = ebpf.NewFlowTracer(iface)
+		tracers[iface] = ebpf.NewFlowTracer(iface, cfg.Sampling)
 	}
 	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
 	grpcExporter, err := exporter.StartGRPCProto(target)

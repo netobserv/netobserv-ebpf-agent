@@ -15,6 +15,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
@@ -22,6 +23,8 @@ import (
 
 const (
 	qdiscType = "clsact"
+	// constants defined in flows.c as "volatile const"
+	constSampling = "sampling"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
@@ -29,6 +32,7 @@ var log = logrus.WithField("component", "ebpf.FlowTracer")
 // FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
 type FlowTracer struct {
 	interfaceName string
+	sampling      uint32
 	objects       bpfObjects
 	qdisc         *netlink.GenericQdisc
 	egressFilter  *netlink.BpfFilter
@@ -37,10 +41,11 @@ type FlowTracer struct {
 }
 
 // NewFlowTracer fo a given interface type
-func NewFlowTracer(iface string) *FlowTracer {
+func NewFlowTracer(iface string, sampling uint32) *FlowTracer {
 	log.WithField("iface", iface).Debug("Instantiating flow tracer")
 	return &FlowTracer{
 		interfaceName: iface,
+		sampling:      sampling,
 	}
 }
 
@@ -53,9 +58,18 @@ func (m *FlowTracer) Register() error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("removing mem lock: %w", err)
 	}
-	// Load pre-compiled programs and maps into the kernel.
-	if err := loadBpfObjects(&m.objects, nil); err != nil {
-		return fmt.Errorf("loading objects: %w", err)
+	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
+	spec, err := loadBpf()
+	if err != nil {
+		return fmt.Errorf("loading BPF data: %w", err)
+	}
+	if err := spec.RewriteConstants(map[string]interface{}{
+		constSampling: m.sampling,
+	}); err != nil {
+		return fmt.Errorf("rewriting BPF constants definition: %w", err)
+	}
+	if err := spec.LoadAndAssign(&m.objects, nil); err != nil {
+		return fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
 	ipvlan, err := netlink.LinkByName(m.interfaceName)
 	if err != nil {
@@ -110,7 +124,7 @@ func (m *FlowTracer) Register() error {
 		LinkIndex: ipvlan.Attrs().Index,
 		Parent:    netlink.HANDLE_MIN_INGRESS,
 		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  3,
+		Protocol:  unix.ETH_P_ALL,
 		Priority:  1,
 	}
 	m.ingressFilter = &netlink.BpfFilter{

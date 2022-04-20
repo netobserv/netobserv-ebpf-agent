@@ -32,8 +32,11 @@ type Config struct {
 	// CacheActiveTimeout specifies the maximum duration in which a flow is kept in the accounting
 	// cache before being flushed for its later export
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`
-	// Verbose logs mode
-	Verbose bool `env:"VERBOSE" envDefault:"false"`
+	// Logger level. From more to less verbose: trace, debug, info, warn, error, fatal, panic.
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
+	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
+	// E.g. if set to 100, one out of 100 packets, on average, will be sent to each target collector.
+	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
 }
 
 func getInterfaces(cfg *Config, interfaces func() ([]net.Interface, error)) (map[string]struct{}, error) {
