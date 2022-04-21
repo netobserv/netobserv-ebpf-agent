@@ -21,9 +21,7 @@ func main() {
 	if err := env.Parse(&config); err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
-	if config.Verbose {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
+	setLoggerVerbosity(&config)
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
@@ -44,4 +42,13 @@ func main() {
 	if err := flowsAgent.Run(ctx); err != nil {
 		logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
 	}
+}
+
+func setLoggerVerbosity(cfg *agent.Config) {
+	lvl, err := logrus.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		logrus.WithError(err).Warn("assuming 'info' logger level as default")
+		lvl = logrus.InfoLevel
+	}
+	logrus.SetLevel(lvl)
 }

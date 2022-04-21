@@ -23,6 +23,9 @@ struct {
     __uint(max_entries, 1 << 24);
 } flows SEC(".maps");
 
+// Constant definitions, to be overridden by the invoker
+volatile const u32 sampling = 0;
+
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow) {
     if ((void *)ip + sizeof(*ip) > data_end) {
@@ -72,6 +75,12 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, struct flow *f
 
 // parses flow information for a given direction (ingress/egress)
 static inline int flow_parse(struct __sk_buff *skb, u8 direction) {
+
+    // If sampling is defined, will only parse 1 out of "sampling" flows
+    if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
+        return TC_ACT_OK;
+    }
+
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
 

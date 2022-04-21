@@ -28,7 +28,6 @@ func TestFlowsAgent(t *testing.T) {
 	flowsAgent, err := FlowsAgent(&Config{
 		TargetHost:         "127.0.0.1",
 		TargetPort:         port,
-		Verbose:            true,
 		CacheMaxFlows:      1,
 		CacheActiveTimeout: 5 * time.Second,
 		BuffersLength:      10,
