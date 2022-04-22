@@ -11,7 +11,7 @@ import (
 type Config struct {
 	// TargetHost is the host name or IP of the target Flow collector
 	TargetHost string `env:"FLOWS_TARGET_HOST,notEmpty"`
-	// TargetHost is the port the target Flow collector
+	// TargetPort is the port the target Flow collector
 	TargetPort int `env:"FLOWS_TARGET_PORT,notEmpty"`
 	// Interfaces contains the interface names from where flows will be collected. If empty, the agent
 	// will fetch all the interfaces in the system, excepting the ones listed in ExcludeInterfaces.
@@ -27,15 +27,15 @@ type Config struct {
 	// stages
 	BuffersLength int `env:"BUFFERS_LENGTH" envDefault:"50"`
 	// CacheMaxFlows specifies how many flows can be accumulated in the accounting cache before
-	// being flushing the cache for its later export
+	// being flushed for its later export
 	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"1000"`
-	// CacheActiveTimeout specifies the maximum duration in which a flow is kept in the accounting
+	// CacheActiveTimeout specifies the maximum duration that flows are kept in the accounting
 	// cache before being flushed for its later export
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`
 	// Logger level. From more to less verbose: trace, debug, info, warn, error, fatal, panic.
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
-	// E.g. if set to 100, one out of 100 packets, on average, will be sent to each target collector.
+	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
 	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
 }
 
