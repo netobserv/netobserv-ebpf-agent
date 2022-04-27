@@ -14,8 +14,8 @@ type Poller struct {
 	interfaces func() ([]Name, error)
 }
 
-func NewPoller(period time.Duration) Poller {
-	return Poller{
+func NewPoller(period time.Duration) *Poller {
+	return &Poller{
 		period:     period,
 		interfaces: interfaces,
 	}

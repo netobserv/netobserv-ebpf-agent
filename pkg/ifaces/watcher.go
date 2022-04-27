@@ -12,8 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const DefaultNetDevPath = "/proc/net/dev"
-
 var ifaceSeparator = []byte{':'}
 
 type Watcher struct {
@@ -21,8 +19,8 @@ type Watcher struct {
 	bufLen     int
 }
 
-func NewWatcher(netDevPath string, bufLen int) Watcher {
-	return Watcher{
+func NewWatcher(netDevPath string, bufLen int) *Watcher {
+	return &Watcher{
 		netDevPath: netDevPath,
 		bufLen:     bufLen,
 	}

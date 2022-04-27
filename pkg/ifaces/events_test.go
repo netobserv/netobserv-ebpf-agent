@@ -28,7 +28,7 @@ func TestEventsInformer_Poller(t *testing.T) {
 	poller := NewPoller(5 * time.Millisecond)
 	poller.interfaces = fakeInterfaces
 
-	changes, err := Informer(ctx, &poller, 10)
+	changes, err := Informer(ctx, poller, 10)
 	require.NoError(t, err)
 
 	assert.Equal(t, Event{Type: EventAdded, Interface: "foo"}, getEvent(t, changes))
@@ -61,7 +61,7 @@ a242730663491d7: 1614408163  178131    0    0    0     0          0         0 13
 
 	watcher := NewWatcher(procNetDev.Name(), 10)
 
-	changes, err := Informer(ctx, &watcher, 10)
+	changes, err := Informer(ctx, watcher, 10)
 	require.NoError(t, err)
 
 	require.Equal(t, Event{Type: EventAdded, Interface: "eth0"}, getEvent(t, changes))

@@ -1,11 +1,12 @@
 package agent
 
 import (
-	"fmt"
-	"net"
-	"regexp"
-	"strings"
 	"time"
+)
+
+const (
+	ListenPoll  = "poll"
+	ListenWatch = "watch"
 )
 
 type Config struct {
@@ -37,58 +38,9 @@ type Config struct {
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
 	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
 	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
-}
 
-func getInterfaces(cfg *Config, interfaces func() ([]net.Interface, error)) (map[string]struct{}, error) {
-	// get interfaces from configuration or acquire them from the system
-	actual, err := interfaces()
-	if err != nil {
-		return nil, fmt.Errorf("can't get network interfaces: %w", err)
-	}
-	accepted := map[string]struct{}{}
-
-	// Accept only defined interfaces, or all if the interfaces section is not defined
-	if len(cfg.Interfaces) > 0 {
-		for _, definition := range cfg.Interfaces {
-			for _, iface := range actual {
-				if m, err := isMatch(iface.Name, definition); err != nil {
-					return nil, fmt.Errorf("wrong definition of interface: %w", err)
-				} else if m {
-					accepted[iface.Name] = struct{}{}
-				}
-			}
-		}
-	} else {
-		for _, iface := range actual {
-			accepted[iface.Name] = struct{}{}
-		}
-	}
-
-	// exclude interfaces
-	for _, definition := range cfg.ExcludeInterfaces {
-		for iface := range accepted {
-			if m, err := isMatch(iface, definition); err != nil {
-				return nil, fmt.Errorf("wrong definition of excluded interfaces: %w", err)
-			} else if m {
-				delete(accepted, iface)
-			}
-		}
-	}
-	return accepted, nil
-}
-
-func isMatch(iface, definition string) (bool, error) {
-	var isRegexp = regexp.MustCompile("^/(.*)/$")
-	definition = strings.Trim(definition, " ")
-
-	// the user defined a /regexp/ between slashes: check if matches
-	if sm := isRegexp.FindStringSubmatch(definition); len(sm) > 0 {
-		m, err := regexp.MatchString(sm[1], iface)
-		if err != nil {
-			return false, fmt.Errorf("wrong pattern %s: %w", definition, err)
-		}
-		return m, nil
-	}
-	// the user defined a plain string: check exact match
-	return iface == definition, nil
+	// accepted values: "poll", "watch"
+	ListenDevices      string        `env:"LISTEN_DEVICES" envDefault:"watch"`
+	ListenPollPeriod   time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
+	ListenWatchDevFile string        `env:"LISTEN_WATCH_DEV_FILE" envDefault:"/proc/net/dev"`
 }
