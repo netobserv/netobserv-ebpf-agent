@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -17,11 +18,18 @@ var alog = logrus.WithField("component", "agent.Flows")
 // Flows reporting agent
 type Flows struct {
 	trMutex        sync.Mutex
-	tracers        map[ifaces.Name]flowTracer
+	tracers        map[ifaces.Name]cancellableTracer
 	accounter      flowAccounter
 	exporter       flowExporter
 	interfaceNames ifaces.NamesProvider
-	bufLen         int
+	filter         interfaceFilter
+	tracerFactory  func(name string, sampling uint32) flowTracer
+	cfg            *Config
+}
+
+type cancellableTracer struct {
+	tracer flowTracer
+	cancel context.CancelFunc
 }
 
 type flowTracer interface {
@@ -39,6 +47,12 @@ type flowExporter func(in <-chan []*flow.Record)
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
+
+	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+	if err != nil {
+		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	}
+
 	var namesProvider ifaces.NamesProvider
 	switch cfg.ListenDevices {
 	case ListenPoll:
@@ -63,13 +77,17 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 	return &Flows{
-		tracers: map[ifaces.Name]flowTracer{},
+		tracers: map[ifaces.Name]cancellableTracer{},
 		accounter: flow.NewAccounter(cfg.CacheMaxFlows,
 			cfg.BuffersLength,
 			cfg.CacheActiveTimeout),
 		exporter:       grpcExporter.ExportFlows,
 		interfaceNames: namesProvider,
-		bufLen:         cfg.BuffersLength,
+		filter:         filter,
+		tracerFactory: func(name string, sampling uint32) flowTracer {
+			return ebpf.NewFlowTracer(name, sampling)
+		},
+		cfg: cfg,
 	}, nil
 }
 
@@ -78,31 +96,11 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 func (f *Flows) Run(ctx context.Context) error {
 	alog.Info("starting Flows agent")
 
-	graph := f.processRecords(tracedRecords)
-	f.subscribeForRecords(tracedRecords)
-
-	alog.Debug("registering flow tracers")
-	var tracers []*node.Init
-	for i, t := range f.tracers {
-		// make sure the background/deferred functions use this loop's values
-		iface, tracer := i, t
-		tlog := alog.WithField("iface", iface)
-		tlog.Debug("registering flow tracer")
-		if err := tracer.Register(); err != nil {
-			return err
-		}
-		defer func() {
-			tlog.Debug("unregistering flow tracer")
-			if err := tracer.Unregister(); err != nil {
-				tlog.WithError(err).Warn("error unregistering flow tracer")
-			}
-		}()
-		tracers = append(tracers,
-			node.AsInit(func(out chan<- *flow.Record) {
-				tracer.Trace(ctx, out)
-				tlog.Debug("tracer routine ended")
-			}))
+	tracedRecords, err := f.subscribeForRecords(ctx)
+	if err != nil {
+		return err
 	}
+	graph := f.processRecords(tracedRecords)
 
 	alog.Info("Flows agent successfully started")
 	<-ctx.Done()
@@ -139,11 +137,11 @@ func (f *Flows) processRecords(tracedRecords <-chan *flow.Record) *node.Terminal
 func (f *Flows) subscribeForRecords(ctx context.Context) (<-chan *flow.Record, error) {
 	slog := alog.WithField("function", "subscribeForRecords")
 	slog.Debug("starting function")
-	deviceEvents, err := ifaces.Informer(ctx, f.interfaceNames, f.bufLen)
+	deviceEvents, err := ifaces.Informer(ctx, f.interfaceNames, f.cfg.BuffersLength)
 	if err != nil {
 		return nil, err
 	}
-	tracedRecords := make(chan *flow.Record, f.bufLen)
+	tracedRecords := make(chan *flow.Record, f.cfg.BuffersLength)
 
 	go func() {
 		for {
@@ -156,9 +154,12 @@ func (f *Flows) subscribeForRecords(ctx context.Context) (<-chan *flow.Record, e
 				slog.WithField("event", event).Debug("received event")
 				switch event.Type {
 				case ifaces.EventAdded:
-					f.onInterfaceAdded(event.Interface)
+					f.onInterfaceAdded(ctx, event.Interface, tracedRecords)
+				case ifaces.EventDeleted:
+					f.onInterfaceDeleted(event.Interface)
+				default:
+					slog.WithField("event", event).Warn("unknown event type")
 				}
-
 			}
 		}
 	}()
@@ -166,11 +167,42 @@ func (f *Flows) subscribeForRecords(ctx context.Context) (<-chan *flow.Record, e
 	return tracedRecords, nil
 }
 
-func (f *Flows) onInterfaceAdded(name ifaces.Name) {
+func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh chan *flow.Record) {
 	// first: filter the interface name according to the configuration
-
+	if !f.filter.Allowed(name) {
+		alog.WithField("name", name).
+			Debug("interface does not match the allow/exclusion filters. Ignoring")
+		return
+	}
 	f.trMutex.Lock()
 	defer f.trMutex.Unlock()
-	if ft, ok := f.tracers[name]; !ok {
+	if _, ok := f.tracers[name]; !ok {
+		alog.WithField("name", name).Info("new interface added. Registering flow tracer")
+		ft := f.tracerFactory(string(name), f.cfg.Sampling)
+		if err := ft.Register(); err != nil {
+			alog.WithField("interface", name).WithError(err).
+				Warn("can't register flow tracer. Ignoring")
+			return
+		}
+		tctx, cancel := context.WithCancel(ctx)
+		go ft.Trace(tctx, flowsCh)
+		f.tracers[name] = cancellableTracer{
+			tracer: ft,
+			cancel: cancel,
+		}
+	}
+}
+
+func (f *Flows) onInterfaceDeleted(name ifaces.Name) {
+	f.trMutex.Lock()
+	defer f.trMutex.Unlock()
+	if ft, ok := f.tracers[name]; ok {
+		alog.WithField("name", name).Info("interface deleted. Removing flow tracer")
+		ft.cancel()
+		if err := ft.tracer.Unregister(); err != nil {
+			alog.WithField("name", name).WithError(err).
+				Warn("can't unregister flow tracer")
+		}
+		delete(f.tracers, name)
 	}
 }

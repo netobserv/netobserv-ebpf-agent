@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 )
@@ -16,6 +17,17 @@ const (
 	EventAdded EventType = iota
 	EventDeleted
 )
+
+func (e EventType) String() string {
+	switch e {
+	case EventAdded:
+		return "Added"
+	case EventDeleted:
+		return "Deleted"
+	default:
+		return fmt.Sprintf("Unknown (%d)", e)
+	}
+}
 
 var ilog = logrus.WithField("component", "ifaces.Informer")
 

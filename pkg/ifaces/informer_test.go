@@ -94,6 +94,21 @@ abcdefghijk: 1614408163  178131    0    0    0     0          0         0 133433
 	}
 }
 
+func TestEventsInformer_RemoveAll(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	np := &FakeNameProvider{Provides: [][]Name{{"eth0"}}}
+
+	changes, err := Informer(ctx, np, 10)
+	require.NoError(t, err)
+	require.Equal(t, Event{Type: EventAdded, Interface: "eth0"}, getEvent(t, changes))
+
+	np.Next()
+
+	require.Equal(t, Event{Type: EventDeleted, Interface: "eth0"}, getEvent(t, changes))
+}
+
 func getEvent(t *testing.T, ch <-chan Event) Event {
 	t.Helper()
 	select {

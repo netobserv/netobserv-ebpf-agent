@@ -8,14 +8,18 @@ import (
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const timeout = 5 * time.Second
+const timeout = 5000 * time.Second
 
 func TestFlowsAgent(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
+
 	// preparing a test flow collector
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -36,9 +40,19 @@ func TestFlowsAgent(t *testing.T) {
 	// replacing the real eBPF tracer (requires running as root in kernel space)
 	// by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
-	flowsAgent.tracers = map[string]flowTracer{
-		"fake": &fakeFlowTracer{tracedFlows: agentInput},
+	namesProvider := &ifaces.FakeNameProvider{
+		Provides: [][]ifaces.Name{{"fake"}},
 	}
+	flowsAgent.interfaceNames = namesProvider
+	var ft *fakeFlowTracer
+	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+		if ft != nil {
+			require.Fail(t, "flow tracer should have been instantiated only once")
+		}
+		ft = &fakeFlowTracer{tracedFlows: agentInput}
+		return ft
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -97,22 +111,44 @@ func TestFlowsAgent(t *testing.T) {
 	assert.EqualValues(t, 456, r.Transport.SrcPort)
 	assert.EqualValues(t, 789, r.Transport.DstPort)
 	assert.EqualValues(t, 1_234_567, r.Bytes)
+
+	// Check that during the initialization, the flow tracer was registered
+	assert.True(t, ft.registerCalled)
+	assert.False(t, ft.unregisterCalled)
+	assert.False(t, ft.contextCanceled)
+
+	// Trigger the removal of the interface and check that the flow tracer is unregistered
+	namesProvider.Next()
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		require.True(t, ft.unregisterCalled)
+		require.True(t, ft.contextCanceled)
+	})
 }
 
 type fakeFlowTracer struct {
-	tracedFlows <-chan *flow.Record
+	registerCalled   bool
+	unregisterCalled bool
+	contextCanceled  bool
+	tracedFlows      <-chan *flow.Record
 }
 
-func (ft *fakeFlowTracer) Trace(_ context.Context, forwardFlows chan<- *flow.Record) {
-	for f := range ft.tracedFlows {
-		forwardFlows <- f
+func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	for {
+		select {
+		case f := <-ft.tracedFlows:
+			forwardFlows <- f
+		case <-ctx.Done():
+			ft.contextCanceled = true
+		}
 	}
 }
 
 func (ft *fakeFlowTracer) Register() error {
+	ft.registerCalled = true
 	return nil
 }
 
 func (ft *fakeFlowTracer) Unregister() error {
+	ft.unregisterCalled = true
 	return nil
 }
