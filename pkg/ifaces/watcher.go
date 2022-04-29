@@ -8,10 +8,14 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// Watcher uses system's netlink to get real-time information events about network interfaces'
+// addition or removal.
 type Watcher struct {
-	bufLen         int
-	current        map[Name]struct{}
-	interfaces     func() ([]Name, error)
+	bufLen     int
+	current    map[Name]struct{}
+	interfaces func() ([]Name, error)
+	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
+	// mocks for unit testing
 	linkSubscriber func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
 }
 
@@ -19,7 +23,7 @@ func NewWatcher(bufLen int) *Watcher {
 	return &Watcher{
 		bufLen:         bufLen,
 		current:        map[Name]struct{}{},
-		interfaces:     interfaces,
+		interfaces:     netInterfaces,
 		linkSubscriber: netlink.LinkSubscribe,
 	}
 }
@@ -33,17 +37,17 @@ func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 }
 
 func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
-	log := logrus.WithFields(logrus.Fields{
-		"component": "ifaces.Watcher",
-	})
+	log := logrus.WithField("component", "ifaces.Watcher")
+
+	// subscribe for interface events
 	links := make(chan netlink.LinkUpdate)
 	if err := w.linkSubscriber(links, ctx.Done()); err != nil {
 		log.WithError(err).Error("can't subscribe to links")
 		return
 	}
 
-	// before sending updates, send all the existing interfaces at the moment of starting the
-	// agent
+	// before sending netlink updates, send all the existing interfaces at the moment of starting
+	// the Watcher
 	if names, err := w.interfaces(); err != nil {
 		log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 	} else {

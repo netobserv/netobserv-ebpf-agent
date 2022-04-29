@@ -17,14 +17,25 @@ var alog = logrus.WithField("component", "agent.Flows")
 
 // Flows reporting agent
 type Flows struct {
-	trMutex       sync.Mutex
-	tracers       map[ifaces.Name]cancellableTracer
-	accounter     flowAccounter
-	exporter      flowExporter
-	interfaces    ifaces.Informer
-	filter        interfaceFilter
+	// trMutex provides synchronized access to the tracers map
+	trMutex sync.Mutex
+	// tracers stores a flowTracer implementation for each interface in the system, with a
+	// cancel function that allows stopping it when its interface is deleted
+	tracers    map[ifaces.Name]cancellableTracer
+	accounter  *flow.Accounter
+	exporter   flowExporter
+	interfaces ifaces.Informer
+	filter     interfaceFilter
+	// tracerFactory specifies how to instantiate flowTracer implementations
 	tracerFactory func(name string, sampling uint32) flowTracer
 	cfg           *Config
+}
+
+// flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
+type flowTracer interface {
+	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
+	Register() error
+	Unregister() error
 }
 
 type cancellableTracer struct {
@@ -32,29 +43,23 @@ type cancellableTracer struct {
 	cancel context.CancelFunc
 }
 
-type flowTracer interface {
-	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
-	Register() error
-	Unregister() error
-}
-
-type flowAccounter interface {
-	Account(in <-chan *flow.Record, out chan<- []*flow.Record)
-}
-
+// flowExporter abstract the ExportFlows' method of exporter.GRPCProto to allow dependency injection
+// in tests
 type flowExporter func(in <-chan []*flow.Record)
 
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
 
+	// configure allow/deny interfaces filter
 	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
 	if err != nil {
 		return nil, fmt.Errorf("configuring interface filters: %w", err)
 	}
 
+	// configure informer for new interfaces
 	var informer ifaces.Informer
-	switch cfg.ListenDevices {
+	switch cfg.ListenInterfaces {
 	case ListenPoll:
 		alog.WithField("period", cfg.ListenPollPeriod).
 			Debug("listening for new interfaces: use polling")
@@ -64,21 +69,21 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	default:
 		alog.WithFields(logrus.Fields{
-			"providedValue": cfg.ListenDevices,
-		}).Warn("wrong device listen method. Using file watcher as default")
+			"providedValue": cfg.ListenInterfaces,
+		}).Warn("wrong interface listen method. Using file watcher as default")
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
+	// configure GRPC+Protobuf exporter
 	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
 	grpcExporter, err := exporter.StartGRPCProto(target)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Flows{
-		tracers: map[ifaces.Name]cancellableTracer{},
-		accounter: flow.NewAccounter(cfg.CacheMaxFlows,
-			cfg.BuffersLength,
-			cfg.CacheActiveTimeout),
+		tracers:    map[ifaces.Name]cancellableTracer{},
+		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
 		exporter:   grpcExporter.ExportFlows,
 		interfaces: informer,
 		filter:     filter,
@@ -94,7 +99,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 func (f *Flows) Run(ctx context.Context) error {
 	alog.Info("starting Flows agent")
 
-	tracedRecords, err := f.subscribeForRecords(ctx)
+	tracedRecords, err := f.interfacesManager(ctx)
 	if err != nil {
 		return err
 	}
@@ -111,10 +116,50 @@ func (f *Flows) Run(ctx context.Context) error {
 	return nil
 }
 
+// interfacesManager uses an informer to check new/deleted network interfaces. For each running
+// interface, it registers a flow tracer that will forward new flows to the returned channel
+func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, error) {
+	slog := alog.WithField("function", "interfacesManager")
+
+	slog.Debug("subscribing for network interface events")
+	ifaceEvents, err := f.interfaces.Subscribe(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
+	}
+
+	tracedRecords := make(chan *flow.Record, f.cfg.BuffersLength)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				slog.Debug("detaching all the flow tracers before closing the record's channel")
+				f.detachAllTracers()
+				slog.Debug("closing channel and exiting internal goroutine")
+				close(tracedRecords)
+				return
+			case event := <-ifaceEvents:
+				slog.WithField("event", event).Debug("received event")
+				switch event.Type {
+				case ifaces.EventAdded:
+					f.onInterfaceAdded(ctx, event.Interface, tracedRecords)
+				case ifaces.EventDeleted:
+					f.onInterfaceDeleted(event.Interface)
+				default:
+					slog.WithField("event", event).Warn("unknown event type")
+				}
+			}
+		}
+	}()
+
+	return tracedRecords, nil
+}
+
+// processRecords creates the tracers --> accounter --> forwarder Flow processing graph
 func (f *Flows) processRecords(tracedRecords <-chan *flow.Record) *node.Terminal {
+	// The start node receives Records from the eBPF flow tracers. Currently it is just an external
+	// channel forwarder, as the Pipes library does not yet accept
+	// adding/removing nodes dynamically: https://github.com/mariomac/pipes/issues/5
 	alog.Debug("registering tracers' input")
-	// The start node is just an external channel forwarder, as the pipes library still
-	// does not accept plug-in/removing nodes dynamically: https://github.com/mariomac/pipes/issues/5
 	tracersCollector := node.AsInit(func(out chan<- *flow.Record) {
 		for i := range tracedRecords {
 			out <- i
@@ -132,41 +177,8 @@ func (f *Flows) processRecords(tracedRecords <-chan *flow.Record) *node.Terminal
 	return export
 }
 
-func (f *Flows) subscribeForRecords(ctx context.Context) (<-chan *flow.Record, error) {
-	slog := alog.WithField("function", "subscribeForRecords")
-	slog.Debug("starting function")
-	deviceEvents, err := f.interfaces.Subscribe(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
-	}
-	tracedRecords := make(chan *flow.Record, f.cfg.BuffersLength)
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				slog.Debug("closing channel and exiting internal goroutine")
-				close(tracedRecords)
-				return
-			case event := <-deviceEvents:
-				slog.WithField("event", event).Debug("received event")
-				switch event.Type {
-				case ifaces.EventAdded:
-					f.onInterfaceAdded(ctx, event.Interface, tracedRecords)
-				case ifaces.EventDeleted:
-					f.onInterfaceDeleted(event.Interface)
-				default:
-					slog.WithField("event", event).Warn("unknown event type")
-				}
-			}
-		}
-	}()
-
-	return tracedRecords, nil
-}
-
 func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh chan *flow.Record) {
-	// first: filter the interface name according to the configuration
+	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	if !f.filter.Allowed(name) {
 		alog.WithField("name", name).
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
@@ -175,17 +187,17 @@ func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh 
 	f.trMutex.Lock()
 	defer f.trMutex.Unlock()
 	if _, ok := f.tracers[name]; !ok {
-		alog.WithField("name", name).Info("new interface added. Registering flow tracer")
-		ft := f.tracerFactory(string(name), f.cfg.Sampling)
-		if err := ft.Register(); err != nil {
+		alog.WithField("name", name).Info("interface detected. Registering flow tracer")
+		tracer := f.tracerFactory(string(name), f.cfg.Sampling)
+		if err := tracer.Register(); err != nil {
 			alog.WithField("interface", name).WithError(err).
 				Warn("can't register flow tracer. Ignoring")
 			return
 		}
 		tctx, cancel := context.WithCancel(ctx)
-		go ft.Trace(tctx, flowsCh)
+		go tracer.Trace(tctx, flowsCh)
 		f.tracers[name] = cancellableTracer{
-			tracer: ft,
+			tracer: tracer,
 			cancel: cancel,
 		}
 	}
@@ -197,10 +209,22 @@ func (f *Flows) onInterfaceDeleted(name ifaces.Name) {
 	if ft, ok := f.tracers[name]; ok {
 		alog.WithField("name", name).Info("interface deleted. Removing flow tracer")
 		ft.cancel()
-		if err := ft.tracer.Unregister(); err != nil {
-			alog.WithField("name", name).WithError(err).
-				Warn("can't unregister flow tracer")
-		}
 		delete(f.tracers, name)
+		// qdiscs, ingress and egress filters are automatically deleted so we don't need to
+		// specifically detach the tracer
 	}
+}
+
+func (f *Flows) detachAllTracers() {
+	f.trMutex.Lock()
+	defer f.trMutex.Unlock()
+	for name, ft := range f.tracers {
+		ft.cancel()
+		flog := alog.WithField("name", name)
+		flog.Info("unregistering flow tracer")
+		if err := ft.tracer.Unregister(); err != nil {
+			flog.WithError(err).Warn("can't unregister flow tracer")
+		}
+	}
+	f.tracers = map[ifaces.Name]cancellableTracer{}
 }

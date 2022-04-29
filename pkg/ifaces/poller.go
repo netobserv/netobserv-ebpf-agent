@@ -7,6 +7,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Poller periodically looks for the network interfaces in the system and forwards Event
+// notifications when interfaces are added or deleted.
 type Poller struct {
 	period     time.Duration
 	current    map[Name]struct{}
@@ -18,7 +20,7 @@ func NewPoller(period time.Duration, bufLen int) *Poller {
 	return &Poller{
 		period:     period,
 		bufLen:     bufLen,
-		interfaces: interfaces,
+		interfaces: netInterfaces,
 		current:    map[Name]struct{}{},
 	}
 }
@@ -50,6 +52,8 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 	return out, nil
 }
 
+// diffNames compares and updates the internal account of interfaces with the latest list of
+// polled interfaces. It forwards Events for any detected addition or removal of interfaces.
 func (np *Poller) diffNames(events chan Event, names []Name) {
 	// Check for new interfaces
 	acquired := map[Name]struct{}{}

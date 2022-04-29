@@ -45,8 +45,7 @@ func TestFlowsAgent(t *testing.T) {
 	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
 	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "ignored"} // to be ignored
 
-	// replacing the real eBPF tracer (requires running as root in kernel space)
-	// by a fake flow tracer
+	// replacing the real eBPF tracer by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
 	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {

@@ -9,21 +9,22 @@ import (
 )
 
 type interfaceFilter struct {
-	totalAllowed     int
 	allowedRegexpes  []*regexp.Regexp
 	allowedMatches   []ifaces.Name
 	excludedRegexpes []*regexp.Regexp
 	excludedMatches  []ifaces.Name
 }
 
+// initInterfaceFilter allows filtering network interfaces that are accepted/excluded by the user,
+// according to the provided allowed and excluded interfaces from the configuration. It allows
+// matching by exact string or by regular expression
 func initInterfaceFilter(allowed, excluded []string) (interfaceFilter, error) {
 	var isRegexp = regexp.MustCompile("^/(.*)/$")
 
 	itf := interfaceFilter{}
 	for _, definition := range allowed {
-		itf.totalAllowed++
 		definition = strings.Trim(definition, " ")
-		// the user defined a /regexp/ between slashes: compile and store it
+		// the user defined a /regexp/ between slashes: compile and store it as regular expression
 		if sm := isRegexp.FindStringSubmatch(definition); len(sm) > 1 {
 			re, err := regexp.Compile(sm[1])
 			if err != nil {
@@ -38,7 +39,7 @@ func initInterfaceFilter(allowed, excluded []string) (interfaceFilter, error) {
 
 	for _, definition := range excluded {
 		definition = strings.Trim(definition, " ")
-		// the user defined a /regexp/ between slashes: compile and store it
+		// the user defined a /regexp/ between slashes: compile and store it as regexp
 		if sm := isRegexp.FindStringSubmatch(definition); len(sm) > 1 {
 			re, err := regexp.Compile(sm[1])
 			if err != nil {
@@ -56,8 +57,8 @@ func initInterfaceFilter(allowed, excluded []string) (interfaceFilter, error) {
 
 func (itf *interfaceFilter) Allowed(name ifaces.Name) bool {
 	// if the allowed list is empty, any interface is allowed except if it matches the exclusion list
-	allowed := itf.totalAllowed == 0
-	// otherwise, we check if it appears in the allowed lists
+	allowed := len(itf.allowedRegexpes)+len(itf.allowedMatches) == 0
+	// otherwise, we check if it appears in the allowed lists (both exact match and regexp)
 	for i := 0; !allowed && i < len(itf.allowedMatches); i++ {
 		allowed = allowed || name == itf.allowedMatches[i]
 	}
@@ -67,7 +68,7 @@ func (itf *interfaceFilter) Allowed(name ifaces.Name) bool {
 	if !allowed {
 		return false
 	}
-	// if it's in the allowed list, we need still to check if it's in the exclusion lists
+	// if the interface matches the allow lists, we still need to check that is not excluded
 	for _, match := range itf.excludedMatches {
 		if name == match {
 			return false

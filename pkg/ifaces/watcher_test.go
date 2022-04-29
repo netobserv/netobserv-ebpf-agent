@@ -17,6 +17,7 @@ func TestWatcher(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10)
+	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func() ([]Name, error) {
 		return []Name{"foo", "bar", "baz"}, nil
 	}
@@ -57,8 +58,6 @@ func TestWatcher(t *testing.T) {
 	default:
 		// ok!
 	}
-
-	// updates of existing interfaces that are not UP and RUNNING will be deleted
 }
 
 func upAndRunning(name string) netlink.LinkUpdate {

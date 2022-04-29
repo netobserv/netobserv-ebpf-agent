@@ -38,8 +38,13 @@ type Config struct {
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
 	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
 	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
-
-	// accepted values: "poll", "watch"
-	ListenDevices    string        `env:"LISTEN_DEVICES" envDefault:"watch"`
+	// ListenInterfaces specifies the mechanism used by the agent to listen for added or removed
+	// network interfaces. Accepted values are "watch" (default) or "poll".
+	// If the value is "watch", interfaces are traced immediately after they are created. This is
+	// the recommended setting for most configurations. "poll" value is a fallback mechanism that
+	// periodically queries the current network interfaces (frequency specified by ListenPollPeriod).
+	ListenInterfaces string `env:"LISTEN_INTERFACES" envDefault:"watch"`
+	// ListenPollPeriod specifies the periodicity to query the network interfaces when the
+	// ListenInterfaces value is set to "poll".
 	ListenPollPeriod time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
 }

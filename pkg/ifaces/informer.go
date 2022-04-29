@@ -38,13 +38,14 @@ type Event struct {
 	Interface Name
 }
 
+// Informer provides notifications about each network interface that is added or removed
+// from the host. Production implementations: Poller and Watcher.
 type Informer interface {
-	// Subscribe returns a channel that sends events
-	// Depending on the implementation, this moment can be periodically or on each addition
+	// Subscribe returns a channel that sends Event instances.
 	Subscribe(ctx context.Context) (<-chan Event, error)
 }
 
-func interfaces() ([]Name, error) {
+func netInterfaces() ([]Name, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("can't fetch interfaces: %w", err)
