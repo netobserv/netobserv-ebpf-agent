@@ -33,7 +33,7 @@ PROTOC_ARTIFACTS := pkg/pbflow
 EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 
 # Image building tool (docker / podman)
-ifeq ($OCI_BIN,)
+ifndef OCI_BIN
 	ifeq (,$(shell which podman 2>/dev/null))
 	OCI_BIN=docker
 	else

@@ -40,7 +40,6 @@ type Config struct {
 	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
 
 	// accepted values: "poll", "watch"
-	ListenDevices      string        `env:"LISTEN_DEVICES" envDefault:"watch"`
-	ListenPollPeriod   time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
-	ListenWatchDevFile string        `env:"LISTEN_WATCH_DEV_FILE" envDefault:"/proc/net/dev"`
+	ListenDevices    string        `env:"LISTEN_DEVICES" envDefault:"watch"`
+	ListenPollPeriod time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
 }

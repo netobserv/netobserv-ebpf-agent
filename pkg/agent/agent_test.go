@@ -33,17 +33,21 @@ func TestFlowsAgent(t *testing.T) {
 		TargetHost:         "127.0.0.1",
 		TargetPort:         port,
 		CacheMaxFlows:      1,
+		ExcludeInterfaces:  []string{"ignored"},
 		CacheActiveTimeout: 5 * time.Second,
 		BuffersLength:      10,
 	})
 	require.NoError(t, err)
+
+	// replace the interfaces informer by a fake
+	ifacesCh := make(chan ifaces.Event, 10)
+	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "ignored"} // to be ignored
+
 	// replacing the real eBPF tracer (requires running as root in kernel space)
 	// by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
-	namesProvider := &ifaces.FakeNameProvider{
-		Provides: [][]ifaces.Name{{"fake"}},
-	}
-	flowsAgent.interfaceNames = namesProvider
 	var ft *fakeFlowTracer
 	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
 		if ft != nil {
@@ -118,7 +122,7 @@ func TestFlowsAgent(t *testing.T) {
 	assert.False(t, ft.contextCanceled)
 
 	// Trigger the removal of the interface and check that the flow tracer is unregistered
-	namesProvider.Next()
+	ifacesCh <- ifaces.Event{Type: ifaces.EventDeleted, Interface: "fake"}
 	test.Eventually(t, timeout, func(t require.TestingT) {
 		require.True(t, ft.unregisterCalled)
 		require.True(t, ft.contextCanceled)
@@ -151,4 +155,12 @@ func (ft *fakeFlowTracer) Register() error {
 func (ft *fakeFlowTracer) Unregister() error {
 	ft.unregisterCalled = true
 	return nil
+}
+
+type fakeInformer struct {
+	events chan ifaces.Event
+}
+
+func (f *fakeInformer) Subscribe(_ context.Context) (<-chan ifaces.Event, error) {
+	return f.events, nil
 }

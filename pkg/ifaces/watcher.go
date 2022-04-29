@@ -2,8 +2,6 @@ package ifaces
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -55,12 +53,6 @@ func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 		}
 	}
 
-	// hay que hacer algo con los veth que se crean rápidamente y luego se hacen el definitivo
-	// opciones:
-	//  - parche: excluir veth
-	//  - meter un delay de 1 segundo para quedarnos con lo definitivo
-	//  - dejar que se cree y se destruya a saco paco
-	//ifs, err := net.Interfaces()
 	for link := range links {
 		attrs := link.Attrs()
 		if attrs == nil {
@@ -88,7 +80,5 @@ func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 				out <- Event{Type: EventDeleted, Interface: Name(attrs.Name)}
 			}
 		}
-		json, _ := json.Marshal(link)
-		fmt.Println(string(json))
 	}
 }

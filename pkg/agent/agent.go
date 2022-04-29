@@ -17,14 +17,14 @@ var alog = logrus.WithField("component", "agent.Flows")
 
 // Flows reporting agent
 type Flows struct {
-	trMutex        sync.Mutex
-	tracers        map[ifaces.Name]cancellableTracer
-	accounter      flowAccounter
-	exporter       flowExporter
-	interfaceNames ifaces.NamesProvider
-	filter         interfaceFilter
-	tracerFactory  func(name string, sampling uint32) flowTracer
-	cfg            *Config
+	trMutex       sync.Mutex
+	tracers       map[ifaces.Name]cancellableTracer
+	accounter     flowAccounter
+	exporter      flowExporter
+	interfaces    ifaces.Informer
+	filter        interfaceFilter
+	tracerFactory func(name string, sampling uint32) flowTracer
+	cfg           *Config
 }
 
 type cancellableTracer struct {
@@ -53,22 +53,20 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, fmt.Errorf("configuring interface filters: %w", err)
 	}
 
-	var namesProvider ifaces.NamesProvider
+	var informer ifaces.Informer
 	switch cfg.ListenDevices {
 	case ListenPoll:
 		alog.WithField("period", cfg.ListenPollPeriod).
 			Debug("listening for new interfaces: use polling")
-		namesProvider = ifaces.NewPoller(cfg.ListenPollPeriod)
+		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
 	case ListenWatch:
-		alog.WithField("file", cfg.ListenWatchDevFile).
-			Debug("listening for new interfaces: use watching")
-		namesProvider = ifaces.NewWatcher(cfg.ListenWatchDevFile, cfg.BuffersLength)
+		alog.Debug("listening for new interfaces: use watching")
+		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	default:
 		alog.WithFields(logrus.Fields{
 			"providedValue": cfg.ListenDevices,
-			"file":          cfg.ListenWatchDevFile,
 		}).Warn("wrong device listen method. Using file watcher as default")
-		namesProvider = ifaces.NewWatcher(cfg.ListenWatchDevFile, cfg.BuffersLength)
+		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
 	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
@@ -81,9 +79,9 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		accounter: flow.NewAccounter(cfg.CacheMaxFlows,
 			cfg.BuffersLength,
 			cfg.CacheActiveTimeout),
-		exporter:       grpcExporter.ExportFlows,
-		interfaceNames: namesProvider,
-		filter:         filter,
+		exporter:   grpcExporter.ExportFlows,
+		interfaces: informer,
+		filter:     filter,
 		tracerFactory: func(name string, sampling uint32) flowTracer {
 			return ebpf.NewFlowTracer(name, sampling)
 		},
@@ -137,9 +135,9 @@ func (f *Flows) processRecords(tracedRecords <-chan *flow.Record) *node.Terminal
 func (f *Flows) subscribeForRecords(ctx context.Context) (<-chan *flow.Record, error) {
 	slog := alog.WithField("function", "subscribeForRecords")
 	slog.Debug("starting function")
-	deviceEvents, err := ifaces.Informer(ctx, f.interfaceNames, f.cfg.BuffersLength)
+	deviceEvents, err := f.interfaces.Subscribe(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 	tracedRecords := make(chan *flow.Record, f.cfg.BuffersLength)
 
