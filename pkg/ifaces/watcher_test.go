@@ -2,74 +2,74 @@ package ifaces
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
+	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
+	"golang.org/x/sys/unix"
 )
 
 func TestWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	procNetDev, err := ioutil.TempFile("", "test_watcher")
-	require.NoError(t, err)
-	_, err = procNetDev.WriteString(`Inter-|   Receive                                                |  Transmit
- face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
-       eth0:     746       7    0    0    0     0          0         0      656       8    0    0    0     0       0          0
-ovn-k8s-mp0: 36061227  194651    0    0    0     0          0         0 114387109  233912    0    0    0     0       0          0
-a242730663491d7: 1614408163  178131    0    0    0     0          0         0 133433479  166346    0    0    0     0       0          0
-         lo:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
-`)
-	require.NoError(t, err)
-	require.NoError(t, procNetDev.Close())
+	defer cancel()
 
-	watcher := NewWatcher(procNetDev.Name(), 10)
-	updates, err := watcher.Subscribe(ctx)
-	require.NoError(t, err)
-
-	select {
-	case names := <-updates:
-		assert.Equal(t, []Name{"eth0", "ovn-k8s-mp0", "a242730663491d7", "lo"}, names)
-	case <-time.After(timeout):
-		require.Fail(t, "timeout while waiting for interface names")
+	watcher := NewWatcher(10)
+	watcher.interfaces = func() ([]Name, error) {
+		return []Name{"foo", "bar", "baz"}, nil
+	}
+	inputLinks := make(chan netlink.LinkUpdate, 10)
+	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
+		go func() {
+			for link := range inputLinks {
+				ch <- link
+			}
+		}()
+		return nil
 	}
 
-	procNetDev, err = os.Create(procNetDev.Name())
+	outputEvents, err := watcher.Subscribe(ctx)
 	require.NoError(t, err)
-	_, err = procNetDev.WriteString(`Inter-|   Receive                                                |  Transmit
- face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
-       eth0:     746       7    0    0    0     0          0         0      656       8    0    0    0     0       0          0
-8d8aeebe36fc23b: 1614408163  178131    0    0    0     0          0         0 133433479  166346    0    0    0     0       0          0
-ovn-k8s-mp0: 36061227  194651    0    0    0     0          0         0 114387109  233912    0    0    0     0       0          0
-         lo:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
-`)
-	require.NoError(t, err)
-	require.NoError(t, procNetDev.Close())
+
+	// initial set of fetched elements
+	assert.Equal(t, Event{Type: EventAdded, Interface: "foo"}, getEvent(t, outputEvents, timeout))
+	assert.Equal(t, Event{Type: EventAdded, Interface: "bar"}, getEvent(t, outputEvents, timeout))
+	assert.Equal(t, Event{Type: EventAdded, Interface: "baz"}, getEvent(t, outputEvents, timeout))
+
+	// updates
+	inputLinks <- upAndRunning("bae")
+	inputLinks <- down("bar")
+	assert.Equal(t, Event{Type: EventAdded, Interface: "bae"}, getEvent(t, outputEvents, timeout))
+	assert.Equal(t, Event{Type: EventDeleted, Interface: "bar"}, getEvent(t, outputEvents, timeout))
+
+	// repeated updates that do not involve a change in the current track of interfaces
+	// will be ignored
+	inputLinks <- upAndRunning("bae")
+	inputLinks <- upAndRunning("foo")
+	inputLinks <- down("bar")
+	inputLinks <- down("eth0")
 
 	select {
-	case names := <-updates:
-		assert.Equal(t, []Name{"eth0", "8d8aeebe36fc23b", "ovn-k8s-mp0", "lo"}, names)
-	case <-time.After(timeout):
-		require.Fail(t, "timeout while waiting for interface names")
+	case ev := <-outputEvents:
+		require.Failf(t, "unexpected event", "%#v", ev)
+	default:
+		// ok!
 	}
 
-	cancel()
+	// updates of existing interfaces that are not UP and RUNNING will be deleted
+}
 
-	procNetDev, err = os.Create(procNetDev.Name())
-	require.NoError(t, err)
-	_, err = procNetDev.WriteString(`Inter-|   Receive                                                |  Transmit
- face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
-       eth0:     746       7    0    0    0     0          0         0      656       8    0    0    0     0       0          0
-`)
-	require.NoError(t, err)
-	require.NoError(t, procNetDev.Close())
+func upAndRunning(name string) netlink.LinkUpdate {
+	return netlink.LinkUpdate{
+		IfInfomsg: nl.IfInfomsg{IfInfomsg: unix.IfInfomsg{Flags: syscall.IFF_UP | syscall.IFF_RUNNING}},
+		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name}},
+	}
+}
 
-	select {
-	case names, ok := <-updates:
-		assert.Falsef(t, ok, "after canceling, no more updates are expected. Got %+v", names)
-	case <-time.After(timeout):
-		assert.Fail(t, "watcher should have been closed after canceling its context")
+func down(name string) netlink.LinkUpdate {
+	return netlink.LinkUpdate{
+		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name}},
 	}
 }

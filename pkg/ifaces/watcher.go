@@ -1,93 +1,94 @@
 package ifaces
 
 import (
-	"bufio"
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
-	"os"
+	"syscall"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 )
 
-var ifaceSeparator = []byte{':'}
-
 type Watcher struct {
-	netDevPath string
-	bufLen     int
+	bufLen         int
+	current        map[Name]struct{}
+	interfaces     func() ([]Name, error)
+	linkSubscriber func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
 }
 
-func NewWatcher(netDevPath string, bufLen int) *Watcher {
+func NewWatcher(bufLen int) *Watcher {
 	return &Watcher{
-		netDevPath: netDevPath,
-		bufLen:     bufLen,
+		bufLen:         bufLen,
+		current:        map[Name]struct{}{},
+		interfaces:     interfaces,
+		linkSubscriber: netlink.LinkSubscribe,
 	}
 }
 
-func (w *Watcher) Subscribe(ctx context.Context) (<-chan []Name, error) {
-	log := logrus.WithFields(logrus.Fields{
-		"component": "ifaces.Watcher",
-		"path":      w.netDevPath,
-	})
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, fmt.Errorf("can't start file watcher: %w", err)
-	}
-	if err := watcher.Add(w.netDevPath); err != nil {
-		return nil, fmt.Errorf("can't subscribe for changes in %s: %w", w.netDevPath, err)
-	}
-	out := make(chan []Name, w.bufLen)
-	go func() {
-		w.fetchAndForwardNames(log, out)
-		for {
-			select {
-			case <-ctx.Done():
-				log.Debug("stopped")
-				close(out)
-				return
-			case event := <-watcher.Events:
-				log.WithField("event", event).Debug("received an event")
-				if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
-					w.fetchAndForwardNames(log, out)
-				}
-			case err := <-watcher.Errors:
-				log.WithError(err).Warn("file watcher forwarded an error")
-			}
-		}
-	}()
+func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
+	out := make(chan Event, w.bufLen)
+
+	go w.sendUpdates(ctx, out)
 
 	return out, nil
 }
 
-func (w *Watcher) fetchAndForwardNames(log *logrus.Entry, out chan []Name) {
-	if netDev, err := os.Open(w.netDevPath); err != nil {
-		log.WithError(err).Error("can't read devices file")
-	} else {
-		names, err := parseNetDev(netDev)
-		if err != nil {
-			log.WithError(err).Error("scanning devices file")
-		}
-		if err := netDev.Close(); err != nil {
-			log.WithError(err).Error("can't close file")
-		}
-		out <- names
+func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
+	log := logrus.WithFields(logrus.Fields{
+		"component": "ifaces.Watcher",
+	})
+	links := make(chan netlink.LinkUpdate)
+	if err := w.linkSubscriber(links, ctx.Done()); err != nil {
+		log.WithError(err).Error("can't subscribe to links")
+		return
 	}
-}
 
-// parseNetDev extracts the interface names according to the format specified in
-// https://www.kernel.org/doc/Documentation/filesystems/proc.txt
-func parseNetDev(in io.Reader) ([]Name, error) {
-	contents := bufio.NewScanner(in)
-	var names []Name
-	for contents.Scan() {
-		iface := bytes.Split(contents.Bytes(), ifaceSeparator)
-		if len(iface) != 2 {
-			// wrong format or just a header line. Ignoring
+	// before sending updates, send all the existing interfaces at the moment of starting the
+	// agent
+	if names, err := w.interfaces(); err != nil {
+		log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
+	} else {
+		for _, name := range names {
+			w.current[name] = struct{}{}
+			out <- Event{Type: EventAdded, Interface: name}
+		}
+	}
+
+	// hay que hacer algo con los veth que se crean rápidamente y luego se hacen el definitivo
+	// opciones:
+	//  - parche: excluir veth
+	//  - meter un delay de 1 segundo para quedarnos con lo definitivo
+	//  - dejar que se cree y se destruya a saco paco
+	//ifs, err := net.Interfaces()
+	for link := range links {
+		attrs := link.Attrs()
+		if attrs == nil {
+			log.WithField("link", link).Debug("received link update without attributes. Ignoring")
 			continue
 		}
-		names = append(names, Name(bytes.Trim(iface[0], " \t")))
+		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 {
+			log.WithFields(logrus.Fields{
+				"operstate": attrs.OperState,
+				"flags":     attrs.Flags,
+				"name":      attrs.Name,
+			}).Debug("Interface up and running")
+			if _, ok := w.current[Name(attrs.Name)]; !ok {
+				w.current[Name(attrs.Name)] = struct{}{}
+				out <- Event{Type: EventAdded, Interface: Name(attrs.Name)}
+			}
+		} else {
+			log.WithFields(logrus.Fields{
+				"operstate": attrs.OperState,
+				"flags":     attrs.Flags,
+				"name":      attrs.Name,
+			}).Debug("Interface down or not running")
+			if _, ok := w.current[Name(attrs.Name)]; ok {
+				delete(w.current, Name(attrs.Name))
+				out <- Event{Type: EventDeleted, Interface: Name(attrs.Name)}
+			}
+		}
+		json, _ := json.Marshal(link)
+		fmt.Println(string(json))
 	}
-	return names, contents.Err()
 }

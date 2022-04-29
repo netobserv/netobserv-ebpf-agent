@@ -1,16 +1,6 @@
 package ifaces
 
-import (
-	"context"
-	"io/ioutil"
-	"os"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
-
+/*
 func TestEventsInformer_Poller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -108,14 +98,4 @@ func TestEventsInformer_RemoveAll(t *testing.T) {
 
 	require.Equal(t, Event{Type: EventDeleted, Interface: "eth0"}, getEvent(t, changes))
 }
-
-func getEvent(t *testing.T, ch <-chan Event) Event {
-	t.Helper()
-	select {
-	case event := <-ch:
-		return event
-	case <-time.After(timeout):
-		require.Fail(t, "timeout while waiting for an event")
-	}
-	return Event{}
-}
+*/

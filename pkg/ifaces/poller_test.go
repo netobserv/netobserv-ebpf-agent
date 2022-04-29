@@ -25,23 +25,33 @@ func TestPoller(t *testing.T) {
 		}
 	}
 
-	poller := NewPoller(5 * time.Millisecond)
+	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
 
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)
 
-	select {
-	case names := <-updates:
-		assert.Equal(t, []Name{"foo", "bar"}, names)
-	case <-time.After(timeout):
-		require.Fail(t, "timeout while waiting for poller to send interfaces")
-	}
+	assert.Equal(t, Event{Type: EventAdded, Interface: "foo"}, getEvent(t, updates, timeout))
+	assert.Equal(t, Event{Type: EventAdded, Interface: "bar"}, getEvent(t, updates, timeout))
+	assert.Equal(t, Event{Type: EventAdded, Interface: "bae"}, getEvent(t, updates, timeout))
+	assert.Equal(t, Event{Type: EventDeleted, Interface: "bar"}, getEvent(t, updates, timeout))
 
+	// no more events are forwarded
 	select {
-	case names := <-updates:
-		assert.Equal(t, []Name{"foo", "bae"}, names)
-	case <-time.After(timeout):
-		require.Fail(t, "timeout while waiting for poller to send interfaces")
+	case ev := <-updates:
+		require.Failf(t, "unexpected event", "%#v", ev)
+	default:
+		// ok!
 	}
+}
+
+func getEvent(t *testing.T, ch <-chan Event, timeout time.Duration) Event {
+	t.Helper()
+	select {
+	case event := <-ch:
+		return event
+	case <-time.After(timeout):
+		require.Fail(t, "timeout while waiting for an event")
+	}
+	return Event{}
 }

@@ -2,8 +2,6 @@ package ifaces
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -11,22 +9,25 @@ import (
 
 type Poller struct {
 	period     time.Duration
+	current    map[Name]struct{}
 	interfaces func() ([]Name, error)
+	bufLen     int
 }
 
-func NewPoller(period time.Duration) *Poller {
+func NewPoller(period time.Duration, bufLen int) *Poller {
 	return &Poller{
 		period:     period,
+		bufLen:     bufLen,
 		interfaces: interfaces,
+		current:    map[Name]struct{}{},
 	}
 }
 
-func (np *Poller) Subscribe(ctx context.Context) (<-chan []Name, error) {
+func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 	log := logrus.WithField("component", "ifaces.Poller")
 	log.WithField("period", np.period).Debug("subscribing to Interface events")
-	out := make(chan []Name, 1)
+	out := make(chan Event, np.bufLen)
 	go func() {
-
 		ticker := time.NewTicker(np.period)
 		defer ticker.Stop()
 		for {
@@ -34,7 +35,7 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan []Name, error) {
 				log.WithError(err).Warn("fetching interface names")
 			} else {
 				log.WithField("names", names).Debug("fetched interface names")
-				out <- names
+				np.diffNames(out, names)
 			}
 			select {
 			case <-ctx.Done():
@@ -49,14 +50,29 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan []Name, error) {
 	return out, nil
 }
 
-func interfaces() ([]Name, error) {
-	ifs, err := net.Interfaces()
-	if err != nil {
-		return nil, fmt.Errorf("can't fetch interfaces: %w", err)
+func (np *Poller) diffNames(events chan Event, names []Name) {
+	// Check for new interfaces
+	acquired := map[Name]struct{}{}
+	for _, n := range names {
+		acquired[n] = struct{}{}
+		if _, ok := np.current[n]; !ok {
+			ilog.WithField("interface", n).Debug("added network interface")
+			np.current[n] = struct{}{}
+			events <- Event{
+				Type:      EventAdded,
+				Interface: n,
+			}
+		}
 	}
-	names := make([]Name, len(ifs))
-	for i, ifc := range ifs {
-		names[i] = Name(ifc.Name)
+	// Check for deleted interfaces
+	for n := range np.current {
+		if _, ok := acquired[n]; !ok {
+			delete(np.current, n)
+			ilog.WithField("interface", n).Debug("deleted network interface")
+			events <- Event{
+				Type:      EventDeleted,
+				Interface: n,
+			}
+		}
 	}
-	return names, nil
 }
