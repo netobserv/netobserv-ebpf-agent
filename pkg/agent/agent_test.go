@@ -10,16 +10,13 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const timeout = 5000 * time.Second
+const timeout = 5 * time.Second
 
 func TestFlowsAgent(t *testing.T) {
-	logrus.SetLevel(logrus.DebugLevel)
-
 	// preparing a test flow collector
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -120,11 +117,53 @@ func TestFlowsAgent(t *testing.T) {
 	assert.False(t, ft.unregisterCalled)
 	assert.False(t, ft.contextCanceled)
 
-	// Trigger the removal of the interface and check that the flow tracer is unregistered
+	// Trigger the removal of the interface and check that the tracer context is cancelled
 	ifacesCh <- ifaces.Event{Type: ifaces.EventDeleted, Interface: "fake"}
 	test.Eventually(t, timeout, func(t require.TestingT) {
-		require.True(t, ft.unregisterCalled)
 		require.True(t, ft.contextCanceled)
+	})
+}
+
+func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
+	flowsAgent, err := FlowsAgent(&Config{
+		TargetHost:         "127.0.0.1",
+		TargetPort:         1234,
+		CacheMaxFlows:      1,
+		ExcludeInterfaces:  []string{"ignored"},
+		CacheActiveTimeout: 5 * time.Second,
+		BuffersLength:      10,
+	})
+	require.NoError(t, err)
+	ifacesCh := make(chan ifaces.Event, 10)
+	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
+	agentInput := make(chan *flow.Record, 10)
+	var ft *fakeFlowTracer
+	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+		ft = &fakeFlowTracer{tracedFlows: agentInput}
+		return ft
+	}
+
+	// GIVEN an agent with a registered flow tracer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		require.NoError(t, flowsAgent.Run(ctx))
+	}()
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		if ft == nil {
+			t.FailNow()
+		} else {
+			assert.True(t, ft.registerCalled)
+		}
+	})
+
+	// WHEN the agent is stopped
+	cancel()
+
+	// THEN its tracers are unregistered
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		require.True(t, ft.unregisterCalled)
 	})
 }
 

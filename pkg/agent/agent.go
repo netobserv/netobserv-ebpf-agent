@@ -68,9 +68,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		alog.Debug("listening for new interfaces: use watching")
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	default:
-		alog.WithFields(logrus.Fields{
-			"providedValue": cfg.ListenInterfaces,
-		}).Warn("wrong interface listen method. Using file watcher as default")
+		alog.WithField("providedValue", cfg.ListenInterfaces).
+			Warn("wrong interface listen method. Using file watcher as default")
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
@@ -132,7 +131,7 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, err
 		for {
 			select {
 			case <-ctx.Done():
-				slog.Debug("detaching all the flow tracers before closing the record's channel")
+				slog.Debug("detaching all the flow tracers before closing the records' channel")
 				f.detachAllTracers()
 				slog.Debug("closing channel and exiting internal goroutine")
 				close(tracedRecords)
