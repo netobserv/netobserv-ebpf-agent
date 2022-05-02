@@ -8,6 +8,7 @@ import (
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,16 +30,29 @@ func TestFlowsAgent(t *testing.T) {
 		TargetHost:         "127.0.0.1",
 		TargetPort:         port,
 		CacheMaxFlows:      1,
+		ExcludeInterfaces:  []string{"ignored"},
 		CacheActiveTimeout: 5 * time.Second,
 		BuffersLength:      10,
 	})
 	require.NoError(t, err)
-	// replacing the real eBPF tracer (requires running as root in kernel space)
-	// by a fake flow tracer
+
+	// replace the interfaces informer by a fake
+	ifacesCh := make(chan ifaces.Event, 10)
+	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "ignored"} // to be ignored
+
+	// replacing the real eBPF tracer by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
-	flowsAgent.tracers = map[string]flowTracer{
-		"fake": &fakeFlowTracer{tracedFlows: agentInput},
+	var ft *fakeFlowTracer
+	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+		if ft != nil {
+			require.Fail(t, "flow tracer should have been instantiated only once")
+		}
+		ft = &fakeFlowTracer{tracedFlows: agentInput}
+		return ft
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -97,22 +111,94 @@ func TestFlowsAgent(t *testing.T) {
 	assert.EqualValues(t, 456, r.Transport.SrcPort)
 	assert.EqualValues(t, 789, r.Transport.DstPort)
 	assert.EqualValues(t, 1_234_567, r.Bytes)
+
+	// Check that during the initialization, the flow tracer was registered
+	assert.True(t, ft.registerCalled)
+	assert.False(t, ft.unregisterCalled)
+	assert.False(t, ft.contextCanceled)
+
+	// Trigger the removal of the interface and check that the tracer context is cancelled
+	ifacesCh <- ifaces.Event{Type: ifaces.EventDeleted, Interface: "fake"}
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		require.True(t, ft.contextCanceled)
+	})
+}
+
+func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
+	flowsAgent, err := FlowsAgent(&Config{
+		TargetHost:         "127.0.0.1",
+		TargetPort:         1234,
+		CacheMaxFlows:      1,
+		ExcludeInterfaces:  []string{"ignored"},
+		CacheActiveTimeout: 5 * time.Second,
+		BuffersLength:      10,
+	})
+	require.NoError(t, err)
+	ifacesCh := make(chan ifaces.Event, 10)
+	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
+	agentInput := make(chan *flow.Record, 10)
+	var ft *fakeFlowTracer
+	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+		ft = &fakeFlowTracer{tracedFlows: agentInput}
+		return ft
+	}
+
+	// GIVEN an agent with a registered flow tracer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		require.NoError(t, flowsAgent.Run(ctx))
+	}()
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		if ft == nil {
+			t.FailNow()
+		} else {
+			assert.True(t, ft.registerCalled)
+		}
+	})
+
+	// WHEN the agent is stopped
+	cancel()
+
+	// THEN its tracers are unregistered
+	test.Eventually(t, timeout, func(t require.TestingT) {
+		require.True(t, ft.unregisterCalled)
+	})
 }
 
 type fakeFlowTracer struct {
-	tracedFlows <-chan *flow.Record
+	registerCalled   bool
+	unregisterCalled bool
+	contextCanceled  bool
+	tracedFlows      <-chan *flow.Record
 }
 
-func (ft *fakeFlowTracer) Trace(_ context.Context, forwardFlows chan<- *flow.Record) {
-	for f := range ft.tracedFlows {
-		forwardFlows <- f
+func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	for {
+		select {
+		case f := <-ft.tracedFlows:
+			forwardFlows <- f
+		case <-ctx.Done():
+			ft.contextCanceled = true
+		}
 	}
 }
 
 func (ft *fakeFlowTracer) Register() error {
+	ft.registerCalled = true
 	return nil
 }
 
 func (ft *fakeFlowTracer) Unregister() error {
+	ft.unregisterCalled = true
 	return nil
+}
+
+type fakeInformer struct {
+	events chan ifaces.Event
+}
+
+func (f *fakeInformer) Subscribe(_ context.Context) (<-chan ifaces.Event, error) {
+	return f.events, nil
 }

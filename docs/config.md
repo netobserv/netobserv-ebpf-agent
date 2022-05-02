@@ -24,3 +24,12 @@ The following environment variables are available to configure the NetObserv eBF
   `error`, `fatal`, `panic`.
 * `BUFFERS_LENGTH` (default: `50`). Length of the internal communication channels between the different
   processing stages. Most probably you won't need to change this value.
+* `LISTEN_INTERFACES` (default: `watch`). Mechanism used by the agent to listen for added or removed
+  network interfaces. Accepted values are:
+  - `watch`: interfaces are traced immediately after they are created. This is
+    the recommended setting for most configurations.
+  - `poll`: recommended mostly as a fallback mechanism if `watch` misbehaves. It periodically 
+    queries the current network interfaces. The poll frequency is specified by the
+    `LISTEN_POLL_PERIOD` variable.
+* `LISTEN_POLL_PERIOD` (default: `10s`). When `LISTEN_INTERFACES` value is `poll`, this duration
+  string specifies the frequency in which the current network interfaces are polled.
