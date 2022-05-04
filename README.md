@@ -26,7 +26,7 @@ export FLOWS_TARGET_HOST=...
 export FLOWS_TARGET_PORT=...
 sudo -E bin/netobserv-ebpf-agent
 ```
-
+To deploy locally, use instructions from [flowlogs-dump (like tcpdump)](./examples/flowlogs-dump/README.md).    
 To deploy it as a Pod, you can check the [deployment example](./examples/performance/deployment.yml).
 
 ## Where is the collector?
