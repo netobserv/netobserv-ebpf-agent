@@ -1,4 +1,5 @@
 #include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/in.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
@@ -32,8 +33,8 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow
         return DISCARD;
     }
 
-    flow->network.src_ip = __bpf_ntohl(ip->saddr);
-    flow->network.dst_ip = __bpf_ntohl(ip->daddr);
+    flow->network.type.v4ip.src_ip = __bpf_ntohl(ip->saddr);
+    flow->network.type.v4ip.dst_ip = __bpf_ntohl(ip->daddr);
     flow->transport.protocol = ip->protocol;
 
     switch (ip->protocol) {
@@ -57,6 +58,36 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow
     return SUBMIT;
 }
 
+// sets flow fields from IPv6 header information
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, struct flow *flow) {
+    if ((void *)ip + sizeof(*ip) > data_end) {
+        return DISCARD;
+    }
+
+    flow->network.type.v6ip.src_ip6 = ip->saddr;
+    flow->network.type.v6ip.dst_ip6 = ip->daddr;
+    flow->transport.protocol = ip->nexthdr;
+
+    switch (ip->nexthdr) {
+    case IPPROTO_TCP: {
+        struct tcphdr *tcp = (void *)ip + sizeof(*ip);
+        if ((void *)tcp + sizeof(*tcp) <= data_end) {
+            flow->transport.src_port = __bpf_ntohs(tcp->source);
+            flow->transport.dst_port = __bpf_ntohs(tcp->dest);
+        }
+    } break;
+    case IPPROTO_UDP: {
+        struct udphdr *udp = (void *)ip + sizeof(*ip);
+        if ((void *)udp + sizeof(*udp) <= data_end) {
+            flow->transport.src_port = __bpf_ntohs(udp->source);
+            flow->transport.dst_port = __bpf_ntohs(udp->dest);
+        }
+    } break;
+    default:
+        break;
+    }
+    return SUBMIT;
+}
 // sets flow fields from Ethernet header information
 static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, struct flow *flow) {
     if ((void *)eth + sizeof(*eth) > data_end) {
@@ -69,6 +100,9 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, struct flow *f
     if (flow->protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
         return fill_iphdr(ip, data_end, flow);
+    } else if (flow->protocol == ETH_P_IPV6) {
+        struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+        return fill_ip6hdr(ip6, data_end, flow);
     }
     return SUBMIT;
 }

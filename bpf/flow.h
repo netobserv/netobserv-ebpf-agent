@@ -17,11 +17,21 @@ struct data_link {
 } __attribute__((packed));
 
 // L3 network layer
-struct network {
-    // todo: add protocol
-    // todo: support ipv6
+struct v4ip {
     u32 src_ip;
     u32 dst_ip;
+} __attribute__((packed));
+
+struct v6ip {
+    struct in6_addr src_ip6;
+    struct in6_addr dst_ip6;
+} __attribute__((packed));
+
+struct network {
+    union {
+        struct v4ip v4ip;
+        struct v6ip v6ip;
+    }type;
 } __attribute__((packed));
 
 // L4 transport layer

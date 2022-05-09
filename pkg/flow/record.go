@@ -10,6 +10,8 @@ import (
 )
 
 const MacLen = 6
+const IP6Len = 16
+const IPv6Type = 0x86DD
 
 // TODO: support IPv6
 type RawIP uint32
@@ -17,6 +19,7 @@ type HumanBytes uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 type TransportProtocol uint8
+type IP6Addr [IP6Len]uint8
 
 type DataLink struct {
 	SrcMac MacAddr
@@ -26,6 +29,11 @@ type DataLink struct {
 type Network struct {
 	SrcAddr RawIP
 	DstAddr RawIP
+}
+
+type NetworkV6 struct {
+	SrcAddr IP6Addr
+	DstAddr IP6Addr
 }
 
 type Transport struct {
@@ -40,9 +48,11 @@ type key struct {
 	Direction Direction
 	DataLink  DataLink
 	Network   Network
+	NetworkV6 NetworkV6
 	Transport Transport
 	// TODO: add TOS field
 }
+
 
 // record structure as parsed from eBPF
 // it's important to emphasize that the fields in this structure have to coincide,
@@ -50,6 +60,22 @@ type key struct {
 // TODO: generate flow.h file from this structure
 type rawRecord struct {
 	key
+	Bytes HumanBytes
+}
+
+type v4Record struct {
+	Direction Direction
+	DataLink  DataLink
+	Network   Network
+	Transport Transport
+	Bytes HumanBytes
+}
+
+type v6Record struct {
+	Direction Direction
+	DataLink  DataLink
+	NetworkV6 NetworkV6
+	Transport Transport
 	Bytes HumanBytes
 }
 
@@ -158,7 +184,30 @@ func (d Direction) MarshalJSON() ([]byte, error) {
 
 // ReadFrom reads a Record from a binary source, in LittleEndian order
 func ReadFrom(reader io.Reader) (*Record, error) {
-	var fr rawRecord
-	err := binary.Read(reader, binary.LittleEndian, &fr)
-	return &Record{rawRecord: fr}, err
+	var proto uint16
+	var v4Rec v4Record
+	var v6Rec v6Record
+
+	err:= binary.Read(reader, binary.LittleEndian, &proto)
+	if err != nil {
+		return nil, err
+	}
+	if proto == IPv6Type {
+		err2:= binary.Read(reader, binary.LittleEndian, &v6Rec)
+		return &Record{rawRecord : rawRecord{key: key{Protocol: proto,
+			Direction: v6Rec.Direction,
+			DataLink: v6Rec.DataLink,
+			Network: Network{},
+			NetworkV6: v6Rec.NetworkV6,
+			Transport: v6Rec.Transport},
+			Bytes: v6Rec.Bytes}}, err2
+	}
+	err2:= binary.Read(reader, binary.LittleEndian, &v4Rec)
+	return &Record{rawRecord: rawRecord{key: key{Protocol: proto,
+		Direction: v4Rec.Direction,
+		DataLink: v4Rec.DataLink,
+		Network: v4Rec.Network,
+		NetworkV6: NetworkV6{},
+		Transport: v4Rec.Transport},
+		Bytes: v4Rec.Bytes}}, err2
 }
