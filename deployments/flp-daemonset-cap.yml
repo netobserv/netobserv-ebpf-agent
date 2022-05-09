@@ -1,0 +1,131 @@
+# Example deployment for manual testing with flp
+# It requires loki to be installed
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netobserv-ebpf-agent
+  labels:
+    k8s-app: netobserv-ebpf-agent
+spec:
+  selector:
+    matchLabels:
+      k8s-app: netobserv-ebpf-agent
+  template:
+    metadata:
+      labels:
+        k8s-app: netobserv-ebpf-agent
+    spec:
+      serviceAccountName: netobserv-account
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: netobserv-ebpf-agent
+        image: quay.io/mmaciasl/netobserv-ebpf-agent:main
+        #      imagePullPolicy: Always
+        securityContext:
+          capabilities:
+            add:
+              - BPF
+              - PERFMON
+              - NET_ADMIN
+              - SYS_RESOURCE
+          runAsUser: 0
+        env:
+          - name: FLOWS_TARGET_HOST
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: FLOWS_TARGET_PORT
+            value: "9999"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: flp
+  labels:
+    k8s-app: flp
+spec:
+  selector:
+    matchLabels:
+      k8s-app: flp
+  template:
+    metadata:
+      labels:
+        k8s-app: flp
+    spec:
+      containers:
+        - name: flowlogs-pipeline
+          image: quay.io/netobserv/flowlogs-pipeline:latest
+          ports:
+            - containerPort: 9999
+          args:
+            - --config=/etc/flp/config.yaml
+          volumeMounts:
+            - mountPath: /etc/flp
+              name: config-volume
+      volumes:
+        - name: config-volume
+          configMap:
+            name: flp-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flp-config
+data:
+  config.yaml: |
+    log-level: debug
+    pipeline:
+      - name: ingest
+      - name: decode
+        follows: ingest
+      - name: enrich
+        follows: decode
+      - name: encode
+        follows: enrich
+      - name: loki
+        follows: encode
+    parameters:
+      - name: ingest
+        ingest:
+          type: grpc
+          grpc:
+            port: 9999
+      - name: decode
+        decode:
+          type: protobuf
+      - name: enrich
+        transform:
+          type: network
+          network:
+            rules:
+              - input: SrcAddr
+                output: SrcK8S
+                type: "add_kubernetes"
+              - input: DstAddr
+                output: DstK8S
+                type: "add_kubernetes"
+      - name: encode
+        encode:
+          type: none
+      - name: loki
+        write:
+          type: loki
+          loki:
+            type: loki
+            staticLabels:
+              app: netobserv-flowcollector
+            labels:
+              - "SrcK8S_Namespace"
+              - "SrcK8S_OwnerName"
+              - "DstK8S_Namespace"
+              - "DstK8S_OwnerName"
+              - "FlowDirection"
+            url: http://loki:3100
+            timestampLabel: TimeFlowEnd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: netobserv-account
+

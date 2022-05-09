@@ -27,15 +27,56 @@ The eBPF Agent is configured by means of environment variables. Check the
 The NetObserv eBPF Agent is designed to run as a DaemonSet in OpenShift/K8s. It is triggered and
 configured by our [Network Observability Operator](https://github.com/netobserv/network-observability-operator).
 
-Anyway you can run it directly as an executable with administrative privileges:
+Anyway you can run it directly as an executable from your command line:
 
 ```
 export FLOWS_TARGET_HOST=...
 export FLOWS_TARGET_PORT=...
 sudo -E bin/netobserv-ebpf-agent
 ```
+
 To deploy locally, use instructions from [flowlogs-dump (like tcpdump)](./examples/flowlogs-dump/README.md).    
-To deploy it as a Pod, you can check the [deployment example](./examples/performance/deployment.yml).
+To deploy it as a Pod, you can check the [deployment examples](./deployments).
+
+The Agent needs to be executed either with:
+
+1. The following [Linux capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html)
+   (recommended way): `BPF`, `PERFMON`, `NET_ADMIN`, `SYS_RESOURCE`. If you
+   [deploy it in Kubernetes or OpenShift](./deployments/flp-daemonset-cap.yml),
+   the container running the Agent needs to define the following `securityContext`:
+   ```yaml
+   securityContext:
+     runAsUser: 0
+     capabilities:
+       add:
+         - BPF
+         - PERFMON
+         - NET_ADMIN
+         - SYS_RESOURCE
+   ```
+   (Please notice that the `runAsUser: 0` is still needed).
+2. Administrative privileges. If you
+   [deploy it in Kubernetes or OpenShift](./deployments/flp-daemonset.yml),
+   the container running the Agent needs to define the following `securityContext`:
+   ```yaml
+   securityContext:
+     privileged: true
+     runAsUser: 0
+   ```
+   This option is only recommended if your Kernel does not recognize some of the above capabilities.
+   We found some Kubernetes distributions (e.g. K3s) that do not recognize the `BPF` and
+   `PERFMON` capabilities.
+
+Here is a list of distributions where we tested both full privileges and capability approaches,
+and whether they worked (✅) or did not (❌):
+
+| Distribution                  | K8s Server version | Capabilities | Privileged |
+|-------------------------------|--------------------|--------------|------------|
+| Amazon EKS (Bottlerocket AMI) | 1.22.6             | ✅            | ✅          |
+| K3s (Rancher Desktop)         | 1.23.5             | ❌            | ✅          |
+| Kind                          | 1.23.5             | ❌            | ✅          |
+| OpenShift                     | 1.23.3             | ✅            | ✅          |
+
 
 ## Development receipts
 
@@ -81,17 +122,8 @@ for an example of a simple collector using our library.
 
 ### Deployed as a Kubernetes Pod, the agent shows permission errors in the logs and can't start
 
-In your [deployment file](./deployments/flp-daemonset.yml), make sure that the container runs both
-in privileged mode and as root user:
-
-```yaml
-      containers:
-      - name: netobserv-ebpf-agent
-        image: quay.io/netobserv/netobserv-ebpf-agent:main
-        securityContext:
-          privileged: true
-          runAsUser: 0
-```
+In your [deployment file](./deployments/flp-daemonset-cap.yml), make sure that the container runs as
+the root user (`runAsUser: 0`) and with the granted capabilities or privileges (see [how to run](#how-to-run) section).
 
 ### The Agent doesn't work in my Amazon EKS puzzle
 
