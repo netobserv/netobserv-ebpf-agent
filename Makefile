@@ -52,7 +52,8 @@ prereqs:
 	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install  google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -118,3 +119,7 @@ ci-images-build: image-build
 
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
+
+integration-test: prereqs
+	$(OCI_BIN) build . -t netobserv-ebpf-agent:test
+	kind load docker-image netobserv-ebpf-agent:test
