@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
-	"github.com/cilium/ebpf/rlimit"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -53,11 +52,6 @@ func NewFlowTracer(iface string, sampling uint32) *FlowTracer {
 // before exiting.
 func (m *FlowTracer) Register() error {
 	ilog := log.WithField("iface", m.interfaceName)
-	// Allow the current process to lock memory for eBPF resources.
-	// TODO: manually invoke unix.Prlimit with lower/reasonable rlimit
-	if err := rlimit.RemoveMemlock(); err != nil {
-		return fmt.Errorf("removing mem lock: %w", err)
-	}
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	spec, err := loadBpf()
 	if err != nil {

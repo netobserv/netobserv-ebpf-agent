@@ -20,34 +20,26 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: netobserv-ebpf-agent
-        image: quay.io/netobserv/netobserv-ebpf-agent:main
+        image: quay.io/mmaciasl/netobserv-ebpf-agent:main
         #      imagePullPolicy: Always
         securityContext:
-          privileged: true
+          capabilities:
+            add:
+              - BPF
+              - PERFMON
+              - NET_ADMIN
+              - SYS_RESOURCE
           runAsUser: 0
         env:
           - name: FLOWS_TARGET_HOST
-            value: "flp"
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
           - name: FLOWS_TARGET_PORT
             value: "9999"
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: flp
-  labels:
-    k8s-app: flp
-spec:
-  ports:
-    - port: 9999
-      protocol: TCP
-      targetPort: 9999
-      name: flp
-  selector:
-    k8s-app: flp
----
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: flp
   labels:
@@ -56,16 +48,13 @@ spec:
   selector:
     matchLabels:
       k8s-app: flp
-  replicas: 1
   template:
     metadata:
       labels:
         k8s-app: flp
     spec:
-      automountServiceAccountToken: true
-      serviceAccountName: netobserv-controller-manager
       containers:
-        - name: packet-counter
+        - name: flowlogs-pipeline
           image: quay.io/netobserv/flowlogs-pipeline:latest
           ports:
             - containerPort: 9999
@@ -139,3 +128,4 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: netobserv-account
+
