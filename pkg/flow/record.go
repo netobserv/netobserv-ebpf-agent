@@ -12,8 +12,8 @@ import (
 const MacLen = 6
 const IP6Len = 16
 const IPv6Type = 0x86DD
+// IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 
-// TODO: support IPv6
 type RawIP uint32
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
