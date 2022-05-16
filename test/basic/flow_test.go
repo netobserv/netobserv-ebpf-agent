@@ -26,7 +26,10 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const clusterNamePrefix = "test-cluster"
+const (
+	clusterNamePrefix = "test-cluster"
+	containerName     = "localhost/ebpf-agent:test"
+)
 
 var (
 	testenv env.Environment
@@ -50,8 +53,12 @@ func TestMain(m *testing.M) {
 		deploy(ManifestDeployDefinition{Namespace: "default", YamlFile: path.Join("..", "base-env", "01-permissions.yml")}),
 		deploy(ManifestDeployDefinition{Namespace: "default", YamlFile: path.Join("..", "base-env", "02-loki.yml")}),
 		deploy(ManifestDeployDefinition{Namespace: "default", YamlFile: path.Join("..", "base-env", "03-flp.yml")}),
-		//envfuncs.LoadImageArchiveToCluster(kindClusterName, "netobserv-ebpf-agent:test"),
-		//deploy(ManifestDeployDefinition{YamlFile: path.Join("..", "base-env", "04-agent.yml")}),
+		func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+			fmt.Println("***** LOADING IMAGE INTO CLUSTER")
+			//return envfuncs.LoadImageArchiveToCluster(kindClusterName, "../../cosa.tar")(ctx, config)
+			return envfuncs.LoadDockerImageToCluster(kindClusterName, containerName)(ctx, config)
+		},
+		deploy(ManifestDeployDefinition{YamlFile: path.Join("..", "base-env", "04-agent.yml")}),
 	)
 
 	testenv.Finish(

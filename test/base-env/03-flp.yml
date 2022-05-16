@@ -19,7 +19,7 @@ spec:
           image: quay.io/netobserv/flowlogs-pipeline:latest
           ports:
             - containerPort: 9999
-              hostPort: 1234
+              hostPort: 9999
           args:
             - --config=/etc/flp/config.yaml
           volumeMounts:

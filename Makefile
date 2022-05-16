@@ -121,5 +121,4 @@ image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
 
 integration-test: prereqs
-	$(OCI_BIN) build . -t netobserv-ebpf-agent:test
-	kind load docker-image netobserv-ebpf-agent:test
+	$(OCI_BIN) build . -t ebpf-agent:test

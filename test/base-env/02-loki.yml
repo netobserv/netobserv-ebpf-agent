@@ -5,7 +5,7 @@ metadata:
 spec:
   resources:
     requests:
-      storage: 1G
+      storage: 64M
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
@@ -91,11 +91,6 @@ spec:
               name: loki-config
           ports:
             - containerPort: 3100
-        - name: grafana
-          image: grafana/grafana:main
-          volumeMounts:
-            - mountPath: "/etc/grafana/provisioning/datasources"
-              name: loki-config
 ---
 # oc port-forward deployment/loki 3100 3000
 kind: Service
@@ -108,7 +103,4 @@ spec:
   ports:
     - name: loki
       port: 3100
-      protocol: TCP
-    - name: grafana
-      port: 3000
       protocol: TCP
