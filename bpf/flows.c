@@ -33,8 +33,8 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow
         return DISCARD;
     }
 
-    flow->network.type.v4ip.src_ip = __bpf_ntohl(ip->saddr);
-    flow->network.type.v4ip.dst_ip = __bpf_ntohl(ip->daddr);
+    flow->network.v4ip.src_ip = __bpf_ntohl(ip->saddr);
+    flow->network.v4ip.dst_ip = __bpf_ntohl(ip->daddr);
     flow->transport.protocol = ip->protocol;
 
     switch (ip->protocol) {
@@ -64,8 +64,8 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, struct flow *f
         return DISCARD;
     }
 
-    flow->network.type.v6ip.src_ip6 = ip->saddr;
-    flow->network.type.v6ip.dst_ip6 = ip->daddr;
+    flow->network.v6ip.src_ip6 = ip->saddr;
+    flow->network.v6ip.dst_ip6 = ip->daddr;
     flow->transport.protocol = ip->nexthdr;
 
     switch (ip->nexthdr) {

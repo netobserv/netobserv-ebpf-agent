@@ -63,22 +63,6 @@ type rawRecord struct {
 	Bytes HumanBytes
 }
 
-type v4Record struct {
-	Direction Direction
-	DataLink  DataLink
-	Network   Network
-	Transport Transport
-	Bytes HumanBytes
-}
-
-type v6Record struct {
-	Direction Direction
-	DataLink  DataLink
-	NetworkV6 NetworkV6
-	Transport Transport
-	Bytes HumanBytes
-}
-
 // Record contains accumulated metrics from a flow
 type Record struct {
 	rawRecord
@@ -184,30 +168,7 @@ func (d Direction) MarshalJSON() ([]byte, error) {
 
 // ReadFrom reads a Record from a binary source, in LittleEndian order
 func ReadFrom(reader io.Reader) (*Record, error) {
-	var proto uint16
-	var v4Rec v4Record
-	var v6Rec v6Record
-
-	err:= binary.Read(reader, binary.LittleEndian, &proto)
-	if err != nil {
-		return nil, err
-	}
-	if proto == IPv6Type {
-		err2:= binary.Read(reader, binary.LittleEndian, &v6Rec)
-		return &Record{rawRecord : rawRecord{key: key{Protocol: proto,
-			Direction: v6Rec.Direction,
-			DataLink: v6Rec.DataLink,
-			Network: Network{},
-			NetworkV6: v6Rec.NetworkV6,
-			Transport: v6Rec.Transport},
-			Bytes: v6Rec.Bytes}}, err2
-	}
-	err2:= binary.Read(reader, binary.LittleEndian, &v4Rec)
-	return &Record{rawRecord: rawRecord{key: key{Protocol: proto,
-		Direction: v4Rec.Direction,
-		DataLink: v4Rec.DataLink,
-		Network: v4Rec.Network,
-		NetworkV6: NetworkV6{},
-		Transport: v4Rec.Transport},
-		Bytes: v4Rec.Bytes}}, err2
+	var fr rawRecord
+	err := binary.Read(reader, binary.LittleEndian, &fr)
+	return &Record{rawRecord: fr}, err
 }

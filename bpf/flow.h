@@ -28,10 +28,8 @@ struct v6ip {
 } __attribute__((packed));
 
 struct network {
-    union {
-        struct v4ip v4ip;
-        struct v6ip v6ip;
-    } type;
+    struct v4ip v4ip;
+    struct v6ip v6ip;
 } __attribute__((packed));
 
 // L4 transport layer
