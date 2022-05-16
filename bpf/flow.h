@@ -31,7 +31,7 @@ struct network {
     union {
         struct v4ip v4ip;
         struct v6ip v6ip;
-    }type;
+    } type;
 } __attribute__((packed));
 
 // L4 transport layer
