@@ -10,13 +10,17 @@ import (
 )
 
 const MacLen = 6
+const IP6Len = 16
+const IPv6Type = 0x86DD
 
-// TODO: support IPv6
+// IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
+
 type RawIP uint32
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 type TransportProtocol uint8
+type IP6Addr [IP6Len]uint8
 
 type DataLink struct {
 	SrcMac MacAddr
@@ -26,6 +30,11 @@ type DataLink struct {
 type Network struct {
 	SrcAddr RawIP
 	DstAddr RawIP
+}
+
+type NetworkV6 struct {
+	SrcAddr IP6Addr
+	DstAddr IP6Addr
 }
 
 type Transport struct {
@@ -40,6 +49,7 @@ type key struct {
 	Direction Direction
 	DataLink  DataLink
 	Network   Network
+	NetworkV6 NetworkV6
 	Transport Transport
 	// TODO: add TOS field
 }

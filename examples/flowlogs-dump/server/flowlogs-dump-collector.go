@@ -26,6 +26,8 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 )
 
+const ipv6 = 0x86DD
+
 var (
 	port = flag.Int("listen_port", 9999, "TCP port to listen for flows")
 )
@@ -36,6 +38,12 @@ var protocolByNumber = map[uint32]string{
 	6:  "tcp",
 	17: "udp",
 	58: "ipv6-icmp",
+}
+
+var ipProto = map[uint32]string{
+	0x0800: "ipv4",
+	0x0806: "arp",
+	0x86DD: "ipv6",
 }
 
 func ipIntToNetIP(ipAsInt uint32) net.IP {
@@ -63,19 +71,37 @@ func main() {
 	}()
 	for records := range receivedRecords {
 		for _, record := range records.Entries {
-			log.Printf("%v %s IP %s:%d > %s:%d: protocol:%s dir:%d bytes:%d packets:%d ends: %v\n",
-				record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
-				record.Interface,
-				ipIntToNetIP(record.Network.GetSrcAddr().GetIpv4()).String(),
-				record.Transport.SrcPort,
-				ipIntToNetIP(record.Network.GetDstAddr().GetIpv4()).String(),
-				record.Transport.DstPort,
-				protocolByNumber[record.Transport.Protocol],
-				record.Direction,
-				record.Bytes,
-				record.Packets,
-				record.TimeFlowEnd.AsTime().Local().Format("15:04:05.000000"),
-			)
+			if record.EthProtocol == ipv6 {
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s dir:%d bytes:%d packets:%d ends: %v\n",
+					ipProto[record.EthProtocol],
+					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
+					record.Interface,
+					net.IP(record.Network.GetSrcAddr().GetIpv6()).To16(),
+					record.Transport.SrcPort,
+					net.IP(record.Network.GetDstAddr().GetIpv6()).To16(),
+					record.Transport.DstPort,
+					protocolByNumber[record.Transport.Protocol],
+					record.Direction,
+					record.Bytes,
+					record.Packets,
+					record.TimeFlowEnd.AsTime().Local().Format("15:04:05.000000"),
+				)
+			} else {
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s dir:%d bytes:%d packets:%d ends: %v\n",
+					ipProto[record.EthProtocol],
+					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
+					record.Interface,
+					ipIntToNetIP(record.Network.GetSrcAddr().GetIpv4()).String(),
+					record.Transport.SrcPort,
+					ipIntToNetIP(record.Network.GetDstAddr().GetIpv4()).String(),
+					record.Transport.DstPort,
+					protocolByNumber[record.Transport.Protocol],
+					record.Direction,
+					record.Bytes,
+					record.Packets,
+					record.TimeFlowEnd.AsTime().Local().Format("15:04:05.000000"),
+				)
+			}
 		}
 	}
 }
