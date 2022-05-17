@@ -20,8 +20,8 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: netobserv-ebpf-agent
-        image: quay.io/mmaciasl/netobserv-ebpf-agent:main
-        #      imagePullPolicy: Always
+        image: quay.io/netobserv/netobserv-ebpf-agent:main
+        imagePullPolicy: Always
         securityContext:
           capabilities:
             add:
@@ -53,11 +53,13 @@ spec:
       labels:
         k8s-app: flp
     spec:
+      serviceAccountName: netobserv-account
       containers:
         - name: flowlogs-pipeline
           image: quay.io/netobserv/flowlogs-pipeline:latest
           ports:
             - containerPort: 9999
+              hostPort: 9999
           args:
             - --config=/etc/flp/config.yaml
           volumeMounts:
@@ -81,10 +83,8 @@ data:
         follows: ingest
       - name: enrich
         follows: decode
-      - name: encode
-        follows: enrich
       - name: loki
-        follows: encode
+        follows: enrich
     parameters:
       - name: ingest
         ingest:
@@ -105,9 +105,6 @@ data:
               - input: DstAddr
                 output: DstK8S
                 type: "add_kubernetes"
-      - name: encode
-        encode:
-          type: none
       - name: loki
         write:
           type: loki
@@ -122,10 +119,51 @@ data:
               - "DstK8S_OwnerName"
               - "FlowDirection"
             url: http://loki:3100
-            timestampLabel: TimeFlowEnd
+            timestampLabel: TimeFlowEndMs
+            timestampScale: 1ms
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: netobserv-account
-
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: netobserv
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - namespaces
+      - services
+      - nodes
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: netobserv
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: netobserv
+subjects:
+  - kind: ServiceAccount
+    name: netobserv-account
+    namespace: default
