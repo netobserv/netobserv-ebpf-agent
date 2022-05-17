@@ -27,6 +27,7 @@ import (
 )
 
 const ipv6 = 0x86DD
+
 var (
 	port = flag.Int("listen_port", 9999, "TCP port to listen for flows")
 )
@@ -40,9 +41,9 @@ var protocolByNumber = map[uint32]string{
 }
 
 var ipProto = map[uint32]string{
-	0x0800:  "ipv4",
-	0x0806:  "arp",
-	0x86DD:  "ipv6",
+	0x0800: "ipv4",
+	0x0806: "arp",
+	0x86DD: "ipv6",
 }
 
 func ipIntToNetIP(ipAsInt uint32) net.IP {
