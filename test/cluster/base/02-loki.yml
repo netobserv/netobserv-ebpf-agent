@@ -98,9 +98,13 @@ apiVersion: v1
 metadata:
   name: loki
 spec:
+  # NodePort will simplify port-forwarding (need to specify the port in 00-kind.yml)
+  type: NodePort
   selector:
     app: loki
   ports:
     - name: loki
       port: 3100
+      targetPort: 3100
       protocol: TCP
+      nodePort: 30100

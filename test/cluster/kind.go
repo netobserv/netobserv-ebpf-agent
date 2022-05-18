@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
 	"path"
 	"testing"
 	"time"
@@ -22,10 +19,8 @@ import (
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/client-go/transport/spdy"
-	"k8s.io/kubectl/pkg/cmd/portforward"
+
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
@@ -42,16 +37,12 @@ var log = logrus.WithField("component", "cluster.Kind")
 var defaultBaseDeployments = []ManifestDeployDefinition{
 	{YamlFile: path.Join("cluster", "base", "01-permissions.yml")},
 	{YamlFile: path.Join("cluster", "base", "02-loki.yml"),
-		ForwardTypeName: "service/loki", ForwardPorts: []string{"3100"},
-		ReadyFunction: (&Loki{BaseURL: "http://127.0.0.1:3100/ready"}).Ready,
-	},
+		ReadyFunction: (&Loki{BaseURL: "http://127.0.0.1:30100"}).Ready},
 	{YamlFile: path.Join("cluster", "base", "03-flp.yml")},
 	{YamlFile: path.Join("cluster", "base", "04-agent.yml")},
 }
 
 type ManifestDeployDefinition struct {
-	ForwardTypeName string
-	ForwardPorts    []string
 	// YamlFile relative location from the `${project.root}/test` folder
 	YamlFile      string
 	ReadyFunction func() error
@@ -73,19 +64,20 @@ func NewKind(kindClusterName string) *Kind {
 }
 
 func (k *Kind) Run(m *testing.M) {
-
 	envFuncs := []env.Func{
-		envfuncs.CreateKindCluster(k.clusterName),
+		envfuncs.CreateKindClusterWithConfig(k.clusterName,
+			"kindest/node:v1.24.0",
+			path.Join("..", "cluster", "base", "00-kind.yml")),
 		envfuncs.LoadDockerImageToCluster(k.clusterName, agentContainerName),
 	}
 	// Deploy component dependencies: loki, flp,
 	for _, c := range k.baseComponents {
 		envFuncs = append(envFuncs, deploy(c))
 	}
-	// Execute port-forward, if defined
-	for _, c := range k.baseComponents {
-		envFuncs = append(envFuncs, withTimeout(portForward(c)))
-	}
+	//// Execute port-forward, if defined
+	//for _, c := range k.baseComponents {
+	//	envFuncs = append(envFuncs, withTimeout(portForward(c)))
+	//}
 	// Execute readyness functions, if defined
 	for _, c := range k.baseComponents {
 		envFuncs = append(envFuncs, withTimeout(isReady(c)))
@@ -94,8 +86,8 @@ func (k *Kind) Run(m *testing.M) {
 	log.Info("starting tests")
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
-			// TODO: retrieve all cluster logs
-			//envfuncs.DestroyKindCluster(kindClusterName),
+		// TODO: retrieve all cluster logs
+		//envfuncs.DestroyKindCluster(kindClusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
 }
@@ -192,56 +184,6 @@ func withTimeout(f env.Func) env.Func {
 			tlog.WithError(err).Debug("function did not succeed. Retrying after 1s")
 			time.Sleep(time.Second)
 		}
-	}
-}
-
-func portForward(def ManifestDeployDefinition) env.Func {
-	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-		if def.ForwardTypeName == "" {
-			return ctx, nil
-		}
-		flog := log.WithFields(logrus.Fields{
-			"function": "portForward",
-			"typeName": def.ForwardTypeName,
-			"ports":    def.ForwardPorts,
-		})
-		flog.Debug("function start")
-		cconfig := cfg.Client().RESTConfig()
-
-		rTripper, upgrader, err := spdy.RoundTripperFor(cconfig)
-		if err != nil {
-			return ctx, fmt.Errorf("creating round tripper: %w", err)
-		}
-		urlStr := fmt.Sprintf("%s/api/v1/namespaces/%s/%s/portforward",
-			cconfig.Host, namespace, def.ForwardTypeName)
-		flog = flog.WithField("url", urlStr)
-
-		flog.Debug("executing actual port forward")
-		path, err := url.Parse(urlStr)
-		if err != nil {
-			return ctx, fmt.Errorf("parsing port-forward url: %w", err)
-		}
-		restClient, err := rest.RESTClientFor(cconfig)
-		if err != nil {
-			return ctx, fmt.Errorf("instantiating REST client: %w", err)
-		}
-		portforward.PortForwardOptions{
-			Namespace:  namespace,
-			PodName:    def.ForwardTypeName,
-			RESTClient: restClient,
-			Config:     cconfig,
-		}
-
-		dialer := spdy.NewDialer(upgrader, &http.Client{Transport: rTripper}, http.MethodPost, path)
-		pf, err := portforward.New(dialer, def.ForwardPorts, make(chan struct{}), make(chan struct{}), os.Stdout, os.Stderr)
-		if err != nil {
-			return ctx, fmt.Errorf("creating port forward: %w", err)
-		}
-		if err := pf.ForwardPorts(); err != nil {
-			return ctx, fmt.Errorf("forwarding ports: %w", err)
-		}
-
-		return ctx, nil
 	}
 }
 
