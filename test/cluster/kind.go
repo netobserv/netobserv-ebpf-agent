@@ -1,0 +1,261 @@
+package cluster
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"testing"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/transport/spdy"
+	"k8s.io/kubectl/pkg/cmd/portforward"
+	"sigs.k8s.io/e2e-framework/pkg/env"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
+)
+
+const (
+	agentContainerName = "localhost/ebpf-agent:test"
+	namespace          = "default"
+	timeout            = 60 * time.Second
+)
+
+var log = logrus.WithField("component", "cluster.Kind")
+
+var defaultBaseDeployments = []ManifestDeployDefinition{
+	{YamlFile: path.Join("cluster", "base", "01-permissions.yml")},
+	{YamlFile: path.Join("cluster", "base", "02-loki.yml"),
+		ForwardTypeName: "service/loki", ForwardPorts: []string{"3100"},
+		ReadyFunction: (&Loki{BaseURL: "http://127.0.0.1:3100/ready"}).Ready,
+	},
+	{YamlFile: path.Join("cluster", "base", "03-flp.yml")},
+	{YamlFile: path.Join("cluster", "base", "04-agent.yml")},
+}
+
+type ManifestDeployDefinition struct {
+	ForwardTypeName string
+	ForwardPorts    []string
+	// YamlFile relative location from the `${project.root}/test` folder
+	YamlFile      string
+	ReadyFunction func() error
+}
+
+type Kind struct {
+	clusterName    string
+	baseComponents []ManifestDeployDefinition
+	testEnv        env.Environment
+}
+
+// TODO: enable options to override baseComponents, cleanups, etc...
+func NewKind(kindClusterName string) *Kind {
+	return &Kind{
+		testEnv:        env.New(),
+		clusterName:    kindClusterName,
+		baseComponents: defaultBaseDeployments,
+	}
+}
+
+func (k *Kind) Run(m *testing.M) {
+
+	envFuncs := []env.Func{
+		envfuncs.CreateKindCluster(k.clusterName),
+		envfuncs.LoadDockerImageToCluster(k.clusterName, agentContainerName),
+	}
+	// Deploy component dependencies: loki, flp,
+	for _, c := range k.baseComponents {
+		envFuncs = append(envFuncs, deploy(c))
+	}
+	// Execute port-forward, if defined
+	for _, c := range k.baseComponents {
+		envFuncs = append(envFuncs, withTimeout(portForward(c)))
+	}
+	// Execute readyness functions, if defined
+	for _, c := range k.baseComponents {
+		envFuncs = append(envFuncs, withTimeout(isReady(c)))
+	}
+
+	log.Info("starting tests")
+	code := k.testEnv.Setup(envFuncs...).
+		Finish(
+			// TODO: retrieve all cluster logs
+			//envfuncs.DestroyKindCluster(kindClusterName),
+		).Run(m)
+	log.WithField("returnCode", code).Info("tests finished run")
+}
+
+func (k *Kind) TestEnv() env.Environment {
+	return k.testEnv
+}
+
+func deploy(definition ManifestDeployDefinition) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		kclient, err := kubernetes.NewForConfig(cfg.Client().RESTConfig())
+		if err != nil {
+			return ctx, fmt.Errorf("creating kubernetes client: %w", err)
+		}
+		if err := deployManifestFile(definition, cfg, kclient); err != nil {
+			return ctx, fmt.Errorf("deploying manifest file: %w", err)
+		}
+		return ctx, nil
+	}
+}
+
+// credits to https://gist.github.com/pytimer/0ad436972a073bb37b8b6b8b474520fc
+func deployManifestFile(definition ManifestDeployDefinition,
+	cfg *envconf.Config,
+	kclient *kubernetes.Clientset,
+) error {
+	b, err := ioutil.ReadFile(path.Join("..", definition.YamlFile))
+	if err != nil {
+		return fmt.Errorf("reading manifest file %q: %w", definition.YamlFile, err)
+	}
+
+	dd, err := dynamic.NewForConfig(cfg.Client().RESTConfig())
+	if err != nil {
+		return fmt.Errorf("creating kubernetes dynamic client: %w", err)
+	}
+
+	decoder := yamlutil.NewYAMLOrJSONDecoder(bytes.NewReader(b), 100)
+	for {
+		var rawObj runtime.RawExtension
+		if err = decoder.Decode(&rawObj); err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("decoding manifest raw object: %w", err)
+			}
+			return nil
+		}
+
+		obj, gvk, err := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme).Decode(rawObj.Raw, nil, nil)
+		unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+		if err != nil {
+			return fmt.Errorf("deserializing object in manifest: %w", err)
+		}
+
+		unstructuredObj := &unstructured.Unstructured{Object: unstructuredMap}
+
+		gr, err := restmapper.GetAPIGroupResources(kclient.Discovery())
+		if err != nil {
+			return fmt.Errorf("can't get API group resources: %w", err)
+		}
+
+		mapper := restmapper.NewDiscoveryRESTMapper(gr)
+		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if err != nil {
+			return fmt.Errorf("creating REST Mapping: %w", err)
+		}
+
+		var dri dynamic.ResourceInterface
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			if unstructuredObj.GetNamespace() == "" {
+				unstructuredObj.SetNamespace(namespace)
+			}
+			dri = dd.Resource(mapping.Resource).Namespace(unstructuredObj.GetNamespace())
+		} else {
+			dri = dd.Resource(mapping.Resource)
+		}
+
+		if _, err := dri.Create(context.Background(), unstructuredObj, metav1.CreateOptions{}); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func withTimeout(f env.Func) env.Func {
+	tlog := log.WithField("function", "withTimeout")
+	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		start := time.Now()
+		for {
+			ctx, err := f(ctx, config)
+			if err == nil {
+				return ctx, nil
+			}
+			if time.Now().Sub(start) > timeout {
+				return ctx, fmt.Errorf("timeout (%s) trying to execute function: %w", timeout, err)
+			}
+			tlog.WithError(err).Debug("function did not succeed. Retrying after 1s")
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func portForward(def ManifestDeployDefinition) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		if def.ForwardTypeName == "" {
+			return ctx, nil
+		}
+		flog := log.WithFields(logrus.Fields{
+			"function": "portForward",
+			"typeName": def.ForwardTypeName,
+			"ports":    def.ForwardPorts,
+		})
+		flog.Debug("function start")
+		cconfig := cfg.Client().RESTConfig()
+
+		rTripper, upgrader, err := spdy.RoundTripperFor(cconfig)
+		if err != nil {
+			return ctx, fmt.Errorf("creating round tripper: %w", err)
+		}
+		urlStr := fmt.Sprintf("%s/api/v1/namespaces/%s/%s/portforward",
+			cconfig.Host, namespace, def.ForwardTypeName)
+		flog = flog.WithField("url", urlStr)
+
+		flog.Debug("executing actual port forward")
+		path, err := url.Parse(urlStr)
+		if err != nil {
+			return ctx, fmt.Errorf("parsing port-forward url: %w", err)
+		}
+		restClient, err := rest.RESTClientFor(cconfig)
+		if err != nil {
+			return ctx, fmt.Errorf("instantiating REST client: %w", err)
+		}
+		portforward.PortForwardOptions{
+			Namespace:  namespace,
+			PodName:    def.ForwardTypeName,
+			RESTClient: restClient,
+			Config:     cconfig,
+		}
+
+		dialer := spdy.NewDialer(upgrader, &http.Client{Transport: rTripper}, http.MethodPost, path)
+		pf, err := portforward.New(dialer, def.ForwardPorts, make(chan struct{}), make(chan struct{}), os.Stdout, os.Stderr)
+		if err != nil {
+			return ctx, fmt.Errorf("creating port forward: %w", err)
+		}
+		if err := pf.ForwardPorts(); err != nil {
+			return ctx, fmt.Errorf("forwarding ports: %w", err)
+		}
+
+		return ctx, nil
+	}
+}
+
+func isReady(definition ManifestDeployDefinition) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		if definition.ReadyFunction != nil {
+			log.WithFields(logrus.Fields{
+				"function":   "isReady",
+				"deployment": definition.YamlFile,
+			}).Debug("checking readiness")
+			if err := definition.ReadyFunction(); err != nil {
+				return ctx, fmt.Errorf("component not ready: %w", err)
+			}
+		}
+		return ctx, nil
+	}
+}
