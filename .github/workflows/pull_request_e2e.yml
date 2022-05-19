@@ -1,0 +1,27 @@
+name: pull request - e2e tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e-tests:
+    name: e2e-tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ['1.17']
+        
+    steps:
+    - name: install make
+      run: sudo apt-get install make
+    - name: set up go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go }}
+    - name: checkout
+      uses: actions/checkout@v2
+    - name: run end-to-end tests
+      run: make tests-e2e

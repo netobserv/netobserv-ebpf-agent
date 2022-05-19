@@ -93,7 +93,7 @@ compile:
 	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 .PHONY: test
-test:
+test: tests-e2e # TODO: delete dependency
 	@echo "### Testing code"
 	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.all.out
 
@@ -120,5 +120,6 @@ ci-images-build: image-build
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
 
-integration-test: prereqs
+tests-e2e: prereqs
 	$(OCI_BIN) build . -t ebpf-agent:test
+	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./...

@@ -1,3 +1,5 @@
+//go:build e2e
+
 package basic
 
 import (
@@ -6,8 +8,8 @@ import (
 	"time"
 
 	"github.com/mariomac/guara/pkg/test"
-	"github.com/netobserv/netobserv-ebpf-agent/test/cluster"
-	"github.com/netobserv/netobserv-ebpf-agent/test/cluster/tester"
+	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
+	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +28,7 @@ var (
 
 func TestMain(m *testing.M) {
 	//logrus.StandardLogger().SetLevel(logrus.DebugLevel)
-	kind = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 16),
+	kind = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 24),
 		cluster.AddDeployments(cluster.Deployment{ManifestFile: "manifests/pods.yml"}))
 	kind.Run(m)
 }

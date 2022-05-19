@@ -26,9 +26,9 @@ type Loki struct {
 
 func (l *Loki) get(pathQuery string) (status int, body string, err error) {
 	client := http.Client{}
-	reqUrl := l.BaseURL + pathQuery
-	llog.WithField("url", reqUrl).Debug("HTTP GET request")
-	resp, err := client.Get(reqUrl)
+	reqURL := l.BaseURL + pathQuery
+	llog.WithField("url", reqURL).Debug("HTTP GET request")
+	resp, err := client.Get(reqURL)
 	if err != nil {
 		return 0, "", err
 	}

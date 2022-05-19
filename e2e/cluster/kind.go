@@ -3,6 +3,7 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,7 +13,7 @@ import (
 
 	rt2 "runtime"
 
-	"github.com/netobserv/netobserv-ebpf-agent/test/cluster/tester"
+	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
 	"github.com/sirupsen/logrus"
 	"github.com/vladimirvivien/gexe"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -152,13 +153,16 @@ func deployManifestFile(definition Deployment,
 	for {
 		var rawObj runtime.RawExtension
 		if err = decoder.Decode(&rawObj); err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				return fmt.Errorf("decoding manifest raw object: %w", err)
 			}
 			return nil
 		}
 
 		obj, gvk, err := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme).Decode(rawObj.Raw, nil, nil)
+		if err != nil {
+			return fmt.Errorf("creating yaml decoding serializer: %w", err)
+		}
 		unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 		if err != nil {
 			return fmt.Errorf("deserializing object in manifest: %w", err)
@@ -202,7 +206,7 @@ func withTimeout(f env.Func) env.Func {
 			if err == nil {
 				return ctx, nil
 			}
-			if time.Now().Sub(start) > timeout {
+			if time.Since(start) > timeout {
 				return ctx, fmt.Errorf("timeout (%s) trying to execute function: %w", timeout, err)
 			}
 			tlog.WithError(err).Debug("function did not succeed. Retrying after 1s")
