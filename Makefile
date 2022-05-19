@@ -126,6 +126,7 @@ image-push: ## Push OCI image with the manager.
 .PHONY: tests-e2e
 tests-e2e: prereqs
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
+	$(OCI_BIN) images
 	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
 
 .PHONY: collect-e2e-logs
