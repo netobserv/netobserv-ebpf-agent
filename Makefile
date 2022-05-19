@@ -124,13 +124,13 @@ image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
 
 .PHONY: tests-e2e
+.ONESHELL:
 tests-e2e: prereqs
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
-	$(OCI_BIN) images
 	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
 
 .PHONY: collect-e2e-logs
 collect-e2e-logs:
 	-rm -rf e2e-logs
 	mkdir e2e-logs
-	for folder in $$(find e2e -name test-logs); do mv $$folder/* collected-logs/ ; rm -rf $$folder; done
+	for folder in $$(find e2e -name test-logs); do mv $$folder/* e2e-logs/ ; rm -rf $$folder; done

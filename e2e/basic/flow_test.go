@@ -122,6 +122,7 @@ func TestTest(t *testing.T) {
 			assert.NotEmpty(t, flow["Interface"])
 			assert.NotZero(t, flow["Packets"])
 			assert.EqualValues(t, 6, flow["Proto"])
+			// TODO: fix, as sometimes it gets the pod ip
 			assert.Equal(t, serverIP, flow["SrcAddr"])
 			assert.NotEmpty(t, flow["SrcMac"])
 			assert.NotZero(t, flow["DstPort"])
