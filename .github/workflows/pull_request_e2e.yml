@@ -27,6 +27,7 @@ jobs:
       run: make tests-e2e
     - name: collect end-to-end test logs
       run: make collect-e2e-logs
+      if: always()
     - name: upload e2e test logs
       uses: actions/upload-artifact@v3
       if: always()
