@@ -23,6 +23,8 @@ spec:
           privileged: true
           runAsUser: 0
         env:
+          - name: CACHE_ACTIVE_TIMEOUT
+            value: 100ms
           - name: FLOWS_TARGET_HOST
             valueFrom:
               fieldRef:

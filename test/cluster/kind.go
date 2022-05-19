@@ -10,7 +10,11 @@ import (
 	"testing"
 	"time"
 
+	rt2 "runtime"
+
+	"github.com/netobserv/netobserv-ebpf-agent/test/cluster/tester"
 	"github.com/sirupsen/logrus"
+	"github.com/vladimirvivien/gexe"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,7 +24,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/restmapper"
-
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
@@ -28,75 +31,96 @@ import (
 
 const (
 	agentContainerName = "localhost/ebpf-agent:test"
+	kindImage          = "kindest/node:v1.24.0"
 	namespace          = "default"
-	timeout            = 60 * time.Second
+	timeout            = 120 * time.Second
 )
 
 var log = logrus.WithField("component", "cluster.Kind")
 
-var defaultBaseDeployments = []ManifestDeployDefinition{
-	{YamlFile: path.Join("cluster", "base", "01-permissions.yml")},
-	{YamlFile: path.Join("cluster", "base", "02-loki.yml"),
-		ReadyFunction: (&Loki{BaseURL: "http://127.0.0.1:30100"}).Ready},
-	{YamlFile: path.Join("cluster", "base", "03-flp.yml")},
-	{YamlFile: path.Join("cluster", "base", "04-agent.yml")},
+var defaultBaseDeployments = []Deployment{
+	{ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml")},
+	{ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
+		ReadyFunction: (&tester.Loki{BaseURL: "http://127.0.0.1:30100"}).Ready},
+	{ManifestFile: path.Join(packageDir(), "base", "03-flp.yml")},
+	{ManifestFile: path.Join(packageDir(), "base", "04-agent.yml")},
 }
 
-type ManifestDeployDefinition struct {
-	// YamlFile relative location from the `${project.root}/test` folder
-	YamlFile      string
+// Deployment of components. Not only K8s deployments but also Pods, Services, DaemonSets, ...
+type Deployment struct {
+	// ManifestFile path to the kubectl-like YAML manifest file
+	ManifestFile  string
 	ReadyFunction func() error
 }
 
 type Kind struct {
-	clusterName    string
-	baseComponents []ManifestDeployDefinition
-	testEnv        env.Environment
+	clusterName     string
+	deployManifests []Deployment
+	testEnv         env.Environment
 }
 
-// TODO: enable options to override baseComponents, cleanups, etc...
-func NewKind(kindClusterName string) *Kind {
-	return &Kind{
-		testEnv:        env.New(),
-		clusterName:    kindClusterName,
-		baseComponents: defaultBaseDeployments,
+type Option func(k *Kind)
+
+func AddDeployments(defs ...Deployment) Option {
+	return func(k *Kind) {
+		k.deployManifests = append(k.deployManifests, defs...)
 	}
+}
+
+// TODO: enable options to override deployManifests, cleanups, etc...
+func NewKind(kindClusterName string, options ...Option) *Kind {
+	k := &Kind{
+		testEnv:         env.New(),
+		clusterName:     kindClusterName,
+		deployManifests: defaultBaseDeployments,
+	}
+	for _, option := range options {
+		option(k)
+	}
+	return k
 }
 
 func (k *Kind) Run(m *testing.M) {
 	envFuncs := []env.Func{
 		envfuncs.CreateKindClusterWithConfig(k.clusterName,
-			"kindest/node:v1.24.0",
-			path.Join("..", "cluster", "base", "00-kind.yml")),
+			kindImage,
+			path.Join(packageDir(), "base", "00-kind.yml")),
 		envfuncs.LoadDockerImageToCluster(k.clusterName, agentContainerName),
 	}
-	// Deploy component dependencies: loki, flp,
-	for _, c := range k.baseComponents {
+	// Deploy base cluster dependencies
+	for _, c := range k.deployManifests {
 		envFuncs = append(envFuncs, deploy(c))
 	}
-	//// Execute port-forward, if defined
-	//for _, c := range k.baseComponents {
-	//	envFuncs = append(envFuncs, withTimeout(portForward(c)))
-	//}
-	// Execute readyness functions, if defined
-	for _, c := range k.baseComponents {
+	// Wait for components' readiness
+	for _, c := range k.deployManifests {
 		envFuncs = append(envFuncs, withTimeout(isReady(c)))
 	}
 
-	log.Info("starting tests")
+	log.Info("starting kind setup")
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
-		// TODO: retrieve all cluster logs
-		//envfuncs.DestroyKindCluster(kindClusterName),
+			exportLogs(k.clusterName),
+			// TODO: retrieve all cluster logs
+			envfuncs.DestroyKindCluster(k.clusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
+}
+
+func exportLogs(name string) env.Func {
+	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		log.Info("exporting cluster logs")
+		exe := gexe.New()
+		out := exe.Run("kind export logs ./test-logs --name " + name)
+		log.WithField("out", out).Debug("exported cluster logs")
+		return ctx, nil
+	}
 }
 
 func (k *Kind) TestEnv() env.Environment {
 	return k.testEnv
 }
 
-func deploy(definition ManifestDeployDefinition) env.Func {
+func deploy(definition Deployment) env.Func {
 	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 		kclient, err := kubernetes.NewForConfig(cfg.Client().RESTConfig())
 		if err != nil {
@@ -110,13 +134,13 @@ func deploy(definition ManifestDeployDefinition) env.Func {
 }
 
 // credits to https://gist.github.com/pytimer/0ad436972a073bb37b8b6b8b474520fc
-func deployManifestFile(definition ManifestDeployDefinition,
+func deployManifestFile(definition Deployment,
 	cfg *envconf.Config,
 	kclient *kubernetes.Clientset,
 ) error {
-	b, err := ioutil.ReadFile(path.Join("..", definition.YamlFile))
+	b, err := ioutil.ReadFile(definition.ManifestFile)
 	if err != nil {
-		return fmt.Errorf("reading manifest file %q: %w", definition.YamlFile, err)
+		return fmt.Errorf("reading manifest file %q: %w", definition.ManifestFile, err)
 	}
 
 	dd, err := dynamic.NewForConfig(cfg.Client().RESTConfig())
@@ -187,12 +211,12 @@ func withTimeout(f env.Func) env.Func {
 	}
 }
 
-func isReady(definition ManifestDeployDefinition) env.Func {
+func isReady(definition Deployment) env.Func {
 	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 		if definition.ReadyFunction != nil {
 			log.WithFields(logrus.Fields{
 				"function":   "isReady",
-				"deployment": definition.YamlFile,
+				"deployment": definition.ManifestFile,
 			}).Debug("checking readiness")
 			if err := definition.ReadyFunction(); err != nil {
 				return ctx, fmt.Errorf("component not ready: %w", err)
@@ -200,4 +224,14 @@ func isReady(definition ManifestDeployDefinition) env.Func {
 		}
 		return ctx, nil
 	}
+}
+
+// helper to get the base directory of this package, allowing to load the test deployment
+// files whatever the working directory is
+func packageDir() string {
+	_, file, _, ok := rt2.Caller(1)
+	if !ok {
+		panic("can't find package directory for (project_dir)/test/cluster")
+	}
+	return path.Dir(file)
 }
