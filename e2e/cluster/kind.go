@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	agentContainerName = "ebpf-agent:test"
+	agentContainerName = "localhost/ebpf-agent:test"
 	kindImage          = "kindest/node:v1.24.0"
 	namespace          = "default"
 	timeout            = 120 * time.Second

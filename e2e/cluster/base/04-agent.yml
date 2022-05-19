@@ -17,7 +17,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: netobserv-ebpf-agent
-        image: ebpf-agent:test
+        image: localhost/ebpf-agent:test
 #        imagePullPolicy: Always # Use always locally-uploaded copy
         securityContext:
           privileged: true
