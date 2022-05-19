@@ -26,7 +26,7 @@ GOLANGCI_LINT_VERSION = v1.42.1
 
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
-GOOS := linux
+GOOS ?= linux
 PROTOC_ARTIFACTS := pkg/pbflow
 
 # regular expressions for excluded file patterns
@@ -93,7 +93,7 @@ compile:
 	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 .PHONY: test
-test: tests-e2e # TODO: delete dependency
+test:
 	@echo "### Testing code"
 	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.all.out
 
@@ -111,15 +111,25 @@ coverage-report-html: cov-exclude-generated
 	@echo "### Generating HTML coverage report"
 	go tool cover --html=./cover.out
 
+.PHONY: image-build
 image-build: ## Build OCI image with the manager.
 	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .
 
+.PHONY: ci-images-build
 ci-images-build: image-build
 	$(OCI_BIN) build --build-arg BASE_IMAGE=$(IMG) -t $(IMG_SHA) -f scripts/shortlived.Dockerfile .
 
+.PHONY: image-push
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
 
+.PHONY: tests-e2e
 tests-e2e: prereqs
 	$(OCI_BIN) build . -t ebpf-agent:test
-	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./...
+	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
+
+.PHONY: collect-e2e-logs
+collect-e2e-logs:
+	-rm -rf e2e-logs
+	mkdir e2e-logs
+	for folder in $$(find e2e -name test-logs); do mv $$folder/* collected-logs/ ; rm -rf $$folder; done
