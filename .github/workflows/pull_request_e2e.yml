@@ -25,3 +25,8 @@ jobs:
       uses: actions/checkout@v2
     - name: run end-to-end tests
       run: make tests-e2e
+    - name: Collect e2e test logs
+      uses: actions/upload-artifact@v3
+      with:
+        name: basic tests logs
+        path: e2e/basic/test-logs
