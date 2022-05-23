@@ -1,5 +1,6 @@
 name: pull request - e2e tests
 
+#todo: check caching dependencies: https://github.com/actions/cache
 on:
   push:
     branches: [ main ]
@@ -13,7 +14,6 @@ jobs:
     strategy:
       matrix:
         go: ['1.17']
-        
     steps:
     - name: install make
       run: sudo apt-get install make
