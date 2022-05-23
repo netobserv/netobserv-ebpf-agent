@@ -25,14 +25,14 @@ const (
 )
 
 var (
-	kind *cluster.Kind
+	testCluster *cluster.Kind
 )
 
 func TestMain(m *testing.M) {
 	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
-	kind = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 24), path.Join("..", ".."),
+	testCluster = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 24), path.Join("..", ".."),
 		cluster.AddDeployments(cluster.Deployment{ManifestFile: "manifests/pods.yml"}))
-	kind.Run(m)
+	testCluster.Run(m)
 }
 
 func TestTest(t *testing.T) {
@@ -61,15 +61,11 @@ func TestTest(t *testing.T) {
 			return ctx
 		}).Assess("client -> server request flow",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// TODO: add as cluster property
-			lc := tester.Loki{BaseURL: "http://127.0.0.1:30100"}
 			var query *tester.LokiQueryResponse
 			test.Eventually(t, 20*time.Second, func(t require.TestingT) {
 				var err error
-				query, err = lc.Query(1, map[string]string{
-					"DstK8S_OwnerName": "server",
-					"SrcK8S_OwnerName": "client",
-				})
+				query, err = testCluster.Loki().
+					Query(1, `{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}`)
 				require.NoError(t, err)
 				require.NotNil(t, query)
 				require.NotEmpty(t, query.Data.Result)
@@ -97,15 +93,12 @@ func TestTest(t *testing.T) {
 			return ctx
 		}).Assess("server -> client response flow",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// TODO: add as cluster property
-			lc := tester.Loki{BaseURL: "http://127.0.0.1:30100"}
 			var query *tester.LokiQueryResponse
 			test.Eventually(t, 20*time.Second, func(t require.TestingT) {
 				var err error
-				query, err = lc.Query(1, map[string]string{
-					"DstK8S_OwnerName": "client",
-					"SrcK8S_OwnerName": "server",
-				})
+				// source can be the pod IP and the service IP. We filter by pod IP
+				query, err = testCluster.Loki().
+					Query(1, `{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}|="\"SrcAddr\":\"`+serverIP+`\""`)
 				require.NoError(t, err)
 				require.NotNil(t, query)
 				require.NotEmpty(t, query.Data.Result)
@@ -124,8 +117,6 @@ func TestTest(t *testing.T) {
 			assert.NotEmpty(t, flow["Interface"])
 			assert.NotZero(t, flow["Packets"])
 			assert.EqualValues(t, 6, flow["Proto"])
-			// TODO: fix, as sometimes it gets the pod ip
-			assert.Equal(t, serverIP, flow["SrcAddr"])
 			assert.NotEmpty(t, flow["SrcMac"])
 			assert.NotZero(t, flow["DstPort"])
 			// TODO: verify that they actually contain reasonable timestamps
@@ -133,5 +124,5 @@ func TestTest(t *testing.T) {
 			assert.NotZero(t, flow["TimeFlowStartMs"])
 			return ctx
 		}).Feature()
-	kind.TestEnv().Test(t, f1)
+	testCluster.TestEnv().Test(t, f1)
 }

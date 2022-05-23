@@ -63,7 +63,7 @@ fmt: ## Run go fmt against code.
 .PHONY: lint
 lint: prereqs
 	@echo "### Linting code"
-	golangci-lint run ./...
+	golangci-lint run ./... --timeout=3m
 
 # As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
 # to run this target for each build. Only when you change the C code inside the bpf folder or the
@@ -130,9 +130,3 @@ tests-e2e: prereqs
 	# todo: explain
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
-
-.PHONY: collect-e2e-logs
-collect-e2e-logs:
-	-rm -rf e2e-logs
-	mkdir e2e-logs
-	for folder in $$(find e2e -name test-logs); do mv $$folder/* e2e-logs/ ; rm -rf $$folder; done

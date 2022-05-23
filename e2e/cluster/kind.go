@@ -1,3 +1,8 @@
+// Package cluster cointains the base setup for the test environment. This is:
+// - Deployment manifests for a base cluster: Loki, permissions, flowlogs-processor and the
+//   local version of the agent. As well as the cluster configuration for ports exposure.
+// - Utility classes to programmatically manage the Kind cluster and some of its components
+//   (e.g. Loki)
 package cluster
 
 import (
@@ -125,6 +130,10 @@ func (k *Kind) exportLogs() env.Func {
 
 func (k *Kind) TestEnv() env.Environment {
 	return k.testEnv
+}
+
+func (k *Kind) Loki() *tester.Loki {
+	return &tester.Loki{BaseURL: "http://127.0.0.1:30100"}
 }
 
 func deploy(definition Deployment) env.Func {

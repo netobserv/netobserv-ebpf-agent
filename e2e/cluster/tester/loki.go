@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -49,25 +48,10 @@ func (l *Loki) Ready() error {
 	return nil
 }
 
-func (l *Loki) Query(limit int, labels map[string]string) (*LokiQueryResponse, error) {
-	queryPath := strings.Builder{}
-	queryPath.WriteString(fmt.Sprintf("%s?%s=%d", pathQuery, queryArgLimit, limit))
-	if len(labels) > 0 {
-		query := strings.Builder{}
-		query.WriteByte('{')
-		firstLabel := true
-		for k, v := range labels {
-			if firstLabel {
-				firstLabel = false
-			} else {
-				query.WriteByte(',')
-			}
-			query.WriteString(k + `="` + v + `"`)
-		}
-		query.WriteByte('}')
-		queryPath.WriteString("&" + queryArgQuery + "=" + url.QueryEscape(query.String()))
-	}
-	status, body, err := l.get(queryPath.String())
+func (l *Loki) Query(limit int, logQL string) (*LokiQueryResponse, error) {
+	status, body, err := l.get(fmt.Sprintf("%s?%s=%d&%s=%s",
+		pathQuery, queryArgLimit, limit,
+		queryArgQuery, url.QueryEscape(logQL)))
 	if err != nil {
 		return nil, fmt.Errorf("loki request error: %w", err)
 	}
