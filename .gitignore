@@ -3,4 +3,4 @@
 *.out
 bin/
 e2e-logs
-**/test-logs
+ebpf-agent.tar

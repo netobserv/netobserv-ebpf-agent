@@ -35,6 +35,8 @@ const (
 	kindImage          = "kindest/node:v1.24.0"
 	namespace          = "default"
 	timeout            = 120 * time.Second
+	logsSubDir         = "e2e-logs"
+	localArchiveName   = "ebpf-agent.tar"
 )
 
 var log = logrus.WithField("component", "cluster.Kind")
@@ -56,6 +58,7 @@ type Deployment struct {
 
 type Kind struct {
 	clusterName     string
+	baseDir         string
 	deployManifests []Deployment
 	testEnv         env.Environment
 }
@@ -69,9 +72,10 @@ func AddDeployments(defs ...Deployment) Option {
 }
 
 // TODO: enable options to override deployManifests, cleanups, etc...
-func NewKind(kindClusterName string, options ...Option) *Kind {
+func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
 	k := &Kind{
 		testEnv:         env.New(),
+		baseDir:         baseDir,
 		clusterName:     kindClusterName,
 		deployManifests: defaultBaseDeployments,
 	}
@@ -86,7 +90,7 @@ func (k *Kind) Run(m *testing.M) {
 		envfuncs.CreateKindClusterWithConfig(k.clusterName,
 			kindImage,
 			path.Join(packageDir(), "base", "00-kind.yml")),
-		envfuncs.LoadDockerImageToCluster(k.clusterName, agentContainerName),
+		k.loadLocalImage(),
 	}
 	// Deploy base cluster dependencies
 	for _, c := range k.deployManifests {
@@ -100,18 +104,19 @@ func (k *Kind) Run(m *testing.M) {
 	log.Info("starting kind setup")
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
-			exportLogs(k.clusterName),
-			// TODO: retrieve all cluster logs
+			k.exportLogs(),
 			envfuncs.DestroyKindCluster(k.clusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
 }
 
-func exportLogs(name string) env.Func {
+// export logs into working directory
+func (k *Kind) exportLogs() env.Func {
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
-		log.Info("exporting cluster logs")
+		logsDir := path.Join(k.baseDir, logsSubDir)
+		log.WithField("directory", logsDir).Info("exporting cluster logs")
 		exe := gexe.New()
-		out := exe.Run("kind export logs ./test-logs --name " + name)
+		out := exe.Run("kind export logs " + logsDir + " --name " + k.clusterName)
 		log.WithField("out", out).Debug("exported cluster logs")
 		return ctx, nil
 	}
@@ -194,6 +199,21 @@ func deployManifestFile(definition Deployment,
 		if _, err := dri.Create(context.Background(), unstructuredObj, metav1.CreateOptions{}); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func (k *Kind) loadLocalImage() env.Func {
+	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		log.Debug("trying to load docker image from local registry")
+		ctx, err := envfuncs.LoadDockerImageToCluster(
+			k.clusterName, agentContainerName)(ctx, config)
+		if err == nil {
+			return ctx, nil
+		}
+		log.WithError(err).WithField("archive", localArchiveName).
+			Debug("couldn't load image from local registry. Trying from local archive")
+		return envfuncs.LoadImageArchiveToCluster(
+			k.clusterName, path.Join(k.baseDir, localArchiveName))(ctx, config)
 	}
 }
 

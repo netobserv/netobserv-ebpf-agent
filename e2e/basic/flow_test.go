@@ -4,6 +4,7 @@ package basic
 
 import (
 	"context"
+	"path"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ var (
 
 func TestMain(m *testing.M) {
 	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
-	kind = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 24),
+	kind = cluster.NewKind(envconf.RandomName(clusterNamePrefix, 24), path.Join("..", ".."),
 		cluster.AddDeployments(cluster.Deployment{ManifestFile: "manifests/pods.yml"}))
 	kind.Run(m)
 }
