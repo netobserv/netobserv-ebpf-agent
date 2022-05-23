@@ -53,25 +53,29 @@ func TestBasicFlowCapture(t *testing.T) {
 	).Assess("correctness of client -> server (as Service) request flows",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			return checkFlow(ctx, t,
-				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}|="\"DstAddr\":\"`+serverServiceIP+`\""`,
+				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}|="\"DstAddr\":\"`+
+					serverServiceIP+`\""`,
 				clientIP, serverServiceIP, "DstPort")
 		},
 	).Assess("correctness of client -> server (as Pod) request flows",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			return checkFlow(ctx, t,
-				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}|="\"DstAddr\":\"`+serverPodIP+`\""`,
+				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}|="\"DstAddr\":\"`+
+					serverPodIP+`\""`,
 				clientIP, serverPodIP, "DstPort")
 		},
 	).Assess("correctness of server (from Service) -> client response flows",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			return checkFlow(ctx, t,
-				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}|="\"SrcAddr\":\"`+serverServiceIP+`\""`,
+				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}|="\"SrcAddr\":\"`+
+					serverServiceIP+`\""`,
 				serverServiceIP, clientIP, "SrcPort")
 		},
 	).Assess("correctness of server (from Pod) -> client response flows",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			return checkFlow(ctx, t,
-				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}|="\"SrcAddr\":\"`+serverPodIP+`\""`,
+				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}|="\"SrcAddr\":\"`+
+					serverPodIP+`\""`,
 				serverPodIP, clientIP, "SrcPort")
 		},
 	).Feature()
@@ -80,7 +84,8 @@ func TestBasicFlowCapture(t *testing.T) {
 
 // TODO: find a way to extract the Pods' MAC
 func fetchSourceAndDestinationAddresses(
-	ctx context.Context, t *testing.T, cfg *envconf.Config) (clientIP, serverServiceIP, serverPodIP string) {
+	ctx context.Context, t *testing.T, cfg *envconf.Config,
+) (clientIP, serverServiceIP, serverPodIP string) {
 	kclient, err := kubernetes.NewForConfig(cfg.Client().RESTConfig())
 	require.NoError(t, err)
 	// extract source Pod information from kubernetes
@@ -112,9 +117,9 @@ func fetchSourceAndDestinationAddresses(
 	return
 }
 
-// checkFlow checks the correctness of flows between HTTP server and client given the expected src & dst IPs,
-// and the field where the service port 80 should be placed ("DstPort" for requests, "SrcPort" for
-// responses)
+// checkFlow checks the correctness of flows between HTTP server and client given the expected src &
+// dst IPs, and the field where the service port 80 should be placed ("DstPort" for requests,
+// "SrcPort" for responses)
 func checkFlow(ctx context.Context, t *testing.T, logQL string,
 	expectedSrcIP, expectedDstIP, port80ExpectedField string) context.Context {
 	var query *tester.LokiQueryResponse
@@ -143,6 +148,7 @@ func checkFlow(ctx context.Context, t *testing.T, logQL string,
 	assert.NotEmpty(t, result.Stream["FlowDirection"])
 	assert.NotZero(t, flow["Bytes"])
 	assert.NotEmpty(t, flow["DstMac"])
+	assert.NotZero(t, flow["DstPort"])
 	assert.NotEmpty(t, flow["Interface"])
 	assert.NotZero(t, flow["Packets"])
 	assert.NotEmpty(t, flow["SrcMac"])
