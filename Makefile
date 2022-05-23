@@ -128,7 +128,7 @@ image-push: ## Push OCI image with the manager.
 tests-e2e: prereqs
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
 	# todo: explain
-	$(OCI_BIN) save -o e2e/basic/ebpf-agent.tar localhost/ebpf-agent:test
+	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
 
 .PHONY: collect-e2e-logs
