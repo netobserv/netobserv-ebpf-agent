@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"path"
 	"testing"
 	"time"
@@ -47,6 +46,7 @@ const (
 
 var log = logrus.WithField("component", "cluster.Kind")
 
+// defaultBaseDeployments are a list of components that are common to any test environment
 var defaultBaseDeployments = []Deployment{
 	{ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml")},
 	{ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
@@ -62,6 +62,7 @@ type Deployment struct {
 	ReadyFunction func() error
 }
 
+// Kind cluster deployed by each TestMain function, prepared for a given test scenario.
 type Kind struct {
 	clusterName     string
 	baseDir         string
@@ -69,15 +70,23 @@ type Kind struct {
 	testEnv         env.Environment
 }
 
+// Option that can be passed to the NewKind function in order to change the configuration
+// of the test cluster
+// TODO: enable options to override deployManifests, cleanups, etc...
 type Option func(k *Kind)
 
+// AddDeployments can be passed to NewKind in order to add extra deployments to setup the
+// test scenario.
 func AddDeployments(defs ...Deployment) Option {
 	return func(k *Kind) {
 		k.deployManifests = append(k.deployManifests, defs...)
 	}
 }
 
-// TODO: enable options to override deployManifests, cleanups, etc...
+// NewKind creates a kind cluster given a name and set of Option instances. The base dir
+// must point to the folder where the logs are going to be stored and, in case your docker
+// backend doesn't provide access to the local images, where the ebpf-agent.tar container image
+// is located. Usually it will be the project root.
 func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
 	k := &Kind{
 		testEnv:         env.New(),
@@ -91,6 +100,7 @@ func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
 	return k
 }
 
+// Run the Kind cluster for the later execution of tests.
 func (k *Kind) Run(m *testing.M) {
 	envFuncs := []env.Func{
 		envfuncs.CreateKindClusterWithConfig(k.clusterName,
@@ -116,7 +126,7 @@ func (k *Kind) Run(m *testing.M) {
 	log.WithField("returnCode", code).Info("tests finished run")
 }
 
-// export logs into working directory
+// export logs into the e2e-logs folder of the base directory.
 func (k *Kind) exportLogs() env.Func {
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
 		logsDir := path.Join(k.baseDir, logsSubDir)
@@ -132,6 +142,7 @@ func (k *Kind) TestEnv() env.Environment {
 	return k.testEnv
 }
 
+// Loki client pointing to the Loki instance inside the test cluster
 func (k *Kind) Loki() *tester.Loki {
 	return &tester.Loki{BaseURL: "http://127.0.0.1:30100"}
 }
@@ -149,6 +160,7 @@ func deploy(definition Deployment) env.Func {
 	}
 }
 
+// deploys a yaml manifest file
 // credits to https://gist.github.com/pytimer/0ad436972a073bb37b8b6b8b474520fc
 func deployManifestFile(definition Deployment,
 	cfg *envconf.Config,
@@ -212,9 +224,10 @@ func deployManifestFile(definition Deployment,
 	}
 }
 
+// loadLocalImage loads the agent docker image into the test cluster. It tries both available
+// methods, which will selectively work depending on the container backend type
 func (k *Kind) loadLocalImage() env.Func {
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
-		debugLocalFiles()
 		log.Debug("trying to load docker image from local registry")
 		ctx, err := envfuncs.LoadDockerImageToCluster(
 			k.clusterName, agentContainerName)(ctx, config)
@@ -228,6 +241,7 @@ func (k *Kind) loadLocalImage() env.Func {
 	}
 }
 
+// withTimeout retries the execution of an env.Func until it succeeds or a timeout is reached
 func withTimeout(f env.Func) env.Func {
 	tlog := log.WithField("function", "withTimeout")
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
@@ -246,6 +260,7 @@ func withTimeout(f env.Func) env.Func {
 	}
 }
 
+// isReady succeeds if the passed deployment does not have ReadyFunction, or it succeeds
 func isReady(definition Deployment) env.Func {
 	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 		if definition.ReadyFunction != nil {
@@ -269,23 +284,4 @@ func packageDir() string {
 		panic("can't find package directory for (project_dir)/test/cluster")
 	}
 	return path.Dir(file)
-}
-
-func debugLocalFiles() {
-	wd, err := os.Getwd()
-	if err != nil {
-		log.WithError(err).Error("can't get working directory")
-		return
-	}
-
-	log.WithField("workingDir", wd).Debug("listing local files of working dir")
-	files, err := ioutil.ReadDir(".")
-	if err != nil {
-		log.WithError(err).Error("can't get working directory")
-		return
-	}
-
-	for _, file := range files {
-		fmt.Println(file.Name(), file.IsDir())
-	}
 }

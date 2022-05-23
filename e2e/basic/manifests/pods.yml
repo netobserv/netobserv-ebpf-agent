@@ -1,5 +1,5 @@
 # Pods for basic eBPF agent test
-# client pod just sends periodic HTTP requests to server service (nginx)
+# client pod just sends periodic HTTP requests to an HTTP service (nginx)
 apiVersion: v1
 kind: Pod
 metadata:

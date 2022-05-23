@@ -11,11 +11,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type eventuallyConfig struct {
+	interval time.Duration
+}
+
+var defaultEventuallyConfig = eventuallyConfig{
+	interval: 0,
+}
+
+type EventuallyOption func(cfg *eventuallyConfig)
+
+// Interval to wait between successive executions of the inner test in the same Eventually
+// invocation, if the inner test has failed.
+func Interval(t time.Duration) EventuallyOption {
+	return func(cfg *eventuallyConfig) {
+		cfg.interval = t
+	}
+}
+
 // Eventually retries a test until it eventually succeeds. If the timeout is reached, the test fails
 // with the same failure as its last execution.
-func Eventually(t *testing.T, timeout time.Duration, testFunc func(_ require.TestingT)) {
+func Eventually(t *testing.T, timeout time.Duration, testFunc func(_ require.TestingT), options ...EventuallyOption) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	config := defaultEventuallyConfig
+	for _, opt := range options {
+		opt(&config)
+	}
 
 	success := make(chan interface{})
 	errorCh := make(chan error)
@@ -31,6 +54,8 @@ func Eventually(t *testing.T, timeout time.Duration, testFunc func(_ require.Tes
 				success <- 1
 				break
 			}
+			// Otherwise, we wait for the passed interval
+			time.Sleep(config.interval)
 		}
 	}()
 

@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/caarlos0/env/v6 v6.9.1
 	github.com/cilium/ebpf v0.8.1
-	github.com/mariomac/guara v0.0.0-20220321135847-54b7fb6a8657
+	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/netobserv/gopipes v0.1.1
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/sirupsen/logrus v1.8.1

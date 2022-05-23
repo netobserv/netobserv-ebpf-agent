@@ -19,6 +19,7 @@ const (
 
 var llog = logrus.WithField("component", "loki.Tester")
 
+// Loki enables basic testing operations for the Loki component of the test cluster
 type Loki struct {
 	BaseURL string
 }
@@ -38,6 +39,7 @@ func (l *Loki) get(pathQuery string) (status int, body string, err error) {
 	return resp.StatusCode, string(bodyBytes), nil
 }
 
+// Ready returns error if the Loki API is ready to accept calls
 func (l *Loki) Ready() error {
 	status, body, err := l.get(pathReady)
 	if err != nil {
@@ -48,6 +50,7 @@ func (l *Loki) Ready() error {
 	return nil
 }
 
+// Query executes an arbitrary logQL query, given a limit in the results
 func (l *Loki) Query(limit int, logQL string) (*LokiQueryResponse, error) {
 	status, body, err := l.get(fmt.Sprintf("%s?%s=%d&%s=%s",
 		pathQuery, queryArgLimit, limit,

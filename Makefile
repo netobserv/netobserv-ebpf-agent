@@ -126,7 +126,8 @@ image-push: ## Push OCI image with the manager.
 .PHONY: tests-e2e
 .ONESHELL:
 tests-e2e: prereqs
+	# making the local agent image available to kind in two ways, so it will work in different
+	# environments: (1) as image tagged in the local repository (2) as image archive.
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
-	# todo: explain
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...

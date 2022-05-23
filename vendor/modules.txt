@@ -77,7 +77,7 @@ github.com/json-iterator/go
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
-# github.com/mariomac/guara v0.0.0-20220321135847-54b7fb6a8657
+# github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 ## explicit; go 1.17
 github.com/mariomac/guara/pkg/test
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
