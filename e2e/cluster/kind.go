@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"path"
 	"testing"
 	"time"
@@ -204,6 +205,7 @@ func deployManifestFile(definition Deployment,
 
 func (k *Kind) loadLocalImage() env.Func {
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		debugLocalFiles()
 		log.Debug("trying to load docker image from local registry")
 		ctx, err := envfuncs.LoadDockerImageToCluster(
 			k.clusterName, agentContainerName)(ctx, config)
@@ -258,4 +260,23 @@ func packageDir() string {
 		panic("can't find package directory for (project_dir)/test/cluster")
 	}
 	return path.Dir(file)
+}
+
+func debugLocalFiles() {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.WithError(err).Error("can't get working directory")
+		return
+	}
+
+	log.WithField("workingDir", wd).Debug("listing local files of working dir")
+	files, err := ioutil.ReadDir(".")
+	if err != nil {
+		log.WithError(err).Error("can't get working directory")
+		return
+	}
+
+	for _, file := range files {
+		fmt.Println(file.Name(), file.IsDir())
+	}
 }
