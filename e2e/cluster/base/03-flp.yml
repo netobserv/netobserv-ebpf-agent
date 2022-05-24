@@ -79,4 +79,5 @@ data:
               - "DstK8S_OwnerName"
               - "FlowDirection"
             url: http://loki:3100
-            timestampLabel: TimeFlowEnd
+            timestampLabel: TimeFlowEndMs
+            timestampScale: 1ms

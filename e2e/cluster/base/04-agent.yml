@@ -18,13 +18,14 @@ spec:
       containers:
       - name: netobserv-ebpf-agent
         image: localhost/ebpf-agent:test
-#        imagePullPolicy: Always # Use always locally-uploaded copy
         securityContext:
           privileged: true
           runAsUser: 0
         env:
           - name: CACHE_ACTIVE_TIMEOUT
-            value: 100ms
+            value: 200ms
+          - name: LOG_LEVEL
+            value: debug
           - name: FLOWS_TARGET_HOST
             valueFrom:
               fieldRef:

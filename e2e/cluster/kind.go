@@ -108,13 +108,9 @@ func (k *Kind) Run(m *testing.M) {
 			path.Join(packageDir(), "base", "00-kind.yml")),
 		k.loadLocalImage(),
 	}
-	// Deploy base cluster dependencies
+	// Deploy base cluster dependencies and wait for readiness (if needed)
 	for _, c := range k.deployManifests {
-		envFuncs = append(envFuncs, deploy(c))
-	}
-	// Wait for components' readiness
-	for _, c := range k.deployManifests {
-		envFuncs = append(envFuncs, withTimeout(isReady(c)))
+		envFuncs = append(envFuncs, deploy(c), withTimeout(isReady(c)))
 	}
 
 	log.Info("starting kind setup")
@@ -166,6 +162,8 @@ func deployManifestFile(definition Deployment,
 	cfg *envconf.Config,
 	kclient *kubernetes.Clientset,
 ) error {
+	log.WithField("file", definition.ManifestFile).Info("deploying manifest file")
+
 	b, err := ioutil.ReadFile(definition.ManifestFile)
 	if err != nil {
 		return fmt.Errorf("reading manifest file %q: %w", definition.ManifestFile, err)
