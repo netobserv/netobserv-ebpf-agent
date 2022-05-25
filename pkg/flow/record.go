@@ -17,6 +17,7 @@ const IPv6Type = 0x86DD
 
 type RawIP uint32
 type HumanBytes uint64
+type Timestamp uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 type TransportProtocol uint8
@@ -58,9 +59,39 @@ type key struct {
 // it's important to emphasize that the fields in this structure have to coincide,
 // byte by byte, with the flow structure in the bpf/flow.h file
 // TODO: generate flow.h file from this structure
+/*
+
+typedef struct flow_id_t {
+	u16 eth_protocol;
+	u8 src_mac[ETH_ALEN];
+	u8 dst_mac[ETH_ALEN];
+	u32 src_ip;
+	u32 dst_ip;
+	u16 src_port;
+	u16 dst_port;
+	u8 protocol;
+} __attribute__((packed)) flow_id;
+
+typedef struct flow_metrics_t {
+	__u32 packets;
+	__u64 bytes;
+	__u64 flow_start_ts;
+	__u64 last_pkt_ts;
+	__u32 flags;  // Could be used to indicate certain things
+} __attribute__((packed)) flow_metrics;
+
+typedef struct flow_record_t {
+	flow_id id;
+	flow_metrics metrics;
+} __attribute__((packed)) flow_record;
+*/
 type rawRecord struct {
 	key
+	Packets uint32
 	Bytes HumanBytes
+	FlowStartTime Timestamp
+	FlowEndTime Timestamp
+	Flags uint32
 }
 
 // Record contains accumulated metrics from a flow
