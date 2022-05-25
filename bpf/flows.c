@@ -81,7 +81,8 @@ struct {
 volatile const u32 sampling = 0;
 
 // sets flow fields from IPv4 header information
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_id) {
+// Flags is highlight any protocol specific info
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_id, u32 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
@@ -97,6 +98,9 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
             flow_id->src_port = __bpf_ntohs(tcp->source);
             flow_id->dst_port = __bpf_ntohs(tcp->dest);
+            if (tcp->fin) {
+                *flags= *flags | TCP_FIN_FLAG;
+            }
         }
     } break;
     case IPPROTO_UDP: {
@@ -143,7 +147,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_
 //     return SUBMIT;
 // }
 // // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v4 *flow_id) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v4 *flow_id, u32 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
@@ -153,7 +157,7 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v4 *fl
 
     if (flow_id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, flow_id);
+        return fill_iphdr(ip, data_end, flow_id, flags);
     } else {
         return DISCARD;
     }
@@ -183,16 +187,14 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
     flow_id_v4 my_flow_id;
     int rc = TC_ACT_OK;
     int pkt_bytes = data_end - data;
+    u32 flags = 0;
 
     __u64 current_time = bpf_ktime_get_ns();
-    //bool tcp_start = false;
-    bool tcp_end = false;
 
     flow_record *flow_event;
-    /* Get Flow ID : <sourceip, destip, sourceport, destport, protocol> */
 
     struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, &my_flow_id) == DISCARD) {
+    if (fill_ethhdr(eth, data_end, &my_flow_id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
 
@@ -202,7 +204,7 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
         my_flow_counters->packets += 1;
         my_flow_counters->bytes += pkt_bytes;
         my_flow_counters->last_pkt_ts = current_time;
-        if (tcp_end) {
+        if (flags & TCP_FIN_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
@@ -214,7 +216,7 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
             flow_event->metrics.packets = my_flow_counters->packets;
             flow_event->metrics.bytes = my_flow_counters->bytes;
             flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
-            flow_event->metrics.flags = flow_event->metrics.flags | TCP_FIN_FLAG;
+            flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
             // Delete the entry from the map
             bpf_map_delete_elem(&xflow_metric_map_ingress, &my_flow_id);
@@ -270,16 +272,14 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
     flow_id_v4 my_flow_id;
     int rc = TC_ACT_OK;
     int pkt_bytes = data_end - data;
+    u32 flags = 0;
 
     __u64 current_time = bpf_ktime_get_ns();
-    //bool tcp_start = false;
-    bool tcp_end = false;
 
     flow_record *flow_event;
-    /* Get Flow ID : <sourceip, destip, sourceport, destport, protocol> */
 
     struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, &my_flow_id) == DISCARD) {
+    if (fill_ethhdr(eth, data_end, &my_flow_id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
 
@@ -289,7 +289,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
         my_flow_counters->packets += 1;
         my_flow_counters->bytes += pkt_bytes;
         my_flow_counters->last_pkt_ts = current_time;
-        if (tcp_end) {
+        if (flags & TCP_FIN_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
@@ -300,8 +300,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
             flow_event->metrics.packets = my_flow_counters->packets;
             flow_event->metrics.bytes = my_flow_counters->bytes;
             flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
-            flow_event->metrics.flags = flow_event->metrics.flags | TCP_FIN_FLAG;
-            flow_event->metrics.flags = flow_event->metrics.flags | DIR_EGRESS_FLAG;
+            flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
             // Delete the entry from the map
             bpf_map_delete_elem(&xflow_metric_map_egress, &my_flow_id);

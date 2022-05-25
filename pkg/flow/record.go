@@ -197,9 +197,12 @@ func (d Direction) MarshalJSON() ([]byte, error) {
 	}
 }
 
+
+
 // ReadFrom reads a Record from a binary source, in LittleEndian order
 func ReadFrom(reader io.Reader) (*Record, error) {
 	var fr rawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
+	fmt.Printf("%+v\n", fr)
 	return &Record{rawRecord: fr}, err
 }
