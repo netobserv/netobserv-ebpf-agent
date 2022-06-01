@@ -173,6 +173,8 @@ static inline void export_flow_id (flow *my_flow_key, flow_id_v4 my_flow_id, u8 
     my_flow_key->network.v4ip.dst_ip = my_flow_id.dst_ip;
     my_flow_key->transport.src_port = my_flow_id.src_port;
     my_flow_key->transport.dst_port = my_flow_id.dst_port;
+    my_flow_key->transport.protocol = my_flow_id.protocol;
+
 }
 
 static inline int record_ingress_packet(struct __sk_buff *skb) {

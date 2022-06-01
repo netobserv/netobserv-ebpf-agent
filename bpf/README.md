@@ -1,4 +1,4 @@
-##Flows v2. A Flow-metric generator using TC.
+## Flows v2: A Flow-metric generator using TC.
 
 This program can be hooked on to TC ingress/egress hook to monitor packets
 to/from an interface.
