@@ -13,6 +13,8 @@ const MacLen = 6
 const IP6Len = 16
 const IPv6Type = 0x86DD
 
+var MAXNS int64 = 1000000000
+
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 
 type RawIP uint32
@@ -87,11 +89,11 @@ typedef struct flow_record_t {
 */
 type rawRecord struct {
 	key
-	Packets uint32
-	Bytes HumanBytes
+	Packets       uint32
+	Bytes         HumanBytes
 	FlowStartTime Timestamp
-	FlowEndTime Timestamp
-	Flags uint32
+	FlowEndTime   Timestamp
+	Flags         uint32
 }
 
 // Record contains accumulated metrics from a flow
@@ -100,7 +102,7 @@ type Record struct {
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	Interface     string
-	Packets       int
+	Packets       uint32
 }
 
 func (r *Record) Accumulate(src *Record) {
@@ -197,12 +199,25 @@ func (d Direction) MarshalJSON() ([]byte, error) {
 	}
 }
 
-
-
 // ReadFrom reads a Record from a binary source, in LittleEndian order
 func ReadFrom(reader io.Reader) (*Record, error) {
 	var fr rawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
-	fmt.Printf("%+v\n", fr)
-	return &Record{rawRecord: fr}, err
+
+	//fmt.Printf("%+v\n", fr)
+	// var FlowStartTimeSec = int64(fr.FlowStartTime) / MAXNS
+	// var FlowStartTimenSec = int64(fr.FlowStartTime) % MAXNS
+	//
+	// var FlowEndTimeSec = int64(fr.FlowEndTime) / MAXNS
+	// var FlowEndTimenSec = int64(fr.FlowEndTime) % MAXNS
+	//
+	// fmt.Printf("%d.%d\n", FlowEndTimeSec, FlowEndTimenSec)
+	// tNow := time.Now()
+	//
+	// //time.Time to Unix Timestamp
+	// tUnix := tNow.Unix()
+	// fmt.Printf("timeUnix %d\n", tUnix)
+
+	return &Record{rawRecord: fr, Packets: fr.Packets}, err
+	//return &Record{rawRecord: fr, TimeFlowStart: time.Unix(FlowStartTimeSec, FlowStartTimenSec), TimeFlowEnd: time.Unix(FlowEndTimeSec,FlowEndTimenSec), Packets: fr.Packets}, err
 }
