@@ -26,7 +26,12 @@ const (
 	constSampling = "sampling"
 )
 
+const TCPFinFlag = 0x1
+const EGRESS = 0x1
+
 var log = logrus.WithField("component", "ebpf.FlowTracer")
+
+//ongoingFlowMap = make(map[key]*Record, maxEntries),
 
 // FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
 type FlowTracer struct {
@@ -37,6 +42,29 @@ type FlowTracer struct {
 	egressFilter  *netlink.BpfFilter
 	ingressFilter *netlink.BpfFilter
 	flows         *ringbuf.Reader
+}
+
+type recordKeyV4 struct {
+	Protocol  uint16 `json:"Etype"`
+	DataLink  flow.DataLink
+	Network   flow.Network
+	Transport flow.Transport
+}
+
+// type recordKeyV6 struct {
+// 	Protocol  uint16 `json:"Etype"`
+// 	DataLink  flow.DataLink
+// 	NetworkV6 flow.NetworkV6
+// 	Transport flow.Transport
+// 	// TODO: add TOS field
+// }
+
+type recordValue struct {
+	Packets       uint32
+	Bytes         flow.HumanBytes
+	FlowStartTime flow.Timestamp
+	FlowEndTime   flow.Timestamp
+	Flags         uint32
 }
 
 // NewFlowTracer fo a given interface type
@@ -188,6 +216,42 @@ func (m *FlowTracer) Unregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
+func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
+	mapKey := recordKeyV4{Protocol: readFlow.Protocol,
+		DataLink:  readFlow.DataLink,
+		Network:   readFlow.Network,
+		Transport: readFlow.Transport}
+	// mapKeyReverse := recordKeyV4{Protocol: readFlow.Protocol,
+	// 	DataLink:  DataLink{SrcMac: readFlow.DataLink.DstMac, DstMac: readFlow.DataLink.SrcMac},
+	// 	Network:   Network{SrcAddr: readFlow.Network.DstAddr, DstAddr: readFlow.Network.SrcAddr},
+	// 	Transport: Transport{SrcPort: readFlow.Transport.DstPort, DstPort: readFlow.Transport.SrcPort, Protocol: readFlow.Transport.Protocol}
+
+	fmt.Printf("%+v\n", mapKey)
+
+	var mapValues []recordValue
+
+	if readFlow.Direction == EGRESS {
+		var nextKey recordKeyV4
+		fmt.Printf("Checking Egress: \n")
+		err := m.objects.XflowMetricMapEgress.NextKey(nil, nextKey)
+		for err != nil {
+			fmt.Printf("%+v\n", nextKey)
+			err = m.objects.XflowMetricMapEgress.NextKey(nil, nextKey)
+		}
+
+		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
+			fmt.Printf("\nreading map: %v", err)
+		}
+
+		fmt.Printf("%+v\n", mapValues)
+		// for i, mapValue := range mapValues {
+		// 	// Aggregate values here
+		//
+		// }
+	}
+	return nil
+}
+
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
@@ -215,20 +279,54 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				tlog.WithError(err).Warn("reading from ring buffer")
 				continue
 			}
-			now := time.Now()
 			// Parses the ringbuf event entry into an Event structure.
+			// The tracer receives a ringbuffer event
 			readFlow, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
 			if err != nil {
 				tlog.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
-			// Fills the Record with information that can't be provided by eBPF
-			readFlow.Packets = 1
-			readFlow.TimeFlowStart = now
-			readFlow.TimeFlowEnd = now
-			readFlow.Interface = m.interfaceName
 
+			//  Upon an entry regarding the flow from ringbuffer, there are two possibilities:
+			// 	1) TCP FIN Packet :
+			// 		In this case, perfom eviction of this flow from ingress and
+			// 		egress maps, and interim map in the userspace.
+			// 	2) Normal Packet coming to userspace because of insufficient space in the map:
+			// 		Send this packet to accounter without further action
+
+			readFlow.Interface = m.interfaceName
+			fmt.Printf("%+v\n", readFlow)
+
+			if (readFlow.Flags & TCPFinFlag) == TCPFinFlag {
+				// TODO : Need to check if we need update a flag if the flow is complete?
+
+				// If we receive a FIN packet from the ring buffer, we need to perform the following:
+				//	1) Check the direction of record : 1 for Egress, and 0 for Ingress
+				//	2) Lookup and delete the key in the corresponding Map (e.g. egress), and send the record upwards
+				//	3) Reverse the key and lookup and delete the other direction's Map (ingress now), and send the record upwards
+
+				fmt.Printf("Complete Flow!")
+				readFlow.TimeFlowEnd = time.Now()
+				// Currently, time provided by eBPF cannot be converted into time in go
+				// since bpf_get_time_ns() uses CLOCK_MONOTIC which is majorly to measure delay.
+				// Need to understand if we need a global time, which can be calculated as below:
+				// readFlow.TimeFlowStart = readFlow.rawRecord.TimeEnd - delay (FlowEndTime - FlowStartTime)
+
+				err := m.scrubFlow(readFlow)
+				if err != nil {
+					tlog.Debug("scrubFlow did not happen! (either nothing else remaining in the map)")
+				}
+				// if readFlow.Protocol == flow.IPv6Type {
+				// 	mapKey := recordKeyV6{Protocol: readFlow.Protocol,
+				// 		 DataLink: readFlow.DataLink,
+				// 		 NetworkV6: readFlow.NetworkV6,
+				// 		 Transport: readFlow.Transport}
+				// } else {
+
+			}
+			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			forwardFlows <- readFlow
+
 		}
 	}
 }
