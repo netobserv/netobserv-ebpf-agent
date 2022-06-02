@@ -101,6 +101,9 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_
             if (tcp->fin) {
                 *flags= *flags | TCP_FIN_FLAG;
             }
+            if (tcp->rst) {
+                *flags= *flags | TCP_RST_FLAG;
+            }
         }
     } break;
     case IPPROTO_UDP: {
@@ -206,7 +209,7 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
         my_flow_counters->packets += 1;
         my_flow_counters->bytes += pkt_bytes;
         my_flow_counters->last_pkt_ts = current_time;
-        if (flags & TCP_FIN_FLAG) {
+        if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
@@ -215,13 +218,13 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
             }
             export_flow_id(&flow_event->flow_key, my_flow_id, 0);
 
-            flow_event->metrics.packets = my_flow_counters->packets;
-            flow_event->metrics.bytes = my_flow_counters->bytes;
-            flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
+            // flow_event->metrics.packets = my_flow_counters->packets;
+            // flow_event->metrics.bytes = my_flow_counters->bytes;
+            // flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
-            // Delete the entry from the map
-            bpf_map_delete_elem(&xflow_metric_map_ingress, &my_flow_id);
+            // Defer the deletion of the entry from the map since it evicts other CPU metrics
+            //bpf_map_delete_elem(&xflow_metric_map_ingress, &my_flow_id);
             bpf_tc_printk(MYNAME "Ingress: Flow ended, Delete and send to Ringbuf");
         } else {
             bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, my_flow_counters, BPF_EXIST);
@@ -291,7 +294,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
         my_flow_counters->packets += 1;
         my_flow_counters->bytes += pkt_bytes;
         my_flow_counters->last_pkt_ts = current_time;
-        if (flags & TCP_FIN_FLAG) {
+        if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
@@ -299,13 +302,13 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
                 return rc;
             }
             export_flow_id(&flow_event->flow_key, my_flow_id, 1);
-            flow_event->metrics.packets = my_flow_counters->packets;
-            flow_event->metrics.bytes = my_flow_counters->bytes;
-            flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
+            // flow_event->metrics.packets = my_flow_counters->packets;
+            // flow_event->metrics.bytes = my_flow_counters->bytes;
+            // flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
-            // Delete the entry from the map
-            bpf_map_delete_elem(&xflow_metric_map_egress, &my_flow_id);
+            // Defer the deletion of the entry from the map since it evicts other CPU metrics
+            // bpf_map_delete_elem(&xflow_metric_map_egress, &my_flow_id);
             bpf_tc_printk(MYNAME "Egress: Flow ended, Delete and send to Ringbuf");
         } else {
             bpf_map_update_elem(&xflow_metric_map_egress, &my_flow_id, my_flow_counters, BPF_EXIST);

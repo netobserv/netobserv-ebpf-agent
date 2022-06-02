@@ -9,7 +9,7 @@
 
 // Bitmask of flags to be embedded in the 32-bit
 #define TCP_FIN_FLAG 0x1
-#define DIR_EGRESS_FLAG 0x10
+#define TCP_RST_FLAG 0x10
 
 typedef __u8 u8;
 typedef __u16 u16;
