@@ -16,15 +16,35 @@ type CollectorServer struct {
 	grpcServer *grpc.Server
 }
 
+type collectorOptions struct {
+	grpcServerOptions []grpc.ServerOption
+}
+
+// CollectorOption allows overriding the default configuration of the CollectorServer instance.
+// Use them in the StartCollector function.
+type CollectorOption func(options *collectorOptions)
+
+func WithGRPCServerOptions(options ...grpc.ServerOption) CollectorOption {
+	return func(copt *collectorOptions) {
+		copt.grpcServerOptions = options
+	}
+}
+
 // StartCollector listens in background for gRPC+Protobuf flows in the given port, and forwards each
 // set of *pbflow.Records by the provided channel.
-func StartCollector(port int, recordForwarder chan<- *pbflow.Records) (*CollectorServer, error) {
+func StartCollector(
+	port int, recordForwarder chan<- *pbflow.Records, options ...CollectorOption,
+) (*CollectorServer, error) {
+	copts := collectorOptions{}
+	for _, opt := range options {
+		opt(&copts)
+	}
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
-	// TODO: set server option arguments
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(copts.grpcServerOptions...)
 	pbflow.RegisterCollectorServer(grpcServer, &collectorAPI{
 		recordForwarder: recordForwarder,
 	})
