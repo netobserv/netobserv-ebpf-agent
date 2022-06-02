@@ -27,6 +27,8 @@ const (
 )
 
 const TCPFinFlag = 0x1
+const TCPRstFlag = 0x10
+
 const EGRESS = 0x1
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
@@ -216,41 +218,111 @@ func (m *FlowTracer) Unregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
+func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Direction) (recordValue, error) {
+	var aggRecord recordValue
+	var err error
+	var mapValues []recordValue
+
+	if direction == EGRESS {
+		// Get the individual map values from Egress per-cpu hash
+		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
+			fmt.Printf("\nFailed in reading map: %v", err)
+			return aggRecord, err
+		}
+		if err = m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
+			fmt.Printf("\nFailed in delete map: %v", err)
+		}
+	} else {
+		// Get the individual map values from Ingress per-cpu hash
+		if err = m.objects.XflowMetricMapIngress.Lookup(mapKey, &mapValues); err != nil {
+			fmt.Printf("\nFailed in reading map: %v", err)
+			return aggRecord, err
+		}
+		if err = m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
+			fmt.Printf("\nFailed in delete map: %v", err)
+		}
+	}
+	// var sumPackets uint32
+	// var sumBytes flow.HumanBytes
+	// var FirstPktTime flow.Timestamp
+	// var LastPktTime flow.Timestamp
+	for i, mapValue := range mapValues {
+		fmt.Printf("%d, %+v\n", i, mapValue)
+		aggRecord.Packets += mapValue.Packets
+		aggRecord.Bytes += mapValue.Bytes
+		if mapValue.FlowStartTime != 0 {
+			aggRecord.FlowStartTime = mapValue.FlowStartTime
+		}
+		if mapValue.FlowEndTime > aggRecord.FlowEndTime {
+			aggRecord.FlowEndTime = mapValue.FlowEndTime
+		}
+
+	}
+	fmt.Printf("Aggregated Values : %+v", aggRecord)
+
+	return aggRecord, nil
+}
+
 func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
 	mapKey := recordKeyV4{Protocol: readFlow.Protocol,
 		DataLink:  readFlow.DataLink,
 		Network:   readFlow.Network,
 		Transport: readFlow.Transport}
-	// mapKeyReverse := recordKeyV4{Protocol: readFlow.Protocol,
-	// 	DataLink:  DataLink{SrcMac: readFlow.DataLink.DstMac, DstMac: readFlow.DataLink.SrcMac},
-	// 	Network:   Network{SrcAddr: readFlow.Network.DstAddr, DstAddr: readFlow.Network.SrcAddr},
-	// 	Transport: Transport{SrcPort: readFlow.Transport.DstPort, DstPort: readFlow.Transport.SrcPort, Protocol: readFlow.Transport.Protocol}
 
-	fmt.Printf("%+v\n", mapKey)
+	fmt.Printf("Scrub Flow : %+v\n", mapKey)
 
-	var mapValues []recordValue
+	aggRecord, err := m.aggregateEntries(mapKey, readFlow.Direction)
 
-	if readFlow.Direction == EGRESS {
-		var nextKey recordKeyV4
-		fmt.Printf("Checking Egress: \n")
-		err := m.objects.XflowMetricMapEgress.NextKey(nil, nextKey)
-		for err != nil {
-			fmt.Printf("%+v\n", nextKey)
-			err = m.objects.XflowMetricMapEgress.NextKey(nil, nextKey)
-		}
-
-		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
-			fmt.Printf("\nreading map: %v", err)
-		}
-
-		fmt.Printf("%+v\n", mapValues)
-		// for i, mapValue := range mapValues {
-		// 	// Aggregate values here
-		//
-		// }
+	if err == nil {
+		// Modify the readFlow record which was the evicted entry from the hash map
+		readFlow.Packets = aggRecord.Packets
+		readFlow.Bytes = aggRecord.Bytes
+		readFlow.FlowStartTime = aggRecord.FlowStartTime
+		readFlow.FlowEndTime = aggRecord.FlowEndTime
 	}
-	return nil
+	return err
 }
+
+// func (m *FlowTracer) scrubReverseFlow(readFlow *flow.Record) (*flow.Record, error) {
+// 	mapKeyReverse := recordKeyV4{
+// 		Protocol: readFlow.Protocol,
+// 		DataLink: flow.DataLink{
+// 			SrcMac: readFlow.DataLink.DstMac,
+// 			DstMac: readFlow.DataLink.SrcMac,
+// 		},
+// 		Network: flow.Network{
+// 			SrcAddr: readFlow.Network.DstAddr,
+// 			DstAddr: readFlow.Network.SrcAddr,
+// 		},
+// 		Transport: flow.Transport{
+// 			SrcPort: readFlow.Transport.DstPort,
+// 			DstPort: readFlow.Transport.SrcPort,
+// 			Protocol: readFlow.Transport.Protocol,
+// 		},
+// 	}
+//
+// 	var readFlowReverse flow.Record
+// 	readFlowReverse.Protocol = readFlow.Protocol
+// 	readFlowReverse.Direction = readFlow.Direction
+// 	readFlowReverse.DataLink = mapKeyReverse.DataLink
+// 	readFlowReverse.Network = mapKeyReverse.Network
+// 	readFlowReverse.Transport = mapKeyReverse.Transport
+//
+//
+// 	fmt.Printf("ScrubFlow reverse: %+v\n", mapKeyReverse)
+//
+//
+// 	aggRecord,err := m.aggregateEntries(mapKeyReverse, readFlowReverse.Direction)
+//
+// 	if err == nil {
+// 		// Modify the readFlow record which was the evicted entry from the hash map
+// 		readFlowReverse.Packets = aggRecord.Packets
+// 		readFlowReverse.Bytes = aggRecord.Bytes
+// 		readFlowReverse.FlowStartTime = aggRecord.FlowStartTime
+// 		readFlowReverse.FlowEndTime = aggRecord.FlowEndTime
+// 	}
+// 	return &readFlowReverse, err
+// }
 
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
@@ -297,7 +369,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 			readFlow.Interface = m.interfaceName
 			fmt.Printf("%+v\n", readFlow)
 
-			if (readFlow.Flags & TCPFinFlag) == TCPFinFlag {
+			if ((readFlow.Flags & TCPFinFlag) == TCPFinFlag) || ((readFlow.Flags & TCPRstFlag) == TCPRstFlag) {
 				// TODO : Need to check if we need update a flag if the flow is complete?
 
 				// If we receive a FIN packet from the ring buffer, we need to perform the following:
@@ -316,6 +388,17 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				if err != nil {
 					tlog.Debug("scrubFlow did not happen! (either nothing else remaining in the map)")
 				}
+				fmt.Printf("After Scrubbing: %+v\n", readFlow)
+
+				// readFlowReverse, err := m.scrubReverseFlow(readFlow)
+				// if err != nil {
+				// 	tlog.Debug("scrubReverseFlow did not happen! (either nothing else remaining in the map)")
+				// }
+				//
+				// fmt.Printf("After Scrubbing Reverse: %+v\n", readFlowReverse)
+				//
+				// forwardFlows <- readFlow
+
 				// if readFlow.Protocol == flow.IPv6Type {
 				// 	mapKey := recordKeyV6{Protocol: readFlow.Protocol,
 				// 		 DataLink: readFlow.DataLink,
@@ -324,6 +407,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				// } else {
 
 			}
+
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			forwardFlows <- readFlow
 
