@@ -10,6 +10,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -81,6 +82,40 @@ func TestGRPCCommunication(t *testing.T) {
 		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
 	default:
 		//ok!
+	}
+}
+
+func TestConstructorOptions(t *testing.T) {
+	port, err := test.FreeTCPPort()
+	require.NoError(t, err)
+	intercepted := make(chan struct{})
+	// Override the default GRPC collector to verify that StartCollector is applying the
+	// passed options
+	_, err = StartCollector(port, make(chan *pbflow.Records),
+		WithGRPCServerOptions(grpc.UnaryInterceptor(func(
+			ctx context.Context,
+			req interface{},
+			info *grpc.UnaryServerInfo,
+			handler grpc.UnaryHandler,
+		) (resp interface{}, err error) {
+			close(intercepted)
+			return handler(ctx, req)
+		})))
+	require.NoError(t, err)
+	cc, err := ConnectClient(fmt.Sprintf("127.0.0.1:%d", port))
+	require.NoError(t, err)
+	client := cc.Client()
+
+	go func() {
+		_, err = client.Send(context.Background(),
+			&pbflow.Records{Entries: []*pbflow.Record{{EthProtocol: 123, Bytes: 456}}})
+		require.NoError(t, err)
+	}()
+
+	select {
+	case <-intercepted:
+	case <-time.After(timeout):
+		require.Fail(t, "timeout waiting for unary interceptor to work")
 	}
 }
 
