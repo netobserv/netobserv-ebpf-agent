@@ -70,8 +70,10 @@ func TestFlowsAgent(t *testing.T) {
 	fr1.Direction = 1 // egress
 	fr1.DataLink.SrcMac = flow.MacAddr{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
 	fr1.DataLink.DstMac = flow.MacAddr{0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC}
-	fr1.Network.SrcAddr = 0x11223344
-	fr1.Network.DstAddr = 0xaabbccdd
+	fr1.Network.SrcAddr = flow.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff,
+		0x11, 0x22, 0x33, 0x44}
+	fr1.Network.DstAddr = flow.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff,
+		0xaa, 0xbb, 0xcc, 0xdd}
 	fr1.Transport.Protocol = 123
 	fr1.Transport.SrcPort = 456
 	fr1.Transport.DstPort = 789

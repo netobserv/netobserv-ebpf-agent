@@ -10,17 +10,20 @@ import (
 )
 
 const MacLen = 6
-const IP6Len = 16
-const IPv6Type = 0x86DD
 
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
+const IPv6Type = 0x86DD
 
-type RawIP uint32
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 type TransportProtocol uint8
-type IP6Addr [IP6Len]uint8
+
+// IPAddr encodes v4 and v6 IPs with a fixed length.
+// IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
+// as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
+// (same behavior as Go's net.IP type)
+type IPAddr [net.IPv6len]uint8
 
 type DataLink struct {
 	SrcMac MacAddr
@@ -28,13 +31,8 @@ type DataLink struct {
 }
 
 type Network struct {
-	SrcAddr RawIP
-	DstAddr RawIP
-}
-
-type NetworkV6 struct {
-	SrcAddr IP6Addr
-	DstAddr IP6Addr
+	SrcAddr IPAddr
+	DstAddr IPAddr
 }
 
 type Transport struct {
@@ -49,7 +47,6 @@ type key struct {
 	Direction Direction
 	DataLink  DataLink
 	Network   Network
-	NetworkV6 NetworkV6
 	Transport Transport
 	// TODO: add TOS field
 }
@@ -77,6 +74,18 @@ func (r *Record) Accumulate(src *Record) {
 	r.TimeFlowEnd = src.TimeFlowStart
 	r.Bytes += src.Bytes
 	r.Packets += src.Packets
+}
+
+// IP returns the net.IP equivalent object
+func (ip *IPAddr) IP() net.IP {
+	return ip[:]
+}
+
+// IntEncodeV4 encodes an IPv4 address as an integer (in network encoding, big endian).
+// It assumes that the passed IP is already IPv4. Otherwise it would just encode the
+// last 4 bytes of an IPv6 address
+func (ip *IPAddr) IntEncodeV4() uint32 {
+	return binary.BigEndian.Uint32(ip[net.IPv6len-net.IPv4len : net.IPv6len])
 }
 
 func (p TransportProtocol) String() string {
@@ -116,16 +125,6 @@ func (p TransportProtocol) String() string {
 
 func (p TransportProtocol) MarshalJSON() ([]byte, error) {
 	return []byte("\"" + p.String() + "\""), nil
-}
-
-func (i RawIP) String() string {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, uint32(i))
-	return ip.String()
-}
-
-func (i RawIP) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + i.String() + "\""), nil
 }
 
 const (
