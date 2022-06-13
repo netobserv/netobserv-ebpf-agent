@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/ioutil"
 	"path"
+	"sort"
 	"testing"
 	"time"
 
@@ -35,11 +36,44 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
 )
 
+// DeployOrder specifies the order in which a Deployment must be executed, from lower to higher
+// priority
+type DeployOrder int
+
+const (
+	// AfterAgent DeployOrder would deploy related manifests after the NetObserv agent has been
+	// deployed
+	AfterAgent DeployOrder = iota
+	// Agent DeployOrder would deploy related manifests with the NetObserv agent, after the
+	// rest of NetObservServices have been deployed.
+	Agent
+	// NetObservServices DeployOrder would deploy related manifests after all the external services
+	// have been deployed, and before deploying the Agent.
+	NetObservServices
+	// ExternalServices DeployOrder is aimed for external services (e.g. Loki, Kafka...), which will
+	// be deployed before the rest of NetObservServices.
+	ExternalServices
+	// Preconditions DeployOrder is aimed to these Resources that define a given cluster status
+	// before tests start (e.g. namespaces, permissions, etc...).
+	Preconditions
+)
+
+// DeployID is an optional identifier for a deployment. It is used to override/replace default
+// base deployments with a different file (e.g. override the default flowlogs-pipeline
+// with a different configuration).
+type DeployID string
+
+const (
+	PermissionsID      DeployID = "permissions"
+	LokiID             DeployID = "loki"
+	FlowLogsPipelineID DeployID = "flp"
+	AgentID            DeployID = "agent"
+)
+
 const (
 	agentContainerName = "localhost/ebpf-agent:test"
 	kindImage          = "kindest/node:v1.24.0"
 	namespace          = "default"
-	timeout            = 120 * time.Second
 	logsSubDir         = "e2e-logs"
 	localArchiveName   = "ebpf-agent.tar"
 )
@@ -47,39 +81,60 @@ const (
 var log = logrus.WithField("component", "cluster.Kind")
 
 // defaultBaseDeployments are a list of components that are common to any test environment
-var defaultBaseDeployments = []Deployment{
-	{ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml")},
-	{ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
-		ReadyFunction: (&tester.Loki{BaseURL: "http://127.0.0.1:30100"}).Ready},
-	{ManifestFile: path.Join(packageDir(), "base", "03-flp.yml")},
-	{ManifestFile: path.Join(packageDir(), "base", "04-agent.yml")},
+var defaultBaseDeployments = map[DeployID]Deployment{
+	PermissionsID: {
+		Order: Preconditions, ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml"),
+	},
+	LokiID: {
+		Order:        ExternalServices,
+		ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
+		ReadyFunction: func(*envconf.Config) error {
+			return (&tester.Loki{BaseURL: "http://127.0.0.1:30100"}).Ready()
+		},
+	},
+	FlowLogsPipelineID: {
+		Order: NetObservServices, ManifestFile: path.Join(packageDir(), "base", "03-flp.yml"),
+	},
+	AgentID: {
+		Order: Agent, ManifestFile: path.Join(packageDir(), "base", "04-agent.yml"),
+	},
 }
 
 // Deployment of components. Not only K8s deployments but also Pods, Services, DaemonSets, ...
 type Deployment struct {
+	// Order of the deployment. Deployments with the same order will be executed by alphabetical
+	// order of its manifest file
+	Order DeployOrder
 	// ManifestFile path to the kubectl-like YAML manifest file
 	ManifestFile  string
-	ReadyFunction func() error
+	ReadyFunction func(*envconf.Config) error
 }
 
 // Kind cluster deployed by each TestMain function, prepared for a given test scenario.
 type Kind struct {
 	clusterName     string
 	baseDir         string
-	deployManifests []Deployment
+	deployManifests map[DeployID]Deployment
 	testEnv         env.Environment
+	timeout         time.Duration
 }
 
 // Option that can be passed to the NewKind function in order to change the configuration
 // of the test cluster
-// TODO: enable options to override deployManifests, cleanups, etc...
 type Option func(k *Kind)
 
-// AddDeployments can be passed to NewKind in order to add extra deployments to setup the
-// test scenario.
-func AddDeployments(defs ...Deployment) Option {
+// Deploy can be passed to NewKind to add extra deployments (or override the default
+// deployments if the passed DeployID already exists.
+func Deploy(id DeployID, def Deployment) Option {
 	return func(k *Kind) {
-		k.deployManifests = append(k.deployManifests, defs...)
+		k.deployManifests[id] = def
+	}
+}
+
+// Timeout for long-running operations (e.g. deployments, readiness probes...)
+func Timeout(t time.Duration) Option {
+	return func(k *Kind) {
+		k.timeout = t
 	}
 }
 
@@ -93,6 +148,7 @@ func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
 		baseDir:         baseDir,
 		clusterName:     kindClusterName,
 		deployManifests: defaultBaseDeployments,
+		timeout:         2 * time.Minute,
 	}
 	for _, option := range options {
 		option(k)
@@ -109,17 +165,50 @@ func (k *Kind) Run(m *testing.M) {
 		k.loadLocalImage(),
 	}
 	// Deploy base cluster dependencies and wait for readiness (if needed)
-	for _, c := range k.deployManifests {
-		envFuncs = append(envFuncs, deploy(c), withTimeout(isReady(c)))
+	// Readiness checks are grouped by deploy orders: first, we deploy all the
+	// elements with the same order, then we execute all the isReady functions, if any.
+	var readyFuncs []env.Func
+	currentOrder := Preconditions
+	for _, c := range k.orderedManifests() {
+		if c.Order != currentOrder {
+			envFuncs = append(envFuncs, readyFuncs...)
+			readyFuncs = nil
+			currentOrder = c.Order
+		}
+		envFuncs = append(envFuncs, deploy(c))
+		readyFuncs = append(readyFuncs, withTimeout(isReady(c), k.timeout))
 	}
+	envFuncs = append(envFuncs, readyFuncs...)
 
 	log.Info("starting kind setup")
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
 			k.exportLogs(),
-			envfuncs.DestroyKindCluster(k.clusterName),
+			//envfuncs.DestroyKindCluster(k.clusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
+}
+
+func (k *Kind) orderedManifests() []Deployment {
+	type sortable struct {
+		id DeployID
+		d  Deployment
+	}
+	var sorted []sortable
+	for id, manifest := range k.deployManifests {
+		sorted = append(sorted, sortable{id: id, d: manifest})
+	}
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].d.Order == sorted[j].d.Order {
+			return sorted[i].id < sorted[j].id
+		}
+		return sorted[i].d.Order > sorted[j].d.Order
+	})
+	var deployments []Deployment
+	for _, s := range sorted {
+		deployments = append(deployments, s.d)
+	}
+	return deployments
 }
 
 // export logs into the e2e-logs folder of the base directory.
@@ -240,7 +329,7 @@ func (k *Kind) loadLocalImage() env.Func {
 }
 
 // withTimeout retries the execution of an env.Func until it succeeds or a timeout is reached
-func withTimeout(f env.Func) env.Func {
+func withTimeout(f env.Func, timeout time.Duration) env.Func {
 	tlog := log.WithField("function", "withTimeout")
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
 		start := time.Now()
@@ -266,7 +355,7 @@ func isReady(definition Deployment) env.Func {
 				"function":   "isReady",
 				"deployment": definition.ManifestFile,
 			}).Debug("checking readiness")
-			if err := definition.ReadyFunction(); err != nil {
+			if err := definition.ReadyFunction(cfg); err != nil {
 				return ctx, fmt.Errorf("component not ready: %w", err)
 			}
 		}

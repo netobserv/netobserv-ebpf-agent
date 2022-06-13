@@ -33,8 +33,12 @@ var (
 
 func TestMain(m *testing.M) {
 	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
-	testCluster = cluster.NewKind(clusterNamePrefix+time.Now().Format("20060102-150405"), path.Join("..", ".."),
-		cluster.AddDeployments(cluster.Deployment{ManifestFile: "manifests/pods.yml"}))
+	testCluster = cluster.NewKind(
+		clusterNamePrefix+time.Now().Format("20060102-150405"),
+		path.Join("..", ".."),
+		cluster.Deploy("traffic-generators", cluster.Deployment{
+			Order: cluster.AfterAgent, ManifestFile: "manifests/pods.yml"}),
+	)
 	testCluster.Run(m)
 }
 

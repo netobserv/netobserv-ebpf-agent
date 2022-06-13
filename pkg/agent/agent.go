@@ -10,6 +10,8 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
 )
 
@@ -45,7 +47,7 @@ type cancellableTracer struct {
 
 // flowExporter abstract the ExportFlows' method of exporter.GRPCProto to allow dependency injection
 // in tests
-type flowExporter func(in <-chan []*flow.Record)
+type flowExporter func(ctx context.Context, in <-chan []*flow.Record)
 
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
@@ -74,16 +76,44 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	// configure GRPC+Protobuf exporter
-	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
-	grpcExporter, err := exporter.StartGRPCProto(target)
-	if err != nil {
-		return nil, err
+	var exportFunc flowExporter
+	switch cfg.Export {
+	case "grpc":
+		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+			return nil, fmt.Errorf("missing target host or port: %s:%d",
+				cfg.TargetHost, cfg.TargetPort)
+		}
+		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+		grpcExporter, err := exporter.StartGRPCProto(target)
+		if err != nil {
+			return nil, err
+		}
+		exportFunc = grpcExporter.ExportFlows
+	case "kafka":
+		var compression compress.Compression
+		if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
+			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
+				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
+		}
+		exportFunc = exporter.KafkaJSON{
+			Writer: kafkago.Writer{
+				Addr:         kafkago.TCP(cfg.KafkaBrokers...),
+				Topic:        cfg.KafkaTopic,
+				BatchSize:    cfg.KafkaBatchSize,
+				BatchTimeout: cfg.CacheActiveTimeout,
+				BatchBytes:   cfg.KafkaBatchBytes,
+				Async:        cfg.KafkaAsync,
+				Compression:  compression,
+			},
+		}.ExportFlows
+	default:
+		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
 
 	return &Flows{
 		tracers:    map[ifaces.Name]cancellableTracer{},
 		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
-		exporter:   grpcExporter.ExportFlows,
+		exporter:   exportFunc,
 		interfaces: informer,
 		filter:     filter,
 		tracerFactory: func(name string, sampling uint32) flowTracer {

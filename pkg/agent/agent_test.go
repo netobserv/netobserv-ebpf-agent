@@ -169,6 +169,10 @@ func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
 	})
 }
 
+func TestFlowsAgent_ValidateConfiguration(t *testing.T) {
+	t.Fatal("IMPLEMENT THIS!")
+}
+
 type fakeFlowTracer struct {
 	registerCalled   bool
 	unregisterCalled bool

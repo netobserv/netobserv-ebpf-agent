@@ -10,10 +10,13 @@ const (
 )
 
 type Config struct {
-	// TargetHost is the host name or IP of the target Flow collector
-	TargetHost string `env:"FLOWS_TARGET_HOST,notEmpty"`
-	// TargetPort is the port the target Flow collector
-	TargetPort int `env:"FLOWS_TARGET_PORT,notEmpty"`
+	// values: grpc (default) or kafka
+	Export string `string:"EXPORT" envDefault:"grpc"`
+	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
+	// set to "grpc"
+	TargetHost string `env:"FLOWS_TARGET_HOST"`
+	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
+	TargetPort int `env:"FLOWS_TARGET_PORT"`
 	// Interfaces contains the interface names from where flows will be collected. If empty, the agent
 	// will fetch all the interfaces in the system, excepting the ones listed in ExcludeInterfaces.
 	// If an entry is enclosed by slashes (e.g. `/br-/`), it will match as regular expression,
@@ -47,4 +50,12 @@ type Config struct {
 	// ListenPollPeriod specifies the periodicity to query the network interfaces when the
 	// ListenInterfaces value is set to "poll".
 	ListenPollPeriod time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
+	// TODO: DOCUMENT HERE AND IN docs/config.md
+	KafkaBrokers    []string `env:"KAFKA_BROKERS" envSeparator:","`
+	KafkaTopic      string   `env:"KAFKA_TOPIC" envDefault:"network-flows"`
+	KafkaBatchSize  int      `env:"KAFKA_BATCH_SIZE" envDefault:"100"`
+	KafkaBatchBytes int64    `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
+	KafkaAsync      bool     `env:"KAFKA_ASYNC" envDefault:"true"`
+	// values: none, gzip, snappy, lz4, zstd
+	KafkaCompression string `env:"KAFKA_COMPRESSION" envDefault:"none"`
 }

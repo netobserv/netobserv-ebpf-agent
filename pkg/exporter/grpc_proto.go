@@ -34,7 +34,7 @@ func StartGRPCProto(hostPort string) (*GRPCProto, error) {
 
 // ExportFlows accepts slices of *flow.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
+func (g *GRPCProto) ExportFlows(ctx context.Context, input <-chan []*flow.Record) {
 	log := glog.WithField("collector", g.hostPort)
 	for inputRecords := range input {
 		entries := make([]*pbflow.Record, 0, len(inputRecords))
@@ -42,7 +42,7 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 			entries = append(entries, flowToPB(record))
 		}
 		log.Debugf("sending %d records", len(entries))
-		if _, err := g.clientConn.Client().Send(context.TODO(), &pbflow.Records{
+		if _, err := g.clientConn.Client().Send(ctx, &pbflow.Records{
 			Entries: entries,
 		}); err != nil {
 			log.WithError(err).Error("couldn't send flow records to collector")
@@ -71,7 +71,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Transport.SrcPort),
 			DstPort:  uint32(fr.Transport.DstPort),
 		},
-		Bytes: uint64(fr.Bytes),
+		Bytes: fr.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),

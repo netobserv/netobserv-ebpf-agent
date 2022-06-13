@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -77,4 +78,22 @@ func (p *Pods) Execute(ctx context.Context, namespace, name string, command ...s
 		return "", "", fmt.Errorf("executing command: %w", err)
 	}
 	return buf.String(), errBuf.String(), nil
+}
+
+// Condition returns the status of a given condition type
+// TODO: borra
+func (p *Pods) Condition(
+	ctx context.Context, namespace, podName string, conditionType v1.PodConditionType,
+) bool {
+	pod, err := p.client.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		logrus.WithField("component", "tester.Pods").WithError(err).Debugf("pod not ready")
+		return false
+	}
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition.Status == v1.ConditionTrue
+		}
+	}
+	return false
 }
