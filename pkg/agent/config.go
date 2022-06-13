@@ -11,7 +11,7 @@ const (
 
 type Config struct {
 	// values: grpc (default) or kafka
-	Export string `string:"EXPORT" envDefault:"grpc"`
+	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
 	TargetHost string `env:"FLOWS_TARGET_HOST"`

@@ -184,7 +184,7 @@ func (k *Kind) Run(m *testing.M) {
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
 			k.exportLogs(),
-			//envfuncs.DestroyKindCluster(k.clusterName),
+			envfuncs.DestroyKindCluster(k.clusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
 }

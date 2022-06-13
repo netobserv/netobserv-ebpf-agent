@@ -35,7 +35,7 @@ func TestJSONConversion(t *testing.T) {
 
 	input <- []*flow.Record{&record}
 	close(input)
-	kj.ExportFlows(context.Background(), input)
+	kj.ExportFlows(input)
 
 	require.Len(t, wc.messages, 1)
 	var msg map[string]interface{}
@@ -62,7 +62,7 @@ type writerCapturer struct {
 	messages []kafkago.Message
 }
 
-func (w *writerCapturer) WriteMessages(ctx context.Context, msgs ...kafkago.Message) error {
+func (w *writerCapturer) WriteMessages(_ context.Context, msgs ...kafkago.Message) error {
 	w.messages = append(w.messages, msgs...)
 	return nil
 }

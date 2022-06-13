@@ -19,7 +19,7 @@ type KafkaJSON struct {
 	Writer kafkaWriter
 }
 
-func (kj *KafkaJSON) ExportFlows(ctx context.Context, input <-chan []*flow.Record) {
+func (kj *KafkaJSON) ExportFlows(input <-chan []*flow.Record) {
 	klog.Info("starting Kafka exporter")
 	for records := range input {
 		msgs := make([]kafkago.Message, 0, len(records))
@@ -39,7 +39,7 @@ func (kj *KafkaJSON) ExportFlows(ctx context.Context, input <-chan []*flow.Recor
 				Value: msgBytes,
 			})
 		}
-		if err := kj.Writer.WriteMessages(ctx, msgs...); err != nil {
+		if err := kj.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
 			klog.WithError(err).Error("can't write messages into Kafka")
 		}
 	}

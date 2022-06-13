@@ -42,7 +42,7 @@ type Transport struct {
 // what identifies a flow
 type key struct {
 	EthProtocol uint16 `json:"Etype"`
-	Direction   uint8
+	Direction   uint8  `json:"FlowDirection"`
 	DataLink
 	Network
 	Transport

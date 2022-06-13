@@ -47,7 +47,7 @@ type cancellableTracer struct {
 
 // flowExporter abstract the ExportFlows' method of exporter.GRPCProto to allow dependency injection
 // in tests
-type flowExporter func(ctx context.Context, in <-chan []*flow.Record)
+type flowExporter func(in <-chan []*flow.Record)
 
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
@@ -95,8 +95,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
 				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
 		}
-		exportFunc = exporter.KafkaJSON{
-			Writer: kafkago.Writer{
+		exportFunc = (&exporter.KafkaJSON{
+			Writer: &kafkago.Writer{
 				Addr:         kafkago.TCP(cfg.KafkaBrokers...),
 				Topic:        cfg.KafkaTopic,
 				BatchSize:    cfg.KafkaBatchSize,
@@ -105,7 +105,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				Async:        cfg.KafkaAsync,
 				Compression:  compression,
 			},
-		}.ExportFlows
+		}).ExportFlows
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}

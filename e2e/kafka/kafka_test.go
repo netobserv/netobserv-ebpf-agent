@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +77,9 @@ func TestMain(m *testing.M) {
 		cluster.Deploy(cluster.FlowLogsPipelineID, cluster.Deployment{
 			Order: cluster.NetObservServices, ManifestFile: path.Join("manifests", "20-flp-transformer.yml"),
 		}),
+		cluster.Deploy(cluster.AgentID, cluster.Deployment{
+			Order: cluster.Agent, ManifestFile: path.Join("manifests", "30-agent.yml"),
+		}),
 		cluster.Deploy("traffic-generators", cluster.Deployment{
 			Order: cluster.AfterAgent, ManifestFile: path.Join("manifests", "pods.yml"),
 		}),
@@ -147,7 +149,7 @@ func TestBasicFlowCapture(t *testing.T) {
 			// At the moment, the result of the client Pod Mac seems to be CNI-dependant, so we will
 			// only check that it is well-formed.
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["SrcMac"])
-			assert.Equal(t, strings.ToUpper(pci.serverMAC), flow["DstMac"])
+			assert.Equal(t, pci.serverMAC, flow["DstMac"])
 
 			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
@@ -178,7 +180,7 @@ func TestBasicFlowCapture(t *testing.T) {
 
 			// When the source is the service, MAC is not well parsed in all CNIs
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["SrcMac"])
-			assert.Equal(t, strings.ToUpper(pci.clientMAC), flow["DstMac"])
+			assert.Equal(t, pci.clientMAC, flow["DstMac"])
 
 			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
@@ -209,7 +211,7 @@ func TestBasicFlowCapture(t *testing.T) {
 			assert.Equal(t, pci.clientIP, flow["DstAddr"])
 			assert.NotZero(t, flow["DstPort"])
 
-			assert.Regexp(t, strings.ToUpper(pci.serverMAC), flow["SrcMac"])
+			assert.Regexp(t, pci.serverMAC, flow["SrcMac"])
 			// At the moment, the result of the client Pod Mac seems to be CNI-dependant, so we will
 			// only check that it is well-formed.
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["DstMac"])
@@ -281,13 +283,15 @@ func fetchPodsConnectInfo(
 	pods, err := tester.NewPods(cfg)
 	require.NoError(t, err, "instantiating pods' tester")
 
-	cmac, err := pods.MACAddress(ctx, namespace, "client", "eth0")
-	require.NoError(t, err, "getting client's MAC")
-	pci.clientMAC = cmac.String()
+	test.Eventually(t, testTimeout, func(t require.TestingT) {
+		cmac, err := pods.MACAddress(ctx, namespace, "client", "eth0")
+		require.NoError(t, err, "getting client's MAC")
+		pci.clientMAC = cmac.String()
 
-	smac, err := pods.MACAddress(ctx, namespace, serverPodName, "eth0")
-	require.NoError(t, err, "getting server's MAC")
-	pci.serverMAC = smac.String()
+		smac, err := pods.MACAddress(ctx, namespace, serverPodName, "eth0")
+		require.NoError(t, err, "getting server's MAC")
+		pci.serverMAC = smac.String()
+	})
 
 	return pci
 }
