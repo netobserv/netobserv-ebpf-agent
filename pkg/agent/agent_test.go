@@ -66,7 +66,7 @@ func TestFlowsAgent(t *testing.T) {
 		TimeFlowEnd:   firstFlowTime,
 		Packets:       1,
 	}
-	fr1.Protocol = 2048
+	fr1.EthProtocol = 2048
 	fr1.Direction = 1 // egress
 	fr1.DataLink.SrcMac = flow.MacAddr{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
 	fr1.DataLink.DstMac = flow.MacAddr{0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC}

@@ -41,11 +41,11 @@ type Transport struct {
 
 // what identifies a flow
 type key struct {
-	Protocol  uint16 `json:"Etype"`
-	Direction uint8
-	DataLink  DataLink
-	Network   Network
-	Transport Transport
+	EthProtocol uint16 `json:"Etype"`
+	Direction   uint8
+	DataLink
+	Network
+	Transport
 }
 
 // record structure as parsed from eBPF
