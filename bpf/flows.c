@@ -6,8 +6,10 @@
 #include <linux/bpf.h>
 #include <linux/types.h>
 #include <linux/if_ether.h>
+
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
+
 #include "flow.h"
 
 #define DISCARD 1
@@ -27,14 +29,18 @@ struct {
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
 
+const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    flow->network.v4ip.src_ip = __bpf_ntohl(ip->saddr);
-    flow->network.v4ip.dst_ip = __bpf_ntohl(ip->daddr);
+    __builtin_memcpy(flow->network.src_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(flow->network.dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(flow->network.src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(flow->network.dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
     flow->transport.protocol = ip->protocol;
 
     switch (ip->protocol) {
@@ -64,8 +70,8 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, struct flow *f
         return DISCARD;
     }
 
-    flow->network.v6ip.src_ip6 = ip->saddr;
-    flow->network.v6ip.dst_ip6 = ip->daddr;
+    flow->network.src_ip = ip->saddr;
+    flow->network.dst_ip = ip->daddr;
     flow->transport.protocol = ip->nexthdr;
 
     switch (ip->nexthdr) {
