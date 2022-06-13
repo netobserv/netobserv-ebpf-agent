@@ -34,6 +34,8 @@ type Flows struct {
 // flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
 type flowTracer interface {
 	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
+	MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record)
+	MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record)
 	Register() error
 	Unregister() error
 }
@@ -197,6 +199,8 @@ func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh 
 		}
 		tctx, cancel := context.WithCancel(ctx)
 		go tracer.Trace(tctx, flowsCh)
+		go tracer.MonitorIngress(tctx, flowsCh)
+		go tracer.MonitorEgress(tctx, flowsCh)
 		f.tracers[name] = cancellableTracer{
 			tracer: tracer,
 			cancel: cancel,

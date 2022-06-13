@@ -185,6 +185,28 @@ func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.R
 	}
 }
 
+func (ft *fakeFlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	for {
+		select {
+		case f := <-ft.tracedFlows:
+			forwardFlows <- f
+		case <-ctx.Done():
+			ft.contextCanceled = true
+		}
+	}
+}
+
+func (ft *fakeFlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	for {
+		select {
+		case f := <-ft.tracedFlows:
+			forwardFlows <- f
+		case <-ctx.Done():
+			ft.contextCanceled = true
+		}
+	}
+}
+
 func (ft *fakeFlowTracer) Register() error {
 	ft.registerCalled = true
 	return nil

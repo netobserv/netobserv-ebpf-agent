@@ -17,6 +17,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+/*
+#include <time.h>
+static unsigned long long get_nsecs(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000000UL + ts.tv_nsec;
+}
+*/
+import "C"
+
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
 //go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS bpf ../../bpf/flows.c -- -I../../bpf/headers
 
@@ -28,6 +39,7 @@ const (
 
 const TCPFinFlag = 0x1
 const TCPRstFlag = 0x10
+const EvictionTimeout = 5000000000 // 5 seconds
 
 const EGRESS = 0x1
 
@@ -218,36 +230,10 @@ func (m *FlowTracer) Unregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
-func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Direction) (recordValue, error) {
+func aggregateValues(mapValues []recordValue) recordValue {
 	var aggRecord recordValue
-	var err error
-	var mapValues []recordValue
 
-	if direction == EGRESS {
-		// Get the individual map values from Egress per-cpu hash
-		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
-			fmt.Printf("\nFailed in reading map: %v", err)
-			return aggRecord, err
-		}
-		if err = m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
-			fmt.Printf("\nFailed in delete map: %v", err)
-		}
-	} else {
-		// Get the individual map values from Ingress per-cpu hash
-		if err = m.objects.XflowMetricMapIngress.Lookup(mapKey, &mapValues); err != nil {
-			fmt.Printf("\nFailed in reading map: %v", err)
-			return aggRecord, err
-		}
-		if err = m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
-			fmt.Printf("\nFailed in delete map: %v", err)
-		}
-	}
-	// var sumPackets uint32
-	// var sumBytes flow.HumanBytes
-	// var FirstPktTime flow.Timestamp
-	// var LastPktTime flow.Timestamp
-	for i, mapValue := range mapValues {
-		fmt.Printf("%d, %+v\n", i, mapValue)
+	for _, mapValue := range mapValues {
 		aggRecord.Packets += mapValue.Packets
 		aggRecord.Bytes += mapValue.Bytes
 		if mapValue.FlowStartTime != 0 {
@@ -258,6 +244,53 @@ func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Directi
 		}
 
 	}
+	return aggRecord
+}
+
+func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction flow.Direction) *flow.Record {
+	var myFlow flow.Record
+	myFlow.Protocol = mapKey.Protocol
+	myFlow.Direction = direction
+	myFlow.DataLink = mapKey.DataLink
+	myFlow.Network = mapKey.Network
+	myFlow.Transport = mapKey.Transport
+	myFlow.Packets = mapValue.Packets
+	myFlow.Bytes = mapValue.Bytes
+	myFlow.FlowStartTime = mapValue.FlowStartTime
+	myFlow.FlowEndTime = mapValue.FlowEndTime
+
+	//TODO : Need to calculate current time in perspective
+	return &myFlow
+}
+func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Direction) (recordValue, error) {
+	var err error
+	var mapValues []recordValue
+
+	if direction == EGRESS {
+		// Get the individual map values from Egress per-cpu hash
+		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
+			fmt.Printf("\nFailed in reading map: %v", err)
+			return recordValue{}, err
+		}
+		if err = m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
+			fmt.Printf("\nFailed in delete map: %v", err)
+		}
+	} else {
+		// Get the individual map values from Ingress per-cpu hash
+		if err = m.objects.XflowMetricMapIngress.Lookup(mapKey, &mapValues); err != nil {
+			fmt.Printf("\nFailed in reading map: %v", err)
+			return recordValue{}, err
+		}
+		if err = m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
+			fmt.Printf("\nFailed in delete map: %v", err)
+		}
+	}
+	// var sumPackets uint32
+	// var sumBytes flow.HumanBytes
+	// var FirstPktTime flow.Timestamp
+	// var LastPktTime flow.Timestamp
+
+	aggRecord := aggregateValues(mapValues)
 	fmt.Printf("Aggregated Values : %+v", aggRecord)
 
 	return aggRecord, nil
@@ -323,6 +356,108 @@ func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
 // 	}
 // 	return &readFlowReverse, err
 // }
+
+// Trace and forward the read flows until the passed context is Done
+func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	tlog := log.WithField("iface", m.interfaceName)
+	var myDirection flow.Direction = 1
+	go func() {
+		<-ctx.Done()
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			tlog.Debug("exiting monitor")
+			return
+		default:
+			egressMapIterator := m.objects.XflowMetricMapEgress.Iterate()
+			// Check Egress Map
+			var entriesAvail = true
+			for entriesAvail {
+				var mapKey recordKeyV4
+				var mapValues []recordValue
+				fmt.Println("Iterating Egress Entries..")
+				timeNow := flow.Timestamp(C.get_nsecs())
+				entriesAvail = egressMapIterator.Next(&mapKey, &mapValues)
+				aggRecord := aggregateValues(mapValues)
+				fmt.Printf("%+v..%+v\n", mapKey, aggRecord)
+				// Eviction Logic can be based on the following three metrics:
+				//   1) LastPacket > 5 sec ?
+				//		The problem with this is how to check the time
+				//   2) Packet/Byte count?
+				//   3) Number of entries
+				fmt.Println(timeNow)
+				var timediff flow.Timestamp
+				if timeNow > aggRecord.FlowEndTime {
+					timediff = timeNow - aggRecord.FlowEndTime
+				} else {
+					timediff = aggRecord.FlowEndTime - timeNow
+				}
+				if (aggRecord.FlowEndTime != 0) && (timediff > EvictionTimeout) {
+					fmt.Println("Evicting entry")
+					myFlow := makeRecord(mapKey, aggRecord, myDirection)
+					fmt.Printf("%+v\n", myFlow)
+					forwardFlows <- myFlow
+					if err := m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
+						fmt.Printf("\nFailed in delete map: %v", err)
+					}
+				}
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
+}
+
+// Trace and forward the read flows until the passed context is Done
+func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	tlog := log.WithField("iface", m.interfaceName)
+	var myDirection flow.Direction = 1
+	go func() {
+		<-ctx.Done()
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			tlog.Debug("exiting monitor")
+			return
+		default:
+			egressMapIterator := m.objects.XflowMetricMapIngress.Iterate()
+			// Check Egress Map
+			var entriesAvail = true
+			for entriesAvail {
+				var mapKey recordKeyV4
+				var mapValues []recordValue
+				fmt.Println("Iterating Ingress Entries..")
+				timeNow := flow.Timestamp(C.get_nsecs())
+				entriesAvail = egressMapIterator.Next(&mapKey, &mapValues)
+				aggRecord := aggregateValues(mapValues)
+				fmt.Printf("%+v..%+v\n", mapKey, aggRecord)
+				// Eviction Logic can be based on the following three metrics:
+				//   1) LastPacket > 5 sec ?
+				//		The problem with this is how to check the time
+				//   2) Packet/Byte count?
+				//   3) Number of entries
+				fmt.Println(timeNow)
+				var timediff flow.Timestamp
+				if timeNow > aggRecord.FlowEndTime {
+					timediff = timeNow - aggRecord.FlowEndTime
+				} else {
+					timediff = aggRecord.FlowEndTime - timeNow
+				}
+				if (aggRecord.FlowEndTime != 0) && (timediff > EvictionTimeout) {
+					fmt.Println("Evicting entry")
+					myFlow := makeRecord(mapKey, aggRecord, myDirection)
+					fmt.Printf("%+v\n", myFlow)
+					forwardFlows <- myFlow
+					if err := m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
+						fmt.Printf("\nFailed in delete map: %v", err)
+					}
+				}
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
+}
 
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
