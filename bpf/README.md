@@ -12,8 +12,8 @@ To tackle this and achieve 100% monitoring coverage, the v2 eBPF/TC code uses a 
 One design choice that needs to be concretized with performance measurements is to whether v4 and v6 IPs need to be maintained in the same map or a different one.  
 On a higher level note, need to check if increasing the map size (hash computation part) affect throughput.  
 2) Upon Packet Arrival, a lookup is performed on the map.  
-* If the lookup is successful, then update the packet count, byte count, and the current timestamp.  
-* If the lookup is unsuccessful, then try creating a new entry in the map.  
+  * If the lookup is successful, then update the packet count, byte count, and the current timestamp.  
+  * If the lookup is unsuccessful, then try creating a new entry in the map.  
 
 3) If entry creation failed due to a full map, then send the entry to userspace program via ringbuffer.  
 4) Upon flow completion (tcp->fin/rst event), send the flow-id to userspace via ringbuffer.
