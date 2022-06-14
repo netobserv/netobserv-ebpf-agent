@@ -1,13 +1,13 @@
 ## Flows v2: An improved version of Netobsev eBPF Agent
 
 ### What Changed?
-    At the eBPF/TC code, the v1 used a ringbuffer to export flow records to the userspace program.
-    Based on our measurements, ringbuffer can lead to a bottleneck since each a record for each packet in the data-path needs to be sent to the userspace, which eventually results in loss of records.
-    Additionally, this leads to high CPU utilization since the userspace program would be constantly active to handle callback events on a per-packet basis.
+At the eBPF/TC code, the v1 used a ringbuffer to export flow records to the userspace program.
+Based on our measurements, ringbuffer can lead to a bottleneck since each a record for each packet in the data-path needs to be sent to the userspace, which eventually results in loss of records.
+Additionally, this leads to high CPU utilization since the userspace program would be constantly active to handle callback events on a per-packet basis.
 
-    Refer to the [Measurements slide-deck](../docs/measurements.pptx) for performance measurements.
+Refer to the [Measurements slide-deck](../docs/measurements.pptx) for performance measurements.
 
-    To tackle this and achieve 100% monitoring coverage, the v2 eBPF/TC code uses a Per-CPU Hash Map to aggregate flow-based records in the eBPF data-path, and pro-actively send the records to userspace upon flow termination. The detailed logic is below:
+To tackle this and achieve 100% monitoring coverage, the v2 eBPF/TC code uses a Per-CPU Hash Map to aggregate flow-based records in the eBPF data-path, and pro-actively send the records to userspace upon flow termination. The detailed logic is below:
 
 #### eBPF Data-path Logic:
     1) Store flow information in a per-cpu hash map. A separate per-cpu hash map is maintained for ingress and egress to avoid performance bottlenecks.
@@ -30,7 +30,7 @@
         2) **MonitorIngress** :
         This is a periodic thread which wakes up every n seconds and does the following :
             a) Create a map iterator, and iterates over each entry in the map.
-            b) Evict an entry if the condition is met : 
+            b) Evict an entry if the condition is met :
                 * If the timestamp of the last seen packet in the flow is more than m seconds ago.
                 * There are other options for eviction that can be implemented, either based on the packets/bytes observed. Or a more aggressive eviction if the map is k% full. These are further improvements that can be performed to fine-tune the map usage based on the scenario and use-case
             c) The evicted entry is aggregated into a flow-record and forwarded to the accounter pipeline.
