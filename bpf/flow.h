@@ -65,7 +65,8 @@ typedef struct flow_metrics_t {
 	__u32 flags;  // Could be used to indicate certain things
 } __attribute__((packed)) flow_metrics;
 
-
+//TODO : Merge IPv4 and IPv6 as in
+//       PR 32(https://github.com/netobserv/netobserv-ebpf-agent/pull/32/files)
 typedef struct flow_id_v4_t {
     u16 eth_protocol;
     u8 src_mac[ETH_ALEN];
@@ -75,8 +76,9 @@ typedef struct flow_id_v4_t {
     u16 src_port;
     u16 dst_port;
     u8 protocol;
-    // TODO : Add incoming interface
 } __attribute__((packed)) flow_id_v4;
+
+
 
 typedef struct flow_record_t {
 	flow flow_key;
