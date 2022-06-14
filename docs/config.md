@@ -2,8 +2,9 @@
 
 The following environment variables are available to configure the NetObserv eBFP Agent:
 
-* `FLOWS_TARGET_HOST` (required). Host name or IP of the target Flow collector.
-* `FLOWS_TARGET_PORT` (required). Port of the target flow collector.
+* `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka`.
+* `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc`). Host name or IP of the target Flow collector.
+* `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc`). Port of the target flow collector.
 * `INTERFACES` (optional). Comma-separated list of the interface names from where flows will be collected. If 
   empty, the agent will use all the interfaces in the system, excepting the ones listed in
   the `EXCLUDE_INTERFACES` variable.
@@ -33,3 +34,15 @@ The following environment variables are available to configure the NetObserv eBF
     `LISTEN_POLL_PERIOD` variable.
 * `LISTEN_POLL_PERIOD` (default: `10s`). When `LISTEN_INTERFACES` value is `poll`, this duration
   string specifies the frequency in which the current network interfaces are polled.
+* `KAFKA_BROKERS` (required if `EXPORT` is `kafka`). Comma-separated list of tha addresses of the
+  brokers of the Kafka cluster that this agent is configured to send messages to.
+* `KAFKA_TOPIC`(default: `network-flows`). Name of the topic where the flows' processor will receive
+  the flows from.
+* `KAFKA_BATCH_SIZE` (default: `100`). Limit on how many messages will be buffered before being sent
+  to a Kafka partition.
+* `KAFKA_BATCH_BYTES` (default: `1048576`). Limit of the maximum size of a request in bytes before
+  being sent to a Kafka partition.
+* `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
+  means that errors are ignored since the caller will not receive the returned value.
+* `KAFKA_COMPRESSION` (default: `none`). Compression codec to be used to compress messages. Accepted
+  values: `none`, `gzip`, `snappy`, `lz4`, `zstd`.

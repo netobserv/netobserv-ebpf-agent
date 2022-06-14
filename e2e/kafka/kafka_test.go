@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	clusterNamePrefix = "basic-test-cluster"
+	clusterNamePrefix = "kafka-test-cluster"
 	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
@@ -49,10 +49,10 @@ func TestMain(m *testing.M) {
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
 		cluster.Timeout(testTimeout),
-		cluster.Deploy("kafka-crd", cluster.Deployment{
+		cluster.Deploy(cluster.Deployment{
 			Order: cluster.Preconditions, ManifestFile: path.Join("manifests", "10-kafka-crd.yml"),
 		}),
-		cluster.Deploy("kafka-cluster", cluster.Deployment{
+		cluster.Deploy(cluster.Deployment{
 			Order: cluster.ExternalServices, ManifestFile: path.Join("manifests", "11-kafka-cluster.yml"),
 			ReadyFunction: func(cfg *envconf.Config) error {
 				client, err := cfg.NewClient()
@@ -74,13 +74,13 @@ func TestMain(m *testing.M) {
 				return nil
 			},
 		}),
-		cluster.Deploy(cluster.FlowLogsPipelineID, cluster.Deployment{
+		cluster.Override(cluster.FlowLogsPipeline, cluster.Deployment{
 			Order: cluster.NetObservServices, ManifestFile: path.Join("manifests", "20-flp-transformer.yml"),
 		}),
-		cluster.Deploy(cluster.AgentID, cluster.Deployment{
-			Order: cluster.Agent, ManifestFile: path.Join("manifests", "30-agent.yml"),
+		cluster.Override(cluster.Agent, cluster.Deployment{
+			Order: cluster.WithAgent, ManifestFile: path.Join("manifests", "30-agent.yml"),
 		}),
-		cluster.Deploy("traffic-generators", cluster.Deployment{
+		cluster.Deploy(cluster.Deployment{
 			Order: cluster.AfterAgent, ManifestFile: path.Join("manifests", "pods.yml"),
 		}),
 	)

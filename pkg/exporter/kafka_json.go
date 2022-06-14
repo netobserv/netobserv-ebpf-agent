@@ -15,6 +15,7 @@ type kafkaWriter interface {
 	WriteMessages(ctx context.Context, msgs ...kafkago.Message) error
 }
 
+// KafkaJSON exports flows over Kafka, as a JSON that is understandable by the Flowlogs-Pipeline.
 type KafkaJSON struct {
 	Writer kafkaWriter
 }
@@ -52,7 +53,3 @@ type JSONRecord struct {
 	TimeFlowStartMs int64
 	TimeFlowEndMs   int64
 }
-
-//func (jr *JSONRecord) AsFlatJSON() ([]byte, error) {
-//
-//}

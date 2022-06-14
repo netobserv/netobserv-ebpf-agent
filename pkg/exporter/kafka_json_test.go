@@ -41,7 +41,7 @@ func TestJSONConversion(t *testing.T) {
 	var msg map[string]interface{}
 	require.NoError(t, json.Unmarshal(wc.messages[0].Value, &msg))
 	assert.EqualValues(t, 3, msg["Etype"])
-	assert.EqualValues(t, 1, msg["Direction"])
+	assert.EqualValues(t, 1, msg["FlowDirection"])
 	assert.Equal(t, "aa:bb:cc:dd:ee:ff", msg["SrcMac"])
 	assert.Equal(t, "11:22:33:44:55:66", msg["DstMac"])
 	assert.Equal(t, "192.1.2.3", msg["SrcAddr"])

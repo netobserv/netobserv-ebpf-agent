@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
-		cluster.Deploy("traffic-generators", cluster.Deployment{
+		cluster.Deploy(cluster.Deployment{
 			Order: cluster.AfterAgent, ManifestFile: "manifests/pods.yml"}),
 	)
 	testCluster.Run(m)

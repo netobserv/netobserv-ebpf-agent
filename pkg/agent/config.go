@@ -10,7 +10,7 @@ const (
 )
 
 type Config struct {
-	// values: grpc (default) or kafka
+	// Export selects the flows' exporter protocol. Accepted values are: grpc (default) or kafka.
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
@@ -50,12 +50,21 @@ type Config struct {
 	// ListenPollPeriod specifies the periodicity to query the network interfaces when the
 	// ListenInterfaces value is set to "poll".
 	ListenPollPeriod time.Duration `env:"LISTEN_POLL_PERIOD" envDefault:"10s"`
-	// TODO: DOCUMENT HERE AND IN docs/config.md
-	KafkaBrokers    []string `env:"KAFKA_BROKERS" envSeparator:","`
-	KafkaTopic      string   `env:"KAFKA_TOPIC" envDefault:"network-flows"`
-	KafkaBatchSize  int      `env:"KAFKA_BATCH_SIZE" envDefault:"100"`
-	KafkaBatchBytes int64    `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
-	KafkaAsync      bool     `env:"KAFKA_ASYNC" envDefault:"true"`
-	// values: none, gzip, snappy, lz4, zstd
+	// KafkaBrokers is a comma-separated list of tha addresses of the brokers of the Kafka cluster
+	// that this agent is configured to send messages to.
+	KafkaBrokers []string `env:"KAFKA_BROKERS" envSeparator:","`
+	// KafkaTopic is the name of the topic where the flows' processor will receive the flows from.
+	KafkaTopic string `env:"KAFKA_TOPIC" envDefault:"network-flows"`
+	// KafkaBatchSize sets the limit on how many messages will be buffered before being sent to a
+	// partition.
+	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"100"`
+	// KafkaBatchBytes sets the limit of the maximum size of a request in bytes before being sent
+	// to a partition.
+	KafkaBatchBytes int64 `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
+	// KafkaAsync. If it's true, the message writing process will never block. It also means that
+	// errors are ignored since the caller will not receive the returned value.
+	KafkaAsync bool `env:"KAFKA_ASYNC" envDefault:"true"`
+	// KafkaCompression sets the compression codec to be used to compress messages. The accepted
+	// values are: none (default), gzip, snappy, lz4, zstd.
 	KafkaCompression string `env:"KAFKA_COMPRESSION" envDefault:"none"`
 }

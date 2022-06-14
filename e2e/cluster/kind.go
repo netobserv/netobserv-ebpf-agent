@@ -44,9 +44,9 @@ const (
 	// AfterAgent DeployOrder would deploy related manifests after the NetObserv agent has been
 	// deployed
 	AfterAgent DeployOrder = iota
-	// Agent DeployOrder would deploy related manifests with the NetObserv agent, after the
+	// WithAgent DeployOrder would deploy related manifests with the NetObserv agent, after the
 	// rest of NetObservServices have been deployed.
-	Agent
+	WithAgent
 	// NetObservServices DeployOrder would deploy related manifests after all the external services
 	// have been deployed, and before deploying the Agent.
 	NetObservServices
@@ -64,10 +64,10 @@ const (
 type DeployID string
 
 const (
-	PermissionsID      DeployID = "permissions"
-	LokiID             DeployID = "loki"
-	FlowLogsPipelineID DeployID = "flp"
-	AgentID            DeployID = "agent"
+	PermissionsSetup DeployID = "permissions"
+	Loki             DeployID = "loki"
+	FlowLogsPipeline DeployID = "flp"
+	Agent            DeployID = "agent"
 )
 
 const (
@@ -82,21 +82,21 @@ var log = logrus.WithField("component", "cluster.Kind")
 
 // defaultBaseDeployments are a list of components that are common to any test environment
 var defaultBaseDeployments = map[DeployID]Deployment{
-	PermissionsID: {
+	PermissionsSetup: {
 		Order: Preconditions, ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml"),
 	},
-	LokiID: {
+	Loki: {
 		Order:        ExternalServices,
 		ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
 		ReadyFunction: func(*envconf.Config) error {
 			return (&tester.Loki{BaseURL: "http://127.0.0.1:30100"}).Ready()
 		},
 	},
-	FlowLogsPipelineID: {
+	FlowLogsPipeline: {
 		Order: NetObservServices, ManifestFile: path.Join(packageDir(), "base", "03-flp.yml"),
 	},
-	AgentID: {
-		Order: Agent, ManifestFile: path.Join(packageDir(), "base", "04-agent.yml"),
+	Agent: {
+		Order: WithAgent, ManifestFile: path.Join(packageDir(), "base", "04-agent.yml"),
 	},
 }
 
@@ -106,7 +106,9 @@ type Deployment struct {
 	// order of its manifest file
 	Order DeployOrder
 	// ManifestFile path to the kubectl-like YAML manifest file
-	ManifestFile  string
+	ManifestFile string
+	// ReadyFunction is an optional function that returns error if the deployment is not ready.
+	// Used when it's needed to wait before starting tests or deploying later components.
 	ReadyFunction func(*envconf.Config) error
 }
 
@@ -123,11 +125,20 @@ type Kind struct {
 // of the test cluster
 type Option func(k *Kind)
 
-// Deploy can be passed to NewKind to add extra deployments (or override the default
-// deployments if the passed DeployID already exists.
-func Deploy(id DeployID, def Deployment) Option {
+// Override can be passed to NewKind to override some components of the base deployment (identified
+// by the passed DeployID instance).
+func Override(id DeployID, def Deployment) Option {
 	return func(k *Kind) {
 		k.deployManifests[id] = def
+	}
+}
+
+// Deploy can be passed to NewKind to deploy extra components, in addition to the base deployment.
+func Deploy(def Deployment) Option {
+	// unique ID for this given deployment
+	id := fmt.Sprintf("%d-%s", def.Order, def.ManifestFile)
+	return func(k *Kind) {
+		k.deployManifests[DeployID(id)] = def
 	}
 }
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -75,7 +76,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
-	// configure GRPC+Protobuf exporter
+	// configure selected exporter
 	var exportFunc flowExporter
 	switch cfg.Export {
 	case "grpc":
@@ -90,6 +91,9 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		}
 		exportFunc = grpcExporter.ExportFlows
 	case "kafka":
+		if len(cfg.KafkaBrokers) == 0 {
+			return nil, errors.New("at least one Kafka broker is needed")
+		}
 		var compression compress.Compression
 		if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
 			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
