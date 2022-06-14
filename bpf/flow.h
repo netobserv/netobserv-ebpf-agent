@@ -4,8 +4,10 @@
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
 #define IP_MAX_LEN 16
+// TODO : Explore if this can be programmed from go launcher
+#define INGRESS_MAX_ENTRIES 1000
+#define EGRESS_MAX_ENTRIES  1000
 
-#define MAX_ENTRIES 1000
 
 // Bitmask of flags to be embedded in the 32-bit
 #define TCP_FIN_FLAG 0x1
@@ -15,6 +17,7 @@ typedef __u8 u8;
 typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
+
 
 // L2 data link layer
 struct data_link {

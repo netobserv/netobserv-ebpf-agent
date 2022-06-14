@@ -65,14 +65,14 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id_v4);
     __type(value, flow_metrics);
-    __uint(max_entries, MAX_ENTRIES);
+    __uint(max_entries, INGRESS_MAX_ENTRIES);
 } xflow_metric_map_ingress SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id_v4);
     __type(value, flow_metrics);
-    __uint(max_entries, MAX_ENTRIES);
+    __uint(max_entries, EGRESS_MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
 
 
@@ -190,7 +190,6 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
     void *data = (void *)(long)skb->data;
     flow_id_v4 my_flow_id;
     int rc = TC_ACT_OK;
-    int pkt_bytes = data_end - data;
     u32 flags = 0;
 
     __u64 current_time = bpf_ktime_get_ns();
@@ -205,8 +204,9 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
     flow_metrics *my_flow_counters =
         bpf_map_lookup_elem(&xflow_metric_map_ingress, &my_flow_id);
     if (my_flow_counters != NULL) {
+        // Entry exists
         my_flow_counters->packets += 1;
-        my_flow_counters->bytes += pkt_bytes;
+        my_flow_counters->bytes += skb->len;
         my_flow_counters->last_pkt_ts = current_time;
         if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
@@ -229,8 +229,9 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
             bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, my_flow_counters, BPF_EXIST);
         }
     } else {
+        //Entry does not exist
         flow_metrics new_flow_counter = {
-            .packets = 1, .bytes=pkt_bytes};
+            .packets = 1, .bytes=skb->len};
         new_flow_counter.flow_start_ts = current_time;
         new_flow_counter.last_pkt_ts = current_time;
         int ret = bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, &new_flow_counter,
@@ -275,7 +276,6 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
     void *data = (void *)(long)skb->data;
     flow_id_v4 my_flow_id;
     int rc = TC_ACT_OK;
-    int pkt_bytes = data_end - data;
     u32 flags = 0;
 
     __u64 current_time = bpf_ktime_get_ns();
@@ -291,7 +291,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
         bpf_map_lookup_elem(&xflow_metric_map_egress, &my_flow_id);
     if (my_flow_counters != NULL) {
         my_flow_counters->packets += 1;
-        my_flow_counters->bytes += pkt_bytes;
+        my_flow_counters->bytes += skb->len;
         my_flow_counters->last_pkt_ts = current_time;
         if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
@@ -314,7 +314,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
         }
     } else {
         flow_metrics new_flow_counter = {
-            .packets = 1, .bytes=pkt_bytes};
+            .packets = 1, .bytes=skb->len};
         new_flow_counter.flow_start_ts = current_time;
         new_flow_counter.last_pkt_ts = current_time;
         int ret = bpf_map_update_elem(&xflow_metric_map_egress, &my_flow_id, &new_flow_counter,
@@ -338,7 +338,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
                 //bpf_tc_printk(MYNAME "Ring buf reserve failed");
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, my_flow_id, 0);
+            export_flow_id(&flow_event->flow_key, my_flow_id, 1);
             flow_event->metrics = new_flow_counter;
             bpf_ringbuf_submit(flow_event, 0);
             bpf_tc_printk(MYNAME "Egress: Map space for new flow not found, sending to ringbuf");
