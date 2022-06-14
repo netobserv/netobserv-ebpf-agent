@@ -234,6 +234,7 @@ func aggregateValues(mapValues []recordValue) recordValue {
 	var aggRecord recordValue
 
 	for _, mapValue := range mapValues {
+		//fmt.Printf("%+v\n", mapValue)
 		aggRecord.Packets += mapValue.Packets
 		aggRecord.Bytes += mapValue.Bytes
 		if mapValue.FlowStartTime != 0 {
@@ -269,7 +270,7 @@ func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Directi
 	if direction == EGRESS {
 		// Get the individual map values from Egress per-cpu hash
 		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
-			fmt.Printf("\nFailed in reading map: %v", err)
+			fmt.Printf("\nFailed in reading egress map: %v", err)
 			return recordValue{}, err
 		}
 		if err = m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
@@ -278,7 +279,7 @@ func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Directi
 	} else {
 		// Get the individual map values from Ingress per-cpu hash
 		if err = m.objects.XflowMetricMapIngress.Lookup(mapKey, &mapValues); err != nil {
-			fmt.Printf("\nFailed in reading map: %v", err)
+			fmt.Printf("\nFailed in reading ingress map: %v", err)
 			return recordValue{}, err
 		}
 		if err = m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
@@ -308,8 +309,8 @@ func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
 
 	if err == nil {
 		// Modify the readFlow record which was the evicted entry from the hash map
-		readFlow.Packets = aggRecord.Packets
-		readFlow.Bytes = aggRecord.Bytes
+		readFlow.Packets += aggRecord.Packets
+		readFlow.Bytes += aggRecord.Bytes
 		readFlow.FlowStartTime = aggRecord.FlowStartTime
 		readFlow.FlowEndTime = aggRecord.FlowEndTime
 	}
@@ -510,9 +511,10 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				// If we receive a FIN packet from the ring buffer, we need to perform the following:
 				//	1) Check the direction of record : 1 for Egress, and 0 for Ingress
 				//	2) Lookup and delete the key in the corresponding Map (e.g. egress), and send the record upwards
-				//	3) Reverse the key and lookup and delete the other direction's Map (ingress now), and send the record upwards
+				//	3) Optional : Reverse the key and lookup and delete the other direction's Map (ingress now), and send the record upwards.
+				//     This is not needed as you get ACK eitherwise.
 
-				fmt.Printf("Complete Flow!")
+				fmt.Printf("Received Complete Flag %X!\n", readFlow.Flags)
 				readFlow.TimeFlowEnd = time.Now()
 				// Currently, time provided by eBPF cannot be converted into time in go
 				// since bpf_get_time_ns() uses CLOCK_MONOTIC which is majorly to measure delay.
