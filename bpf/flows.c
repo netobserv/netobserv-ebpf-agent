@@ -75,19 +75,6 @@ struct {
     __uint(max_entries, MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
 
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v4);
-    __type(value, flow_metrics);
-    __uint(max_entries, MAX_ENTRIES);
-} xflow_metric_map_ingress_v6 SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v4);
-    __type(value, flow_metrics);
-    __uint(max_entries, MAX_ENTRIES);
-} xflow_metric_map_egress_v6 SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
