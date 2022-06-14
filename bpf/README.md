@@ -20,11 +20,11 @@ On a higher level note, need to check if increasing the map size (hash computati
 
 #### User-space program Logic: (Refer [tracer.go](../pkg/ebpf/tracer.go))
 The userspace program has three active threads:  
+
 1) **Trace** :     
 a) If the received flow-id is a flow completion (indicated via the flags) from eBPF data-path via ringbuffer and does the following:  
 * ScrubFlow : Performs lookup of the flow-id in the ingress/egress map and aggregates the metrics from different CPU specific counters. Then deletes the entry corresponding to the flow-id from the map.  
 * Exports the aggregated flow record to the accounter pipeline.  
-
 b) If the received flow-id is not a flow completion event, then just forward this record to accounter pipeline. It will be aggregated in future by accounter upon flow completion.
 
 2) **MonitorIngress** :
