@@ -12,19 +12,19 @@ To tackle this and achieve 100% monitoring coverage, the v2 eBPF/TC code uses a 
 One design choice that needs to be concretized with performance measurements is to whether v4 and v6 IPs need to be maintained in the same map or a different one.  
 On a higher level note, need to check if increasing the map size (hash computation part) affect throughput.  
 2) Upon Packet Arrival, a lookup is performed on the map.  
-* If the lookup is successful, then update the packet count, byte count, and the current timestamp.  
-* If the lookup is unsuccessful, then try creating a new entry in the map.  
+  * If the lookup is successful, then update the packet count, byte count, and the current timestamp.  
+  * If the lookup is unsuccessful, then try creating a new entry in the map.  
 
 3) If entry creation failed due to a full map, then send the entry to userspace program via ringbuffer.  
 4) Upon flow completion (tcp->fin/rst event), send the flow-id to userspace via ringbuffer.
 
 #### User-space program Logic: (Refer [tracer.go](../pkg/ebpf/tracer.go))
 The userspace program has three active threads:  
+
 1) **Trace** :     
 a) If the received flow-id is a flow completion (indicated via the flags) from eBPF data-path via ringbuffer and does the following:  
 * ScrubFlow : Performs lookup of the flow-id in the ingress/egress map and aggregates the metrics from different CPU specific counters. Then deletes the entry corresponding to the flow-id from the map.  
 * Exports the aggregated flow record to the accounter pipeline.  
-
 b) If the received flow-id is not a flow completion event, then just forward this record to accounter pipeline. It will be aggregated in future by accounter upon flow completion.
 
 2) **MonitorIngress** :
