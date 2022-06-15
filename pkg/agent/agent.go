@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -101,10 +102,15 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		}
 		exportFunc = (&exporter.KafkaJSON{
 			Writer: &kafkago.Writer{
-				Addr:         kafkago.TCP(cfg.KafkaBrokers...),
-				Topic:        cfg.KafkaTopic,
-				BatchSize:    cfg.KafkaBatchSize,
-				BatchTimeout: cfg.CacheActiveTimeout,
+				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
+				Topic:     cfg.KafkaTopic,
+				BatchSize: cfg.KafkaBatchSize,
+				// Segmentio's Kafka-go does not behave as standard Kafka library, and would
+				// throttle any Write invocation until reaching the timeout.
+				// Since we invoke write once each CacheActiveTimeout, we can safely disable this
+				// timeout throttling
+				// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
+				BatchTimeout: time.Nanosecond,
 				BatchBytes:   cfg.KafkaBatchBytes,
 				Async:        cfg.KafkaAsync,
 				Compression:  compression,
