@@ -36,10 +36,8 @@ data:
     log-level: debug
     pipeline:
       - name: ingest
-      - name: decode
-        follows: ingest
       - name: enrich
-        follows: decode
+        follows: ingest
       - name: loki
         follows: enrich
     parameters:
@@ -50,9 +48,8 @@ data:
             brokers: ["kafka-cluster-kafka-bootstrap"]
             topic: network-flows
             groupId: kafka-transformer
-      - name: decode
-        decode:
-          type: json
+            decoder:
+              type: json
       - name: enrich
         transform:
           type: network
