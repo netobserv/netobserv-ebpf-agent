@@ -56,7 +56,7 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 	return &pbflow.Record{
-		EthProtocol: uint32(fr.Protocol),
+		EthProtocol: uint32(fr.EthProtocol),
 		Direction:   pbflow.Direction(fr.Direction),
 		DataLink: &pbflow.DataLink{
 			SrcMac: macToUint64(&fr.DataLink.SrcMac),
@@ -71,7 +71,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Transport.SrcPort),
 			DstPort:  uint32(fr.Transport.DstPort),
 		},
-		Bytes: uint64(fr.Bytes),
+		Bytes: fr.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -87,7 +87,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 
 func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 	return &pbflow.Record{
-		EthProtocol: uint32(fr.Protocol),
+		EthProtocol: uint32(fr.EthProtocol),
 		Direction:   pbflow.Direction(fr.Direction),
 		DataLink: &pbflow.DataLink{
 			SrcMac: macToUint64(&fr.DataLink.SrcMac),
@@ -102,7 +102,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Transport.SrcPort),
 			DstPort:  uint32(fr.Transport.DstPort),
 		},
-		Bytes: uint64(fr.Bytes),
+		Bytes: fr.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -117,7 +117,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 }
 
 func flowToPB(fr *flow.Record) *pbflow.Record {
-	if fr.Protocol == flow.IPv6Type {
+	if fr.EthProtocol == flow.IPv6Type {
 		return v6FlowToPB(fr)
 	}
 	return v4FlowToPB(fr)

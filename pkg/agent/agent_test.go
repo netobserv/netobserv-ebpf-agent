@@ -27,6 +27,7 @@ func TestFlowsAgent(t *testing.T) {
 
 	// GIVEN a flows agent
 	flowsAgent, err := FlowsAgent(&Config{
+		Export:             "grpc",
 		TargetHost:         "127.0.0.1",
 		TargetPort:         port,
 		CacheMaxFlows:      1,
@@ -66,7 +67,7 @@ func TestFlowsAgent(t *testing.T) {
 		TimeFlowEnd:   firstFlowTime,
 		Packets:       1,
 	}
-	fr1.Protocol = 2048
+	fr1.EthProtocol = 2048
 	fr1.Direction = 1 // egress
 	fr1.DataLink.SrcMac = flow.MacAddr{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
 	fr1.DataLink.DstMac = flow.MacAddr{0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC}
@@ -128,6 +129,7 @@ func TestFlowsAgent(t *testing.T) {
 
 func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
 	flowsAgent, err := FlowsAgent(&Config{
+		Export:             "grpc",
 		TargetHost:         "127.0.0.1",
 		TargetPort:         1234,
 		CacheMaxFlows:      1,
@@ -167,6 +169,30 @@ func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
 	test.Eventually(t, timeout, func(t require.TestingT) {
 		require.True(t, ft.unregisterCalled)
 	})
+}
+
+func TestFlowsAgent_InvalidConfigs(t *testing.T) {
+	for _, tc := range []struct {
+		d string
+		c Config
+	}{{
+		d: "invalid export type",
+		c: Config{Export: "foo"},
+	}, {
+		d: "GRPC: missing host",
+		c: Config{Export: "grpc", TargetPort: 3333},
+	}, {
+		d: "GRPC: missing port",
+		c: Config{Export: "grpc", TargetHost: "flp"},
+	}, {
+		d: "Kafka: missing brokers",
+		c: Config{Export: "kafka"},
+	}} {
+		t.Run(tc.d, func(t *testing.T) {
+			_, err := FlowsAgent(&tc.c)
+			assert.Error(t, err)
+		})
+	}
 }
 
 type fakeFlowTracer struct {

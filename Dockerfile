@@ -1,19 +1,10 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi8/go-toolset:1.16.7-5 as builder
+FROM registry.access.redhat.com/ubi8/go-toolset:1.17.7 as builder
 
 ARG SW_VERSION="unknown"
 ARG GOVERSION="1.17.8"
 
 WORKDIR /opt/app-root
-
-# TEMPORARY STEPS UNTIL ubi8 releases a go1.17 image
-RUN wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz && tar -xzf go$GOVERSION.linux-amd64.tar.gz
-ENV GOROOT /opt/app-root/go
-RUN mkdir -p /opt/app-root/gopath
-ENV GOPATH /opt/app-root/gopath
-ENV PATH $GOROOT/bin:$GOPATH/bin:$PATH
-WORKDIR /opt/app-root/src
-# END OF LINES TO REMOVE
 
 # Copy the go manifests and source
 COPY .git/ .git/
@@ -29,9 +20,9 @@ COPY Makefile Makefile
 RUN make compile
 
 # Create final image from minimal + built binary
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5-240
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.6
 WORKDIR /
-COPY --from=builder /opt/app-root/src/bin/netobserv-ebpf-agent .
+COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
 
 ENTRYPOINT ["/netobserv-ebpf-agent"]

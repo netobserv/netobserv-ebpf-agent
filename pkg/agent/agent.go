@@ -2,14 +2,18 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
 )
 
@@ -73,17 +77,53 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
-	// configure GRPC+Protobuf exporter
-	target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
-	grpcExporter, err := exporter.StartGRPCProto(target)
-	if err != nil {
-		return nil, err
+	// configure selected exporter
+	var exportFunc flowExporter
+	switch cfg.Export {
+	case "grpc":
+		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+			return nil, fmt.Errorf("missing target host or port: %s:%d",
+				cfg.TargetHost, cfg.TargetPort)
+		}
+		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+		grpcExporter, err := exporter.StartGRPCProto(target)
+		if err != nil {
+			return nil, err
+		}
+		exportFunc = grpcExporter.ExportFlows
+	case "kafka":
+		if len(cfg.KafkaBrokers) == 0 {
+			return nil, errors.New("at least one Kafka broker is needed")
+		}
+		var compression compress.Compression
+		if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
+			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
+				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
+		}
+		exportFunc = (&exporter.KafkaJSON{
+			Writer: &kafkago.Writer{
+				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
+				Topic:     cfg.KafkaTopic,
+				BatchSize: cfg.KafkaBatchSize,
+				// Segmentio's Kafka-go does not behave as standard Kafka library, and would
+				// throttle any Write invocation until reaching the timeout.
+				// Since we invoke write once each CacheActiveTimeout, we can safely disable this
+				// timeout throttling
+				// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
+				BatchTimeout: time.Nanosecond,
+				BatchBytes:   cfg.KafkaBatchBytes,
+				Async:        cfg.KafkaAsync,
+				Compression:  compression,
+			},
+		}).ExportFlows
+	default:
+		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
 
 	return &Flows{
 		tracers:    map[ifaces.Name]cancellableTracer{},
 		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
-		exporter:   grpcExporter.ExportFlows,
+		exporter:   exportFunc,
 		interfaces: informer,
 		filter:     filter,
 		tracerFactory: func(name string, sampling uint32) flowTracer {

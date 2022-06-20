@@ -22,7 +22,7 @@ IMG_SHA = $(IMAGE_TAG_BASE):$(BUILD_SHA)
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 
 CILIUM_EBPF_VERSION := v0.8.1
-GOLANGCI_LINT_VERSION = v1.42.1
+GOLANGCI_LINT_VERSION = v1.46.2
 
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
@@ -49,11 +49,11 @@ vendors:
 .PHONY: prereqs
 prereqs:
 	@echo "### Check if prerequisites are met, and installing missing dependencies"
-	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
-	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
-	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	test -f $(go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
+	test -f $(shell go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(shell go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -130,4 +130,4 @@ tests-e2e: prereqs
 	# environments: (1) as image tagged in the local repository (2) as image archive.
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
-	GOOS=$(GOOS) go test -v -mod vendor -tags e2e ./e2e/...
+	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...

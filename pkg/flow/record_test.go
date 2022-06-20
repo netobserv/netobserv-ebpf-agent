@@ -28,8 +28,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	assert.Equal(t, Record{
 		rawRecord: rawRecord{
 			key: key{
-				Protocol:  0x0201,
-				Direction: 0x03,
+				EthProtocol: 0x0201,
+				Direction:   0x03,
 				DataLink: DataLink{
 					SrcMac: MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 					DstMac: MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
