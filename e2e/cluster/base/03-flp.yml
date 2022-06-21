@@ -39,10 +39,8 @@ data:
     log-level: debug
     pipeline:
       - name: ingest
-      - name: decode
-        follows: ingest
       - name: enrich
-        follows: decode
+        follows: ingest
       - name: loki
         follows: enrich
     parameters:
@@ -51,9 +49,6 @@ data:
           type: grpc
           grpc:
             port: 9999
-      - name: decode
-        decode:
-          type: protobuf
       - name: enrich
         transform:
           type: network

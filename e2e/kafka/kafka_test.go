@@ -23,7 +23,7 @@ import (
 
 const (
 	clusterNamePrefix = "kafka-test-cluster"
-	testTimeout       = 10 * time.Minute
+	testTimeout       = 20 * time.Minute
 	namespace         = "default"
 )
 
