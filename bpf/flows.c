@@ -123,42 +123,42 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v *flow_i
 }
 
 // sets flow fields from IPv6 header information
-// static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
-//     if ((void *)ip + sizeof(*ip) > data_end) {
-//         return DISCARD;
-//     }
-//
-//     flow_id->src_ip = ip->saddr;
-//     flow_id->dst_ip = ip->daddr;
-//     flow_id->protocol = ip->nexthdr;
-//     flow_id->src_port = 0;
-//     flow_id->dst_port = 0;
-//     switch (ip->nexthdr) {
-//     case IPPROTO_TCP: {
-//         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
-//         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-//             flow_id->src_port = __bpf_ntohs(tcp->source);
-//             flow_id->dst_port = __bpf_ntohs(tcp->dest);
-//              if (tcp->fin) {
-//                  *flags= *flags | TCP_FIN_FLAG;
-//              }
-//              if (tcp->rst) {
-//                  *flags= *flags | TCP_RST_FLAG;
-//              }
-//         }
-//     } break;
-//     case IPPROTO_UDP: {
-//         struct udphdr *udp = (void *)ip + sizeof(*ip);
-//         if ((void *)udp + sizeof(*udp) <= data_end) {
-//             flow_id->src_port = __bpf_ntohs(udp->source);
-//             flow_id->dst_port = __bpf_ntohs(udp->dest);
-//         }
-//     } break;
-//     default:
-//         break;
-//     }
-//     return SUBMIT;
-// }
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
+    if ((void *)ip + sizeof(*ip) > data_end) {
+        return DISCARD;
+    }
+
+    flow_id->src_ip = ip->saddr;
+    flow_id->dst_ip = ip->daddr;
+    flow_id->protocol = ip->nexthdr;
+    flow_id->src_port = 0;
+    flow_id->dst_port = 0;
+    switch (ip->nexthdr) {
+    case IPPROTO_TCP: {
+        struct tcphdr *tcp = (void *)ip + sizeof(*ip);
+        if ((void *)tcp + sizeof(*tcp) <= data_end) {
+            flow_id->src_port = __bpf_ntohs(tcp->source);
+            flow_id->dst_port = __bpf_ntohs(tcp->dest);
+             if (tcp->fin) {
+                 *flags= *flags | TCP_FIN_FLAG;
+             }
+             if (tcp->rst) {
+                 *flags= *flags | TCP_RST_FLAG;
+             }
+        }
+    } break;
+    case IPPROTO_UDP: {
+        struct udphdr *udp = (void *)ip + sizeof(*ip);
+        if ((void *)udp + sizeof(*udp) <= data_end) {
+            flow_id->src_port = __bpf_ntohs(udp->source);
+            flow_id->dst_port = __bpf_ntohs(udp->dest);
+        }
+    } break;
+    default:
+        break;
+    }
+    return SUBMIT;
+}
 // // sets flow fields from Ethernet header information
 static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flow_id, u32 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
@@ -171,11 +171,10 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flo
     if (flow_id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
         return fill_iphdr(ip, data_end, flow_id, flags);
+    } else if (flow_id->eth_protocol == ETH_P_IPV6) {
+        struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+        return fill_ip6hdr(ip6, data_end, flow_id, flags);
     }
-    // else if (flow_id->eth_protocol == ETH_P_IPV6) {
-    //     struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-    //     return fill_ip6hdr(ip6, data_end, flow_id, flags);
-    // }
     else {
         return DISCARD;
     }
