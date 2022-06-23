@@ -75,7 +75,7 @@ type recordKeyV4 struct {
 
 type recordValue struct {
 	Packets       uint32
-	Bytes         flow.HumanBytes
+	Bytes         uint64
 	FlowStartTime flow.Timestamp
 	FlowEndTime   flow.Timestamp
 	Flags         uint32
@@ -248,9 +248,9 @@ func aggregateValues(mapValues []recordValue) recordValue {
 	return aggRecord
 }
 
-func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction flow.Direction) *flow.Record {
+func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction uint8) *flow.Record {
 	var myFlow flow.Record
-	myFlow.Protocol = mapKey.Protocol
+	myFlow.EthProtocol = mapKey.Protocol
 	myFlow.Direction = direction
 	myFlow.DataLink = mapKey.DataLink
 	myFlow.Network = mapKey.Network
@@ -263,7 +263,7 @@ func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction flow.Directi
 	//TODO : Need to calculate current time in perspective
 	return &myFlow
 }
-func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Direction) (recordValue, error) {
+func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction uint8) (recordValue, error) {
 	var err error
 	var mapValues []recordValue
 
@@ -298,7 +298,7 @@ func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction flow.Directi
 }
 
 func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
-	mapKey := recordKeyV4{Protocol: readFlow.Protocol,
+	mapKey := recordKeyV4{Protocol: readFlow.EthProtocol,
 		DataLink:  readFlow.DataLink,
 		Network:   readFlow.Network,
 		Transport: readFlow.Transport}
@@ -361,7 +361,7 @@ func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
-	var myDirection flow.Direction = 1
+	var myDirection uint8 = 1
 	go func() {
 		<-ctx.Done()
 	}()
@@ -398,6 +398,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 					fmt.Println("Evicting entry")
 					myFlow := makeRecord(mapKey, aggRecord, myDirection)
 					fmt.Printf("%+v\n", myFlow)
+					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
 						fmt.Printf("\nFailed in delete map: %v", err)
@@ -412,7 +413,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
-	var myDirection flow.Direction = 1
+	var myDirection uint8 = 1
 	go func() {
 		<-ctx.Done()
 	}()
@@ -449,6 +450,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *fl
 					fmt.Println("Evicting entry")
 					myFlow := makeRecord(mapKey, aggRecord, myDirection)
 					fmt.Printf("%+v\n", myFlow)
+					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
 						fmt.Printf("\nFailed in delete map: %v", err)

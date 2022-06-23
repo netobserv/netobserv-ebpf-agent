@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"time"
 )
 
 const MacLen = 6
-const IP6Len = 16
-const IPv6Type = 0x86DD
 
 var MAXNS int64 = 1000000000
 
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
+const IPv6Type = 0x86DD
 
-type RawIP uint32
 type HumanBytes uint64
 type Timestamp uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
-type TransportProtocol uint8
-type IP6Addr [IP6Len]uint8
+
+// IPAddr encodes v4 and v6 IPs with a fixed length.
+// IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
+// as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
+// (same behavior as Go's net.IP type)
+type IPAddr [net.IPv6len]uint8
 
 type DataLink struct {
 	SrcMac MacAddr
@@ -31,30 +32,23 @@ type DataLink struct {
 }
 
 type Network struct {
-	SrcAddr RawIP
-	DstAddr RawIP
-}
-
-type NetworkV6 struct {
-	SrcAddr IP6Addr
-	DstAddr IP6Addr
+	SrcAddr IPAddr
+	DstAddr IPAddr
 }
 
 type Transport struct {
 	SrcPort  uint16
 	DstPort  uint16
-	Protocol TransportProtocol `json:"Proto"`
+	Protocol uint8 `json:"Proto"`
 }
 
 // what identifies a flow
 type key struct {
-	Protocol  uint16 `json:"Etype"`
-	Direction Direction
-	DataLink  DataLink
-	Network   Network
-	NetworkV6 NetworkV6
-	Transport Transport
-	// TODO: add TOS field
+	EthProtocol uint16 `json:"Etype"`
+	Direction   uint8  `json:"FlowDirection"`
+	DataLink
+	Network
+	Transport
 }
 
 // record structure as parsed from eBPF
@@ -90,7 +84,7 @@ typedef struct flow_record_t {
 type rawRecord struct {
 	key
 	Packets       uint32
-	Bytes         HumanBytes
+	Bytes         uint64
 	FlowStartTime Timestamp
 	FlowEndTime   Timestamp
 	Flags         uint32
@@ -112,72 +106,20 @@ func (r *Record) Accumulate(src *Record) {
 	r.Packets += src.Packets
 }
 
-func (p TransportProtocol) String() string {
-	switch p {
-	case 0:
-		return "IP"
-	case 1:
-		return "ICMP"
-	case 2:
-		return "IGMP"
-	case 4:
-		return "IPIP"
-	case 6:
-		return "TCP"
-	case 8:
-		return "EGP"
-	case 12:
-		return "PUP"
-	case 17:
-		return "UDP"
-	case 22:
-		return "IDP"
-	case 29:
-		return "TP"
-	case 33:
-		return "DCCP"
-	case 41:
-		return "IPV6"
-	case 46:
-		return "RSVP"
-	case 136:
-		return "UDPLITE"
-	default:
-		return "other"
-	}
+// IP returns the net.IP equivalent object
+func (ia *IPAddr) IP() net.IP {
+	return ia[:]
 }
 
-func (p TransportProtocol) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + p.String() + "\""), nil
+// IntEncodeV4 encodes an IPv4 address as an integer (in network encoding, big endian).
+// It assumes that the passed IP is already IPv4. Otherwise it would just encode the
+// last 4 bytes of an IPv6 address
+func (ia *IPAddr) IntEncodeV4() uint32 {
+	return binary.BigEndian.Uint32(ia[net.IPv6len-net.IPv4len : net.IPv6len])
 }
 
-func (i RawIP) String() string {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, uint32(i))
-	return ip.String()
-}
-
-func (i RawIP) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + i.String() + "\""), nil
-}
-
-const (
-	kibi = 1024
-	mibi = kibi * 1024
-	gibi = mibi * 1024
-)
-
-func (b HumanBytes) String() string {
-	if b < kibi {
-		return strconv.FormatUint(uint64(b), 10)
-	}
-	if b < mibi {
-		return fmt.Sprintf("%.2f KiB", float64(b)/float64(kibi))
-	}
-	if b < gibi {
-		return fmt.Sprintf("%.2f MiB", float64(b)/float64(mibi))
-	}
-	return fmt.Sprintf("%.2f MiB", float64(b)/float64(gibi))
+func (ia *IPAddr) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + ia.IP().String() + `"`), nil
 }
 
 func (m *MacAddr) String() string {
@@ -186,17 +128,6 @@ func (m *MacAddr) String() string {
 
 func (m *MacAddr) MarshalJSON() ([]byte, error) {
 	return []byte("\"" + m.String() + "\""), nil
-}
-
-func (d Direction) MarshalJSON() ([]byte, error) {
-	switch d {
-	case 0:
-		return []byte(`"INGRESS"`), nil
-	case 1:
-		return []byte(`"EGRESS"`), nil
-	default:
-		return []byte(`"UNKNOWN"`), nil
-	}
 }
 
 // ReadFrom reads a Record from a binary source, in LittleEndian order

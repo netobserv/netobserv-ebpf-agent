@@ -22,11 +22,11 @@ IMG_SHA = $(IMAGE_TAG_BASE):$(BUILD_SHA)
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 
 CILIUM_EBPF_VERSION := v0.8.1
-GOLANGCI_LINT_VERSION = v1.42.1
+GOLANGCI_LINT_VERSION = v1.46.2
 
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
-GOOS := linux
+GOOS ?= linux
 PROTOC_ARTIFACTS := pkg/pbflow
 
 # regular expressions for excluded file patterns
@@ -49,10 +49,11 @@ vendors:
 .PHONY: prereqs
 prereqs:
 	@echo "### Check if prerequisites are met, and installing missing dependencies"
-	test -f $(go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
-	test -f $(go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
-	test -f $(go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	test -f $(go env GOPATH)/bin/protoc-gen-go-grpc || go install  google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(shell go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(shell go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -62,7 +63,7 @@ fmt: ## Run go fmt against code.
 .PHONY: lint
 lint: prereqs
 	@echo "### Linting code"
-	golangci-lint run ./...
+	golangci-lint run ./... --timeout=3m
 
 # As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
 # to run this target for each build. Only when you change the C code inside the bpf folder or the
@@ -110,11 +111,23 @@ coverage-report-html: cov-exclude-generated
 	@echo "### Generating HTML coverage report"
 	go tool cover --html=./cover.out
 
+.PHONY: image-build
 image-build: ## Build OCI image with the manager.
 	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .
 
+.PHONY: ci-images-build
 ci-images-build: image-build
 	$(OCI_BIN) build --build-arg BASE_IMAGE=$(IMG) -t $(IMG_SHA) -f scripts/shortlived.Dockerfile .
 
+.PHONY: image-push
 image-push: ## Push OCI image with the manager.
 	$(OCI_BIN) push ${IMG}
+
+.PHONY: tests-e2e
+.ONESHELL:
+tests-e2e: prereqs
+	# making the local agent image available to kind in two ways, so it will work in different
+	# environments: (1) as image tagged in the local repository (2) as image archive.
+	$(OCI_BIN) build . -t localhost/ebpf-agent:test
+	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
+	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...

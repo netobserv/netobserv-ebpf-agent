@@ -63,14 +63,14 @@ struct {
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v4);
+    __type(key, flow_id_v);
     __type(value, flow_metrics);
     __uint(max_entries, INGRESS_MAX_ENTRIES);
 } xflow_metric_map_ingress SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v4);
+    __type(key, flow_id_v);
     __type(value, flow_metrics);
     __uint(max_entries, EGRESS_MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
@@ -79,15 +79,19 @@ struct {
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
 
+const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+
 // sets flow fields from IPv4 header information
 // Flags is highlight any protocol specific info
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_id, u32 *flags) {
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    flow_id->src_ip = __bpf_ntohl(ip->saddr);
-    flow_id->dst_ip = __bpf_ntohl(ip->daddr);
+    __builtin_memcpy(flow_id->src_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(flow_id->dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(flow_id->src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(flow_id->dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
     flow_id->protocol = ip->protocol;
     flow_id->src_port = 0;
     flow_id->dst_port = 0;
@@ -119,28 +123,35 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_
 }
 
 // sets flow fields from IPv6 header information
-// static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *flow_id) {
+// static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
 //     if ((void *)ip + sizeof(*ip) > data_end) {
 //         return DISCARD;
 //     }
 //
-//     flow_id->network.v6ip.src_ip6 = ip->saddr;
-//     flow_id->network.v6ip.dst_ip6 = ip->daddr;
-//     flow_id->transport.protocol = ip->nexthdr;
-//
+//     flow_id->src_ip = ip->saddr;
+//     flow_id->dst_ip = ip->daddr;
+//     flow_id->protocol = ip->nexthdr;
+//     flow_id->src_port = 0;
+//     flow_id->dst_port = 0;
 //     switch (ip->nexthdr) {
 //     case IPPROTO_TCP: {
 //         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
 //         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-//             flow_id->transport.src_port = __bpf_ntohs(tcp->source);
-//             flow_id->transport.dst_port = __bpf_ntohs(tcp->dest);
+//             flow_id->src_port = __bpf_ntohs(tcp->source);
+//             flow_id->dst_port = __bpf_ntohs(tcp->dest);
+//              if (tcp->fin) {
+//                  *flags= *flags | TCP_FIN_FLAG;
+//              }
+//              if (tcp->rst) {
+//                  *flags= *flags | TCP_RST_FLAG;
+//              }
 //         }
 //     } break;
 //     case IPPROTO_UDP: {
 //         struct udphdr *udp = (void *)ip + sizeof(*ip);
 //         if ((void *)udp + sizeof(*udp) <= data_end) {
-//             flow_id->transport.src_port = __bpf_ntohs(udp->source);
-//             flow_id->transport.dst_port = __bpf_ntohs(udp->dest);
+//             flow_id->src_port = __bpf_ntohs(udp->source);
+//             flow_id->dst_port = __bpf_ntohs(udp->dest);
 //         }
 //     } break;
 //     default:
@@ -149,7 +160,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v4 *flow_
 //     return SUBMIT;
 // }
 // // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v4 *flow_id, u32 *flags) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flow_id, u32 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
@@ -160,19 +171,24 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v4 *fl
     if (flow_id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
         return fill_iphdr(ip, data_end, flow_id, flags);
-    } else {
+    }
+    // else if (flow_id->eth_protocol == ETH_P_IPV6) {
+    //     struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+    //     return fill_ip6hdr(ip6, data_end, flow_id, flags);
+    // }
+    else {
         return DISCARD;
     }
     return SUBMIT;
 }
 
-static inline void export_flow_id (flow *my_flow_key, flow_id_v4 my_flow_id, u8 direction) {
+static inline void export_flow_id (flow *my_flow_key, flow_id_v my_flow_id, u8 direction) {
     my_flow_key->protocol = my_flow_id.eth_protocol;
     my_flow_key->direction = direction;
     __builtin_memcpy(my_flow_key->data_link.src_mac, my_flow_id.src_mac, ETH_ALEN);
     __builtin_memcpy(my_flow_key->data_link.dst_mac, my_flow_id.dst_mac, ETH_ALEN);
-    my_flow_key->network.v4ip.src_ip = my_flow_id.src_ip;
-    my_flow_key->network.v4ip.dst_ip = my_flow_id.dst_ip;
+    my_flow_key->network.src_ip = my_flow_id.src_ip;
+    my_flow_key->network.dst_ip = my_flow_id.dst_ip;
     my_flow_key->transport.src_port = my_flow_id.src_port;
     my_flow_key->transport.dst_port = my_flow_id.dst_port;
     my_flow_key->transport.protocol = my_flow_id.protocol;
@@ -188,7 +204,7 @@ static inline int record_ingress_packet(struct __sk_buff *skb) {
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    flow_id_v4 my_flow_id;
+    flow_id_v my_flow_id;
     int rc = TC_ACT_OK;
     u32 flags = 0;
 
@@ -274,7 +290,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    flow_id_v4 my_flow_id;
+    flow_id_v my_flow_id;
     int rc = TC_ACT_OK;
     u32 flags = 0;
 

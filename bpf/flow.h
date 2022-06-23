@@ -26,19 +26,11 @@ struct data_link {
 } __attribute__((packed));
 
 // L3 network layer
-struct v4ip {
-    u32 src_ip;
-    u32 dst_ip;
-} __attribute__((packed));
-
-struct v6ip {
-    struct in6_addr src_ip6;
-    struct in6_addr dst_ip6;
-} __attribute__((packed));
-
+// IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
+// as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
 struct network {
-    struct v4ip v4ip;
-    struct v6ip v6ip;
+    struct in6_addr src_ip;
+    struct in6_addr dst_ip;
 } __attribute__((packed));
 
 // L4 transport layer
@@ -70,16 +62,16 @@ typedef struct flow_metrics_t {
 
 //TODO : Merge IPv4 and IPv6 as in
 //       PR 32(https://github.com/netobserv/netobserv-ebpf-agent/pull/32/files)
-typedef struct flow_id_v4_t {
+typedef struct flow_id_t {
     u16 eth_protocol;
     u8 src_mac[ETH_ALEN];
     u8 dst_mac[ETH_ALEN];
-    u32 src_ip;
-    u32 dst_ip;
+    struct in6_addr src_ip;
+    struct in6_addr dst_ip;
     u16 src_port;
     u16 dst_port;
     u8 protocol;
-} __attribute__((packed)) flow_id_v4;
+} __attribute__((packed)) flow_id_v;
 
 
 
