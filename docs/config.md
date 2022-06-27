@@ -46,3 +46,5 @@ The following environment variables are available to configure the NetObserv eBF
   means that errors are ignored since the caller will not receive the returned value.
 * `KAFKA_COMPRESSION` (default: `none`). Compression codec to be used to compress messages. Accepted
   values: `none`, `gzip`, `snappy`, `lz4`, `zstd`.
+* `PROFILE_PORT` (default: unset). Sets the listening port for [Go's Pprof tool](https://pkg.go.dev/net/http/pprof).
+  If it is not set, profile is disabled.
