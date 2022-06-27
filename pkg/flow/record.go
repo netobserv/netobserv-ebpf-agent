@@ -54,36 +54,10 @@ type key struct {
 // record structure as parsed from eBPF
 // it's important to emphasize that the fields in this structure have to coincide,
 // byte by byte, with the flow structure in the bpf/flow.h file
-// TODO: generate flow.h file from this structure
-/*
 
-typedef struct flow_id_t {
-	u16 eth_protocol;
-	u8 src_mac[ETH_ALEN];
-	u8 dst_mac[ETH_ALEN];
-	u32 src_ip;
-	u32 dst_ip;
-	u16 src_port;
-	u16 dst_port;
-	u8 protocol;
-} __attribute__((packed)) flow_id;
-
-typedef struct flow_metrics_t {
-	__u32 packets;
-	__u64 bytes;
-	__u64 flow_start_ts;
-	__u64 last_pkt_ts;
-	__u32 flags;  // Could be used to indicate certain things
-} __attribute__((packed)) flow_metrics;
-
-typedef struct flow_record_t {
-	flow_id id;
-	flow_metrics metrics;
-} __attribute__((packed)) flow_record;
-*/
 type rawRecord struct {
 	key
-	Packets       uint32
+	Pkts          uint32
 	Bytes         uint64
 	FlowStartTime Timestamp
 	FlowEndTime   Timestamp
@@ -134,21 +108,5 @@ func (m *MacAddr) MarshalJSON() ([]byte, error) {
 func ReadFrom(reader io.Reader) (*Record, error) {
 	var fr rawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
-
-	//fmt.Printf("%+v\n", fr)
-	// var FlowStartTimeSec = int64(fr.FlowStartTime) / MAXNS
-	// var FlowStartTimenSec = int64(fr.FlowStartTime) % MAXNS
-	//
-	// var FlowEndTimeSec = int64(fr.FlowEndTime) / MAXNS
-	// var FlowEndTimenSec = int64(fr.FlowEndTime) % MAXNS
-	//
-	// fmt.Printf("%d.%d\n", FlowEndTimeSec, FlowEndTimenSec)
-	// tNow := time.Now()
-	//
-	// //time.Time to Unix Timestamp
-	// tUnix := tNow.Unix()
-	// fmt.Printf("timeUnix %d\n", tUnix)
-
-	return &Record{rawRecord: fr, Packets: fr.Packets}, err
-	//return &Record{rawRecord: fr, TimeFlowStart: time.Unix(FlowStartTimeSec, FlowStartTimenSec), TimeFlowEnd: time.Unix(FlowEndTimeSec,FlowEndTimenSec), Packets: fr.Packets}, err
+	return &Record{rawRecord: fr}, err
 }

@@ -321,8 +321,7 @@ static inline int record_egress_packet(struct __sk_buff *skb) {
             // flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
-            // Defer the deletion of the entry from the map since it evicts other CPU metrics
-            // bpf_map_delete_elem(&xflow_metric_map_egress, &my_flow_id);
+            // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
             bpf_tc_printk(MYNAME "Egress: Flow ended, Delete and send to Ringbuf");
         } else {
             bpf_map_update_elem(&xflow_metric_map_egress, &my_flow_id, my_flow_counters, BPF_EXIST);

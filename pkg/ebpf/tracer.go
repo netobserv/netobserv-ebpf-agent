@@ -41,8 +41,8 @@ const TCPFinFlag = 0x1
 const TCPRstFlag = 0x10
 const EvictionTimeout = 5000000000 // 5 seconds
 
+const INGRESS = 0x0
 const EGRESS = 0x1
-
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
 //ongoingFlowMap = make(map[key]*Record, maxEntries),
@@ -58,20 +58,12 @@ type FlowTracer struct {
 	flows         *ringbuf.Reader
 }
 
-type recordKeyV4 struct {
+type recordKey struct {
 	Protocol  uint16 `json:"Etype"`
 	DataLink  flow.DataLink
 	Network   flow.Network
 	Transport flow.Transport
 }
-
-// type recordKeyV6 struct {
-// 	Protocol  uint16 `json:"Etype"`
-// 	DataLink  flow.DataLink
-// 	NetworkV6 flow.NetworkV6
-// 	Transport flow.Transport
-// 	// TODO: add TOS field
-// }
 
 type recordValue struct {
 	Packets       uint32
@@ -248,7 +240,7 @@ func aggregateValues(mapValues []recordValue) recordValue {
 	return aggRecord
 }
 
-func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction uint8) *flow.Record {
+func makeRecord(mapKey recordKey, mapValue recordValue, direction uint8) *flow.Record {
 	var myFlow flow.Record
 	myFlow.EthProtocol = mapKey.Protocol
 	myFlow.Direction = direction
@@ -260,10 +252,53 @@ func makeRecord(mapKey recordKeyV4, mapValue recordValue, direction uint8) *flow
 	myFlow.FlowStartTime = mapValue.FlowStartTime
 	myFlow.FlowEndTime = mapValue.FlowEndTime
 
-	//TODO : Need to calculate current time in perspective
+	//Calculate current time in perspective
+
 	return &myFlow
 }
-func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction uint8) (recordValue, error) {
+
+func computeFlowTime(myFlow *flow.Record, timeDelta flow.Timestamp) {
+	currentTime := time.Now()
+	// TimeFlowEnd = currentTime - (Duration)timeDelta
+	myFlow.TimeFlowEnd = currentTime.Add(time.Duration(-timeDelta))
+	// TimeFlowStart = TimeFlowEnd - (Duration)(FlowEndTime - FlowStartTime)
+	flowDuration := myFlow.FlowEndTime - myFlow.FlowStartTime
+	myFlow.TimeFlowStart = myFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
+	fmt.Printf("Time Now, Started, Ended= %+v, %+v, %+v\n", currentTime, myFlow.TimeFlowStart, myFlow.TimeFlowEnd)
+}
+// func getFlowStartTime(TimeFlowEnd time.Time , delta flow.Timestamp) time.Time {
+//
+// }
+
+// Eviction logic based on timeout of last seen packet of a flow
+func evictFlowTimeoutLogic (mapKey recordKey, aggRecord recordValue, myDirection uint8) (*flow.Record, bool) {
+	var myFlow *flow.Record
+	evict := false
+	// Logic 1:
+	if aggRecord.FlowEndTime == 0 {
+		return myFlow, evict
+	}
+	timeNow := flow.Timestamp(C.get_nsecs())
+	var timeDelta flow.Timestamp
+	if timeNow > aggRecord.FlowEndTime {
+		timeDelta = timeNow - aggRecord.FlowEndTime
+	} else {
+		timeDelta = aggRecord.FlowEndTime - timeNow
+	}
+	if timeDelta > EvictionTimeout {
+		evict = true
+	}
+	if evict {
+		fmt.Println("Evicting entry")
+		myFlow = makeRecord(mapKey, aggRecord, myDirection)
+		computeFlowTime(myFlow, timeDelta)
+		fmt.Printf("%+v\n", myFlow)
+
+	}
+	return myFlow, evict
+}
+
+func (m *FlowTracer) aggregateEntries(mapKey recordKey, direction uint8) (recordValue, error) {
 	var err error
 	var mapValues []recordValue
 
@@ -298,7 +333,7 @@ func (m *FlowTracer) aggregateEntries(mapKey recordKeyV4, direction uint8) (reco
 }
 
 func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
-	mapKey := recordKeyV4{Protocol: readFlow.EthProtocol,
+	mapKey := recordKey{Protocol: readFlow.EthProtocol,
 		DataLink:  readFlow.DataLink,
 		Network:   readFlow.Network,
 		Transport: readFlow.Transport}
@@ -314,49 +349,10 @@ func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
 		readFlow.FlowStartTime = aggRecord.FlowStartTime
 		readFlow.FlowEndTime = aggRecord.FlowEndTime
 	}
+	flowDuration := readFlow.FlowEndTime - readFlow.FlowStartTime
+	readFlow.TimeFlowStart = readFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
 	return err
 }
-
-// func (m *FlowTracer) scrubReverseFlow(readFlow *flow.Record) (*flow.Record, error) {
-// 	mapKeyReverse := recordKeyV4{
-// 		Protocol: readFlow.Protocol,
-// 		DataLink: flow.DataLink{
-// 			SrcMac: readFlow.DataLink.DstMac,
-// 			DstMac: readFlow.DataLink.SrcMac,
-// 		},
-// 		Network: flow.Network{
-// 			SrcAddr: readFlow.Network.DstAddr,
-// 			DstAddr: readFlow.Network.SrcAddr,
-// 		},
-// 		Transport: flow.Transport{
-// 			SrcPort: readFlow.Transport.DstPort,
-// 			DstPort: readFlow.Transport.SrcPort,
-// 			Protocol: readFlow.Transport.Protocol,
-// 		},
-// 	}
-//
-// 	var readFlowReverse flow.Record
-// 	readFlowReverse.Protocol = readFlow.Protocol
-// 	readFlowReverse.Direction = readFlow.Direction
-// 	readFlowReverse.DataLink = mapKeyReverse.DataLink
-// 	readFlowReverse.Network = mapKeyReverse.Network
-// 	readFlowReverse.Transport = mapKeyReverse.Transport
-//
-//
-// 	fmt.Printf("ScrubFlow reverse: %+v\n", mapKeyReverse)
-//
-//
-// 	aggRecord,err := m.aggregateEntries(mapKeyReverse, readFlowReverse.Direction)
-//
-// 	if err == nil {
-// 		// Modify the readFlow record which was the evicted entry from the hash map
-// 		readFlowReverse.Packets = aggRecord.Packets
-// 		readFlowReverse.Bytes = aggRecord.Bytes
-// 		readFlowReverse.FlowStartTime = aggRecord.FlowStartTime
-// 		readFlowReverse.FlowEndTime = aggRecord.FlowEndTime
-// 	}
-// 	return &readFlowReverse, err
-// }
 
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
@@ -375,33 +371,25 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 			// Check Egress Map
 			var entriesAvail = true
 			for entriesAvail {
-				var mapKey recordKeyV4
+				var mapKey recordKey
 				var mapValues []recordValue
-				fmt.Println("Iterating Egress Entries..")
-				timeNow := flow.Timestamp(C.get_nsecs())
 				entriesAvail = egressMapIterator.Next(&mapKey, &mapValues)
 				aggRecord := aggregateValues(mapValues)
-				fmt.Printf("%+v..%+v\n", mapKey, aggRecord)
+				//fmt.Printf("%+v..%+v\n", mapKey, aggRecord)
 				// Eviction Logic can be based on the following three metrics:
 				//   1) LastPacket > 5 sec ?
 				//		The problem with this is how to check the time
 				//   2) Packet/Byte count?
 				//   3) Number of entries
-				fmt.Println(timeNow)
-				var timediff flow.Timestamp
-				if timeNow > aggRecord.FlowEndTime {
-					timediff = timeNow - aggRecord.FlowEndTime
-				} else {
-					timediff = aggRecord.FlowEndTime - timeNow
-				}
-				if (aggRecord.FlowEndTime != 0) && (timediff > EvictionTimeout) {
-					fmt.Println("Evicting entry")
-					myFlow := makeRecord(mapKey, aggRecord, myDirection)
-					fmt.Printf("%+v\n", myFlow)
+				//   4) Regular Eviction
+
+				// Logic 1:
+				myFlow, evict := evictFlowTimeoutLogic(mapKey, aggRecord, myDirection)
+				if evict {
 					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
-						fmt.Printf("\nFailed in delete map: %v", err)
+						tlog.WithError(err).Warn("Failed in delete map")
 					}
 				}
 			}
@@ -413,7 +401,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
-	var myDirection uint8 = 1
+	var myDirection uint8 = 0
 	go func() {
 		<-ctx.Done()
 	}()
@@ -427,33 +415,19 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *fl
 			// Check Egress Map
 			var entriesAvail = true
 			for entriesAvail {
-				var mapKey recordKeyV4
+				var mapKey recordKey
 				var mapValues []recordValue
-				fmt.Println("Iterating Ingress Entries..")
-				timeNow := flow.Timestamp(C.get_nsecs())
 				entriesAvail = egressMapIterator.Next(&mapKey, &mapValues)
 				aggRecord := aggregateValues(mapValues)
-				fmt.Printf("%+v..%+v\n", mapKey, aggRecord)
-				// Eviction Logic can be based on the following three metrics:
-				//   1) LastPacket > 5 sec ?
-				//		The problem with this is how to check the time
-				//   2) Packet/Byte count?
-				//   3) Number of entries
-				fmt.Println(timeNow)
-				var timediff flow.Timestamp
-				if timeNow > aggRecord.FlowEndTime {
-					timediff = timeNow - aggRecord.FlowEndTime
-				} else {
-					timediff = aggRecord.FlowEndTime - timeNow
-				}
-				if (aggRecord.FlowEndTime != 0) && (timediff > EvictionTimeout) {
-					fmt.Println("Evicting entry")
-					myFlow := makeRecord(mapKey, aggRecord, myDirection)
-					fmt.Printf("%+v\n", myFlow)
+
+				// Logic 1:
+				myFlow, evict := evictFlowTimeoutLogic(mapKey, aggRecord, myDirection)
+
+				if evict {
 					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
-						fmt.Printf("\nFailed in delete map: %v", err)
+						tlog.WithError(err).Warn("Failed in delete map")
 					}
 				}
 			}
@@ -505,7 +479,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 			// 		Send this packet to accounter without further action
 
 			readFlow.Interface = m.interfaceName
-			fmt.Printf("%+v\n", readFlow)
+			//fmt.Printf("%+v\n", readFlow)
 
 			if ((readFlow.Flags & TCPFinFlag) == TCPFinFlag) || ((readFlow.Flags & TCPRstFlag) == TCPRstFlag) {
 				// TODO : Need to check if we need update a flag if the flow is complete?
@@ -516,35 +490,17 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				//	3) Optional : Reverse the key and lookup and delete the other direction's Map (ingress now), and send the record upwards.
 				//     This is not needed as you get ACK eitherwise.
 
-				fmt.Printf("Received Complete Flag %X!\n", readFlow.Flags)
+				//fmt.Printf("Received Complete Flag %X!\n", readFlow.Flags)
 				readFlow.TimeFlowEnd = time.Now()
 				// Currently, time provided by eBPF cannot be converted into time in go
 				// since bpf_get_time_ns() uses CLOCK_MONOTIC which is majorly to measure delay.
-				// Need to understand if we need a global time, which can be calculated as below:
-				// readFlow.TimeFlowStart = readFlow.rawRecord.TimeEnd - delay (FlowEndTime - FlowStartTime)
+				// readFlow.TimeFlowStart = readFlow.rawRecord.TimeEnd - Duration (FlowEndTime - FlowStartTime)
 
 				err := m.scrubFlow(readFlow)
 				if err != nil {
 					tlog.Debug("scrubFlow did not happen! (either nothing else remaining in the map)")
 				}
 				fmt.Printf("After Scrubbing: %+v\n", readFlow)
-
-				// readFlowReverse, err := m.scrubReverseFlow(readFlow)
-				// if err != nil {
-				// 	tlog.Debug("scrubReverseFlow did not happen! (either nothing else remaining in the map)")
-				// }
-				//
-				// fmt.Printf("After Scrubbing Reverse: %+v\n", readFlowReverse)
-				//
-				// forwardFlows <- readFlow
-
-				// if readFlow.Protocol == flow.IPv6Type {
-				// 	mapKey := recordKeyV6{Protocol: readFlow.Protocol,
-				// 		 DataLink: readFlow.DataLink,
-				// 		 NetworkV6: readFlow.NetworkV6,
-				// 		 Transport: readFlow.Transport}
-				// } else {
-
 			}
 
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow

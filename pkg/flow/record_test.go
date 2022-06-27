@@ -48,13 +48,12 @@ func TestRecordBinaryEncoding(t *testing.T) {
 					Protocol: 0x12,
 				},
 			},
-			Packets:       0x09080706,
+			Pkts:          0x09080706,
 			Bytes:         0x1a19181716151413,
 			FlowStartTime: 0x1a19181716151413,
 			FlowEndTime:   0x1a19181716151413,
 			Flags:         0x09080706,
 		},
-		Packets: 0x09080706,
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses
 	assert.Equal(t, "6.7.8.9", fr.Network.SrcAddr.IP().String())
