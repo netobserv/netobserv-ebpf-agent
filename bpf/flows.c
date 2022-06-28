@@ -32,24 +32,13 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <string.h>
-//#include <linux/pkt_cls.h>
-//#include <iproute2/bpf_elf.h>
-//#include <bpf/bpf_helper_defs.h>
+
 #include <stdbool.h>
 #include <linux/if_ether.h>
 
 #include "flow.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
-
-#define MYNAME "flows-"
-
-#define bpf_tc_printk(fmt, ...) \
-({ \
-const char ____fmt[] = fmt; \
-bpf_trace_printk(____fmt, sizeof(____fmt), \
-##__VA_ARGS__); \
-})
 
 #define DISCARD 1
 #define SUBMIT 0
@@ -243,7 +232,6 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
             // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
-            // bpf_tc_printk(MYNAME "Egress: Flow ended, Delete and send to Ringbuf");
         } else {
             if (direction == INGRESS) {
                 bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, my_flow_counters, BPF_EXIST);
@@ -287,9 +275,6 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             export_flow_id(&flow_event->flow_key, my_flow_id, 1);
             flow_event->metrics = new_flow_counter;
             bpf_ringbuf_submit(flow_event, 0);
-            bpf_tc_printk(MYNAME "Map space for new flow not found, sending to ringbuf");
-        }else {
-            bpf_tc_printk(MYNAME "We New flow created in Map");
         }
     }
     return rc;
