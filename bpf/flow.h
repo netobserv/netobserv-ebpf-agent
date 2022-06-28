@@ -45,7 +45,6 @@ struct transport {
 
 // TODO: L5 session layer to bound flows to connections?
 
-// contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
 typedef struct flow_t {
     u16 protocol;
     u8 direction;
@@ -56,11 +55,11 @@ typedef struct flow_t {
 
 
 typedef struct flow_metrics_t {
-	__u32 packets;
-	__u64 bytes;
-	__u64 flow_start_ts;
+    __u32 packets;
+    __u64 bytes;
+    __u64 flow_start_ts;
     __u64 last_pkt_ts;
-	__u32 flags;  // Could be used to indicate certain things
+    __u32 flags;  // Could be used to indicate certain things
 } __attribute__((packed)) flow_metrics;
 
 typedef struct flow_id_t {
@@ -75,8 +74,9 @@ typedef struct flow_id_t {
 } __attribute__((packed)) flow_id_v;
 
 // Flow record is the typical information sent from eBPF to userspace
+// contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
 typedef struct flow_record_t {
-	flow flow_key;
-	flow_metrics metrics;
+    flow flow_key;
+    flow_metrics metrics;
 } __attribute__((packed)) flow_record;
 #endif
