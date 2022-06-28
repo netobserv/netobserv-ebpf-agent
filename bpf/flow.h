@@ -4,12 +4,15 @@
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
 #define IP_MAX_LEN 16
+
 // TODO : Explore if this can be programmed from go launcher
+// Total mem consumption would be (1000*)
 #define INGRESS_MAX_ENTRIES 1000
 #define EGRESS_MAX_ENTRIES  1000
 
 
 // Bitmask of flags to be embedded in the 32-bit
+// In Future, Other TCP Flags can be added
 #define TCP_FIN_FLAG 0x1
 #define TCP_RST_FLAG 0x10
 
@@ -60,8 +63,6 @@ typedef struct flow_metrics_t {
 	__u32 flags;  // Could be used to indicate certain things
 } __attribute__((packed)) flow_metrics;
 
-//TODO : Merge IPv4 and IPv6 as in
-//       PR 32(https://github.com/netobserv/netobserv-ebpf-agent/pull/32/files)
 typedef struct flow_id_t {
     u16 eth_protocol;
     u8 src_mac[ETH_ALEN];
@@ -73,8 +74,7 @@ typedef struct flow_id_t {
     u8 protocol;
 } __attribute__((packed)) flow_id_v;
 
-
-
+// Flow record is the typical information sent from eBPF to userspace
 typedef struct flow_record_t {
 	flow flow_key;
 	flow_metrics metrics;
