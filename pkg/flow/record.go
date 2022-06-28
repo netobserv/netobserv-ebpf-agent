@@ -57,11 +57,11 @@ type key struct {
 
 type rawRecord struct {
 	key
-	Pkts          uint32
+	Pkts          uint32 // Unused for now
 	Bytes         uint64
-	FlowStartTime Timestamp
+	FlowStartTime Timestamp // Timestamps from eBPF (CLOCK_MONOTIC)
 	FlowEndTime   Timestamp
-	Flags         uint32
+	Flags         uint32 // Flags with some future space to highlight TCP states
 }
 
 // Record contains accumulated metrics from a flow
