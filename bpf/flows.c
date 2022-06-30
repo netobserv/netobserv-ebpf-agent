@@ -179,16 +179,16 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flo
     return SUBMIT;
 }
 
-static inline void export_flow_id (flow *my_flow_key, flow_id_v my_flow_id, u8 direction) {
-    my_flow_key->protocol = my_flow_id.eth_protocol;
-    my_flow_key->direction = direction;
-    __builtin_memcpy(my_flow_key->data_link.src_mac, my_flow_id.src_mac, ETH_ALEN);
-    __builtin_memcpy(my_flow_key->data_link.dst_mac, my_flow_id.dst_mac, ETH_ALEN);
-    my_flow_key->network.src_ip = my_flow_id.src_ip;
-    my_flow_key->network.dst_ip = my_flow_id.dst_ip;
-    my_flow_key->transport.src_port = my_flow_id.src_port;
-    my_flow_key->transport.dst_port = my_flow_id.dst_port;
-    my_flow_key->transport.protocol = my_flow_id.protocol;
+static inline void export_flow_id (flow *key, flow_id_v id, u8 direction) {
+    key->protocol = id.eth_protocol;
+    key->direction = direction;
+    __builtin_memcpy(key->data_link.src_mac, id.src_mac, ETH_ALEN);
+    __builtin_memcpy(key->data_link.dst_mac, id.dst_mac, ETH_ALEN);
+    key->network.src_ip = id.src_ip;
+    key->network.dst_ip = id.dst_ip;
+    key->transport.src_port = id.src_port;
+    key->transport.dst_port = id.dst_port;
+    key->transport.protocol = id.protocol;
 }
 
 static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
@@ -198,7 +198,7 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     }
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    flow_id_v my_flow_id;
+    flow_id_v id;
     int rc = TC_ACT_OK;
     u32 flags = 0;
     flow_record *flow_event;
@@ -206,13 +206,13 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     __u64 current_time = bpf_ktime_get_ns();
 
     struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, &my_flow_id, &flags) == DISCARD) {
+    if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
     if (direction == INGRESS) {
-        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_ingress, &my_flow_id);
+        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
     } else {
-        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_egress, &my_flow_id);
+        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
     }
 
     if (my_flow_counters != NULL) {
@@ -225,18 +225,15 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, my_flow_id, 1);
-            // flow_event->metrics.packets = my_flow_counters->packets;
-            // flow_event->metrics.bytes = my_flow_counters->bytes;
-            // flow_event->metrics.last_pkt_ts = my_flow_counters->last_pkt_ts;
+            export_flow_id(&flow_event->flow_key, id, 1);
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
             // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
         } else {
             if (direction == INGRESS) {
-                bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, my_flow_counters, BPF_EXIST);
+                bpf_map_update_elem(&xflow_metric_map_ingress, &id, my_flow_counters, BPF_EXIST);
             } else {
-                bpf_map_update_elem(&xflow_metric_map_egress, &my_flow_id, my_flow_counters, BPF_EXIST);
+                bpf_map_update_elem(&xflow_metric_map_egress, &id, my_flow_counters, BPF_EXIST);
             }
         }
     } else {
@@ -246,10 +243,10 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         new_flow_counter.last_pkt_ts = current_time;
         int ret;
         if (direction == INGRESS) {
-            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &my_flow_id, &new_flow_counter,
+            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &new_flow_counter,
                                       BPF_NOEXIST);
         } else {
-            ret = bpf_map_update_elem(&xflow_metric_map_egress, &my_flow_id, &new_flow_counter,
+            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &new_flow_counter,
                                       BPF_NOEXIST);
         }
         if (ret < 0) {
@@ -272,7 +269,7 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, my_flow_id, 1);
+            export_flow_id(&flow_event->flow_key, id, 1);
             flow_event->metrics = new_flow_counter;
             bpf_ringbuf_submit(flow_event, 0);
         }
