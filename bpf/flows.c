@@ -152,7 +152,7 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flo
     }
     return SUBMIT;
 }
-// // sets flow fields from Ethernet header information
+// sets flow fields from Ethernet header information
 static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flow_id, u32 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
