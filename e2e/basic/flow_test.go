@@ -148,7 +148,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 		if len(query.Data.Result) > 0 {
 			sent, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)
-			require.LessOrEqual(t, newerThan.UnixMilli(),
+			require.Less(t, newerThan.UnixMilli(),
 				asTime(sent["TimeFlowStartMs"]).UnixMilli())
 		}
 	}, test.Interval(time.Second))
@@ -162,7 +162,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 		if len(query.Data.Result) > 0 {
 			recv, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)
-			require.LessOrEqual(t, newerThan.UnixMilli(),
+			require.Less(t, newerThan.UnixMilli(),
 				asTime(sent["TimeFlowStartMs"]).UnixMilli())
 		}
 	}, test.Interval(time.Second))
