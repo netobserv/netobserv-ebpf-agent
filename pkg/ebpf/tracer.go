@@ -96,7 +96,6 @@ func (m *FlowTracer) Register() error {
 		return fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 	if err := spec.LoadAndAssign(&m.objects, nil); err != nil {
-		fmt.Printf("%s\n", m.objects)
 		return fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
 	ipvlan, err := netlink.LinkByName(m.interfaceName)
