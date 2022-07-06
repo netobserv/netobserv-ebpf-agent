@@ -53,7 +53,6 @@ struct {
     __uint(max_entries, 1 << 24);
 } flows SEC(".maps");
 
-
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id_v);
@@ -67,7 +66,6 @@ struct {
     __type(value, flow_metrics);
     __uint(max_entries, EGRESS_MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
-
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
@@ -225,7 +223,7 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, id, 1);
+            export_flow_id(&flow_event->flow_key, id, direction);
             flow_event->metrics.flags = flags;
             bpf_ringbuf_submit(flow_event, 0);
             // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
@@ -269,7 +267,7 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, id, 1);
+            export_flow_id(&flow_event->flow_key, id, direction);
             flow_event->metrics = new_flow_counter;
             bpf_ringbuf_submit(flow_event, 0);
         }
