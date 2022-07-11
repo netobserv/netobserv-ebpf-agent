@@ -370,6 +370,11 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 				myFlow, evict := evictInactiveFlows(mapKey, aggRecord, myDirection)
 				if evict {
 					myFlow.Interface = m.interfaceName
+					tlog.WithFields(logrus.Fields{
+					  "Direction": myDirection,
+					  "Flowkey": mapKey,
+					  "FlowValues": aggRecord,
+					}).Debug("Evicting Flow")
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
 						tlog.WithError(err).Warn("Failed in delete map")
@@ -410,6 +415,12 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *fl
 
 				if evict {
 					myFlow.Interface = m.interfaceName
+					tlog.WithFields(logrus.Fields{
+					  "Direction": myDirection,
+					  "Flowkey": mapKey,
+					  "FlowValues": aggRecord,
+					  "Interface": m.interfaceName,
+					}).Debug("Evicting Flow")
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
 						tlog.WithError(err).Warn("Failed in delete map")
