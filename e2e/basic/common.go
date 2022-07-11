@@ -243,7 +243,6 @@ func (bt *FlowCaptureTester) lokiQuery(t *testing.T, logQL string) tester.LokiQu
 		require.NotNil(t, query)
 		require.NotEmpty(t, query.Data.Result)
 	}, test.Interval(time.Second))
-	require.NotEmpty(t, query.Data.Result)
 	result := query.Data.Result[0]
 	return result
 }

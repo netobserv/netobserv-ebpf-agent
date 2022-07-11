@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	pathReady     = "/ready"
-	pathQuery     = "/loki/api/v1/query"
-	queryArgLimit = "limit"
-	queryArgQuery = "query"
+	pathReady      = "/ready"
+	pathQueryRange = "/loki/api/v1/query_range"
+	queryArgLimit  = "limit"
+	queryArgQuery  = "query"
+	queryStep      = "step=30m"
 )
 
 var llog = logrus.WithField("component", "loki.Tester")
@@ -52,8 +53,8 @@ func (l *Loki) Ready() error {
 
 // Query executes an arbitrary logQL query, given a limit in the results
 func (l *Loki) Query(limit int, logQL string) (*LokiQueryResponse, error) {
-	status, body, err := l.get(fmt.Sprintf("%s?%s=%d&%s=%s",
-		pathQuery, queryArgLimit, limit,
+	status, body, err := l.get(fmt.Sprintf("%s?%s=%d&%s&%s=%s",
+		pathQueryRange, queryArgLimit, limit, queryStep,
 		queryArgQuery, url.QueryEscape(logQL)))
 	if err != nil {
 		return nil, fmt.Errorf("loki request error: %w", err)

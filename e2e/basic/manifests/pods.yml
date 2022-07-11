@@ -43,3 +43,13 @@ spec:
       containers:
         - name: nginx
           image: nginx:latest
+---
+# Used for single-packet test
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pinger
+spec:
+  containers:
+    - name: pinger
+      image: ibmcom/ping
