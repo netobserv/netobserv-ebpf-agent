@@ -5,6 +5,7 @@ package basic
 import (
 	"context"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 
@@ -57,7 +58,6 @@ func TestBasicFlowCapture(t *testing.T) {
 // (2) once packets are evicted, no more flows are aggregated on top of them.
 func TestSinglePacketFlows(t *testing.T) {
 	var pingerIP, serverPodIP string
-	var latestFlowMS time.Time
 	testCluster.TestEnv().Test(t, features.New("single-packet flow capture").Setup(
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			kclient, err := kubernetes.NewForConfig(cfg.Client().RESTConfig())
@@ -82,54 +82,34 @@ func TestSinglePacketFlows(t *testing.T) {
 			}, test.Interval(time.Second))
 			return ctx
 		},
-	).Assess("correctness of single, small ICMP packet from pinger to server",
+	).Assess("correctness of single, sequential small ICMP packets from pinger to server",
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			pods, err := tester.NewPods(cfg)
 			require.NoError(t, err)
 
-			logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
-			stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
-				"ping", "-c", "1", serverPodIP)
-			require.NoError(t, err)
-			logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Info("ping sent")
+			const ipIcmpHeadersLen = 42
+			latestFlowMS := time.Now().Add(-time.Minute)
+			for pktLen := 50; pktLen <= 60; pktLen++ {
+				logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
+				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
+					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
+				require.NoError(t, err)
+				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Info("ping sent")
 
-			sent, recv := getPingFlows(t, time.Now().Add(-time.Minute))
+				sent, recv := getPingFlows(t, latestFlowMS)
 
-			assert.Equal(t, pingerIP, sent["SrcAddr"])
-			assert.Equal(t, serverPodIP, sent["DstAddr"])
-			assert.EqualValues(t, 98, sent["Bytes"]) // default ping data size + IP+ICMP headers
-			assert.EqualValues(t, 1, sent["Packets"])
-			assert.Equal(t, pingerIP, recv["DstAddr"])
-			assert.Equal(t, serverPodIP, recv["SrcAddr"])
-			assert.EqualValues(t, 98, recv["Bytes"]) // default ping data size + IP+ICMP headers
-			assert.EqualValues(t, 1, recv["Packets"])
+				assert.Equal(t, pingerIP, sent["SrcAddr"])
+				assert.Equal(t, serverPodIP, sent["DstAddr"])
+				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, sent["Bytes"])
+				assert.EqualValues(t, 1, sent["Packets"])
+				assert.Equal(t, pingerIP, recv["DstAddr"])
+				assert.Equal(t, serverPodIP, recv["SrcAddr"])
+				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, recv["Bytes"])
+				assert.EqualValues(t, 1, recv["Packets"])
 
-			latestFlowMS = asTime(recv["TimeFlowEndMs"])
+				latestFlowMS = asTime(recv["TimeFlowEndMs"])
+			}
 
-			return ctx
-		},
-	).Assess("correctness of another ICMP packet contained in another flow",
-		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			pods, err := tester.NewPods(cfg)
-			require.NoError(t, err)
-
-			logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
-			stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
-				"ping", "-s", "100", "-c", "1", serverPodIP)
-			require.NoError(t, err)
-			logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Info("ping sent")
-
-			// We filter by time to avoid getting twice the same flows
-			sent, recv := getPingFlows(t, latestFlowMS)
-
-			assert.Equal(t, pingerIP, sent["SrcAddr"])
-			assert.Equal(t, serverPodIP, sent["DstAddr"])
-			assert.EqualValues(t, 142, sent["Bytes"]) // 100-byte data size + IP+ICMP headers
-			assert.EqualValues(t, 1, sent["Packets"])
-			assert.Equal(t, pingerIP, recv["DstAddr"])
-			assert.Equal(t, serverPodIP, recv["SrcAddr"])
-			assert.EqualValues(t, 142, recv["Bytes"]) // 100-byte data size + IP+ICMP headers
-			assert.EqualValues(t, 1, recv["Packets"])
 			return ctx
 		},
 	).Feature())
