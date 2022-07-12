@@ -39,7 +39,7 @@ const (
 
 const TCPFinFlag = 0x1
 const TCPRstFlag = 0x10
-const EvictionTimeout = 5000000000 // 5 seconds
+const EvictionTimeout = 3000000000 // 3 seconds
 
 const INGRESS = 0x0
 const EGRESS = 0x1
@@ -371,9 +371,9 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 				if evict {
 					myFlow.Interface = m.interfaceName
 					tlog.WithFields(logrus.Fields{
-					  "Direction": myDirection,
-					  "Flowkey": mapKey,
-					  "FlowValues": aggRecord,
+						"Direction":  myDirection,
+						"Flowkey":    mapKey,
+						"FlowValues": aggRecord,
 					}).Debug("Evicting Flow")
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapEgress.Delete(mapKey); err != nil {
@@ -382,7 +382,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flo
 				}
 				// In Future, other eviction logic can be implemented here based on the use-case
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -416,10 +416,10 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *fl
 				if evict {
 					myFlow.Interface = m.interfaceName
 					tlog.WithFields(logrus.Fields{
-					  "Direction": myDirection,
-					  "Flowkey": mapKey,
-					  "FlowValues": aggRecord,
-					  "Interface": m.interfaceName,
+						"Direction":  myDirection,
+						"Flowkey":    mapKey,
+						"FlowValues": aggRecord,
+						"Interface":  m.interfaceName,
 					}).Debug("Evicting Flow")
 					forwardFlows <- myFlow
 					if err := m.objects.XflowMetricMapIngress.Delete(mapKey); err != nil {
@@ -428,7 +428,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *fl
 				}
 				// In Future, other eviction logic can be implemented here based on the use-case
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -494,7 +494,13 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 					continue
 				}
 			}
-
+			tlog.WithFields(logrus.Fields{
+				"Direction":   readFlow.Direction,
+				"FlowkeyNet":  readFlow.Network,
+				"FlowkeyTran": readFlow.Transport,
+				"Bytes":       readFlow.Bytes,
+				"Interface":   m.interfaceName,
+			}).Debug("Tracer Event")
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			forwardFlows <- readFlow
 
