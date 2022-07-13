@@ -17,6 +17,12 @@ egress flows on a Linux host (required a Kernel 4.18+ with eBPF enabled).
 make build
 ```
 
+To build the agent image and push it to your Docker / Quay repository, run:
+
+```bash
+IMG=quay.io/myaccount/netobserv-ebpf-agent:dev make image-build image-push
+```
+
 ## How to configure
 
 The eBPF Agent is configured by means of environment variables. Check the

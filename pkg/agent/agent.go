@@ -100,6 +100,14 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
 				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
 		}
+		transport := kafkago.Transport{}
+		if cfg.KafkaEnableTLS {
+			tlsConfig, err := buildTLSConfig(cfg)
+			if err != nil {
+				return nil, err
+			}
+			transport.TLS = tlsConfig
+		}
 		exportFunc = (&exporter.KafkaJSON{
 			Writer: &kafkago.Writer{
 				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
@@ -114,6 +122,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				BatchBytes:   cfg.KafkaBatchBytes,
 				Async:        cfg.KafkaAsync,
 				Compression:  compression,
+				Transport:    &transport,
 			},
 		}).ExportFlows
 	default:
