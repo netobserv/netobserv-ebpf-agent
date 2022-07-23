@@ -10,10 +10,13 @@ import (
 
 const MacLen = 6
 
+var MAXNS int64 = 1000000000
+
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const IPv6Type = 0x86DD
 
 type HumanBytes uint64
+type Timestamp uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 
@@ -51,10 +54,14 @@ type key struct {
 // record structure as parsed from eBPF
 // it's important to emphasize that the fields in this structure have to coincide,
 // byte by byte, with the flow structure in the bpf/flow.h file
-// TODO: generate this structure from flow.h (allowed by bpf2go 0.9.0: https://github.com/cilium/ebpf/releases/tag/v0.9.0)
+
 type rawRecord struct {
 	key
-	Bytes uint64
+	Pkts          uint32 // Unused for now
+	Bytes         uint64
+	FlowStartTime Timestamp // Timestamps from eBPF (CLOCK_MONOTIC)
+	FlowEndTime   Timestamp
+	Flags         uint32 // Flags with some future space to highlight TCP states
 }
 
 // Record contains accumulated metrics from a flow
@@ -63,7 +70,7 @@ type Record struct {
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	Interface     string
-	Packets       int
+	Packets       uint32
 }
 
 func (r *Record) Accumulate(src *Record) {
