@@ -67,6 +67,16 @@ type Config struct {
 	// KafkaCompression sets the compression codec to be used to compress messages. The accepted
 	// values are: none (default), gzip, snappy, lz4, zstd.
 	KafkaCompression string `env:"KAFKA_COMPRESSION" envDefault:"none"`
+	// KafkaEnableTLS set true to enable TLS
+	KafkaEnableTLS bool `env:"KAFKA_ENABLE_TLS" envDefault:"false"`
+	// KafkaTLSInsecureSkipVerify skips server certificate verification in TLS connections
+	KafkaTLSInsecureSkipVerify bool `env:"KAFKA_TLS_INSECURE_SKIP_VERIFY" envDefault:"false"`
+	// KafkaTLSCACertPath is the path to the Kafka server certificate for TLS connections
+	KafkaTLSCACertPath string `env:"KAFKA_TLS_CA_CERT_PATH"`
+	// KafkaTLSUserCertPath is the path to the user (client) certificate for mTLS connections
+	KafkaTLSUserCertPath string `env:"KAFKA_TLS_USER_CERT_PATH"`
+	// KafkaTLSUserKeyPath is the path to the user (client) private key for mTLS connections
+	KafkaTLSUserKeyPath string `env:"KAFKA_TLS_USER_KEY_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
 }
