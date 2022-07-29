@@ -455,11 +455,6 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
 				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
 				if evict {
-					if myFlow.Protocol == 1 {
-						tlog.WithFields(logrus.Fields{
-							"Flow": myFlow,
-						}).Debug("Evicting")
-					}
 					m.resetEntriesAndDelete(mapKey)
 					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
@@ -517,11 +512,6 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
 
 				if evict {
-					if myFlow.Protocol == 1 {
-						tlog.WithFields(logrus.Fields{
-							"Flow": myFlow,
-						}).Debug("Evicting")
-					}
 					m.resetEntriesAndDelete(mapKey)
 					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
