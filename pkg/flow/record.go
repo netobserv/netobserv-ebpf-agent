@@ -57,7 +57,7 @@ type key struct {
 
 type rawRecord struct {
 	key
-	Pkts          uint32 // Unused for now
+	Pkts          uint32 // Packet count from eBPF datapath
 	Bytes         uint64
 	FlowStartTime Timestamp // Timestamps from eBPF (CLOCK_MONOTIC)
 	FlowEndTime   Timestamp
@@ -70,7 +70,7 @@ type Record struct {
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	Interface     string
-	Packets       uint32
+	Packets       uint32 // Packets field kept here
 }
 
 func (r *Record) Accumulate(src *Record) {

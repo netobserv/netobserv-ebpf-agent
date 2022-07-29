@@ -55,15 +55,15 @@ struct {
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v);
-    __type(value, flow_metrics);
+    __type(key, flow_id);
+    __type(value, flow_aggregate);
     __uint(max_entries, INGRESS_MAX_ENTRIES);
 } xflow_metric_map_ingress SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id_v);
-    __type(value, flow_metrics);
+    __type(key, flow_id);
+    __type(value, flow_aggregate);
     __uint(max_entries, EGRESS_MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
 
@@ -74,24 +74,24 @@ const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 // sets flow fields from IPv4 header information
 // Flags is highlight any protocol specific info
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u32 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    __builtin_memcpy(flow_id->src_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(flow_id->dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(flow_id->src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
-    __builtin_memcpy(flow_id->dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
-    flow_id->protocol = ip->protocol;
-    flow_id->src_port = 0;
-    flow_id->dst_port = 0;
+    __builtin_memcpy(id->src_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(id->dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    id->protocol = ip->protocol;
+    id->src_port = 0;
+    id->dst_port = 0;
     switch (ip->protocol) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            flow_id->src_port = __bpf_ntohs(tcp->source);
-            flow_id->dst_port = __bpf_ntohs(tcp->dest);
+            id->src_port = __bpf_ntohs(tcp->source);
+            id->dst_port = __bpf_ntohs(tcp->dest);
             if (tcp->fin) {
                 *flags= *flags | TCP_FIN_FLAG;
             }
@@ -103,8 +103,8 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v *flow_i
     case IPPROTO_UDP: {
         struct udphdr *udp = (void *)ip + sizeof(*ip);
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            flow_id->src_port = __bpf_ntohs(udp->source);
-            flow_id->dst_port = __bpf_ntohs(udp->dest);
+            id->src_port = __bpf_ntohs(udp->source);
+            id->dst_port = __bpf_ntohs(udp->dest);
         }
     } break;
     default:
@@ -114,22 +114,22 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id_v *flow_i
 }
 
 // sets flow fields from IPv6 header information
-static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flow_id, u32 *flags) {
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u32 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    flow_id->src_ip = ip->saddr;
-    flow_id->dst_ip = ip->daddr;
-    flow_id->protocol = ip->nexthdr;
-    flow_id->src_port = 0;
-    flow_id->dst_port = 0;
+    id->src_ip = ip->saddr;
+    id->dst_ip = ip->daddr;
+    id->protocol = ip->nexthdr;
+    id->src_port = 0;
+    id->dst_port = 0;
     switch (ip->nexthdr) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            flow_id->src_port = __bpf_ntohs(tcp->source);
-            flow_id->dst_port = __bpf_ntohs(tcp->dest);
+            id->src_port = __bpf_ntohs(tcp->source);
+            id->dst_port = __bpf_ntohs(tcp->dest);
              if (tcp->fin) {
                  *flags= *flags | TCP_FIN_FLAG;
              }
@@ -141,8 +141,8 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flo
     case IPPROTO_UDP: {
         struct udphdr *udp = (void *)ip + sizeof(*ip);
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            flow_id->src_port = __bpf_ntohs(udp->source);
-            flow_id->dst_port = __bpf_ntohs(udp->dest);
+            id->src_port = __bpf_ntohs(udp->source);
+            id->dst_port = __bpf_ntohs(udp->dest);
         }
     } break;
     default:
@@ -151,43 +151,32 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id_v *flo
     return SUBMIT;
 }
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id_v *flow_id, u32 *flags) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u32 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
-    __builtin_memcpy(flow_id->dst_mac, eth->h_dest, ETH_ALEN);
-    __builtin_memcpy(flow_id->src_mac, eth->h_source, ETH_ALEN);
-    flow_id->eth_protocol = __bpf_ntohs(eth->h_proto);
+    __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
+    id->eth_protocol = __bpf_ntohs(eth->h_proto);
 
-    if (flow_id->eth_protocol == ETH_P_IP) {
+    if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, flow_id, flags);
-    } else if (flow_id->eth_protocol == ETH_P_IPV6) {
+        return fill_iphdr(ip, data_end, id, flags);
+    } else if (id->eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-        return fill_ip6hdr(ip6, data_end, flow_id, flags);
+        return fill_ip6hdr(ip6, data_end, id, flags);
     } else {
         // TODO : Need to implement other specific ethertypes if needed
         // For now other parts of flow id remain zero
-        memset (&(flow_id->src_ip),0, sizeof(struct in6_addr));
-        memset (&(flow_id->dst_ip),0, sizeof(struct in6_addr));
-        flow_id->protocol = 0;
-        flow_id->src_port = 0;
-        flow_id->dst_port = 0;
+        memset (&(id->src_ip),0, sizeof(struct in6_addr));
+        memset (&(id->dst_ip),0, sizeof(struct in6_addr));
+        id->protocol = 0;
+        id->src_port = 0;
+        id->dst_port = 0;
     }
     return SUBMIT;
 }
 
-static inline void export_flow_id (flow *key, flow_id_v id, u8 direction) {
-    key->protocol = id.eth_protocol;
-    key->direction = direction;
-    __builtin_memcpy(key->data_link.src_mac, id.src_mac, ETH_ALEN);
-    __builtin_memcpy(key->data_link.dst_mac, id.dst_mac, ETH_ALEN);
-    key->network.src_ip = id.src_ip;
-    key->network.dst_ip = id.dst_ip;
-    key->transport.src_port = id.src_port;
-    key->transport.dst_port = id.dst_port;
-    key->transport.protocol = id.protocol;
-}
 
 static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
@@ -196,58 +185,116 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     }
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    flow_id_v id;
+    flow_id id;
     int rc = TC_ACT_OK;
     u32 flags = 0;
     flow_record *flow_event;
-    flow_metrics *my_flow_counters;
-    __u64 current_time = bpf_ktime_get_ns();
+    flow_aggregate *my_flow_aggregate;
+
+    u64 current_time = bpf_ktime_get_ns();
 
     struct ethhdr *eth = data;
     if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
+    id.direction = direction;
     if (direction == INGRESS) {
-        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
+        my_flow_aggregate = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
     } else {
-        my_flow_counters = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
+        my_flow_aggregate = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
     }
 
-    if (my_flow_counters != NULL) {
-        my_flow_counters->packets += 1;
-        my_flow_counters->bytes += skb->len;
-        my_flow_counters->last_pkt_ts = current_time;
+    if (my_flow_aggregate != NULL) {
+        // The key already exists in the map
         if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
             /* Need to evict the entry and send it via ring buffer */
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, id, direction);
+            //export_flow_id(&flow_event->flow_key, id, direction);
+            flow_event->id = id;
             flow_event->metrics.flags = flags;
+            flow_event->metrics.packets = 1;
+            flow_event->metrics.bytes = skb->len;
+            flow_event->metrics.last_pkt_ts = current_time;
             bpf_ringbuf_submit(flow_event, 0);
             // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
         } else {
-            if (direction == INGRESS) {
-                bpf_map_update_elem(&xflow_metric_map_ingress, &id, my_flow_counters, BPF_EXIST);
+            bool update = false;
+            my_flow_aggregate->packets += 1;
+            my_flow_aggregate->bytes += skb->len;
+            my_flow_aggregate->last_pkt_ts = current_time;
+            if (my_flow_aggregate->eth_protocol == 0) { // Ensures no other flow is residing
+                my_flow_aggregate->eth_protocol = id.eth_protocol;
+                my_flow_aggregate->direction = direction;
+                __builtin_memcpy(my_flow_aggregate->src_mac, id.src_mac, ETH_ALEN);
+                __builtin_memcpy(my_flow_aggregate->dst_mac, id.dst_mac, ETH_ALEN);
+                my_flow_aggregate->src_ip = id.src_ip;
+                my_flow_aggregate->dst_ip = id.dst_ip;
+                my_flow_aggregate->src_port = id.src_port;
+                my_flow_aggregate->dst_port = id.dst_port;
+                my_flow_aggregate->protocol = id.protocol;
+                update = true;
             } else {
-                bpf_map_update_elem(&xflow_metric_map_egress, &id, my_flow_counters, BPF_EXIST);
+                // check flow id stored
+                // If its the same, then perform write to map
+                // Else send to ringbuffer
+                if (my_flow_aggregate->src_port == id.src_port &&
+                    my_flow_aggregate->dst_port == id.dst_port &&
+                    my_flow_aggregate->protocol == id.protocol) {
+                    update = true;
+                }
+            }
+            if (update == true) {
+                // Update existing map when no collision detected
+                if (direction == INGRESS) {
+                    bpf_map_update_elem(&xflow_metric_map_ingress, &id, my_flow_aggregate, BPF_EXIST);
+                } else {
+                    bpf_map_update_elem(&xflow_metric_map_egress, &id, my_flow_aggregate, BPF_EXIST);
+                }
+            } else {
+                // Sending to ringbuffer since collision detected
+                flow_metrics new_flow_counter = {
+                        .packets = 1, .bytes=skb->len};
+                new_flow_counter.flow_start_ts = current_time;
+                new_flow_counter.last_pkt_ts = current_time;
+                new_flow_counter.flags = COLLISION_FLAG;
+                flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
+                if (!flow_event) {
+                    return rc;
+                }
+                flow_event->id = id;
+                flow_event->metrics = new_flow_counter;
+                bpf_ringbuf_submit(flow_event, 0);
             }
         }
     } else {
-        flow_metrics new_flow_counter = {
+        // Key does not exist in the map, and will need to create a new entry.
+        flow_aggregate my_flow_aggregate = {
             .packets = 1, .bytes=skb->len};
-        new_flow_counter.flow_start_ts = current_time;
-        new_flow_counter.last_pkt_ts = current_time;
+        my_flow_aggregate.flow_start_ts = current_time;
+        my_flow_aggregate.last_pkt_ts = current_time;
+
+        my_flow_aggregate.eth_protocol = id.eth_protocol;
+        my_flow_aggregate.direction = direction;
+        __builtin_memcpy(my_flow_aggregate.src_mac, id.src_mac, ETH_ALEN);
+        __builtin_memcpy(my_flow_aggregate.dst_mac, id.dst_mac, ETH_ALEN);
+        my_flow_aggregate.src_ip = id.src_ip;
+        my_flow_aggregate.dst_ip = id.dst_ip;
+        my_flow_aggregate.src_port = id.src_port;
+        my_flow_aggregate.dst_port = id.dst_port;
+        my_flow_aggregate.protocol = id.protocol;
         int ret;
         if (direction == INGRESS) {
-            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &new_flow_counter,
+            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &my_flow_aggregate,
                                       BPF_NOEXIST);
         } else {
-            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &new_flow_counter,
+            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &my_flow_aggregate,
                                       BPF_NOEXIST);
         }
         if (ret < 0) {
+            // Map is full
             /*
                 When the map is full, we have two choices:
                     1) Send the new flow entry to userspace via ringbuffer,
@@ -262,12 +309,14 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
                 and do nothing in the eBPF datapath and wait for userspace to create more space in the Map.
 
             */
-
+            flow_metrics new_flow_counter = {
+                    .packets = 1, .bytes=skb->len};
+            new_flow_counter.last_pkt_ts = current_time;
             flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
             if (!flow_event) {
                 return rc;
             }
-            export_flow_id(&flow_event->flow_key, id, direction);
+            flow_event->id = id;
             flow_event->metrics = new_flow_counter;
             bpf_ringbuf_submit(flow_event, 0);
         }

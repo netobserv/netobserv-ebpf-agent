@@ -67,4 +67,8 @@ type Config struct {
 	// KafkaCompression sets the compression codec to be used to compress messages. The accepted
 	// values are: none (default), gzip, snappy, lz4, zstd.
 	KafkaCompression string `env:"KAFKA_COMPRESSION" envDefault:"none"`
+	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
+	ProfilePort int `env:"PROFILE_PORT"`
+	// EvictionTimeout sets the timeout for eviction of an inactive flow, Default is 2 seconds
+	EvictionTimeout uint64 `env:"EVICTION_TIMEOUT" envDefault:"2000000000"`
 }

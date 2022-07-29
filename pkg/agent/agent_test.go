@@ -213,7 +213,7 @@ func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.R
 	}
 }
 
-func (ft *fakeFlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (ft *fakeFlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record) {
 	for {
 		select {
 		case f := <-ft.tracedFlows:
@@ -224,7 +224,7 @@ func (ft *fakeFlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<-
 	}
 }
 
-func (ft *fakeFlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (ft *fakeFlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record) {
 	for {
 		select {
 		case f := <-ft.tracedFlows:

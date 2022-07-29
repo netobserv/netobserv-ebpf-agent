@@ -18,6 +18,13 @@ On a higher level note, need to check if increasing the map size (hash computati
 3) If entry creation failed due to a full map, then send the entry to userspace program via ringbuffer.  
 4) Upon flow completion (tcp->fin/rst event), send the flow-id to userspace via ringbuffer.
 
+##### Hash collisions
+One downside of using hash-based map is, When flows are hashed to the per-cpu map, there is a possibility of hash collisions occuring which would make multiple different flows map into the same entry. As a result, it might lead to inaccurate flow entries. To handle hash collisions we do the following :
+1) In each flow entry, we additionally maintain the full key/id.
+2) Before a packet's id is updated to map, the key is additionally compared to check if there is another flow residing in the map.
+3) If there is another flow, we do want to update the entry wrongly. Hence, we send the new packet entry directly to userspace via ringbuffer after updating a flag to inform of collision.
+
+To detect and handle
 #### User-space program Logic: (Refer [tracer.go](../pkg/ebpf/tracer.go))
 The userspace program has three active threads:  
 
@@ -38,3 +45,6 @@ c) The evicted entry is aggregated into a flow-record and forwarded to the accou
 
 3) **MonitorEgress** :  
 This is a period thread, which does the same task as MonitorIngress, but only the map is egress.
+
+##### Hash Collision handling in user-space
+Inspite of handling hash collisions in the eBPF datapath, there is still a chance of multiple flows mapping to the same map, since per-cpu map maintains a separate entries per-cpu. Hence, its possible that multiple flows from different CPUs can map into the same entry, but are in different buckets. Hence, during aggregation of entries, we check the key before aggregating the entries per-flow. Upon detection of such entries, we export the entry to accounter. Now since the flow key is stored along with each entry, we can recover such collided entries and send to accounter.
