@@ -46,5 +46,10 @@ The following environment variables are available to configure the NetObserv eBF
   means that errors are ignored since the caller will not receive the returned value.
 * `KAFKA_COMPRESSION` (default: `none`). Compression codec to be used to compress messages. Accepted
   values: `none`, `gzip`, `snappy`, `lz4`, `zstd`.
+* `KAFKA_ENABLE_TLS` (default: false). If `true`, enable TLS encryption for Kafka messages. The following settings are used only when TLS is enabled:
+  * `KAFKA_TLS_INSECURE_SKIP_VERIFY` (default: false). Skips server certificate verification in TLS connections.
+  * `KAFKA_TLS_CA_CERT_PATH` (default: unset). Path to the Kafka server certificate for TLS connections.
+  * `KAFKA_TLS_USER_CERT_PATH` (default: unset). Path to the user (client) certificate for mutual TLS connections.
+  * `KAFKA_TLS_USER_KEY_PATH` (default: unset). Path to the user (client) private key for mutual TLS connections.
 * `PROFILE_PORT` (default: unset). Sets the listening port for [Go's Pprof tool](https://pkg.go.dev/net/http/pprof).
   If it is not set, profile is disabled.
