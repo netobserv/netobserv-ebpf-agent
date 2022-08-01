@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +14,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
+
+	_ "net/http/pprof"
 )
 
 func main() {
@@ -22,6 +25,14 @@ func main() {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
 	setLoggerVerbosity(&config)
+
+	if config.ProfilePort != 0 {
+		go func() {
+			logrus.WithField("port", config.ProfilePort).Info("starting PProf HTTP listener")
+			logrus.WithError(http.ListenAndServe(fmt.Sprintf(":%d", config.ProfilePort), nil)).
+				Error("PProf HTTP listener stopped working")
+		}()
+	}
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
