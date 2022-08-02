@@ -13,6 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// IPAddrFromNetIP returns IPAddr from net.IP
+func IPAddrFromNetIP(netIP net.IP) flow.IPAddr {
+	var arr [net.IPv6len]uint8
+	copy(arr[:], (netIP)[0:net.IPv6len])
+	return arr
+}
+
 func TestJSONConversion(t *testing.T) {
 	wc := writerCapturer{}
 	kj := KafkaJSON{Writer: &wc}
@@ -22,8 +29,8 @@ func TestJSONConversion(t *testing.T) {
 	record.Direction = 1
 	record.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.SrcAddr = *(*flow.IPAddr)(net.ParseIP("192.1.2.3")[0:16])
-	record.DstAddr = *(*flow.IPAddr)(net.ParseIP("aabb:ccdd:eeff::2233")[0:16])
+	record.SrcAddr = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.DstAddr = IPAddrFromNetIP(net.ParseIP("aabb:ccdd:eeff::2233"))
 	record.SrcPort = 4321
 	record.DstPort = 1234
 	record.Protocol = 210
