@@ -308,11 +308,9 @@ func computeFlowTime(myFlow *flow.Record, timeDelta flow.Timestamp) {
 	// TimeFlowEnd = currentTime - (Duration)timeDelta
 	myFlow.TimeFlowEnd = currentTime.Add(time.Duration(-timeDelta))
 	// TimeFlowStart = TimeFlowEnd - (Duration)(FlowEndTime - FlowStartTime)
-	if aggRecord.FlowStartTime != 0 {
-		flowDuration := myFlow.FlowEndTime - myFlow.FlowStartTime
-	} else {
-		// Handles a scenario where FlowStartTime could be 0 due to hash collision
-		flowDuration = 0
+	flowDuration := flow.Timestamp(0)
+	if myFlow.FlowStartTime != 0 {
+		flowDuration = myFlow.FlowEndTime - myFlow.FlowStartTime
 	}
 	myFlow.TimeFlowStart = myFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
 }
