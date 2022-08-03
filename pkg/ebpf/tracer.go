@@ -13,10 +13,10 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/gavv/monotime"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-	"github.com/gavv/monotime"
 	"golang.org/x/sys/unix"
 )
 
