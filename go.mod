@@ -13,6 +13,7 @@ require (
 	github.com/stretchr/testify v1.7.1
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vladimirvivien/gexe v0.1.1
+	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
 	google.golang.org/grpc v1.45.0
 	google.golang.org/protobuf v1.28.0
