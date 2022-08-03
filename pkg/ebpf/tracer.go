@@ -16,19 +16,9 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"github.com/gavv/monotime"
 	"golang.org/x/sys/unix"
 )
-
-/*
-#include <time.h>
-static unsigned long long get_nsecs(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (unsigned long long)ts.tv_sec * 1000000000UL + ts.tv_nsec;
-}
-*/
-import "C"
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
 //go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS bpf ../../bpf/flows.c -- -I../../bpf/headers
@@ -431,7 +421,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 			var mapEntries = 0
 			// Check Egress Map
 			var entriesAvail = true
-			timeNow := flow.Timestamp(C.get_nsecs())
+			timeNow := flow.Timestamp(monotime.Now())
 			for entriesAvail {
 				var mapKey recordKey
 				var mapValues []recordValue
@@ -492,8 +482,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 		default:
 			ingressMapIterator := m.objects.XflowMetricMapIngress.Iterate()
 			var mapEntries = 0
-			timeNow := flow.Timestamp(C.get_nsecs())
-
+			timeNow := flow.Timestamp(monotime.Now())
 			// Check Ingress Map
 			var entriesAvail = true
 			for entriesAvail {
@@ -599,7 +588,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				readFlow.TimeFlowEnd = now
 				readFlow.Interface = m.interfaceName
 				if readFlow.Flags == CollisionFlag {
-					ebpfCollisions += 1
+					ebpfCollisions++
 				}
 			}
 
