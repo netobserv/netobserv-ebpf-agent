@@ -306,7 +306,7 @@ func computeFlowTime(myFlow *flow.Record, timeDelta flow.Timestamp) {
 }
 
 // Eviction logic based on timeout of last seen packet of a flow
-func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp, timeNow flow.Timestamp) (*flow.Record, bool) {
+func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout time.Duration, timeNow flow.Timestamp) (*flow.Record, bool) {
 	var myFlow *flow.Record
 	evict := false
 	// Logic 1:
@@ -319,7 +319,7 @@ func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeou
 	} else {
 		timeDelta = aggRecord.FlowEndTime - timeNow
 	}
-	if timeDelta > evictionTimeout {
+	if timeDelta > flow.Timestamp(evictionTimeout.Nanoseconds()) {
 		evict = true
 	}
 	if evict {
@@ -406,7 +406,7 @@ func (m *FlowTracer) resetEntriesAndDelete(mapKey recordKey) {
 }
 
 // Monitor Egress Map to evict flows based on logic
-func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
@@ -441,7 +441,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, evictionTimeout, timeNow)
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
 					myFlow.Interface = m.interfaceName
@@ -469,7 +469,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 }
 
 // Monitor Ingress Map to evict flows based on logic
-func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
@@ -496,7 +496,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 				aggRecord, collidedRecords := m.aggregateValues(mapKey, mapValues)
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, evictionTimeout, timeNow)
 
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
