@@ -36,9 +36,10 @@
 #include <stdbool.h>
 #include <linux/if_ether.h>
 
+#include <bpf_helpers.h>
+#include <bpf_endian.h>
+
 #include "flow.h"
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
 
 #define DISCARD 1
 #define SUBMIT 0
@@ -185,114 +186,57 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     }
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    flow_id id;
     int rc = TC_ACT_OK;
-    u32 flags = 0;
-    flow_record *flow_event;
-    flow_aggregate *my_flow_aggregate;
-
     u64 current_time = bpf_ktime_get_ns();
 
     struct ethhdr *eth = data;
+    flow_id id;
+    u32 flags; // TODO: remove flags as we don't need them
     if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
     id.direction = direction;
+    // TODO: pass map pointer as argument
+    flow_aggregate *aggregate_flow;
     if (direction == INGRESS) {
-        my_flow_aggregate = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
+        aggregate_flow = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
     } else {
-        my_flow_aggregate = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
+        aggregate_flow = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
     }
 
-    if (my_flow_aggregate != NULL) {
-        // The key already exists in the map
-        if (flags & TCP_FIN_FLAG || flags & TCP_RST_FLAG) {
-            /* Need to evict the entry and send it via ring buffer */
-            flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
-            if (!flow_event) {
-                return rc;
-            }
-            //export_flow_id(&flow_event->flow_key, id, direction);
-            flow_event->id = id;
-            flow_event->metrics.flags = flags;
-            flow_event->metrics.packets = 1;
-            flow_event->metrics.bytes = skb->len;
-            flow_event->metrics.last_pkt_ts = current_time;
-            bpf_ringbuf_submit(flow_event, 0);
-            // Defer the deletion of the entry from the map to usespace since it evicts other CPU metrics
-        } else {
-            bool update = false;
-            my_flow_aggregate->packets += 1;
-            my_flow_aggregate->bytes += skb->len;
-            my_flow_aggregate->last_pkt_ts = current_time;
-            if (my_flow_aggregate->eth_protocol == 0) { // Ensures no other flow is residing
-                my_flow_aggregate->eth_protocol = id.eth_protocol;
-                my_flow_aggregate->direction = direction;
-                __builtin_memcpy(my_flow_aggregate->src_mac, id.src_mac, ETH_ALEN);
-                __builtin_memcpy(my_flow_aggregate->dst_mac, id.dst_mac, ETH_ALEN);
-                my_flow_aggregate->src_ip = id.src_ip;
-                my_flow_aggregate->dst_ip = id.dst_ip;
-                my_flow_aggregate->src_port = id.src_port;
-                my_flow_aggregate->dst_port = id.dst_port;
-                my_flow_aggregate->protocol = id.protocol;
-                update = true;
-            } else {
-                // check flow id stored
-                // If its the same, then perform write to map
-                // Else send to ringbuffer
-                if (my_flow_aggregate->src_port == id.src_port &&
-                    my_flow_aggregate->dst_port == id.dst_port &&
-                    my_flow_aggregate->protocol == id.protocol) {
-                    update = true;
-                }
-            }
-            if (update == true) {
-                // Update existing map when no collision detected
-                if (direction == INGRESS) {
-                    bpf_map_update_elem(&xflow_metric_map_ingress, &id, my_flow_aggregate, BPF_EXIST);
-                } else {
-                    bpf_map_update_elem(&xflow_metric_map_egress, &id, my_flow_aggregate, BPF_EXIST);
-                }
-            } else {
-                // Sending to ringbuffer since collision detected
-                flow_metrics new_flow_counter = {
-                        .packets = 1, .bytes=skb->len};
-                new_flow_counter.flow_start_ts = current_time;
-                new_flow_counter.last_pkt_ts = current_time;
-                new_flow_counter.flags = COLLISION_FLAG;
-                flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
-                if (!flow_event) {
-                    return rc;
-                }
-                flow_event->id = id;
-                flow_event->metrics = new_flow_counter;
-                bpf_ringbuf_submit(flow_event, 0);
-            }
-        }
+    if (aggregate_flow != NULL) {
+        aggregate_flow->packets += 1;
+        aggregate_flow->bytes += skb->len;
+        aggregate_flow->last_pkt_ts = current_time;
     } else {
         // Key does not exist in the map, and will need to create a new entry.
-        flow_aggregate my_flow_aggregate = {
-            .packets = 1, .bytes=skb->len};
-        my_flow_aggregate.flow_start_ts = current_time;
-        my_flow_aggregate.last_pkt_ts = current_time;
+        flow_aggregate new_flow = {
+            .packets = 1,
+            .bytes=skb->len,
+            .flow_start_ts = current_time,
+            .last_pkt_ts = current_time,
+        };
 
-        my_flow_aggregate.eth_protocol = id.eth_protocol;
-        my_flow_aggregate.direction = direction;
-        __builtin_memcpy(my_flow_aggregate.src_mac, id.src_mac, ETH_ALEN);
-        __builtin_memcpy(my_flow_aggregate.dst_mac, id.dst_mac, ETH_ALEN);
-        my_flow_aggregate.src_ip = id.src_ip;
-        my_flow_aggregate.dst_ip = id.dst_ip;
-        my_flow_aggregate.src_port = id.src_port;
-        my_flow_aggregate.dst_port = id.dst_port;
-        my_flow_aggregate.protocol = id.protocol;
+        // TODO: maybe just set id as a field of flow_aggregate so you can do direct copy
+        new_flow.eth_protocol = id.eth_protocol;
+        new_flow.direction = direction;
+        __builtin_memcpy(new_flow.src_mac, id.src_mac, ETH_ALEN);
+        __builtin_memcpy(new_flow.dst_mac, id.dst_mac, ETH_ALEN);
+        new_flow.src_ip = id.src_ip;
+        new_flow.dst_ip = id.dst_ip;
+        new_flow.src_port = id.src_port;
+        new_flow.dst_port = id.dst_port;
+        new_flow.protocol = id.protocol;
+        
         int ret;
         if (direction == INGRESS) {
-            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &my_flow_aggregate,
+            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &new_flow,
                                       BPF_NOEXIST);
         } else {
-            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &my_flow_aggregate,
+            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &new_flow,
                                       BPF_NOEXIST);
         }
+        // TODO: maybe better to verify first map size with bpf_obj_get_info_by_fd ?
         if (ret < 0) {
             // Map is full
             /*
@@ -312,13 +256,13 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             flow_metrics new_flow_counter = {
                     .packets = 1, .bytes=skb->len};
             new_flow_counter.last_pkt_ts = current_time;
-            flow_event = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
-            if (!flow_event) {
+            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
+            if (!record) {
                 return rc;
             }
-            flow_event->id = id;
-            flow_event->metrics = new_flow_counter;
-            bpf_ringbuf_submit(flow_event, 0);
+            record->id = id;
+            record->metrics = new_flow_counter;
+            bpf_ringbuf_submit(record, 0);
         }
     }
     return rc;

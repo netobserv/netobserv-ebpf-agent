@@ -6,7 +6,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
+# TODO: generate eBPF code from flows.c on each build so we make sure the bpf assets belong to the actual C sources
 jobs:
   e2e-tests:
     name: e2e-tests
