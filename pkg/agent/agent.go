@@ -31,15 +31,13 @@ type Flows struct {
 	interfaces ifaces.Informer
 	filter     interfaceFilter
 	// tracerFactory specifies how to instantiate flowTracer implementations
-	tracerFactory func(name string, sampling uint32) flowTracer
+	tracerFactory func(name string, sampling uint32, evictTimeout time.Duration) flowTracer
 	cfg           *Config
 }
 
 // flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
 type flowTracer interface {
 	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
-	MonitorIngress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record)
-	MonitorEgress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record)
 	Register() error
 	Unregister() error
 }
@@ -128,8 +126,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		exporter:   exportFunc,
 		interfaces: informer,
 		filter:     filter,
-		tracerFactory: func(name string, sampling uint32) flowTracer {
-			return ebpf.NewFlowTracer(name, sampling)
+		tracerFactory: func(name string, sampling uint32, evictTimeout time.Duration) flowTracer {
+			return ebpf.NewFlowTracer(name, sampling, evictTimeout)
 		},
 		cfg: cfg,
 	}, nil
@@ -231,7 +229,7 @@ func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh 
 	defer f.trMutex.Unlock()
 	if _, ok := f.tracers[name]; !ok {
 		alog.WithField("name", name).Info("interface detected. Registering flow tracer")
-		tracer := f.tracerFactory(string(name), f.cfg.Sampling)
+		tracer := f.tracerFactory(string(name), f.cfg.Sampling, f.cfg.CacheActiveTimeout)
 		if err := tracer.Register(); err != nil {
 			alog.WithField("interface", name).WithError(err).
 				Warn("can't register flow tracer. Ignoring")
@@ -239,8 +237,6 @@ func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh 
 		}
 		tctx, cancel := context.WithCancel(ctx)
 		go tracer.Trace(tctx, flowsCh)
-		go tracer.MonitorIngress(tctx, f.cfg.EvictionTimeout, flowsCh)
-		go tracer.MonitorEgress(tctx, f.cfg.EvictionTimeout, flowsCh)
 		f.tracers[name] = cancellableTracer{
 			tracer: tracer,
 			cancel: cancel,

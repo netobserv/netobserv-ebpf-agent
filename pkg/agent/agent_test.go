@@ -46,7 +46,7 @@ func TestFlowsAgent(t *testing.T) {
 	// replacing the real eBPF tracer by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+	flowsAgent.tracerFactory = func(name string, sampling uint32, _ time.Duration) flowTracer {
 		if ft != nil {
 			require.Fail(t, "flow tracer should have been instantiated only once")
 		}
@@ -143,7 +143,7 @@ func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
 	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(name string, sampling uint32) flowTracer {
+	flowsAgent.tracerFactory = func(name string, sampling uint32, _ time.Duration) flowTracer {
 		ft = &fakeFlowTracer{tracedFlows: agentInput}
 		return ft
 	}
@@ -203,28 +203,6 @@ type fakeFlowTracer struct {
 }
 
 func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
-	for {
-		select {
-		case f := <-ft.tracedFlows:
-			forwardFlows <- f
-		case <-ctx.Done():
-			ft.contextCanceled = true
-		}
-	}
-}
-
-func (ft *fakeFlowTracer) MonitorEgress(ctx context.Context, _ time.Duration, forwardFlows chan<- *flow.Record) {
-	for {
-		select {
-		case f := <-ft.tracedFlows:
-			forwardFlows <- f
-		case <-ctx.Done():
-			ft.contextCanceled = true
-		}
-	}
-}
-
-func (ft *fakeFlowTracer) MonitorIngress(ctx context.Context, _ time.Duration, forwardFlows chan<- *flow.Record) {
 	for {
 		select {
 		case f := <-ft.tracedFlows:

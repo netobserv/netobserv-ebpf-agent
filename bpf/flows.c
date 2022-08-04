@@ -187,6 +187,7 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     int rc = TC_ACT_OK;
+    // TODO: use system time instead of monotonic time?
     u64 current_time = bpf_ktime_get_ns();
 
     struct ethhdr *eth = data;

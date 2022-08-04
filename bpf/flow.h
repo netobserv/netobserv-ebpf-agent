@@ -53,7 +53,7 @@ typedef struct flow_metrics_t {
     u64 bytes;
     u64 flow_start_ts;
     u64 last_pkt_ts;
-    u32 flags;  // Could be used to indicate certain things
+    u32 flags;  // Could be used to indicate certain things. TODO: remove
 } __attribute__((packed)) flow_metrics;
 
 typedef struct flow_id_t {

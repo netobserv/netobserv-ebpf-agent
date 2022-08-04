@@ -69,6 +69,4 @@ type Config struct {
 	KafkaCompression string `env:"KAFKA_COMPRESSION" envDefault:"none"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
-	// EvictionTimeout sets the timeout for eviction of an inactive flow, Default is 2 seconds
-	EvictionTimeout time.Duration `env:"EVICTION_TIMEOUT" envDefault:"2s"`
 }
