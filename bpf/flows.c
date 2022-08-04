@@ -9,15 +9,9 @@
         2) Upon flow completion (tcp->fin event), evict the entry from map, and
            send to userspace through ringbuffer.
            Eviction for non-tcp flows need to done by userspace
-        3) When the map is full, we have two choices:
-                1) Send the new flow entry to userspace via ringbuffer,
-                        until an entry is available.
-                2) Send an existing flow entry (probably least recently used)
-                        to userspace via ringbuffer, delete that entry, and add in the
-                        new flow to the hash map.
-
-                Ofcourse, 2nd step involves more manipulations and
-                    state maintenance, and will it provide any performance benefit?
+        3) When the map is full, we send the new flow entry to userspace via ringbuffer,
+            until an entry is available.
+        4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
 
 #include <linux/bpf.h>
@@ -296,18 +290,8 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         if (ret < 0) {
             // Map is full
             /*
-                When the map is full, we have two choices:
-                    1) Send the new flow entry to userspace via ringbuffer,
-                       until an entry is available.
-                    2) Send an existing flow entry (probably least recently used)
-                       to userspace via ringbuffer, delete that entry, and add in the
-                       new flow to the hash map.
-
-                Ofcourse, 2nd step involves more manipulations and
-                       state maintenance, and no guarantee if it will any performance benefit.
-                Hence, taking the first approach here to send the entry to userspace
-                and do nothing in the eBPF datapath and wait for userspace to create more space in the Map.
-
+                When the map is full, we have two choices, send the new flow entry to userspace via ringbuffer,
+                until an entry is available.
             */
             flow_metrics new_flow_counter = {
                     .packets = 1, .bytes=skb->len};
