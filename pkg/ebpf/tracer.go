@@ -38,6 +38,10 @@ const EGRESS = 0x1
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
+// Reference Timestamps to calculate actual flow start and end time
+var realStartTime time.Time
+var monoStartTime flow.Timestamp
+
 // FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
 type FlowTracer struct {
 	interfaceName string
@@ -273,7 +277,7 @@ func makeRecord(mapKey recordKey, mapValue *recordValue) *flow.Record {
 }
 
 // Converts a recordValue to flow.Record
-func ConvertToRecord(mapValue *recordValue, timeNow flow.Timestamp, interfaceName string) *flow.Record {
+func ConvertToRecord(mapValue *recordValue, interfaceName string) *flow.Record {
 	var myFlow flow.Record
 	myFlow.EthProtocol = mapValue.Protocol
 	myFlow.Direction = mapValue.Direction
@@ -286,27 +290,27 @@ func ConvertToRecord(mapValue *recordValue, timeNow flow.Timestamp, interfaceNam
 	myFlow.Interface = interfaceName
 	myFlow.Packets = mapValue.Packets
 	myFlow.Bytes = mapValue.Bytes
-	timeDelta := timeNow - mapValue.FlowEndTime
-	computeFlowTime(&myFlow, timeDelta)
-
+	computeFlowTime(&myFlow)
 	return &myFlow
 }
 
 // Computes the real clock time from eBPF CLOCK_MONOTONIC timestamps
-func computeFlowTime(myFlow *flow.Record, timeDelta flow.Timestamp) {
-	currentTime := time.Now()
-	// TimeFlowEnd = currentTime - (Duration)timeDelta
-	myFlow.TimeFlowEnd = currentTime.Add(time.Duration(-timeDelta))
-	// TimeFlowStart = TimeFlowEnd - (Duration)(FlowEndTime - FlowStartTime)
-	flowDuration := flow.Timestamp(0)
+func computeFlowTime(myFlow *flow.Record) {
+	monoDeltaStart :=flow.Timestamp(0)
+	monoDeltaEnd := myFlow.FlowEndTime - monoStartTime
+
 	if myFlow.FlowStartTime != 0 {
-		flowDuration = myFlow.FlowEndTime - myFlow.FlowStartTime
+		monoDeltaStart = myFlow.FlowStartTime - monoStartTime
+		myFlow.TimeFlowStart = realStartTime.Add(time.Duration(monoDeltaStart))
+	} else {
+		myFlow.TimeFlowStart = realStartTime.Add(time.Duration(monoDeltaEnd))
 	}
-	myFlow.TimeFlowStart = myFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
+
+	myFlow.TimeFlowEnd = realStartTime.Add(time.Duration(monoDeltaEnd))
 }
 
 // Eviction logic based on timeout of last seen packet of a flow
-func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp, timeNow flow.Timestamp) (*flow.Record, bool) {
+func  evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp) (*flow.Record, bool) {
 	var myFlow *flow.Record
 	evict := false
 	// Logic 1:
@@ -314,17 +318,14 @@ func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeou
 		return myFlow, evict
 	}
 	var timeDelta flow.Timestamp
-	if timeNow > aggRecord.FlowEndTime {
-		timeDelta = timeNow - aggRecord.FlowEndTime
-	} else {
-		timeDelta = aggRecord.FlowEndTime - timeNow
-	}
+	timeNow := flow.Timestamp(monotime.Now())
+	timeDelta = timeNow - aggRecord.FlowEndTime
 	if timeDelta > evictionTimeout {
 		evict = true
 	}
 	if evict {
 		myFlow = makeRecord(mapKey, aggRecord)
-		computeFlowTime(myFlow, timeDelta)
+		computeFlowTime(myFlow)
 	}
 	return myFlow, evict
 }
@@ -421,7 +422,6 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 			var mapEntries = 0
 			// Check Egress Map
 			var entriesAvail = true
-			timeNow := flow.Timestamp(monotime.Now())
 			for entriesAvail {
 				var mapKey recordKey
 				var mapValues []recordValue
@@ -441,14 +441,14 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout))
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
 					myFlow.Interface = m.interfaceName
 					forwardFlows <- myFlow
 					totalCollisions += len(collidedRecords)
 					for _, colrecValue := range collidedRecords {
-						colRecord := ConvertToRecord(&colrecValue, timeNow, m.interfaceName)
+						colRecord := ConvertToRecord(&colrecValue, m.interfaceName)
 						tlog.WithFields(logrus.Fields{
 							"collidedRecords": colRecord,
 						}).Debug("Collided Record")
@@ -482,7 +482,6 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 		default:
 			ingressMapIterator := m.objects.XflowMetricMapIngress.Iterate()
 			var mapEntries = 0
-			timeNow := flow.Timestamp(monotime.Now())
 			// Check Ingress Map
 			var entriesAvail = true
 			for entriesAvail {
@@ -496,7 +495,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 				aggRecord, collidedRecords := m.aggregateValues(mapKey, mapValues)
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout), timeNow)
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout))
 
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
@@ -504,7 +503,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 					forwardFlows <- myFlow
 					totalCollisions += len(collidedRecords)
 					for _, colrecValue := range collidedRecords {
-						colRecord := ConvertToRecord(&colrecValue, timeNow, m.interfaceName)
+						colRecord := ConvertToRecord(&colrecValue, m.interfaceName)
 						forwardFlows <- colRecord
 					}
 				}
@@ -524,6 +523,9 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	initResetMapEntries()
+	// Initialize reference time which will be used to calculate FlowStartTime and FlowEndTime
+	realStartTime = time.Now()
+	monoStartTime = flow.Timestamp(monotime.Now())
 	go func() {
 		<-ctx.Done()
 		// m.flows.Read is a blocking operation, so we need to close the ring buffer
