@@ -38,8 +38,8 @@ type Flows struct {
 // flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
 type flowTracer interface {
 	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
-	MonitorIngress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record)
-	MonitorEgress(ctx context.Context, evictionTimeout uint64, forwardFlows chan<- *flow.Record)
+	MonitorIngress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record)
+	MonitorEgress(ctx context.Context, evictionTimeout time.Duration, forwardFlows chan<- *flow.Record)
 	Register() error
 	Unregister() error
 }
