@@ -296,7 +296,7 @@ func ConvertToRecord(mapValue *recordValue, interfaceName string) *flow.Record {
 
 // Computes the real clock time from eBPF CLOCK_MONOTONIC timestamps
 func computeFlowTime(myFlow *flow.Record) {
-	monoDeltaStart :=flow.Timestamp(0)
+	monoDeltaStart := flow.Timestamp(0)
 	monoDeltaEnd := myFlow.FlowEndTime - monoStartTime
 
 	if myFlow.FlowStartTime != 0 {
@@ -310,7 +310,7 @@ func computeFlowTime(myFlow *flow.Record) {
 }
 
 // Eviction logic based on timeout of last seen packet of a flow
-func  evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp) (*flow.Record, bool) {
+func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp) (*flow.Record, bool) {
 	var myFlow *flow.Record
 	evict := false
 	// Logic 1:
