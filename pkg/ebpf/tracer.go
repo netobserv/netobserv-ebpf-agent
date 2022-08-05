@@ -320,7 +320,7 @@ func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeou
 	var timeDelta flow.Timestamp
 	timeNow := flow.Timestamp(monotime.Now())
 	timeDelta = timeNow - aggRecord.FlowEndTime
-	if timeDelta > evictionTimeout {
+	if timeDelta > flow.Timestamp(evictionTimeout.Nanoseconds()) {
 		evict = true
 	}
 	if evict {
