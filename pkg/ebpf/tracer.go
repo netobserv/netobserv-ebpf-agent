@@ -210,19 +210,24 @@ func (m *FlowTracer) Unregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
-func (m *FlowTracer) aggregate(records []recordValue) recordValue {
+func (m *FlowTracer) aggregate(mapKey recordKey, records []recordValue) recordValue {
 	if len(records) == 0 {
 		log.Warn("invoked aggregate with no values")
 		return recordValue{}
 	}
-	aggr := records[0]
-	for i := range records[1:] {
+	aggr := recordValue{recordKey: mapKey}
+	for i := range records {
+		// a zero-valued recordValue in a given array slot means that no record has been processed
+		// by this given CPU. We just ignore it
+		if records[i].FlowStartTime == 0 {
+			continue
+		}
 		aggr.Packets += records[i].Packets
 		aggr.Bytes += records[i].Bytes
-		if aggr.FlowStartTime > records[i].FlowStartTime {
+		if aggr.FlowStartTime == 0 || aggr.FlowStartTime > records[i].FlowStartTime {
 			aggr.FlowStartTime = records[i].FlowStartTime
 		}
-		if aggr.FlowEndTime < records[i].FlowEndTime {
+		if aggr.FlowEndTime == 0 || aggr.FlowEndTime < records[i].FlowEndTime {
 			aggr.FlowEndTime = records[i].FlowEndTime
 		}
 	}
@@ -232,22 +237,22 @@ func (m *FlowTracer) aggregate(records []recordValue) recordValue {
 // Converts a recordValue to flow.Record
 func ConvertToRecord(mapValue recordValue, currentTime time.Time, monotonicCurrentTime flow.Timestamp, interfaceName string) *flow.Record {
 	var myFlow flow.Record
+	myFlow.Protocol = mapValue.Transport.Protocol
 	myFlow.EthProtocol = mapValue.Protocol
 	myFlow.Direction = mapValue.Direction
 	myFlow.DataLink = mapValue.DataLink
 	myFlow.Network = mapValue.Network
 	myFlow.Transport = mapValue.Transport
 
+	// TODO: dedupe
 	myFlow.FlowStartTime = mapValue.FlowStartTime
 	myFlow.FlowEndTime = mapValue.FlowEndTime
 	myFlow.Interface = interfaceName
 	myFlow.Packets = mapValue.Packets
 	myFlow.Bytes = mapValue.Bytes
-	// TODO: set system time in BPF, because monotonic time is not needed anymore
+
 	timeDelta := monotonicCurrentTime - mapValue.FlowEndTime
-	// TimeFlowEnd = currentTime - (Duration)timeDelta
 	myFlow.TimeFlowEnd = currentTime.Add(time.Duration(-timeDelta))
-	// TimeFlowStart = TimeFlowEnd - (Duration)(FlowEndTime - FlowStartTime)
 	flowDuration := flow.Timestamp(0)
 	if myFlow.FlowStartTime != 0 {
 		flowDuration = myFlow.FlowEndTime - myFlow.FlowStartTime
@@ -297,7 +302,7 @@ func (m *FlowTracer) monitor(ctx context.Context, flowMap *ebpf.Map, forwardFlow
 				}
 				flowCount++
 				forwardFlows <- ConvertToRecord(
-					m.aggregate(mapValues),
+					m.aggregate(mapKey, mapValues),
 					currentTime,
 					monotonicTimeNow,
 					m.interfaceName,

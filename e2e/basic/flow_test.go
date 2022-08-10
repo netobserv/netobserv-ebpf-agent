@@ -90,13 +90,17 @@ func TestSinglePacketFlows(t *testing.T) {
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
 			for pktLen := 50; pktLen <= 200; pktLen++ {
-				logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
+				// avoid sending the ping flow in the same millisecond the previous flow has
+				// been processed (very unlike, but possible)
+				time.Sleep(time.Millisecond)
+				logrus.WithField("destinationIP", serverPodIP).Debug("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
 					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
 				require.NoError(t, err)
-				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Info("ping sent")
+				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Debug("ping sent")
 
 				sent, recv := getPingFlows(t, latestFlowMS)
+				latestFlowMS = asTime(recv["TimeFlowEndMs"])
 
 				assert.Equal(t, pingerIP, sent["SrcAddr"])
 				assert.Equal(t, serverPodIP, sent["DstAddr"])
@@ -107,7 +111,13 @@ func TestSinglePacketFlows(t *testing.T) {
 				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, recv["Bytes"])
 				assert.EqualValues(t, 1, recv["Packets"])
 
-				latestFlowMS = asTime(recv["TimeFlowEndMs"])
+				if t.Failed() {
+					logrus.Infof("latestFlowMS: %v (%v)", latestFlowMS.UnixMilli(),
+						recv["TimeFlowEndMs"])
+					logrus.Infof("sent: %#v", sent)
+					logrus.Infof("received: %#v", recv)
+				}
+
 			}
 
 			return ctx
@@ -116,7 +126,7 @@ func TestSinglePacketFlows(t *testing.T) {
 }
 
 func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]interface{}) {
-	logrus.Info("Verifying that the request/return ICMP packets have been captured individually")
+	logrus.Debug("Verifying that the request/return ICMP packets have been captured individually")
 	var query *tester.LokiQueryResponse
 	var err error
 	test.Eventually(t, testTimeout, func(t require.TestingT) {

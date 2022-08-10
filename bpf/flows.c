@@ -54,6 +54,11 @@ struct {
     __uint(max_entries, 1 << 24);
 } flows SEC(".maps");
 
+// TODO: why not just having a single map and use "direction" as part of the key?
+// TODO: for the max entries limitation, check whether we can create the map in Go and then pin it
+//       here as a pointer
+// TODO: to save space and faster (de)serialization of map values, create a flow_metrics struct that do not store
+//        the flow identifier, as it is already the map key.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
@@ -209,6 +214,12 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->last_pkt_ts = current_time;
+        // TODO: insert/update
+        if (direction == INGRESS) {
+            bpf_map_update_elem(&xflow_metric_map_ingress, &id, aggregate_flow, BPF_EXIST);
+        } else {
+            bpf_map_update_elem(&xflow_metric_map_egress, &id, aggregate_flow, BPF_EXIST);
+        }
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_aggregate new_flow = {
@@ -239,31 +250,31 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         }
         // TODO: maybe better to verify first map size with bpf_obj_get_info_by_fd ?
         if (ret < 0) {
-            // Map is full
-            /*
-                When the map is full, we have two choices:
-                    1) Send the new flow entry to userspace via ringbuffer,
-                       until an entry is available.
-                    2) Send an existing flow entry (probably least recently used)
-                       to userspace via ringbuffer, delete that entry, and add in the
-                       new flow to the hash map.
-
-                Ofcourse, 2nd step involves more manipulations and
-                       state maintenance, and no guarantee if it will any performance benefit.
-                Hence, taking the first approach here to send the entry to userspace
-                and do nothing in the eBPF datapath and wait for userspace to create more space in the Map.
-
-            */
-            flow_metrics new_flow_counter = {
-                    .packets = 1, .bytes=skb->len};
-            new_flow_counter.last_pkt_ts = current_time;
-            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
-            if (!record) {
-                return rc;
-            }
-            record->id = id;
-            record->metrics = new_flow_counter;
-            bpf_ringbuf_submit(record, 0);
+//            // Map is full
+//            /*
+//                When the map is full, we have two choices:
+//                    1) Send the new flow entry to userspace via ringbuffer,
+//                       until an entry is available.
+//                    2) Send an existing flow entry (probably least recently used)
+//                       to userspace via ringbuffer, delete that entry, and add in the
+//                       new flow to the hash map.
+//
+//                Ofcourse, 2nd step involves more manipulations and
+//                       state maintenance, and no guarantee if it will any performance benefit.
+//                Hence, taking the first approach here to send the entry to userspace
+//                and do nothing in the eBPF datapath and wait for userspace to create more space in the Map.
+//
+//            */
+//            flow_metrics new_flow_counter = {
+//                    .packets = 1, .bytes=skb->len};
+//            new_flow_counter.last_pkt_ts = current_time;
+//            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
+//            if (!record) {
+//                return rc;
+//            }
+//            record->id = id;
+//            record->metrics = new_flow_counter;
+//            bpf_ringbuf_submit(record, 0);
         }
     }
     return rc;

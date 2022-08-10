@@ -57,8 +57,9 @@ type key struct {
 
 type rawRecord struct {
 	key
-	Pkts          uint32 // Packet count from eBPF datapath
-	Bytes         uint64
+	Pkts  uint32 // Packet count from eBPF datapath
+	Bytes uint64
+	// TODO: use time.Time
 	FlowStartTime Timestamp // Timestamps from eBPF (CLOCK_MONOTIC)
 	FlowEndTime   Timestamp
 	Flags         uint32 // Flags with some future space to highlight TCP states
@@ -67,6 +68,7 @@ type rawRecord struct {
 // Record contains accumulated metrics from a flow
 type Record struct {
 	rawRecord
+	// TODO: remove
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	Interface     string

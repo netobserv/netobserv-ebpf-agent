@@ -22,6 +22,7 @@ typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
 
+// TODO: unify flow_aggregate and flow_record_t, as they show the same information
 typedef struct flow_aggregate_t {
     // key info for validation and direct eviction
     u16 eth_protocol;
