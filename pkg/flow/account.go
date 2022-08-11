@@ -16,7 +16,7 @@ type Accounter struct {
 	maxEntries     int
 	evictBufferLen int
 	evictTimeout   time.Duration
-	entries        map[key]*Record
+	entries        map[RecordKey]*Record
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -28,13 +28,15 @@ func NewAccounter(maxEntries, evictBufferLen int, evictTimeout time.Duration) *A
 		maxEntries:     maxEntries,
 		evictBufferLen: evictBufferLen,
 		evictTimeout:   evictTimeout,
-		entries:        make(map[key]*Record, maxEntries),
+		entries:        make(map[RecordKey]*Record, maxEntries),
 	}
 }
 
 // Account runs in a new goroutine. It reads all the records from the input channel
 // and accumulate their metrics internally. Once the metrics have reached their max size
 // or the eviction times out, it evicts all the accumulated flows by the returned channel.
+// TODO: this intermediate accumulation is not needed anymore, or at most is only needed
+// by the moment, to the ringbuffer edge case.
 func (c *Accounter) Account(in <-chan *Record, out chan<- []*Record) {
 	evictTick := time.NewTicker(c.evictTimeout)
 	defer evictTick.Stop()
@@ -42,7 +44,7 @@ func (c *Accounter) Account(in <-chan *Record, out chan<- []*Record) {
 		select {
 		case <-evictTick.C:
 			evictingEntries := c.entries
-			c.entries = make(map[key]*Record, c.maxEntries)
+			c.entries = make(map[RecordKey]*Record, c.maxEntries)
 			go evict(evictingEntries, out)
 		case record, ok := <-in:
 			if !ok {
@@ -54,22 +56,22 @@ func (c *Accounter) Account(in <-chan *Record, out chan<- []*Record) {
 				alog.Debug("exiting account routine")
 				return
 			}
-			if stored, ok := c.entries[record.key]; ok {
-				stored.Accumulate(record)
+			if stored, ok := c.entries[record.RecordKey]; ok {
+				stored.Accumulate(&record.RecordMetrics)
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
-					c.entries = make(map[key]*Record, c.maxEntries)
+					c.entries = make(map[RecordKey]*Record, c.maxEntries)
 					go evict(evictingEntries, out)
 				}
-				c.entries[record.key] = record
+				c.entries[record.RecordKey] = record
 			}
 		}
 
 	}
 }
 
-func evict(entries map[key]*Record, evictor chan<- []*Record) {
+func evict(entries map[RecordKey]*Record, evictor chan<- []*Record) {
 	records := make([]*Record, 0, len(entries))
 	for _, record := range entries {
 		records = append(records, record)

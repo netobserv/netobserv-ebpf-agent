@@ -42,25 +42,6 @@ type FlowTracer struct {
 	flows           *ringbuf.Reader
 }
 
-// TODO: remove recordKey and recorValue and make it work with pkg/flow/Record and rawRecord
-type recordKey struct {
-	Protocol  uint16 `json:"Etype"`
-	Direction uint8  `json:"FlowDirection"`
-	DataLink  flow.DataLink
-	Network   flow.Network
-	Transport flow.Transport
-}
-
-type recordValue struct {
-	recordKey
-	Packets       uint32
-	Bytes         uint64
-	FlowStartTime flow.Timestamp
-	FlowEndTime   flow.Timestamp
-	Flags         uint32
-	// Flow ID Signature to verify
-}
-
 // NewFlowTracer fo a given interface type
 func NewFlowTracer(iface string, sampling uint32, evictionTimeout time.Duration) *FlowTracer {
 	log.WithField("iface", iface).Debug("Instantiating flow tracer")
@@ -210,69 +191,34 @@ func (m *FlowTracer) Unregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
-func (m *FlowTracer) aggregate(mapKey recordKey, records []recordValue) recordValue {
-	if len(records) == 0 {
+func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics {
+	if len(metrics) == 0 {
 		log.Warn("invoked aggregate with no values")
-		return recordValue{}
+		return flow.RecordMetrics{}
 	}
-	aggr := recordValue{recordKey: mapKey}
-	for i := range records {
+	aggr := flow.RecordMetrics{}
+	for i := range metrics {
 		// a zero-valued recordValue in a given array slot means that no record has been processed
 		// by this given CPU. We just ignore it
-		if records[i].FlowStartTime == 0 {
+		if metrics[i].StartMonoTimeNs == 0 {
 			continue
 		}
-		aggr.Packets += records[i].Packets
-		aggr.Bytes += records[i].Bytes
-		if aggr.FlowStartTime == 0 || aggr.FlowStartTime > records[i].FlowStartTime {
-			aggr.FlowStartTime = records[i].FlowStartTime
-		}
-		if aggr.FlowEndTime == 0 || aggr.FlowEndTime < records[i].FlowEndTime {
-			aggr.FlowEndTime = records[i].FlowEndTime
-		}
+		aggr.Accumulate(&metrics[i])
 	}
 	return aggr
 }
 
-// Converts a recordValue to flow.Record
-func ConvertToRecord(mapValue recordValue, currentTime time.Time, monotonicCurrentTime flow.Timestamp, interfaceName string) *flow.Record {
-	var myFlow flow.Record
-	myFlow.Protocol = mapValue.Transport.Protocol
-	myFlow.EthProtocol = mapValue.Protocol
-	myFlow.Direction = mapValue.Direction
-	myFlow.DataLink = mapValue.DataLink
-	myFlow.Network = mapValue.Network
-	myFlow.Transport = mapValue.Transport
-
-	// TODO: dedupe
-	myFlow.FlowStartTime = mapValue.FlowStartTime
-	myFlow.FlowEndTime = mapValue.FlowEndTime
-	myFlow.Interface = interfaceName
-	myFlow.Packets = mapValue.Packets
-	myFlow.Bytes = mapValue.Bytes
-
-	timeDelta := monotonicCurrentTime - mapValue.FlowEndTime
-	myFlow.TimeFlowEnd = currentTime.Add(time.Duration(-timeDelta))
-	flowDuration := flow.Timestamp(0)
-	if myFlow.FlowStartTime != 0 {
-		flowDuration = myFlow.FlowEndTime - myFlow.FlowStartTime
-	}
-	myFlow.TimeFlowStart = myFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
-	return &myFlow
-}
-
 // Monitor Egress Map to evict flows based on logic
-// TODO: this code is repeated to MonitorIngress
-func (m *FlowTracer) MonitorEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
-	m.monitor(ctx, m.objects.XflowMetricMapEgress, forwardFlows)
+func (m *FlowTracer) pollAndForwardEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	m.pollAndForward(ctx, m.objects.XflowMetricMapEgress, forwardFlows)
 }
 
 // Monitor Ingress Map to evict flows based on logic
-func (m *FlowTracer) MonitorIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
-	m.monitor(ctx, m.objects.XflowMetricMapIngress, forwardFlows)
+func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+	m.pollAndForward(ctx, m.objects.XflowMetricMapIngress, forwardFlows)
 }
 
-func (m *FlowTracer) monitor(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- *flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
@@ -287,10 +233,11 @@ func (m *FlowTracer) monitor(ctx context.Context, flowMap *ebpf.Map, forwardFlow
 		case <-ticker.C:
 			tlog.Debug("evicting flows")
 			mapIterator := flowMap.Iterate()
-			monotonicTimeNow := flow.Timestamp(monotime.Now())
+			// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
+			monotonicTimeNow := monotime.Now()
 			currentTime := time.Now()
-			var mapKey recordKey
-			var mapValues []recordValue
+			var mapKey flow.RecordKey
+			var mapValues []flow.RecordMetrics
 			flowCount := 0
 			for mapIterator.Next(&mapKey, &mapValues) {
 				// I fear an improbable race condition if the kernel space adds information in
@@ -301,10 +248,11 @@ func (m *FlowTracer) monitor(ctx context.Context, flowMap *ebpf.Map, forwardFlow
 						Warn("couldn't delete flow from map")
 				}
 				flowCount++
-				forwardFlows <- ConvertToRecord(
-					m.aggregate(mapKey, mapValues),
+				forwardFlows <- flow.NewRecord(
+					mapKey,
+					m.aggregate(mapValues),
 					currentTime,
-					monotonicTimeNow,
+					uint64(monotonicTimeNow),
 					m.interfaceName,
 				)
 			}
@@ -325,8 +273,8 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 			tlog.WithError(err).Warn("can't close ring buffer")
 		}
 	}()
-	go m.MonitorIngress(ctx, forwardFlows)
-	go m.MonitorEgress(ctx, forwardFlows)
+	go m.pollAndForwardIngress(ctx, forwardFlows)
+	go m.pollAndForwardEgress(ctx, forwardFlows)
 	for {
 		select {
 		case <-ctx.Done():
@@ -348,7 +296,6 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				tlog.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
-			// TODO: correct timeFlowStart/timeflowEnd
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			forwardFlows <- readFlow
 

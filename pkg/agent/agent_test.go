@@ -65,7 +65,6 @@ func TestFlowsAgent(t *testing.T) {
 		Interface:     "fake",
 		TimeFlowStart: firstFlowTime,
 		TimeFlowEnd:   firstFlowTime,
-		Packets:       1,
 	}
 	fr1.EthProtocol = 2048
 	fr1.Direction = 1 // egress
@@ -79,6 +78,7 @@ func TestFlowsAgent(t *testing.T) {
 	fr1.Transport.SrcPort = 456
 	fr1.Transport.DstPort = 789
 	fr1.Bytes = 1_234_000
+	fr1.Packets = 1
 
 	secondFlowTime := time.Date(2022, 03, 21, 16, 33, 17, 987_654_321, time.UTC)
 	fr2 := fr1

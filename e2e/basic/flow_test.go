@@ -89,10 +89,10 @@ func TestSinglePacketFlows(t *testing.T) {
 
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
+			// TODO: to speedup this test, check whether we can increase the flush frequency
+			// or just reduce the number of iterations once we verify that the error causing this test
+			// to be flaki is eventually fixed
 			for pktLen := 50; pktLen <= 200; pktLen++ {
-				// avoid sending the ping flow in the same millisecond the previous flow has
-				// been processed (very unlike, but possible)
-				time.Sleep(time.Millisecond)
 				logrus.WithField("destinationIP", serverPodIP).Debug("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
 					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
@@ -100,7 +100,8 @@ func TestSinglePacketFlows(t *testing.T) {
 				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Debug("ping sent")
 
 				sent, recv := getPingFlows(t, latestFlowMS)
-				latestFlowMS = asTime(recv["TimeFlowEndMs"])
+				logrus.Debugf("ping request flow: %#v", sent)
+				logrus.Debugf("ping response flow: %#v", recv)
 
 				assert.Equal(t, pingerIP, sent["SrcAddr"])
 				assert.Equal(t, serverPodIP, sent["DstAddr"])
@@ -112,11 +113,11 @@ func TestSinglePacketFlows(t *testing.T) {
 				assert.EqualValues(t, 1, recv["Packets"])
 
 				if t.Failed() {
-					logrus.Infof("latestFlowMS: %v (%v)", latestFlowMS.UnixMilli(),
+					logrus.Infof("latestFlowMS: %v (vs received %d)", latestFlowMS.UnixMilli(),
 						recv["TimeFlowEndMs"])
-					logrus.Infof("sent: %#v", sent)
-					logrus.Infof("received: %#v", recv)
+					return ctx
 				}
+				latestFlowMS = asTime(recv["TimeFlowEndMs"])
 
 			}
 
