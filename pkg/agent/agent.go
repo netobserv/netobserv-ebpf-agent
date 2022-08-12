@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -31,7 +32,8 @@ type Flows struct {
 	interfaces ifaces.Informer
 	filter     interfaceFilter
 	// tracerFactory specifies how to instantiate flowTracer implementations
-	tracerFactory func(name string, sampling uint32, evictTimeout time.Duration) flowTracer
+	tracerFactory ebpf.FlowTracerFactory
+	tracerCloser  io.Closer
 	cfg           *Config
 }
 
@@ -120,16 +122,20 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
 
+	factory, factoryCloser, err := ebpf.NewFlowTracerFactory(cfg.Sampling, cfg.CacheActiveTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Flows{
-		tracers:    map[ifaces.Name]cancellableTracer{},
-		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
-		exporter:   exportFunc,
-		interfaces: informer,
-		filter:     filter,
-		tracerFactory: func(name string, sampling uint32, evictTimeout time.Duration) flowTracer {
-			return ebpf.NewFlowTracer(name, sampling, evictTimeout)
-		},
-		cfg: cfg,
+		tracers:       map[ifaces.Name]cancellableTracer{},
+		accounter:     flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
+		exporter:      exportFunc,
+		interfaces:    informer,
+		filter:        filter,
+		tracerFactory: factory,
+		tracerCloser:  factoryCloser,
+		cfg:           cfg,
 	}, nil
 }
 
@@ -177,6 +183,11 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, err
 				f.detachAllTracers()
 				slog.Debug("closing channel and exiting internal goroutine")
 				close(tracedRecords)
+				if f.tracerCloser != nil {
+					if err := f.tracerCloser.Close(); err != nil {
+						slog.WithError(err).Warn("couldn't close Flows' Tracer Factory")
+					}
+				}
 				return
 			case event := <-ifaceEvents:
 				slog.WithField("event", event).Debug("received event")
@@ -229,7 +240,7 @@ func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh 
 	defer f.trMutex.Unlock()
 	if _, ok := f.tracers[name]; !ok {
 		alog.WithField("name", name).Info("interface detected. Registering flow tracer")
-		tracer := f.tracerFactory(string(name), f.cfg.Sampling, f.cfg.CacheActiveTimeout)
+		tracer := f.tracerFactory(string(name))
 		if err := tracer.Register(); err != nil {
 			alog.WithField("interface", name).WithError(err).
 				Warn("can't register flow tracer. Ignoring")

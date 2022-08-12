@@ -35,8 +35,6 @@ func NewAccounter(maxEntries, evictBufferLen int, evictTimeout time.Duration) *A
 // Account runs in a new goroutine. It reads all the records from the input channel
 // and accumulate their metrics internally. Once the metrics have reached their max size
 // or the eviction times out, it evicts all the accumulated flows by the returned channel.
-// TODO: this intermediate accumulation is not needed anymore, or at most is only needed
-// by the moment, to the ringbuffer edge case.
 func (c *Accounter) Account(in <-chan *Record, out chan<- []*Record) {
 	evictTick := time.NewTicker(c.evictTimeout)
 	defer evictTick.Stop()

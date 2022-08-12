@@ -25,17 +25,39 @@ import (
 const (
 	qdiscType = "clsact"
 	// constants defined in flows.c as "volatile const"
-	constSampling = "sampling"
+	constSampling   = "sampling"
+	constIngressMap = "xflow_metric_map_ingress"
+	constEgressMap  = "xflow_metric_map_egressMap"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
+type FlowTracerFactory func(iface string) *FlowTracer
+
+func NewFlowTracerFactory(sampling uint32, evictionTimeout time.Duration) (FlowTracerFactory, io.Closer, error) {
+	objects := bpfObjects{}
+	spec, err := loadBpf()
+	if err != nil {
+		return nil, &objects, fmt.Errorf("loading BPF data: %w", err)
+	}
+	if err := spec.RewriteConstants(map[string]interface{}{
+		constSampling: sampling,
+	}); err != nil {
+		return nil, &objects, fmt.Errorf("rewriting BPF constants definition: %w", err)
+	}
+	if err := spec.LoadAndAssign(&objects, nil); err != nil {
+		return nil, &objects, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+	return func(iface string) *FlowTracer {
+		return NewFlowTracer(iface, &objects, evictionTimeout)
+	}, &objects, nil
+}
+
 // FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
 type FlowTracer struct {
 	interfaceName   string
-	sampling        uint32
 	evictionTimeout time.Duration
-	objects         bpfObjects
+	objects         *bpfObjects
 	qdisc           *netlink.GenericQdisc
 	egressFilter    *netlink.BpfFilter
 	ingressFilter   *netlink.BpfFilter
@@ -43,11 +65,11 @@ type FlowTracer struct {
 }
 
 // NewFlowTracer fo a given interface type
-func NewFlowTracer(iface string, sampling uint32, evictionTimeout time.Duration) *FlowTracer {
+func NewFlowTracer(iface string, objects *bpfObjects, evictionTimeout time.Duration) *FlowTracer {
 	log.WithField("iface", iface).Debug("Instantiating flow tracer")
 	return &FlowTracer{
 		interfaceName:   iface,
-		sampling:        sampling,
+		objects:         objects,
 		evictionTimeout: evictionTimeout,
 	}
 }
@@ -57,18 +79,6 @@ func NewFlowTracer(iface string, sampling uint32, evictionTimeout time.Duration)
 func (m *FlowTracer) Register() error {
 	ilog := log.WithField("iface", m.interfaceName)
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
-	spec, err := loadBpf()
-	if err != nil {
-		return fmt.Errorf("loading BPF data: %w", err)
-	}
-	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling: m.sampling,
-	}); err != nil {
-		return fmt.Errorf("rewriting BPF constants definition: %w", err)
-	}
-	if err := spec.LoadAndAssign(&m.objects, nil); err != nil {
-		return fmt.Errorf("loading and assigning BPF objects: %w", err)
-	}
 	ipvlan, err := netlink.LinkByName(m.interfaceName)
 	if err != nil {
 		return fmt.Errorf("failed to lookup ipvlan device %q: %w", m.interfaceName, err)
@@ -153,16 +163,11 @@ func (m *FlowTracer) Register() error {
 func (m *FlowTracer) Unregister() error {
 	tlog := log.WithField("iface", m.interfaceName)
 	var errs []error
-	doClose := func(o io.Closer) {
-		if o == nil {
-			return
-		}
-		if err := o.Close(); err != nil {
+	if m.flows != nil {
+		if err := m.flows.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	doClose(m.flows)
-	doClose(&m.objects)
 	if m.egressFilter != nil {
 		tlog.WithField("filter", m.egressFilter).Debug("deleting egress filter")
 		if err := netlink.FilterDel(m.egressFilter); err != nil {

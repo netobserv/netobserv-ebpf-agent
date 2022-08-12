@@ -68,6 +68,8 @@ struct {
 } xflow_metric_map_egress SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
+//volatile const void *xflow_metric_map_ingress = NULL;
+//volatile const void *xflow_metric_map_egress = NULL;
 volatile const u32 sampling = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
@@ -194,7 +196,6 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
-        // TODO: insert/update
         if (direction == INGRESS) {
             bpf_map_update_elem(&xflow_metric_map_ingress, &id, aggregate_flow, BPF_EXIST);
         } else {
