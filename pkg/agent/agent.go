@@ -113,7 +113,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				// timeout throttling
 				// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
 				BatchTimeout: time.Nanosecond,
-				BatchBytes:   cfg.KafkaBatchBytes,
+				BatchBytes:   int64(cfg.KafkaBatchBytes),
 				Async:        cfg.KafkaAsync,
 				Compression:  compression,
 			},
@@ -122,7 +122,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
 
-	factory, factoryCloser, err := ebpf.NewFlowTracerFactory(cfg.Sampling, cfg.CacheActiveTimeout)
+	factory, factoryCloser, err := ebpf.NewFlowTracerFactory(
+		cfg.Sampling, cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
 	if err != nil {
 		return nil, err
 	}

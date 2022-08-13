@@ -27,21 +27,25 @@ const (
 	// constants defined in flows.c as "volatile const"
 	constSampling   = "sampling"
 	constIngressMap = "xflow_metric_map_ingress"
-	constEgressMap  = "xflow_metric_map_egressMap"
+	constEgressMap  = "xflow_metric_map_egress"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
 type FlowTracerFactory func(iface string) *FlowTracer
 
-func NewFlowTracerFactory(sampling uint32, evictionTimeout time.Duration) (FlowTracerFactory, io.Closer, error) {
+func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Duration) (FlowTracerFactory, io.Closer, error) {
 	objects := bpfObjects{}
 	spec, err := loadBpf()
 	if err != nil {
 		return nil, &objects, fmt.Errorf("loading BPF data: %w", err)
 	}
+	// Resize maps according to user-provided configuration
+	spec.Maps[constIngressMap].MaxEntries = uint32(cacheMaxSize)
+	spec.Maps[constEgressMap].MaxEntries = uint32(cacheMaxSize)
+
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling: sampling,
+		constSampling: uint32(sampling),
 	}); err != nil {
 		return nil, &objects, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}

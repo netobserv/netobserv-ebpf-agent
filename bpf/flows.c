@@ -51,25 +51,20 @@ struct {
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 // The userspace will aggregate them into a single flow.
 // TODO: why not just having a single map and use "direction" as part of the key?
-// TODO: to allow configuring max entries, check whether we can create the map in Go and then pin it
-//       here as a pointer
+// max_entries value is defined at userspace according to user configuration
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
-    __uint(max_entries, INGRESS_MAX_ENTRIES);
 } xflow_metric_map_ingress SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
-    __uint(max_entries, EGRESS_MAX_ENTRIES);
 } xflow_metric_map_egress SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
-//volatile const void *xflow_metric_map_ingress = NULL;
-//volatile const void *xflow_metric_map_egress = NULL;
 volatile const u32 sampling = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};

@@ -5,9 +5,6 @@
 #define TC_ACT_SHOT 2
 #define IP_MAX_LEN 16
 
-#define INGRESS_MAX_ENTRIES 10000
-#define EGRESS_MAX_ENTRIES  10000
-
 typedef __u8 u8;
 typedef __u16 u16;
 typedef __u32 u32;

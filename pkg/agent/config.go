@@ -40,7 +40,7 @@ type Config struct {
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
 	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
-	Sampling uint32 `env:"SAMPLING" envDefault:"0"`
+	Sampling int `env:"SAMPLING" envDefault:"0"`
 	// ListenInterfaces specifies the mechanism used by the agent to listen for added or removed
 	// network interfaces. Accepted values are "watch" (default) or "poll".
 	// If the value is "watch", interfaces are traced immediately after they are created. This is
@@ -60,7 +60,7 @@ type Config struct {
 	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"100"`
 	// KafkaBatchBytes sets the limit of the maximum size of a request in bytes before being sent
 	// to a partition.
-	KafkaBatchBytes int64 `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
+	KafkaBatchBytes int `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
 	// KafkaAsync. If it's true, the message writing process will never block. It also means that
 	// errors are ignored since the caller will not receive the returned value.
 	KafkaAsync bool `env:"KAFKA_ASYNC" envDefault:"true"`
