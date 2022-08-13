@@ -162,7 +162,7 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
 }
 
 
-static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
+static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_map) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
@@ -179,23 +179,14 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
     id.direction = direction;
-    // TODO: pass map pointer as argument
-    flow_metrics *aggregate_flow;
-    if (direction == INGRESS) {
-        aggregate_flow = bpf_map_lookup_elem(&xflow_metric_map_ingress, &id);
-    } else {
-        aggregate_flow = bpf_map_lookup_elem(&xflow_metric_map_egress, &id);
-    }
 
+    flow_metrics *aggregate_flow = bpf_map_lookup_elem(flows_map, &id);
     if (aggregate_flow != NULL) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
-        if (direction == INGRESS) {
-            bpf_map_update_elem(&xflow_metric_map_ingress, &id, aggregate_flow, BPF_EXIST);
-        } else {
-            bpf_map_update_elem(&xflow_metric_map_egress, &id, aggregate_flow, BPF_EXIST);
-        }
+
+        bpf_map_update_elem(flows_map, &id, aggregate_flow, BPF_EXIST);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
@@ -205,12 +196,8 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
             .end_mono_time_ts = current_time,
         };
         
-        int ret;
-        if (direction == INGRESS) {
-            ret = bpf_map_update_elem(&xflow_metric_map_ingress, &id, &new_flow, BPF_NOEXIST);
-        } else {
-            ret = bpf_map_update_elem(&xflow_metric_map_egress, &id, &new_flow, BPF_NOEXIST);
-        }
+        int ret = bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST);
+
         // TODO: maybe better to verify first map size with bpf_obj_get_info_by_fd ?
         if (ret < 0) {
 //            // Map is full
@@ -245,11 +232,11 @@ static inline int flow_monitor (struct __sk_buff *skb, u8 direction) {
 }
 SEC("tc_ingress")
 int ingress_flow_parse (struct __sk_buff *skb) {
-    return flow_monitor(skb, INGRESS);
+    return flow_monitor(skb, INGRESS, &xflow_metric_map_ingress);
 }
 
 SEC("tc_egress")
 int egress_flow_parse (struct __sk_buff *skb) {
-    return flow_monitor(skb, EGRESS);
+    return flow_monitor(skb, EGRESS, &xflow_metric_map_egress);
 }
 char _license[] SEC("license") = "GPL";

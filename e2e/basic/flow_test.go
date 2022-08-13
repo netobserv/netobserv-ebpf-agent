@@ -135,7 +135,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 			Query(1, `{SrcK8S_OwnerName="pinger",DstK8S_OwnerName="server"}|="\"Proto\":1,"`) // Proto 1 == ICMP
 		require.NoError(t, err)
 		require.NotNil(t, query)
-		require.Len(t, query.Data.Result, 1)
+		require.NotEmpty(t, query.Data.Result)
 		if len(query.Data.Result) > 0 {
 			sent, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)

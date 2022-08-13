@@ -40,6 +40,7 @@ func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Durat
 	if err != nil {
 		return nil, &objects, fmt.Errorf("loading BPF data: %w", err)
 	}
+
 	// Resize maps according to user-provided configuration
 	spec.Maps[constIngressMap].MaxEntries = uint32(cacheMaxSize)
 	spec.Maps[constEgressMap].MaxEntries = uint32(cacheMaxSize)
