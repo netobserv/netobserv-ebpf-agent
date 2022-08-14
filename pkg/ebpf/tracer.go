@@ -32,9 +32,7 @@ const (
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
-type FlowTracerFactory func(iface string) *FlowTracer
-
-func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Duration) (FlowTracerFactory, io.Closer, error) {
+func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Duration) (func(string) *FlowTracer, io.Closer, error) {
 	objects := bpfObjects{}
 	spec, err := loadBpf()
 	if err != nil {

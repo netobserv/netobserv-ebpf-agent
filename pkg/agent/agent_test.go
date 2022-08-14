@@ -46,7 +46,7 @@ func TestFlowsAgent(t *testing.T) {
 	// replacing the real eBPF tracer by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(name string, sampling uint32, _ time.Duration) flowTracer {
+	flowsAgent.tracerFactory = func(iface string) flowTracer {
 		if ft != nil {
 			require.Fail(t, "flow tracer should have been instantiated only once")
 		}
@@ -143,7 +143,7 @@ func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
 	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(name string, sampling uint32, _ time.Duration) flowTracer {
+	flowsAgent.tracerFactory = func(name string) flowTracer {
 		ft = &fakeFlowTracer{tracedFlows: agentInput}
 		return ft
 	}

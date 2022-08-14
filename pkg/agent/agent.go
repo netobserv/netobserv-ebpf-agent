@@ -32,7 +32,7 @@ type Flows struct {
 	interfaces ifaces.Informer
 	filter     interfaceFilter
 	// tracerFactory specifies how to instantiate flowTracer implementations
-	tracerFactory ebpf.FlowTracerFactory
+	tracerFactory func(string) flowTracer
 	tracerCloser  io.Closer
 	cfg           *Config
 }
@@ -129,14 +129,16 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	return &Flows{
-		tracers:       map[ifaces.Name]cancellableTracer{},
-		accounter:     flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
-		exporter:      exportFunc,
-		interfaces:    informer,
-		filter:        filter,
-		tracerFactory: factory,
-		tracerCloser:  factoryCloser,
-		cfg:           cfg,
+		tracers:    map[ifaces.Name]cancellableTracer{},
+		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
+		exporter:   exportFunc,
+		interfaces: informer,
+		filter:     filter,
+		tracerFactory: func(iface string) flowTracer {
+			return factory(iface)
+		},
+		tracerCloser: factoryCloser,
+		cfg:          cfg,
 	}, nil
 }
 
