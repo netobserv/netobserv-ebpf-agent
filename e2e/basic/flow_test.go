@@ -89,7 +89,7 @@ func TestSinglePacketFlows(t *testing.T) {
 
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
-			for pktLen := 50; pktLen <= 60; pktLen++ {
+			for pktLen := 50; pktLen <= 200; pktLen++ {
 				logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
 					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
@@ -143,7 +143,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 			recv, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)
 			require.Less(t, newerThan.UnixMilli(),
-				asTime(sent["TimeFlowStartMs"]).UnixMilli())
+				asTime(recv["TimeFlowStartMs"]).UnixMilli())
 		}
 	}, test.Interval(time.Second))
 	return sent, recv

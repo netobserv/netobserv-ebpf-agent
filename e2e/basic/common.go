@@ -61,7 +61,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 
 			// For the values below, we just check that they have reasonable/safe values
 			assert.NotZero(t, flow["Bytes"])
-			assert.Less(t, flow["Bytes"], float64(600))
+			assert.Less(t, flow["Bytes"], float64(650))
 			assert.NotZero(t, flow["Packets"])
 			assert.Less(t, flow["Packets"], float64(10))
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
@@ -93,7 +93,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.EqualValues(t, 2048, flow["Etype"])
 
 			assert.NotZero(t, flow["Bytes"])
-			assert.Less(t, flow["Bytes"], float64(600))
+			assert.Less(t, flow["Bytes"], float64(650))
 			assert.NotZero(t, flow["Packets"])
 			assert.Less(t, flow["Packets"], float64(10))
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
