@@ -16,7 +16,6 @@ var MAXNS int64 = 1000000000
 const IPv6Type = 0x86DD
 
 type HumanBytes uint64
-type Timestamp uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 
@@ -57,11 +56,8 @@ type key struct {
 
 type rawRecord struct {
 	key
-	Pkts          uint32 // Packet count from eBPF datapath
-	Bytes         uint64
-	FlowStartTime Timestamp // Timestamps from eBPF (CLOCK_MONOTIC)
-	FlowEndTime   Timestamp
-	Flags         uint32 // Flags with some future space to highlight TCP states
+	Bytes uint64
+	Flags uint32 // Flags with some future space to highlight TCP states
 }
 
 // Record contains accumulated metrics from a flow
