@@ -29,9 +29,10 @@ const (
 	constSampling = "sampling"
 )
 
-const TCPFinFlag = 0x1
-const TCPRstFlag = 0x10
-const CollisionFlag = 0x100
+type Timestamp uint64
+
+const CollisionFlag = 0x1
+const MapfullFlag = 0x10
 
 const INGRESS = 0x0
 const EGRESS = 0x1
@@ -40,7 +41,7 @@ var log = logrus.WithField("component", "ebpf.FlowTracer")
 
 // Reference Timestamps to calculate actual flow start and end time
 var realStartTime time.Time
-var monoStartTime flow.Timestamp
+var monoStartTime Timestamp
 
 // FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
 type FlowTracer struct {
@@ -65,8 +66,8 @@ type recordValue struct {
 	recordKey
 	Packets       uint32
 	Bytes         uint64
-	FlowStartTime flow.Timestamp
-	FlowEndTime   flow.Timestamp
+	FlowStartTime Timestamp
+	FlowEndTime   Timestamp
 	Flags         uint32
 	// Flow ID Signature to verify
 }
@@ -75,6 +76,7 @@ var resetMapValues []recordValue
 
 var totalCollisions = 0
 var ebpfCollisions = 0
+var mapFulls = 0
 
 // NewFlowTracer fo a given interface type
 func NewFlowTracer(iface string, sampling uint32) *FlowTracer {
@@ -271,8 +273,7 @@ func makeRecord(mapKey recordKey, mapValue *recordValue) *flow.Record {
 	myFlow.Transport = mapKey.Transport
 	myFlow.Packets = mapValue.Packets
 	myFlow.Bytes = mapValue.Bytes
-	myFlow.FlowStartTime = mapValue.FlowStartTime
-	myFlow.FlowEndTime = mapValue.FlowEndTime
+	computeFlowTime(&myFlow, mapValue.FlowStartTime, mapValue.FlowEndTime)
 	return &myFlow
 }
 
@@ -284,23 +285,20 @@ func ConvertToRecord(mapValue *recordValue, interfaceName string) *flow.Record {
 	myFlow.DataLink = mapValue.DataLink
 	myFlow.Network = mapValue.Network
 	myFlow.Transport = mapValue.Transport
-
-	myFlow.FlowStartTime = mapValue.FlowStartTime
-	myFlow.FlowEndTime = mapValue.FlowEndTime
 	myFlow.Interface = interfaceName
 	myFlow.Packets = mapValue.Packets
 	myFlow.Bytes = mapValue.Bytes
-	computeFlowTime(&myFlow)
+	computeFlowTime(&myFlow, mapValue.FlowStartTime, mapValue.FlowEndTime)
 	return &myFlow
 }
 
 // Computes the real clock time from eBPF CLOCK_MONOTONIC timestamps
-func computeFlowTime(myFlow *flow.Record) {
-	monoDeltaStart :=flow.Timestamp(0)
-	monoDeltaEnd := myFlow.FlowEndTime - monoStartTime
+func computeFlowTime(myFlow *flow.Record, FlowStartTime Timestamp, FlowEndTime Timestamp) {
+	monoDeltaStart := Timestamp(0)
+	monoDeltaEnd := FlowEndTime - monoStartTime
 
-	if myFlow.FlowStartTime != 0 {
-		monoDeltaStart = myFlow.FlowStartTime - monoStartTime
+	if FlowStartTime != 0 {
+		monoDeltaStart = FlowStartTime - monoStartTime
 		myFlow.TimeFlowStart = realStartTime.Add(time.Duration(monoDeltaStart))
 	} else {
 		myFlow.TimeFlowStart = realStartTime.Add(time.Duration(monoDeltaEnd))
@@ -310,69 +308,23 @@ func computeFlowTime(myFlow *flow.Record) {
 }
 
 // Eviction logic based on timeout of last seen packet of a flow
-func  evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout flow.Timestamp) (*flow.Record, bool) {
+func evictInactiveFlows(mapKey recordKey, aggRecord *recordValue, evictionTimeout Timestamp) (*flow.Record, bool) {
 	var myFlow *flow.Record
 	evict := false
 	// Logic 1:
 	if aggRecord.FlowEndTime == 0 {
 		return myFlow, evict
 	}
-	var timeDelta flow.Timestamp
-	timeNow := flow.Timestamp(monotime.Now())
+	var timeDelta Timestamp
+	timeNow := Timestamp(monotime.Now())
 	timeDelta = timeNow - aggRecord.FlowEndTime
 	if timeDelta > evictionTimeout {
 		evict = true
 	}
 	if evict {
 		myFlow = makeRecord(mapKey, aggRecord)
-		computeFlowTime(myFlow)
 	}
 	return myFlow, evict
-}
-
-// Obtains individual values based on a flow-id from the Per-CPU Hash Map and aggregates them
-func (m *FlowTracer) aggregateEntries(mapKey recordKey) (recordValue, []recordValue, error) {
-	var err error
-	var mapValues []recordValue
-
-	if mapKey.Direction == EGRESS {
-		// Get the individual map values from Egress per-cpu hash
-		if err = m.objects.XflowMetricMapEgress.Lookup(mapKey, &mapValues); err != nil {
-			return recordValue{}, mapValues, err
-		}
-	} else {
-		// Get the individual map values from Ingress per-cpu hash
-		if err = m.objects.XflowMetricMapIngress.Lookup(mapKey, &mapValues); err != nil {
-			return recordValue{}, mapValues, err
-		}
-	}
-	m.resetEntriesAndDelete(mapKey)
-
-	aggRecord, collidedRecords := m.aggregateValues(mapKey, mapValues)
-
-	return aggRecord, collidedRecords, nil
-}
-
-// Scrubs a particular flow-id to be sent to accounter
-func (m *FlowTracer) scrubFlow(readFlow *flow.Record) error {
-	mapKey := recordKey{Protocol: readFlow.EthProtocol,
-		Direction: readFlow.Direction,
-		DataLink:  readFlow.DataLink,
-		Network:   readFlow.Network,
-		Transport: readFlow.Transport}
-
-	aggRecord, collidedRecords, err := m.aggregateEntries(mapKey)
-	totalCollisions += len(collidedRecords)
-	if err == nil {
-		// Modify the readFlow record which was the evicted entry from the hash map
-		readFlow.Packets += aggRecord.Packets
-		readFlow.Bytes += aggRecord.Bytes
-		readFlow.FlowStartTime = aggRecord.FlowStartTime
-		readFlow.FlowEndTime = aggRecord.FlowEndTime
-		flowDuration := aggRecord.FlowEndTime - aggRecord.FlowStartTime
-		readFlow.TimeFlowStart = readFlow.TimeFlowEnd.Add(time.Duration(-flowDuration))
-	}
-	return err
 }
 
 func initResetMapEntries() {
@@ -441,7 +393,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout))
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, Timestamp(evictionTimeout))
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
 					myFlow.Interface = m.interfaceName
@@ -462,6 +414,7 @@ func (m *FlowTracer) MonitorEgress(ctx context.Context, evictionTimeout uint64, 
 				"Entries":        mapEntries,
 				"Collisions":     totalCollisions,
 				"ebpfCollisions": ebpfCollisions,
+				"Mapfulls":       mapFulls,
 			}).Debug("Egress Map")
 			time.Sleep(1 * time.Second)
 		}
@@ -495,7 +448,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 				aggRecord, collidedRecords := m.aggregateValues(mapKey, mapValues)
 				// Logic 1:
 				// Evict if a flow has not seen any packet for the last "EvictionTimeout" seconds
-				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, flow.Timestamp(evictionTimeout))
+				myFlow, evict := evictInactiveFlows(mapKey, &aggRecord, Timestamp(evictionTimeout))
 
 				if evict {
 					m.resetEntriesAndDelete(mapKey)
@@ -513,6 +466,7 @@ func (m *FlowTracer) MonitorIngress(ctx context.Context, evictionTimeout uint64,
 				"Entries":        mapEntries,
 				"Collisions":     totalCollisions,
 				"ebpfCollisions": ebpfCollisions,
+				"Mapfulls":       mapFulls,
 			}).Debug("Ingress Map")
 			time.Sleep(1 * time.Second)
 		}
@@ -525,7 +479,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 	initResetMapEntries()
 	// Initialize reference time which will be used to calculate FlowStartTime and FlowEndTime
 	realStartTime = time.Now()
-	monoStartTime = flow.Timestamp(monotime.Now())
+	monoStartTime = Timestamp(monotime.Now())
 	go func() {
 		<-ctx.Done()
 		// m.flows.Read is a blocking operation, so we need to close the ring buffer
@@ -558,42 +512,20 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				continue
 			}
 
-			//  Upon an entry regarding the flow from ringbuffer, there are two possibilities:
-			// 	1) TCP FIN Packet :
-			// 		In this case, perfom eviction of this flow from ingress and
-			// 		egress maps, and interim map in the userspace.
-			// 	2) Normal Packet coming to userspace because of insufficient space in the map:
-			// 		Send this packet to accounter without further action
-
 			readFlow.Interface = m.interfaceName
 			now := time.Now()
-			if ((readFlow.Flags & TCPFinFlag) == TCPFinFlag) || ((readFlow.Flags & TCPRstFlag) == TCPRstFlag) {
 
-				// If we receive a FIN packet from the ring buffer, we need to perform the following:
-				//	1) Check the direction of record : 1 for Egress, and 0 for Ingress
-				//	2) Lookup and delete the key in the corresponding Map (e.g. egress), and send the record upwards
-				//	3) Optional : Reverse the key and lookup and delete the other direction's Map (ingress now), and send the record upwards.
-				//     This is not needed as you get ACK eitherwise.
-
-				readFlow.TimeFlowEnd = now
-				// TimeFlowStart is computed after scrubbing the flow from Per-CPU Hash Map
-
-				err := m.scrubFlow(readFlow)
-				if err != nil {
-					tlog.Debug("scrubFlow did not happen! (possbibly nothing else remaining in the map (Multiple RST packets))")
-					continue
-				}
-			} else {
-				// Packet Records that came here due to hash collisions or a fully occupied map.
-				readFlow.Packets = 1
-				readFlow.TimeFlowStart = now
-				readFlow.TimeFlowEnd = now
-				readFlow.Interface = m.interfaceName
-				if readFlow.Flags == CollisionFlag {
-					ebpfCollisions++
-				}
+			// Packet Records that came here due to hash collisions or a fully occupied map.
+			readFlow.Packets = 1
+			readFlow.TimeFlowStart = now
+			readFlow.TimeFlowEnd = now
+			readFlow.Interface = m.interfaceName
+			if readFlow.Flags == CollisionFlag {
+				ebpfCollisions++
 			}
-
+			if readFlow.Flags == MapfullFlag {
+				mapFulls++
+			}
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			forwardFlows <- readFlow
 
