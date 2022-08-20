@@ -196,35 +196,20 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
             .end_mono_time_ts = current_time,
         };
         
-        int ret = bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST);
-
-        // TODO: maybe better to verify first map size with bpf_obj_get_info_by_fd ?
-        if (ret < 0) {
-//            // Map is full
-//            /*
-//                When the map is full, we have two choices:
-//                    1) Send the new flow entry to userspace via ringbuffer,
-//                       until an entry is available.
-//                    2) Send an existing flow entry (probably least recently used)
-//                       to userspace via ringbuffer, delete that entry, and add in the
-//                       new flow to the hash map.
-//
-//                Ofcourse, 2nd step involves more manipulations and
-//                       state maintenance, and no guarantee if it will any performance benefit.
-//                Hence, taking the first approach here to send the entry to userspace
-//                and do nothing in the eBPF datapath and wait for userspace to create more space in the Map.
-//
-//            */
-//            flow_metrics new_flow_counter = {
-//                    .packets = 1, .bytes=skb->len};
-//            new_flow_counter.end_mono_time_ts = current_time;
-//            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
-//            if (!record) {
-//                return rc;
-//            }
-//            record->id = id;
-//            record->metrics = new_flow_counter;
-//            bpf_ringbuf_submit(record, 0);
+        if (bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST) < 0) {
+            /*
+                When the map is full, we send the new flow entry to userspace via ringbuffer,
+                until an entry is available.
+                TODO: to avoid two communication channels, we could just trigger the eviction of the hashmap
+                when it reaches e.g. 90% of its size, and remove this ringbuffer.
+            */
+            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
+            if (!record) {
+                return rc;
+            }
+            record->id = id;
+            record->metrics = new_flow;
+            bpf_ringbuf_submit(record, 0);
         }
     }
     return rc;
