@@ -37,9 +37,9 @@ typedef struct flow_id_t {
     u8 transport_protocol;
 } __attribute__((packed)) flow_id;
 
-// Flow record is the typical information sent from eBPF to userspace
-// It is used to send a single packet record via ringbuffer
-// contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
+// Flow record is a tuple containing both flow identifier and metrics. It is used to send
+// a complete flow via ring buffer when only when the accounting hashmap is full.
+// Contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
 typedef struct flow_record_t {
     flow_id id;
     flow_metrics metrics;

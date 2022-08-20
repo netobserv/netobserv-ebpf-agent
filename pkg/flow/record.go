@@ -65,14 +65,14 @@ type RecordMetrics struct {
 // record structure as parsed from eBPF
 // it's important to emphasize that the fields in this structure have to coincide,
 // byte by byte, with the flow_record_t structure in the bpf/flow.h file
-type rawRecord struct {
+type RawRecord struct {
 	RecordKey
 	RecordMetrics
 }
 
 // Record contains accumulated metrics from a flow
 type Record struct {
-	rawRecord
+	RawRecord
 	// TODO: redundant field from RecordMetrics. Reorganize structs
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
@@ -89,7 +89,7 @@ func NewRecord(
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeNs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeNs)
 	return &Record{
-		rawRecord: rawRecord{
+		RawRecord: RawRecord{
 			RecordKey:     key,
 			RecordMetrics: metrics,
 		},
@@ -136,8 +136,8 @@ func (m *MacAddr) MarshalJSON() ([]byte, error) {
 }
 
 // ReadFrom reads a Record from a binary source, in LittleEndian order
-func ReadFrom(reader io.Reader) (*Record, error) {
-	var fr rawRecord
+func ReadFrom(reader io.Reader) (*RawRecord, error) {
+	var fr RawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
-	return &Record{rawRecord: fr}, err
+	return &fr, err
 }

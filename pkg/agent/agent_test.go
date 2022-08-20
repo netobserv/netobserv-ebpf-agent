@@ -30,7 +30,6 @@ func TestFlowsAgent(t *testing.T) {
 		Export:             "grpc",
 		TargetHost:         "127.0.0.1",
 		TargetPort:         port,
-		CacheMaxFlows:      1,
 		ExcludeInterfaces:  []string{"ignored"},
 		CacheActiveTimeout: 5 * time.Second,
 		BuffersLength:      10,
@@ -61,10 +60,11 @@ func TestFlowsAgent(t *testing.T) {
 	}()
 
 	firstFlowTime := time.Date(2022, 03, 21, 16, 33, 12, 123_456_789, time.UTC)
+	secondFlowTime := time.Date(2022, 03, 21, 16, 33, 17, 987_654_321, time.UTC)
 	fr1 := flow.Record{
 		Interface:     "fake",
 		TimeFlowStart: firstFlowTime,
-		TimeFlowEnd:   firstFlowTime,
+		TimeFlowEnd:   secondFlowTime,
 	}
 	fr1.EthProtocol = 2048
 	fr1.Direction = 1 // egress
@@ -80,18 +80,10 @@ func TestFlowsAgent(t *testing.T) {
 	fr1.Bytes = 1_234_000
 	fr1.Packets = 1
 
-	secondFlowTime := time.Date(2022, 03, 21, 16, 33, 17, 987_654_321, time.UTC)
-	fr2 := fr1
-	fr2.Bytes = 567
-	fr2.TimeFlowStart = secondFlowTime
-	fr2.TimeFlowEnd = secondFlowTime
-
-	// WHEN new flows are traced
+	// WHEN new flow us traced
 	agentInput <- &fr1
-	agentInput <- &fr2
-	agentInput <- &flow.Record{} // forces eviction
 
-	// THEN the flows are aggregated and forwarded to the remote collector
+	// THEN the flows is forwarded to the remote collector
 	var rs *pbflow.Records
 	select {
 	case rs = <-collectedRecords:
@@ -202,11 +194,11 @@ type fakeFlowTracer struct {
 	tracedFlows      <-chan *flow.Record
 }
 
-func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	for {
 		select {
 		case f := <-ft.tracedFlows:
-			forwardFlows <- f
+			forwardFlows <- []*flow.Record{f}
 		case <-ctx.Done():
 			ft.contextCanceled = true
 		}

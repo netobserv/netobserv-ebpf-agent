@@ -32,7 +32,7 @@ const (
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
-func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Duration) (func(string) *FlowTracer, io.Closer, error) {
+func NewFlowTracerFactory(sampling, cacheMaxSize, buffersLength int, evictionTimeout time.Duration) (func(string) *FlowTracer, io.Closer, error) {
 	objects := bpfObjects{}
 	spec, err := loadBpf()
 	if err != nil {
@@ -52,7 +52,7 @@ func NewFlowTracerFactory(sampling, cacheMaxSize int, evictionTimeout time.Durat
 		return nil, &objects, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
 	return func(iface string) *FlowTracer {
-		return NewFlowTracer(iface, &objects, evictionTimeout)
+		return NewFlowTracer(iface, &objects, cacheMaxSize, buffersLength, evictionTimeout)
 	}, &objects, nil
 }
 
@@ -65,15 +65,25 @@ type FlowTracer struct {
 	egressFilter    *netlink.BpfFilter
 	ingressFilter   *netlink.BpfFilter
 	flows           *ringbuf.Reader
+	buffersLength   int
+	accounter       *flow.Accounter
 }
 
 // NewFlowTracer fo a given interface type
-func NewFlowTracer(iface string, objects *bpfObjects, evictionTimeout time.Duration) *FlowTracer {
+func NewFlowTracer(
+	iface string,
+	objects *bpfObjects,
+	cacheMaxFlows, buffersLength int,
+	evictionTimeout time.Duration,
+) *FlowTracer {
 	log.WithField("iface", iface).Debug("Instantiating flow tracer")
+
 	return &FlowTracer{
 		interfaceName:   iface,
 		objects:         objects,
 		evictionTimeout: evictionTimeout,
+		buffersLength:   buffersLength,
+		accounter:       flow.NewAccounter(iface, cacheMaxFlows, evictionTimeout),
 	}
 }
 
@@ -217,21 +227,22 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 }
 
 // Monitor Egress Map to evict flows based on logic
-func (m *FlowTracer) pollAndForwardEgress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) pollAndForwardEgress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	m.pollAndForward(ctx, m.objects.XflowMetricMapEgress, forwardFlows)
 }
 
 // Monitor Ingress Map to evict flows based on logic
-func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	m.pollAndForward(ctx, m.objects.XflowMetricMapIngress, forwardFlows)
 }
 
-func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- []*flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
 	}()
 	ticker := time.NewTicker(m.evictionTimeout)
+	lastIterationFlowCount := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -240,13 +251,18 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 			return
 		case <-ticker.C:
 			tlog.Debug("evicting flows")
-			mapIterator := flowMap.Iterate()
 			// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 			monotonicTimeNow := monotime.Now()
 			currentTime := time.Now()
+
+			// dimension flows' slice to minimize slice resizings, assuming each iteration
+			// will probably have a similar number of flows
+			forwardingFlows := make([]*flow.Record, 0, lastIterationFlowCount)
+			lastIterationFlowCount = 0
+
 			var mapKey flow.RecordKey
 			var mapValues []flow.RecordMetrics
-			flowCount := 0
+			mapIterator := flowMap.Iterate()
 			for mapIterator.Next(&mapKey, &mapValues) {
 				// I fear an improbable race condition if the kernel space adds information in
 				// the lapse between getting and deleting the map entry
@@ -255,22 +271,27 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 					tlog.WithError(err).WithField("flowRecord", mapKey).
 						Warn("couldn't delete flow from map")
 				}
-				flowCount++
-				forwardFlows <- flow.NewRecord(
+				forwardingFlows = append(forwardingFlows, flow.NewRecord(
 					mapKey,
 					m.aggregate(mapValues),
 					currentTime,
 					uint64(monotonicTimeNow),
 					m.interfaceName,
-				)
+				))
 			}
-			tlog.WithField("count", flowCount).Debug("flows evicted")
+			lastIterationFlowCount = len(forwardingFlows)
+			if lastIterationFlowCount == 0 {
+				log.Debug("no flows to forward")
+			} else {
+				forwardFlows <- forwardingFlows
+				tlog.WithField("count", lastIterationFlowCount).Debug("flows evicted")
+			}
 		}
 	}
 }
 
 // Trace and forward the read flows until the passed context is Done
-func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record) {
+func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
@@ -283,6 +304,13 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 	}()
 	go m.pollAndForwardIngress(ctx, forwardFlows)
 	go m.pollAndForwardEgress(ctx, forwardFlows)
+	m.pollAndForwardRingbuffer(ctx, forwardFlows)
+}
+
+func (m *FlowTracer) pollAndForwardRingbuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
+	tlog := log.WithField("iface", m.interfaceName)
+	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
+	go m.accounter.Account(flowAccount, forwardFlows)
 	for {
 		select {
 		case <-ctx.Done():
@@ -305,8 +333,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- *flow.Record
 				continue
 			}
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
-			forwardFlows <- readFlow
-
+			flowAccount <- readFlow
 		}
 	}
 }

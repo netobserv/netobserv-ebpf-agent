@@ -27,7 +27,6 @@ type Flows struct {
 	// tracers stores a flowTracer implementation for each interface in the system, with a
 	// cancel function that allows stopping it when its interface is deleted
 	tracers    map[ifaces.Name]cancellableTracer
-	accounter  *flow.Accounter
 	exporter   flowExporter
 	interfaces ifaces.Informer
 	filter     interfaceFilter
@@ -39,7 +38,7 @@ type Flows struct {
 
 // flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
 type flowTracer interface {
-	Trace(ctx context.Context, forwardFlows chan<- *flow.Record)
+	Trace(ctx context.Context, forwardFlows chan<- []*flow.Record)
 	Register() error
 	Unregister() error
 }
@@ -123,14 +122,13 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	factory, factoryCloser, err := ebpf.NewFlowTracerFactory(
-		cfg.Sampling, cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
+		cfg.Sampling, cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Flows{
 		tracers:    map[ifaces.Name]cancellableTracer{},
-		accounter:  flow.NewAccounter(cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout),
 		exporter:   exportFunc,
 		interfaces: informer,
 		filter:     filter,
@@ -168,7 +166,7 @@ func (f *Flows) Run(ctx context.Context) error {
 
 // interfacesManager uses an informer to check new/deleted network interfaces. For each running
 // interface, it registers a flow tracer that will forward new flows to the returned channel
-func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, error) {
+func (f *Flows) interfacesManager(ctx context.Context) (<-chan []*flow.Record, error) {
 	slog := alog.WithField("function", "interfacesManager")
 
 	slog.Debug("subscribing for network interface events")
@@ -177,7 +175,7 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, err
 		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 
-	tracedRecords := make(chan *flow.Record, f.cfg.BuffersLength)
+	tracedRecords := make(chan []*flow.Record, f.cfg.BuffersLength)
 	go func() {
 		for {
 			select {
@@ -210,29 +208,26 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan *flow.Record, err
 }
 
 // processRecords creates the tracers --> accounter --> forwarder Flow processing graph
-func (f *Flows) processRecords(tracedRecords <-chan *flow.Record) *node.Terminal {
+func (f *Flows) processRecords(tracedRecords <-chan []*flow.Record) *node.Terminal {
 	// The start node receives Records from the eBPF flow tracers. Currently it is just an external
 	// channel forwarder, as the Pipes library does not yet accept
 	// adding/removing nodes dynamically: https://github.com/mariomac/pipes/issues/5
 	alog.Debug("registering tracers' input")
-	tracersCollector := node.AsInit(func(out chan<- *flow.Record) {
+	tracersCollector := node.AsInit(func(out chan<- []*flow.Record) {
 		for i := range tracedRecords {
 			out <- i
 		}
 	})
-	alog.Debug("registering accounter")
-	accounter := node.AsMiddle(f.accounter.Account)
 	alog.Debug("registering exporter")
 	export := node.AsTerminal(f.exporter)
 	alog.Debug("connecting graph")
-	tracersCollector.SendsTo(accounter)
-	accounter.SendsTo(export)
+	tracersCollector.SendsTo(export)
 	alog.Debug("starting graph")
 	tracersCollector.Start()
 	return export
 }
 
-func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh chan *flow.Record) {
+func (f *Flows) onInterfaceAdded(ctx context.Context, name ifaces.Name, flowsCh chan []*flow.Record) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	if !f.filter.Allowed(name) {
 		alog.WithField("name", name).
