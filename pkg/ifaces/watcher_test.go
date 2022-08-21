@@ -18,8 +18,8 @@ func TestWatcher(t *testing.T) {
 
 	watcher := NewWatcher(10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
-	watcher.interfaces = func() ([]Name, error) {
-		return []Name{"foo", "bar", "baz"}, nil
+	watcher.interfaces = func() ([]Interface, error) {
+		return []Interface{{"foo", 1}, {"bar", 2}, {"baz", 3}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
@@ -35,22 +35,32 @@ func TestWatcher(t *testing.T) {
 	require.NoError(t, err)
 
 	// initial set of fetched elements
-	assert.Equal(t, Event{Type: EventAdded, Interface: "foo"}, getEvent(t, outputEvents, timeout))
-	assert.Equal(t, Event{Type: EventAdded, Interface: "bar"}, getEvent(t, outputEvents, timeout))
-	assert.Equal(t, Event{Type: EventAdded, Interface: "baz"}, getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"foo", 1}},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"bar", 2}},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"baz", 3}},
+		getEvent(t, outputEvents, timeout))
 
 	// updates
-	inputLinks <- upAndRunning("bae")
-	inputLinks <- down("bar")
-	assert.Equal(t, Event{Type: EventAdded, Interface: "bae"}, getEvent(t, outputEvents, timeout))
-	assert.Equal(t, Event{Type: EventDeleted, Interface: "bar"}, getEvent(t, outputEvents, timeout))
+	inputLinks <- upAndRunning("bae", 4)
+	inputLinks <- down("bar", 2)
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"bae", 4}},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2}},
+		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces
 	// will be ignored
-	inputLinks <- upAndRunning("bae")
-	inputLinks <- upAndRunning("foo")
-	inputLinks <- down("bar")
-	inputLinks <- down("eth0")
+	inputLinks <- upAndRunning("bae", 4)
+	inputLinks <- upAndRunning("foo", 1)
+	inputLinks <- down("bar", 2)
+	inputLinks <- down("eth0", 3)
 
 	select {
 	case ev := <-outputEvents:
@@ -60,15 +70,15 @@ func TestWatcher(t *testing.T) {
 	}
 }
 
-func upAndRunning(name string) netlink.LinkUpdate {
+func upAndRunning(name string, index int) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
 		IfInfomsg: nl.IfInfomsg{IfInfomsg: unix.IfInfomsg{Flags: syscall.IFF_UP | syscall.IFF_RUNNING}},
-		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name}},
+		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index}},
 	}
 }
 
-func down(name string) netlink.LinkUpdate {
+func down(name string, index int) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
-		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name}},
+		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index}},
 	}
 }

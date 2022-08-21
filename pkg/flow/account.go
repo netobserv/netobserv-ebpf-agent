@@ -12,22 +12,24 @@ import (
 // for the edge case where packets are submitted directly via ring-buffer because the kernel-side
 // accounting map is full.
 type Accounter struct {
-	maxEntries    int
-	interfaceName string
-	evictTimeout  time.Duration
-	entries       map[RecordKey]RecordMetrics
+	maxEntries   int
+	evictTimeout time.Duration
+	entries      map[RecordKey]RecordMetrics
+	namer        InterfaceNamer
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
 
 // NewAccounter creates a new Accounter.
 // The cache has no limit and it's assumed that eviction is done by the caller.
-func NewAccounter(interfaceName string, maxEntries int, evictTimeout time.Duration) *Accounter {
+func NewAccounter(
+	maxEntries int, evictTimeout time.Duration, ifaceNamer InterfaceNamer,
+) *Accounter {
 	return &Accounter{
-		interfaceName: interfaceName,
-		maxEntries:    maxEntries,
-		evictTimeout:  evictTimeout,
-		entries:       make(map[RecordKey]RecordMetrics, maxEntries),
+		maxEntries:   maxEntries,
+		evictTimeout: evictTimeout,
+		entries:      make(map[RecordKey]RecordMetrics, maxEntries),
+		namer:        ifaceNamer,
 	}
 }
 
@@ -42,14 +44,14 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 		case <-evictTick.C:
 			evictingEntries := c.entries
 			c.entries = make(map[RecordKey]RecordMetrics, c.maxEntries)
-			go evict(c.interfaceName, evictingEntries, out)
+			go evict(evictingEntries, out, c.namer)
 		case record, ok := <-in:
 			if !ok {
 				alog.Debug("input channel closed. Evicting entries")
 				// if the records channel is closed, we evict the entries in the
 				// same goroutine to wait for all the entries to be sent before
 				// closing the channel
-				evict(c.interfaceName, c.entries, out)
+				evict(c.entries, out, c.namer)
 				alog.Debug("exiting account routine")
 				return
 			}
@@ -59,7 +61,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
 					c.entries = make(map[RecordKey]RecordMetrics, c.maxEntries)
-					go evict(c.interfaceName, evictingEntries, out)
+					go evict(evictingEntries, out, c.namer)
 				}
 				c.entries[record.RecordKey] = record.RecordMetrics
 			}
@@ -68,12 +70,12 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 	}
 }
 
-func evict(interfaceName string, entries map[RecordKey]RecordMetrics, evictor chan<- []*Record) {
+func evict(entries map[RecordKey]RecordMetrics, evictor chan<- []*Record, namer InterfaceNamer) {
 	now := time.Now()
 	monotonicNow := uint64(monotime.Now())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, metrics, now, monotonicNow, interfaceName))
+		records = append(records, NewRecord(key, metrics, now, monotonicNow, namer))
 	}
 	evictor <- records
 }

@@ -48,6 +48,7 @@ type RecordKey struct {
 	DataLink
 	Network
 	Transport
+	IFIndex uint32
 }
 
 // RecordMetrics provides flows metrics and timing information
@@ -79,12 +80,14 @@ type Record struct {
 	Interface     string
 }
 
+type InterfaceNamer func(ifIndex int) string
+
 func NewRecord(
 	key RecordKey,
 	metrics RecordMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
-	interfaceName string,
+	namer InterfaceNamer,
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeNs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeNs)
@@ -93,7 +96,7 @@ func NewRecord(
 			RecordKey:     key,
 			RecordMetrics: metrics,
 		},
-		Interface:     interfaceName,
+		Interface:     namer(int(key.IFIndex)),
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}

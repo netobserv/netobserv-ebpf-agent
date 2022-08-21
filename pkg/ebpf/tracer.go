@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -32,11 +32,28 @@ const (
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
 
-func NewFlowTracerFactory(sampling, cacheMaxSize, buffersLength int, evictionTimeout time.Duration) (func(string) *FlowTracer, io.Closer, error) {
+// FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
+type FlowTracer struct {
+	evictionTimeout time.Duration
+	objects         *bpfObjects
+	qdiscs          map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters   map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters  map[ifaces.Interface]*netlink.BpfFilter
+	flows           *ringbuf.Reader
+	buffersLength   int
+	accounter       *flow.Accounter
+	interfaceNamer  flow.InterfaceNamer
+}
+
+func NewFlowTracer(
+	sampling, cacheMaxSize, buffersLength int,
+	evictionTimeout time.Duration,
+	namer flow.InterfaceNamer,
+) (*FlowTracer, error) {
 	objects := bpfObjects{}
 	spec, err := loadBpf()
 	if err != nil {
-		return nil, &objects, fmt.Errorf("loading BPF data: %w", err)
+		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
 	// Resize maps according to user-provided configuration
@@ -46,76 +63,60 @@ func NewFlowTracerFactory(sampling, cacheMaxSize, buffersLength int, evictionTim
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling: uint32(sampling),
 	}); err != nil {
-		return nil, &objects, fmt.Errorf("rewriting BPF constants definition: %w", err)
+		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
-		return nil, &objects, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
-	return func(iface string) *FlowTracer {
-		return NewFlowTracer(iface, &objects, cacheMaxSize, buffersLength, evictionTimeout)
-	}, &objects, nil
-}
 
-// FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
-type FlowTracer struct {
-	interfaceName   string
-	evictionTimeout time.Duration
-	objects         *bpfObjects
-	qdisc           *netlink.GenericQdisc
-	egressFilter    *netlink.BpfFilter
-	ingressFilter   *netlink.BpfFilter
-	flows           *ringbuf.Reader
-	buffersLength   int
-	accounter       *flow.Accounter
-}
-
-// NewFlowTracer fo a given interface type
-func NewFlowTracer(
-	iface string,
-	objects *bpfObjects,
-	cacheMaxFlows, buffersLength int,
-	evictionTimeout time.Duration,
-) *FlowTracer {
-	log.WithField("iface", iface).Debug("Instantiating flow tracer")
-
+	// read events from igress+egress ringbuffer
+	flows, err := ringbuf.NewReader(objects.Flows)
+	if err != nil {
+		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
+	}
 	return &FlowTracer{
-		interfaceName:   iface,
-		objects:         objects,
+		objects:         &objects,
 		evictionTimeout: evictionTimeout,
 		buffersLength:   buffersLength,
-		accounter:       flow.NewAccounter(iface, cacheMaxFlows, evictionTimeout),
-	}
+		accounter:       flow.NewAccounter(cacheMaxSize, evictionTimeout, namer),
+		flows:           flows,
+		egressFilters:   map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:          map[ifaces.Interface]*netlink.GenericQdisc{},
+		interfaceNamer:  namer,
+	}, nil
 }
 
 // Register and links the eBPF tracer into the system. The program should invoke Unregister
 // before exiting.
-func (m *FlowTracer) Register() error {
-	ilog := log.WithField("iface", m.interfaceName)
+func (m *FlowTracer) Register(iface ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
-	ipvlan, err := netlink.LinkByName(m.interfaceName)
+	ipvlan, err := netlink.LinkByIndex(iface.Index)
 	if err != nil {
-		return fmt.Errorf("failed to lookup ipvlan device %q: %w", m.interfaceName, err)
+		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
 		Handle:    netlink.MakeHandle(0xffff, 0),
 		Parent:    netlink.HANDLE_CLSACT,
 	}
-	m.qdisc = &netlink.GenericQdisc{
+	qdisc := &netlink.GenericQdisc{
 		QdiscAttrs: qdiscAttrs,
 		QdiscType:  qdiscType,
 	}
-	if err := netlink.QdiscDel(m.qdisc); err == nil {
+	if err := netlink.QdiscDel(qdisc); err == nil {
 		ilog.Warn("qdisc clsact already existed. Deleted it")
 	}
-	if err := netlink.QdiscAdd(m.qdisc); err != nil {
+	if err := netlink.QdiscAdd(qdisc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
-			m.qdisc = nil
-			return fmt.Errorf("failed to create clsact qdisc on %q: %T %w", m.interfaceName, err, err)
+			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %T %w", iface.Index, iface.Name, err, err)
 		}
 	}
+	m.qdiscs[iface] = qdisc
+
 	// Fetch events on egress
 	egressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
@@ -124,22 +125,24 @@ func (m *FlowTracer) Register() error {
 		Protocol:  3,
 		Priority:  1,
 	}
-	m.egressFilter = &netlink.BpfFilter{
+	egressFilter := &netlink.BpfFilter{
 		FilterAttrs:  egressAttrs,
 		Fd:           m.objects.EgressFlowParse.FD(),
 		Name:         "tc/egress_flow_parse",
 		DirectAction: true,
 	}
-	if err := netlink.FilterDel(m.egressFilter); err == nil {
+	if err := netlink.FilterDel(egressFilter); err == nil {
 		ilog.Warn("egress filter already existed. Deleted it")
 	}
-	if err = netlink.FilterAdd(m.egressFilter); err != nil {
+	if err = netlink.FilterAdd(egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
 		} else {
 			return fmt.Errorf("failed to create egress filter: %w", err)
 		}
 	}
+	m.egressFilters[iface] = egressFilter
+
 	// Fetch events on ingress
 	ingressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
@@ -148,57 +151,55 @@ func (m *FlowTracer) Register() error {
 		Protocol:  unix.ETH_P_ALL,
 		Priority:  1,
 	}
-	m.ingressFilter = &netlink.BpfFilter{
+	ingressFilter := &netlink.BpfFilter{
 		FilterAttrs:  ingressAttrs,
 		Fd:           m.objects.IngressFlowParse.FD(),
 		Name:         "tc/ingress_flow_parse",
 		DirectAction: true,
 	}
-	if err := netlink.FilterDel(m.ingressFilter); err == nil {
+	if err := netlink.FilterDel(ingressFilter); err == nil {
 		ilog.Warn("ingress filter already existed. Deleted it")
 	}
-	if err = netlink.FilterAdd(m.ingressFilter); err != nil {
+	if err = netlink.FilterAdd(ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
 		} else {
 			return fmt.Errorf("failed to create ingress filter: %w", err)
 		}
 	}
-
-	// read events from igress+egress ringbuffer
-	if m.flows, err = ringbuf.NewReader(m.objects.Flows); err != nil {
-		return fmt.Errorf("accessing to ringbuffer: %w", err)
-	}
+	m.ingressFilters[iface] = ingressFilter
 	return nil
 }
 
 // Unregister the eBPF tracer from the system.
-func (m *FlowTracer) Unregister() error {
-	tlog := log.WithField("iface", m.interfaceName)
+func (m *FlowTracer) unregisterEverything() error {
 	var errs []error
 	if m.flows != nil {
 		if err := m.flows.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	if m.egressFilter != nil {
-		tlog.WithField("filter", m.egressFilter).Debug("deleting egress filter")
-		if err := netlink.FilterDel(m.egressFilter); err != nil {
+	for iface, ef := range m.egressFilters {
+		log.WithField("interface", iface).Debug("deleting egress filter")
+		if err := netlink.FilterDel(ef); err != nil {
 			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
-	if m.ingressFilter != nil {
-		tlog.WithField("filter", m.ingressFilter).Debug("deleting ingress filter")
-		if err := netlink.FilterDel(m.ingressFilter); err != nil {
+	m.egressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	for iface, igf := range m.ingressFilters {
+		log.WithField("interface", iface).Debug("deleting ingress filter")
+		if err := netlink.FilterDel(igf); err != nil {
 			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
 		}
 	}
-	if m.qdisc != nil {
-		tlog.WithField("qdisc", m.qdisc).Debug("deleting Qdisc")
-		if err := netlink.QdiscDel(m.qdisc); err != nil {
+	m.ingressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	for iface, qd := range m.qdiscs {
+		log.WithField("interface", iface).Debug("deleting Qdisc")
+		if err := netlink.QdiscDel(qd); err != nil {
 			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
 	}
+	m.qdiscs = map[ifaces.Interface]*netlink.GenericQdisc{}
 	if len(errs) == 0 {
 		return nil
 	}
@@ -237,7 +238,7 @@ func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows cha
 }
 
 func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- []*flow.Record) {
-	tlog := log.WithField("iface", m.interfaceName)
+	tlog := log.WithField("map", flowMap.String())
 	go func() {
 		<-ctx.Done()
 	}()
@@ -276,7 +277,7 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 					m.aggregate(mapValues),
 					currentTime,
 					uint64(monotonicTimeNow),
-					m.interfaceName,
+					m.interfaceNamer,
 				))
 			}
 			lastIterationFlowCount = len(forwardingFlows)
@@ -292,15 +293,15 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 
 // Trace and forward the read flows until the passed context is Done
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	tlog := log.WithField("iface", m.interfaceName)
 	go func() {
 		<-ctx.Done()
 		// m.flows.Read is a blocking operation, so we need to close the ring buffer
 		// from another goroutine to avoid the system not being able to exit if there
 		// isn't traffic in a given interface
 		if err := m.flows.Close(); err != nil {
-			tlog.WithError(err).Warn("can't close ring buffer")
+			log.WithError(err).Warn("Tracer: can't close ring buffer")
 		}
+		m.unregisterEverything()
 	}()
 	go m.pollAndForwardIngress(ctx, forwardFlows)
 	go m.pollAndForwardEgress(ctx, forwardFlows)
@@ -308,28 +309,27 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Reco
 }
 
 func (m *FlowTracer) pollAndForwardRingbuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	tlog := log.WithField("iface", m.interfaceName)
 	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
 	go m.accounter.Account(flowAccount, forwardFlows)
 	for {
 		select {
 		case <-ctx.Done():
-			tlog.Debug("exiting flow tracer")
+			log.Debug("exiting flow tracer")
 			return
 		default:
 			event, err := m.flows.Read()
 			if err != nil {
 				if errors.Is(err, ringbuf.ErrClosed) {
-					tlog.Debug("Received signal, exiting..")
+					log.Debug("Received signal, exiting..")
 					return
 				}
-				tlog.WithError(err).Warn("reading from ring buffer")
+				log.WithError(err).Warn("reading from ring buffer")
 				continue
 			}
 			// Parses the ringbuf event entry into an Event structure.
 			readFlow, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
 			if err != nil {
-				tlog.WithError(err).Warn("reading ringbuf event")
+				log.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow

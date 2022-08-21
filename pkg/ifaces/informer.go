@@ -8,9 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Name of an interface (e.g. eth0)
-type Name string
-
 // EventType for an interface: added, deleted
 type EventType int
 
@@ -35,7 +32,12 @@ var ilog = logrus.WithField("component", "ifaces.Informer")
 // Event of a network interface, given the type (added, removed) and the interface name
 type Event struct {
 	Type      EventType
-	Interface Name
+	Interface Interface
+}
+
+type Interface struct {
+	Name  string
+	Index int
 }
 
 // Informer provides notifications about each network interface that is added or removed
@@ -45,14 +47,14 @@ type Informer interface {
 	Subscribe(ctx context.Context) (<-chan Event, error)
 }
 
-func netInterfaces() ([]Name, error) {
+func netInterfaces() ([]Interface, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("can't fetch interfaces: %w", err)
 	}
-	names := make([]Name, len(ifs))
+	names := make([]Interface, len(ifs))
 	for i, ifc := range ifs {
-		names[i] = Name(ifc.Name)
+		names[i] = Interface{Name: ifc.Name, Index: ifc.Index}
 	}
 	return names, nil
 }

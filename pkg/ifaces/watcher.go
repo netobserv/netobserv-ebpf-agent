@@ -12,8 +12,8 @@ import (
 // addition or removal.
 type Watcher struct {
 	bufLen     int
-	current    map[Name]struct{}
-	interfaces func() ([]Name, error)
+	current    map[Interface]struct{}
+	interfaces func() ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
 	linkSubscriber func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
@@ -22,7 +22,7 @@ type Watcher struct {
 func NewWatcher(bufLen int) *Watcher {
 	return &Watcher{
 		bufLen:         bufLen,
-		current:        map[Name]struct{}{},
+		current:        map[Interface]struct{}{},
 		interfaces:     netInterfaces,
 		linkSubscriber: netlink.LinkSubscribe,
 	}
@@ -63,15 +63,16 @@ func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 			log.WithField("link", link).Debug("received link update without attributes. Ignoring")
 			continue
 		}
+		iface := Interface{Name: attrs.Name, Index: attrs.Index}
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 {
 			log.WithFields(logrus.Fields{
 				"operstate": attrs.OperState,
 				"flags":     attrs.Flags,
 				"name":      attrs.Name,
 			}).Debug("Interface up and running")
-			if _, ok := w.current[Name(attrs.Name)]; !ok {
-				w.current[Name(attrs.Name)] = struct{}{}
-				out <- Event{Type: EventAdded, Interface: Name(attrs.Name)}
+			if _, ok := w.current[iface]; !ok {
+				w.current[iface] = struct{}{}
+				out <- Event{Type: EventAdded, Interface: iface}
 			}
 		} else {
 			log.WithFields(logrus.Fields{
@@ -79,9 +80,9 @@ func (w *Watcher) sendUpdates(ctx context.Context, out chan Event) {
 				"flags":     attrs.Flags,
 				"name":      attrs.Name,
 			}).Debug("Interface down or not running")
-			if _, ok := w.current[Name(attrs.Name)]; ok {
-				delete(w.current, Name(attrs.Name))
-				out <- Event{Type: EventDeleted, Interface: Name(attrs.Name)}
+			if _, ok := w.current[iface]; ok {
+				delete(w.current, iface)
+				out <- Event{Type: EventDeleted, Interface: iface}
 			}
 		}
 	}

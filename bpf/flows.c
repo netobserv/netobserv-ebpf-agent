@@ -178,6 +178,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
     if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
         return TC_ACT_OK;
     }
+    id.if_index = skb->ifindex;
     id.direction = direction;
 
     flow_metrics *aggregate_flow = bpf_map_lookup_elem(flows_map, &id);

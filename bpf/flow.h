@@ -35,6 +35,8 @@ typedef struct flow_id_t {
     u16 src_port;
     u16 dst_port;
     u8 transport_protocol;
+    // OS interface index
+    u32 if_index;
 } __attribute__((packed)) flow_id;
 
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send

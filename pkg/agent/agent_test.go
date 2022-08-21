@@ -39,19 +39,13 @@ func TestFlowsAgent(t *testing.T) {
 	// replace the interfaces informer by a fake
 	ifacesCh := make(chan ifaces.Event, 10)
 	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
-	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
-	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "ignored"} // to be ignored
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: ifaces.Interface{"fake", 1}}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: ifaces.Interface{"ignored", 2}} // to be ignored
 
 	// replacing the real eBPF tracer by a fake flow tracer
 	agentInput := make(chan *flow.Record, 10)
 	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(iface string) flowTracer {
-		if ft != nil {
-			require.Fail(t, "flow tracer should have been instantiated only once")
-		}
-		ft = &fakeFlowTracer{tracedFlows: agentInput}
-		return ft
-	}
+	flowsAgent.tracer = &fakeFlowTracer{tracedFlows: agentInput}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -109,57 +103,12 @@ func TestFlowsAgent(t *testing.T) {
 
 	// Check that during the initialization, the flow tracer was registered
 	assert.True(t, ft.registerCalled)
-	assert.False(t, ft.unregisterCalled)
 	assert.False(t, ft.contextCanceled)
 
 	// Trigger the removal of the interface and check that the tracer context is cancelled
-	ifacesCh <- ifaces.Event{Type: ifaces.EventDeleted, Interface: "fake"}
+	ifacesCh <- ifaces.Event{Type: ifaces.EventDeleted, Interface: ifaces.Interface{"fake", 1}}
 	test.Eventually(t, timeout, func(t require.TestingT) {
 		require.True(t, ft.contextCanceled)
-	})
-}
-
-func TestFlowsAgent_DetachAllTracersOnExit(t *testing.T) {
-	flowsAgent, err := FlowsAgent(&Config{
-		Export:             "grpc",
-		TargetHost:         "127.0.0.1",
-		TargetPort:         1234,
-		CacheMaxFlows:      1,
-		ExcludeInterfaces:  []string{"ignored"},
-		CacheActiveTimeout: 5 * time.Second,
-		BuffersLength:      10,
-	})
-	require.NoError(t, err)
-	ifacesCh := make(chan ifaces.Event, 10)
-	flowsAgent.interfaces = &fakeInformer{events: ifacesCh}
-	ifacesCh <- ifaces.Event{Type: ifaces.EventAdded, Interface: "fake"}
-	agentInput := make(chan *flow.Record, 10)
-	var ft *fakeFlowTracer
-	flowsAgent.tracerFactory = func(name string) flowTracer {
-		ft = &fakeFlowTracer{tracedFlows: agentInput}
-		return ft
-	}
-
-	// GIVEN an agent with a registered flow tracer
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		require.NoError(t, flowsAgent.Run(ctx))
-	}()
-	test.Eventually(t, timeout, func(t require.TestingT) {
-		if ft == nil {
-			t.FailNow()
-		} else {
-			assert.True(t, ft.registerCalled)
-		}
-	})
-
-	// WHEN the agent is stopped
-	cancel()
-
-	// THEN its tracers are unregistered
-	test.Eventually(t, timeout, func(t require.TestingT) {
-		require.True(t, ft.unregisterCalled)
 	})
 }
 
@@ -188,10 +137,9 @@ func TestFlowsAgent_InvalidConfigs(t *testing.T) {
 }
 
 type fakeFlowTracer struct {
-	registerCalled   bool
-	unregisterCalled bool
-	contextCanceled  bool
-	tracedFlows      <-chan *flow.Record
+	registerCalled  bool
+	contextCanceled bool
+	tracedFlows     <-chan *flow.Record
 }
 
 func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
@@ -205,13 +153,8 @@ func (ft *fakeFlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow
 	}
 }
 
-func (ft *fakeFlowTracer) Register() error {
+func (ft *fakeFlowTracer) Register(_ ifaces.Interface) error {
 	ft.registerCalled = true
-	return nil
-}
-
-func (ft *fakeFlowTracer) Unregister() error {
-	ft.unregisterCalled = true
 	return nil
 }
 
