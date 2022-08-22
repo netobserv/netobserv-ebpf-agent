@@ -42,7 +42,7 @@
 #define INGRESS 0
 #define EGRESS 1
 
-// Common Ringbuffer as a conduit for ingress/egress maps to userspace
+// Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
@@ -169,12 +169,12 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
     }
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
+    flow_id id;
     int rc = TC_ACT_OK;
 
     u64 current_time = bpf_ktime_get_ns();
 
     struct ethhdr *eth = data;
-    flow_id id;
     if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
         return TC_ACT_OK;
     }

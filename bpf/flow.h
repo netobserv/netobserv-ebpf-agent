@@ -19,8 +19,8 @@ typedef struct flow_metrics_t {
     u64 end_mono_time_ts;
 } __attribute__((packed)) flow_metrics;
 
+// Attributes that uniquely identify a flow
 typedef struct flow_id_t {
-    // key info for validation and direct eviction
     u16 eth_protocol;
     u8 direction;
     // L2 data link layer
@@ -28,7 +28,7 @@ typedef struct flow_id_t {
     u8 dst_mac[ETH_ALEN];
     // L3 network layer
     // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
-    // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2    
+    // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
     struct in6_addr src_ip;
     struct in6_addr dst_ip;
     // L4 transport layer

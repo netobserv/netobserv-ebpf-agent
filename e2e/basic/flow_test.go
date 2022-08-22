@@ -89,9 +89,6 @@ func TestSinglePacketFlows(t *testing.T) {
 
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
-			// TODO: to speedup this test, check whether we can increase the flush frequency
-			// or just reduce the number of iterations once we verify that the error causing this test
-			// to be flaki is eventually fixed
 			for pktLen := 50; pktLen <= 200; pktLen++ {
 				logrus.WithField("destinationIP", serverPodIP).Debug("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",

@@ -173,8 +173,6 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 	bt.Cluster.TestEnv().Test(t, f1)
 }
 
-// TODO: test adding a pod and checking that flows are still fetched for it
-
 type podsConnectInfo struct {
 	clientIP        string
 	serverServiceIP string

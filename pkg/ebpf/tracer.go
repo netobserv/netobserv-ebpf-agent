@@ -178,6 +178,8 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 }
 
 // Unregister the eBPF tracer from the system.
+// We don't need an "Unregister(iface)" method because the filters and qdiscs
+// are automatically removed when the interface is down
 func (m *FlowTracer) unregisterEverything() error {
 	var errs []error
 	if m.flows != nil {

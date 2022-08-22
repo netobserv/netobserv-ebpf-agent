@@ -19,7 +19,6 @@ const MacLen = 6
 const IPv6Type = 0x86DD
 
 type HumanBytes uint64
-type Timestamp uint64
 type MacAddr [MacLen]uint8
 type Direction uint8
 
