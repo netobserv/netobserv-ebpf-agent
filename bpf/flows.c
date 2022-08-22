@@ -46,7 +46,7 @@
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
-} flows SEC(".maps");
+} direct_flows SEC(".maps");
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 // The userspace will aggregate them into a single flow.
@@ -197,14 +197,12 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
             .end_mono_time_ts = current_time,
         };
         
-        if (bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST) < 0) {
+        if (bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST) != 0) {
             /*
-                When the map is full, we send the new flow entry to userspace via ringbuffer,
-                until an entry is available.
-                TODO: to avoid two communication channels, we could just trigger the eviction of the hashmap
-                when it reaches e.g. 90% of its size, and remove this ringbuffer.
+                When the map is full, we directly send the flow entry to userspace via ringbuffer,
+                until space is available in the kernel-side maps
             */
-            flow_record *record = bpf_ringbuf_reserve(&flows, sizeof(flow_record), 0);
+            flow_record *record = bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
             if (!record) {
                 return rc;
             }

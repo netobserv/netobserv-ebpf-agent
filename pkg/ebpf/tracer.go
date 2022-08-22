@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -43,6 +44,9 @@ type FlowTracer struct {
 	buffersLength   int
 	accounter       *flow.Accounter
 	interfaceNamer  flow.InterfaceNamer
+	// manages the access to the eviction routines, avoiding two evictions happening at the same time
+	ingressEviction *sync.Cond
+	egressEviction  *sync.Cond
 }
 
 func NewFlowTracer(
@@ -70,7 +74,7 @@ func NewFlowTracer(
 	}
 
 	// read events from igress+egress ringbuffer
-	flows, err := ringbuf.NewReader(objects.Flows)
+	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
@@ -84,6 +88,8 @@ func NewFlowTracer(
 		ingressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
 		qdiscs:          map[ifaces.Interface]*netlink.GenericQdisc{},
 		interfaceNamer:  namer,
+		ingressEviction: sync.NewCond(&sync.Mutex{}),
+		egressEviction:  sync.NewCond(&sync.Mutex{}),
 	}, nil
 }
 
@@ -216,78 +222,100 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 		return flow.RecordMetrics{}
 	}
 	aggr := flow.RecordMetrics{}
-	for i := range metrics {
+	for _, mt := range metrics {
 		// a zero-valued recordValue in a given array slot means that no record has been processed
 		// by this given CPU. We just ignore it
-		if metrics[i].StartMonoTimeNs == 0 {
+		if mt.StartMonoTimeNs == 0 {
 			continue
 		}
-		aggr.Accumulate(&metrics[i])
+		aggr.Accumulate(&mt)
 	}
 	return aggr
 }
 
 // Monitor Egress Map to evict flows based on logic
 func (m *FlowTracer) pollAndForwardEgress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	m.pollAndForward(ctx, m.objects.XflowMetricMapEgress, forwardFlows)
+	m.pollAndForward(ctx, m.objects.XflowMetricMapEgress, forwardFlows, m.egressEviction)
 }
 
 // Monitor Ingress Map to evict flows based on logic
 func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	m.pollAndForward(ctx, m.objects.XflowMetricMapIngress, forwardFlows)
+	m.pollAndForward(ctx, m.objects.XflowMetricMapIngress, forwardFlows, m.ingressEviction)
 }
 
-func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- []*flow.Record) {
+func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- []*flow.Record, evictor *sync.Cond) {
 	tlog := log.WithField("map", flowMap.String())
 	go func() {
 		<-ctx.Done()
 	}()
+	go func() {
+		lastIterationFlowCount := 0
+		for {
+			// make sure we only evict once at a time, even if there are multiple eviction signals
+			evictor.L.Lock()
+			evictor.Wait()
+			m.evictFlows(&lastIterationFlowCount, flowMap, tlog, forwardFlows)
+			evictor.L.Unlock()
+
+			// if context is canceled, stops the goroutine after evicting flows
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
+	}()
 	ticker := time.NewTicker(m.evictionTimeout)
-	lastIterationFlowCount := 0
 	for {
 		select {
 		case <-ctx.Done():
+			tlog.Debug("evicting flows after context cancelation")
+			evictor.Broadcast()
 			ticker.Stop()
 			tlog.Debug("exiting monitor")
 			return
 		case <-ticker.C:
-			tlog.Debug("evicting flows")
-			// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
-			monotonicTimeNow := monotime.Now()
-			currentTime := time.Now()
-
-			// dimension flows' slice to minimize slice resizings, assuming each iteration
-			// will probably have a similar number of flows
-			forwardingFlows := make([]*flow.Record, 0, lastIterationFlowCount)
-			lastIterationFlowCount = 0
-
-			var mapKey flow.RecordKey
-			var mapValues []flow.RecordMetrics
-			mapIterator := flowMap.Iterate()
-			for mapIterator.Next(&mapKey, &mapValues) {
-				// I fear an improbable race condition if the kernel space adds information in
-				// the lapse between getting and deleting the map entry
-				// TODO: try with combining NextKey and LookupAndDelete or BatchLookupAndDelete
-				if err := flowMap.Delete(mapKey); err != nil {
-					tlog.WithError(err).WithField("flowRecord", mapKey).
-						Warn("couldn't delete flow from map")
-				}
-				forwardingFlows = append(forwardingFlows, flow.NewRecord(
-					mapKey,
-					m.aggregate(mapValues),
-					currentTime,
-					uint64(monotonicTimeNow),
-					m.interfaceNamer,
-				))
-			}
-			lastIterationFlowCount = len(forwardingFlows)
-			if lastIterationFlowCount == 0 {
-				log.Debug("no flows to forward")
-			} else {
-				forwardFlows <- forwardingFlows
-				tlog.WithField("count", lastIterationFlowCount).Debug("flows evicted")
-			}
+			tlog.Debug("evicting flows on timer")
+			evictor.Broadcast()
 		}
+	}
+}
+
+func (m *FlowTracer) evictFlows(lastIterationFlowCount *int, flowMap *ebpf.Map, tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
+	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
+	monotonicTimeNow := monotime.Now()
+	currentTime := time.Now()
+
+	// dimension flows' slice to minimize slice resizings, assuming each iteration
+	// will probably have a similar number of flows
+	forwardingFlows := make([]*flow.Record, 0, *lastIterationFlowCount)
+	*lastIterationFlowCount = 0
+
+	var mapKey flow.RecordKey
+	var mapValues []flow.RecordMetrics
+	mapIterator := flowMap.Iterate()
+	for mapIterator.Next(&mapKey, &mapValues) {
+		// I fear an improbable race condition if the kernel space adds information in
+		// the lapse between getting and deleting the map entry
+		// TODO: try with combining NextKey and LookupAndDelete or BatchLookupAndDelete
+		if err := flowMap.Delete(mapKey); err != nil {
+			tlog.WithError(err).WithField("flowRecord", mapKey).
+				Warn("couldn't delete flow from map")
+		}
+		forwardingFlows = append(forwardingFlows, flow.NewRecord(
+			mapKey,
+			m.aggregate(mapValues),
+			currentTime,
+			uint64(monotonicTimeNow),
+			m.interfaceNamer,
+		))
+	}
+	*lastIterationFlowCount = len(forwardingFlows)
+	if *lastIterationFlowCount == 0 {
+		log.Debug("no flows to forward")
+	} else {
+		forwardFlows <- forwardingFlows
+		tlog.WithField("count", *lastIterationFlowCount).Debug("flows evicted")
 	}
 }
 
@@ -305,10 +333,10 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Reco
 	}()
 	go m.pollAndForwardIngress(ctx, forwardFlows)
 	go m.pollAndForwardEgress(ctx, forwardFlows)
-	m.pollAndForwardRingbuffer(ctx, forwardFlows)
+	m.listenAndForwardRingBuffer(ctx, forwardFlows)
 }
 
-func (m *FlowTracer) pollAndForwardRingbuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
+func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
 	go m.accounter.Account(flowAccount, forwardFlows)
 	for {
@@ -332,6 +360,18 @@ func (m *FlowTracer) pollAndForwardRingbuffer(ctx context.Context, forwardFlows 
 				log.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
+			log.WithField("direction", readFlow.Direction).
+				Debug("received flow from ringbuffer. Evicting in-memory maps to leave free space")
+			switch readFlow.Direction {
+			case flow.DirectionIngress:
+				m.ingressEviction.Broadcast()
+			case flow.DirectionEgress:
+				m.egressEviction.Broadcast()
+			default:
+				log.WithField("direction", readFlow.Direction).
+					Warnf("received flow with incorrect direction: %#v", readFlow)
+			}
+
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			flowAccount <- readFlow
 		}

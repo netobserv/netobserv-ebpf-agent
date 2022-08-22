@@ -62,7 +62,7 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Flows                 *ebpf.MapSpec `ebpf:"flows"`
+	DirectFlows           *ebpf.MapSpec `ebpf:"direct_flows"`
 	XflowMetricMapEgress  *ebpf.MapSpec `ebpf:"xflow_metric_map_egress"`
 	XflowMetricMapIngress *ebpf.MapSpec `ebpf:"xflow_metric_map_ingress"`
 }
@@ -86,14 +86,14 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Flows                 *ebpf.Map `ebpf:"flows"`
+	DirectFlows           *ebpf.Map `ebpf:"direct_flows"`
 	XflowMetricMapEgress  *ebpf.Map `ebpf:"xflow_metric_map_egress"`
 	XflowMetricMapIngress *ebpf.Map `ebpf:"xflow_metric_map_ingress"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
-		m.Flows,
+		m.DirectFlows,
 		m.XflowMetricMapEgress,
 		m.XflowMetricMapIngress,
 	)

@@ -77,5 +77,6 @@ func evict(entries map[RecordKey]RecordMetrics, evictor chan<- []*Record, namer 
 	for key, metrics := range entries {
 		records = append(records, NewRecord(key, metrics, now, monotonicNow, namer))
 	}
+	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records
 }
