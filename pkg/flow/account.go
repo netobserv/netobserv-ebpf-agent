@@ -3,7 +3,6 @@ package flow
 import (
 	"time"
 
-	"github.com/gavv/monotime"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,7 +13,9 @@ import (
 type Accounter struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      map[RecordKey]RecordMetrics
+	entries      map[RecordKey]*RecordMetrics
+	clock        func() time.Time
+	monoClock    func() time.Duration
 	namer        InterfaceNamer
 }
 
@@ -24,12 +25,16 @@ var alog = logrus.WithField("component", "flow/Accounter")
 // The cache has no limit and it's assumed that eviction is done by the caller.
 func NewAccounter(
 	maxEntries int, evictTimeout time.Duration, ifaceNamer InterfaceNamer,
+	clock func() time.Time,
+	monoClock func() time.Duration,
 ) *Accounter {
 	return &Accounter{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      make(map[RecordKey]RecordMetrics, maxEntries),
+		entries:      make(map[RecordKey]*RecordMetrics, maxEntries),
 		namer:        ifaceNamer,
+		clock:        clock,
+		monoClock:    monoClock,
 	}
 }
 
@@ -42,16 +47,19 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 	for {
 		select {
 		case <-evictTick.C:
+			if len(c.entries) == 0 {
+				break
+			}
 			evictingEntries := c.entries
-			c.entries = make(map[RecordKey]RecordMetrics, c.maxEntries)
-			go evict(evictingEntries, out, c.namer)
+			c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+			go c.evict(evictingEntries, out)
 		case record, ok := <-in:
 			if !ok {
 				alog.Debug("input channel closed. Evicting entries")
 				// if the records channel is closed, we evict the entries in the
 				// same goroutine to wait for all the entries to be sent before
 				// closing the channel
-				evict(c.entries, out, c.namer)
+				c.evict(c.entries, out)
 				alog.Debug("exiting account routine")
 				return
 			}
@@ -60,22 +68,22 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
-					c.entries = make(map[RecordKey]RecordMetrics, c.maxEntries)
-					go evict(evictingEntries, out, c.namer)
+					c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+					go c.evict(evictingEntries, out)
 				}
-				c.entries[record.RecordKey] = record.RecordMetrics
+				c.entries[record.RecordKey] = &record.RecordMetrics
 			}
 		}
 
 	}
 }
 
-func evict(entries map[RecordKey]RecordMetrics, evictor chan<- []*Record, namer InterfaceNamer) {
-	now := time.Now()
-	monotonicNow := uint64(monotime.Now())
+func (c *Accounter) evict(entries map[RecordKey]*RecordMetrics, evictor chan<- []*Record) {
+	now := c.clock()
+	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, metrics, now, monotonicNow, namer))
+		records = append(records, NewRecord(key, *metrics, now, monotonicNow, c.namer))
 	}
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records

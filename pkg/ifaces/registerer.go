@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"net"
 	"sync"
 )
 
@@ -51,9 +52,22 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 	return out, nil
 }
 
+// IfaceNameForIndex gets the interface name given an index as recorded by the underlying
+// interfaces' informer. It backs up into the net.InterfaceByIndex function if the interface
+// has not been previously registered
 func (r *Registerer) IfaceNameForIndex(idx int) (string, bool) {
 	r.m.RLock()
-	defer r.m.RUnlock()
 	name, ok := r.ifaces[idx]
+	r.m.RUnlock()
+	if !ok {
+		iface, err := net.InterfaceByIndex(idx)
+		if err != nil {
+			return "", false
+		}
+		name = iface.Name
+		r.m.Lock()
+		r.ifaces[idx] = name
+		r.m.Unlock()
+	}
 	return name, ok
 }

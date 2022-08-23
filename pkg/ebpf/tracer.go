@@ -82,7 +82,7 @@ func NewFlowTracer(
 		objects:         &objects,
 		evictionTimeout: evictionTimeout,
 		buffersLength:   buffersLength,
-		accounter:       flow.NewAccounter(cacheMaxSize, evictionTimeout, namer),
+		accounter:       flow.NewAccounter(cacheMaxSize, evictionTimeout, namer, time.Now, monotime.Now),
 		flows:           flows,
 		egressFilters:   map[ifaces.Interface]*netlink.BpfFilter{},
 		ingressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
