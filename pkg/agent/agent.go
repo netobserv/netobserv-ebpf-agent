@@ -136,9 +136,6 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 // until the passed context is canceled
 func (f *Flows) Run(ctx context.Context) error {
 	alog.Info("starting Flows agent")
-
-	systemSetup()
-
 	tracedRecords, err := f.interfacesManager(ctx)
 	if err != nil {
 		return err

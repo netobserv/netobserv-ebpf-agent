@@ -12,6 +12,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/cilium/ebpf/rlimit"
 	"github.com/gavv/monotime"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -54,6 +55,11 @@ func NewFlowTracer(
 	evictionTimeout time.Duration,
 	namer flow.InterfaceNamer,
 ) (*FlowTracer, error) {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.WithError(err).
+			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
+	}
+
 	objects := bpfObjects{}
 	spec, err := loadBpf()
 	if err != nil {
