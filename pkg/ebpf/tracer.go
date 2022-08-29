@@ -48,6 +48,7 @@ type FlowTracer struct {
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	ingressEviction *sync.Cond
 	egressEviction  *sync.Cond
+	lastEvictionNs  uint64
 }
 
 func NewFlowTracer(
@@ -96,6 +97,7 @@ func NewFlowTracer(
 		interfaceNamer:  namer,
 		ingressEviction: sync.NewCond(&sync.Mutex{}),
 		egressEviction:  sync.NewCond(&sync.Mutex{}),
+		lastEvictionNs:  uint64(monotime.Now()),
 	}, nil
 }
 
@@ -231,9 +233,10 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 	}
 	aggr := flow.RecordMetrics{}
 	for _, mt := range metrics {
-		// a zero-valued recordValue in a given array slot means that no record has been processed
-		// by this given CPU. We just ignore it
-		if mt.StartMonoTimeNs == 0 {
+		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
+		// might receive entries from previous collect-eviction timeslots.
+		// We need to check the flow time and discard old flows.
+		if mt.StartMonoTimeNs <= m.lastEvictionNs {
 			continue
 		}
 		aggr.Accumulate(&mt)
@@ -257,12 +260,11 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 		<-ctx.Done()
 	}()
 	go func() {
-		lastIterationFlowCount := 0
 		for {
 			// make sure we only evict once at a time, even if there are multiple eviction signals
 			evictor.L.Lock()
 			evictor.Wait()
-			m.evictFlows(&lastIterationFlowCount, flowMap, tlog, forwardFlows)
+			m.evictFlows(flowMap, tlog, forwardFlows)
 			evictor.L.Unlock()
 
 			// if context is canceled, stops the goroutine after evicting flows
@@ -289,42 +291,32 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 	}
 }
 
-func (m *FlowTracer) evictFlows(lastIterationFlowCount *int, flowMap *ebpf.Map, tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
+func (m *FlowTracer) evictFlows(flowMap *ebpf.Map, tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
 
-	// dimension flows' slice to minimize slice resizings, assuming each iteration
-	// will probably have a similar number of flows
-	forwardingFlows := make([]*flow.Record, 0, *lastIterationFlowCount)
-	*lastIterationFlowCount = 0
+	mapKeys, mapValues := m.lookupAndDeleteMapKeysValues(flowMap)
 
-	var mapKey flow.RecordKey
-	var mapValues []flow.RecordMetrics
-	mapIterator := flowMap.Iterate()
-	for mapIterator.Next(&mapKey, &mapValues) {
-		// I fear an improbable race condition if the kernel space adds information in
-		// the lapse between getting and deleting the map entry
-		// TODO: try with combining NextKey and LookupAndDelete or BatchLookupAndDelete
-		if err := flowMap.Delete(mapKey); err != nil {
-			tlog.WithError(err).WithField("flowRecord", mapKey).
-				Warn("couldn't delete flow from map")
+	var forwardingFlows []*flow.Record
+	laterFlowNs := uint64(0)
+	for nf, flowKey := range mapKeys {
+		flowMetrics := mapValues[nf]
+		aggregatedMetrics := m.aggregate(flowMetrics)
+		if aggregatedMetrics.StartMonoTimeNs > laterFlowNs {
+			laterFlowNs = aggregatedMetrics.StartMonoTimeNs
 		}
 		forwardingFlows = append(forwardingFlows, flow.NewRecord(
-			mapKey,
-			m.aggregate(mapValues),
+			flowKey,
+			aggregatedMetrics,
 			currentTime,
 			uint64(monotonicTimeNow),
 			m.interfaceNamer,
 		))
 	}
-	*lastIterationFlowCount = len(forwardingFlows)
-	if *lastIterationFlowCount == 0 {
-		log.Debug("no flows to forward")
-	} else {
-		forwardFlows <- forwardingFlows
-		tlog.WithField("count", *lastIterationFlowCount).Debug("flows evicted")
-	}
+	m.lastEvictionNs = laterFlowNs
+	forwardFlows <- forwardingFlows
+	tlog.WithField("count", len(forwardingFlows)).Debug("flows evicted")
 }
 
 // Trace and forward the read flows until the passed context is Done
@@ -384,4 +376,34 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 			flowAccount <- readFlow
 		}
 	}
+}
+
+// For synchronization purposes, we get/delete a whole snapshot of the flows map.
+// This way we avoid missing packets that could be updated on the
+// ebpf side while we process/aggregate them here
+// TODO: detect whether BatchLookupAndDelete is supported (e.g. not supported in Openshift 4.10) and use it selectively
+func (m *FlowTracer) lookupAndDeleteMapKeysValues(flowMap *ebpf.Map) ([]flow.RecordKey, [][]flow.RecordMetrics) {
+	var flowKeys []flow.RecordKey
+	var flowsValues [][]flow.RecordMetrics
+
+	// Get all map keys
+	var err error
+	key := flow.RecordKey{}
+	for err = flowMap.NextKey(nil, &key); err == nil; err = flowMap.NextKey(key, &key) {
+		flowKeys = append(flowKeys, key)
+	}
+	if !errors.Is(err, ebpf.ErrKeyNotExist) {
+		log.WithError(err).Warnf("couldn't read all keys from eBPF map: %s", flowMap.String())
+	}
+
+	// Lookup and delete all map entries
+	for _, key := range flowKeys {
+		var v []flow.RecordMetrics
+		if err := flowMap.LookupAndDelete(key, &v); err != nil {
+			log.WithError(err).WithField("flowId", key).
+				Warnf("couldn't read Flow information for entry")
+		}
+		flowsValues = append(flowsValues, v)
+	}
+	return flowKeys, flowsValues
 }
