@@ -48,6 +48,7 @@ type FlowTracer struct {
 	lastEvictionNs uint64
 }
 
+// TODO: decouple flowtracer logic from eBPF maps access so we can inject mocks for testing
 func NewFlowTracer(
 	sampling, cacheMaxSize, buffersLength int,
 	evictionTimeout time.Duration,
@@ -183,12 +184,30 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 // Unregister the eBPF tracer from the system.
 // We don't need an "Unregister(iface)" method because the filters and qdiscs
 // are automatically removed when the interface is down
-func (m *FlowTracer) unregisterEverything() error {
+func (m *FlowTracer) stopAndUnregister() error {
 	var errs []error
+	// m.flows.Read is a blocking operation, so we need to close the ring buffer
+	// from another goroutine to avoid the system not being able to exit if there
+	// isn't traffic in a given interface
 	if m.flows != nil {
 		if err := m.flows.Close(); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if m.objects != nil {
+		if err := m.objects.EgressFlowParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.IngressFlowParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlows.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.DirectFlows.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		m.objects = nil
 	}
 	for iface, ef := range m.egressFilters {
 		log.WithField("interface", iface).Debug("deleting egress filter")
@@ -313,13 +332,9 @@ func (m *FlowTracer) evictFlows(tlog *logrus.Entry, forwardFlows chan<- []*flow.
 func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	go func() {
 		<-ctx.Done()
-		// m.flows.Read is a blocking operation, so we need to close the ring buffer
-		// from another goroutine to avoid the system not being able to exit if there
-		// isn't traffic in a given interface
-		if err := m.flows.Close(); err != nil {
-			log.WithError(err).Warn("Tracer: can't close ring buffer")
+		if err := m.stopAndUnregister(); err != nil {
+			log.WithError(err).Warn("unregistering eBPF objects")
 		}
-		m.unregisterEverything()
 	}()
 	go m.pollAndForwardAggregateFlows(ctx, forwardFlows)
 	m.listenAndForwardRingBuffer(ctx, forwardFlows)
