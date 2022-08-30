@@ -236,7 +236,7 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
 		// might receive entries from previous collect-eviction timeslots.
 		// We need to check the flow time and discard old flows.
-		if mt.StartMonoTimeNs <= m.lastEvictionNs {
+		if mt.EndMonoTimeNs <= m.lastEvictionNs {
 			continue
 		}
 		aggr.Accumulate(&mt)
@@ -303,12 +303,13 @@ func (m *FlowTracer) evictFlows(flowMap *ebpf.Map, tlog *logrus.Entry, forwardFl
 	for nf, flowKey := range mapKeys {
 		flowMetrics := mapValues[nf]
 		aggregatedMetrics := m.aggregate(flowMetrics)
-		// If it iterated an entry that do not have updated flows
-		if aggregatedMetrics.StartMonoTimeNs == 0 {
+		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
+		if aggregatedMetrics.EndMonoTimeNs == 0 {
 			continue
 		}
-		if aggregatedMetrics.StartMonoTimeNs > laterFlowNs {
-			laterFlowNs = aggregatedMetrics.StartMonoTimeNs
+		// If it iterated an entry that do not have updated flows
+		if aggregatedMetrics.EndMonoTimeNs > laterFlowNs {
+			laterFlowNs = aggregatedMetrics.EndMonoTimeNs
 		}
 		forwardingFlows = append(forwardingFlows, flow.NewRecord(
 			flowKey,
@@ -392,30 +393,18 @@ func (m *FlowTracer) lookupAndDeleteMapKeysValues(flowMap *ebpf.Map) ([]flow.Rec
 	var flowKeys []flow.RecordKey
 	var flowsValues [][]flow.RecordMetrics
 
-	// Get all map keys
-	var err error
-	key := flow.RecordKey{}
-	for err = flowMap.NextKey(nil, &key); err == nil; err = flowMap.NextKey(key, &key) {
-		flowKeys = append(flowKeys, key)
-	}
-	if !errors.Is(err, ebpf.ErrKeyNotExist) {
-		log.WithError(err).Warnf("couldn't read all keys from eBPF map: %s", flowMap.String())
-	}
-
-	// Lookup and delete all map entries
-	for _, key := range flowKeys {
-		var v []flow.RecordMetrics
-		// Changing Lookup+Delete by LookupAndDelete would prevent some possible race conditions
-		// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
-		if err := flowMap.Lookup(key, &v); err != nil {
-			log.WithError(err).WithField("flowId", key).
-				Warnf("couldn't read flow information for entry")
-		}
-		if err := flowMap.Delete(key); err != nil {
-			log.WithError(err).WithField("flowId", key).
+	iterator := flowMap.Iterate()
+	id := flow.RecordKey{}
+	var metrics []flow.RecordMetrics
+	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
+	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
+	for iterator.Next(&id, &metrics) {
+		if err := flowMap.Delete(id); err != nil {
+			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
 		}
-		flowsValues = append(flowsValues, v)
+		flowKeys = append(flowKeys, id)
+		flowsValues = append(flowsValues, metrics)
 	}
 	return flowKeys, flowsValues
 }
