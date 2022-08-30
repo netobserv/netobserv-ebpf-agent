@@ -50,19 +50,11 @@ struct {
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 // The userspace will aggregate them into a single flow.
-// TODO: why not just having a single map and use "direction" as part of the key?
-// max_entries value is defined at userspace according to user configuration
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
-} xflow_metric_map_ingress SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __type(key, flow_id);
-    __type(value, flow_metrics);
-} xflow_metric_map_egress SEC(".maps");
+} aggregated_flows SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
@@ -162,18 +154,16 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
 }
 
 
-static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_map) {
+static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
+
     flow_id id;
-    int rc = TC_ACT_OK;
-
     u64 current_time = bpf_ktime_get_ns();
-
     struct ethhdr *eth = data;
     if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
         return TC_ACT_OK;
@@ -181,13 +171,13 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
     id.if_index = skb->ifindex;
     id.direction = direction;
 
-    flow_metrics *aggregate_flow = bpf_map_lookup_elem(flows_map, &id);
+    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
 
-        bpf_map_update_elem(flows_map, &id, aggregate_flow, BPF_EXIST);
+        bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_EXIST);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
@@ -197,30 +187,30 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction, void *flows_
             .end_mono_time_ts = current_time,
         };
         
-        if (bpf_map_update_elem(flows_map, &id, &new_flow, BPF_NOEXIST) != 0) {
+        if (bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST) != 0) {
             /*
                 When the map is full, we directly send the flow entry to userspace via ringbuffer,
                 until space is available in the kernel-side maps
             */
             flow_record *record = bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
             if (!record) {
-                return rc;
+                return TC_ACT_OK;
             }
             record->id = id;
             record->metrics = new_flow;
             bpf_ringbuf_submit(record, 0);
         }
     }
-    return rc;
+    return TC_ACT_OK;
 
 }
 SEC("tc_ingress")
 int ingress_flow_parse (struct __sk_buff *skb) {
-    return flow_monitor(skb, INGRESS, &xflow_metric_map_ingress);
+    return flow_monitor(skb, INGRESS);
 }
 
 SEC("tc_egress")
 int egress_flow_parse (struct __sk_buff *skb) {
-    return flow_monitor(skb, EGRESS, &xflow_metric_map_egress);
+    return flow_monitor(skb, EGRESS);
 }
 char _license[] SEC("license") = "GPL";

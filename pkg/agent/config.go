@@ -32,7 +32,7 @@ type Config struct {
 	BuffersLength int `env:"BUFFERS_LENGTH" envDefault:"50"`
 	// CacheMaxFlows specifies how many flows can be accumulated in the accounting cache before
 	// being flushed for its later export
-	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"1000"`
+	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"5000"`
 	// CacheActiveTimeout specifies the maximum duration that flows are kept in the accounting
 	// cache before being flushed for its later export
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`

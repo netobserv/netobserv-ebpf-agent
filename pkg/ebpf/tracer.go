@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/gavv/monotime"
@@ -27,9 +26,8 @@ import (
 const (
 	qdiscType = "clsact"
 	// constants defined in flows.c as "volatile const"
-	constSampling   = "sampling"
-	constIngressMap = "xflow_metric_map_ingress"
-	constEgressMap  = "xflow_metric_map_egress"
+	constSampling      = "sampling"
+	aggregatedFlowsMap = "aggregated_flows"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowTracer")
@@ -46,9 +44,8 @@ type FlowTracer struct {
 	accounter       *flow.Accounter
 	interfaceNamer  flow.InterfaceNamer
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
-	ingressEviction *sync.Cond
-	egressEviction  *sync.Cond
-	lastEvictionNs  uint64
+	flowsEvictor   *sync.Cond
+	lastEvictionNs uint64
 }
 
 func NewFlowTracer(
@@ -67,9 +64,8 @@ func NewFlowTracer(
 		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
-	// Resize maps according to user-provided configuration
-	spec.Maps[constIngressMap].MaxEntries = uint32(cacheMaxSize)
-	spec.Maps[constEgressMap].MaxEntries = uint32(cacheMaxSize)
+	// Resize aggregated flows map according to user-provided configuration
+	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
 
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling: uint32(sampling),
@@ -95,8 +91,7 @@ func NewFlowTracer(
 		ingressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
 		qdiscs:          map[ifaces.Interface]*netlink.GenericQdisc{},
 		interfaceNamer:  namer,
-		ingressEviction: sync.NewCond(&sync.Mutex{}),
-		egressEviction:  sync.NewCond(&sync.Mutex{}),
+		flowsEvictor:    sync.NewCond(&sync.Mutex{}),
 		lastEvictionNs:  uint64(monotime.Now()),
 	}, nil
 }
@@ -244,28 +239,18 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 	return aggr
 }
 
-// Monitor Egress Map to evict flows based on logic
-func (m *FlowTracer) pollAndForwardEgress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	m.pollAndForward(ctx, m.objects.XflowMetricMapEgress, forwardFlows, m.egressEviction)
-}
-
-// Monitor Ingress Map to evict flows based on logic
-func (m *FlowTracer) pollAndForwardIngress(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	m.pollAndForward(ctx, m.objects.XflowMetricMapIngress, forwardFlows, m.ingressEviction)
-}
-
-func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forwardFlows chan<- []*flow.Record, evictor *sync.Cond) {
-	tlog := log.WithField("map", flowMap.String())
+func (m *FlowTracer) pollAndForwardAggregateFlows(ctx context.Context, forwardFlows chan<- []*flow.Record) {
+	tlog := log.WithField("map", m.objects.AggregatedFlows.String())
 	go func() {
 		<-ctx.Done()
 	}()
 	go func() {
 		for {
 			// make sure we only evict once at a time, even if there are multiple eviction signals
-			evictor.L.Lock()
-			evictor.Wait()
-			m.evictFlows(flowMap, tlog, forwardFlows)
-			evictor.L.Unlock()
+			m.flowsEvictor.L.Lock()
+			m.flowsEvictor.Wait()
+			m.evictFlows(tlog, forwardFlows)
+			m.flowsEvictor.L.Unlock()
 
 			// if context is canceled, stops the goroutine after evicting flows
 			select {
@@ -280,23 +265,23 @@ func (m *FlowTracer) pollAndForward(ctx context.Context, flowMap *ebpf.Map, forw
 		select {
 		case <-ctx.Done():
 			tlog.Debug("evicting flows after context cancelation")
-			evictor.Broadcast()
+			m.flowsEvictor.Broadcast()
 			ticker.Stop()
 			tlog.Debug("exiting monitor")
 			return
 		case <-ticker.C:
 			tlog.Debug("evicting flows on timer")
-			evictor.Broadcast()
+			m.flowsEvictor.Broadcast()
 		}
 	}
 }
 
-func (m *FlowTracer) evictFlows(flowMap *ebpf.Map, tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
+func (m *FlowTracer) evictFlows(tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
 
-	mapKeys, mapValues := m.lookupAndDeleteMapKeysValues(flowMap)
+	mapKeys, mapValues := m.lookupAndDeleteMapKeysValues()
 
 	var forwardingFlows []*flow.Record
 	laterFlowNs := uint64(0)
@@ -336,8 +321,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Reco
 		}
 		m.unregisterEverything()
 	}()
-	go m.pollAndForwardIngress(ctx, forwardFlows)
-	go m.pollAndForwardEgress(ctx, forwardFlows)
+	go m.pollAndForwardAggregateFlows(ctx, forwardFlows)
 	m.listenAndForwardRingBuffer(ctx, forwardFlows)
 }
 
@@ -367,15 +351,7 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 			}
 			log.WithField("direction", readFlow.Direction).
 				Debug("received flow from ringbuffer. Evicting in-memory maps to leave free space")
-			switch readFlow.Direction {
-			case flow.DirectionIngress:
-				m.ingressEviction.Broadcast()
-			case flow.DirectionEgress:
-				m.egressEviction.Broadcast()
-			default:
-				log.WithField("direction", readFlow.Direction).
-					Warnf("received flow with incorrect direction: %#v", readFlow)
-			}
+			m.flowsEvictor.Broadcast()
 
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			flowAccount <- readFlow
@@ -389,7 +365,8 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 // Changing this method invaction by BatchLookupAndDelete could improve performance
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete oprations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
-func (m *FlowTracer) lookupAndDeleteMapKeysValues(flowMap *ebpf.Map) ([]flow.RecordKey, [][]flow.RecordMetrics) {
+func (m *FlowTracer) lookupAndDeleteMapKeysValues() ([]flow.RecordKey, [][]flow.RecordMetrics) {
+	flowMap := m.objects.AggregatedFlows
 	var flowKeys []flow.RecordKey
 	var flowsValues [][]flow.RecordMetrics
 
