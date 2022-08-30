@@ -303,6 +303,10 @@ func (m *FlowTracer) evictFlows(flowMap *ebpf.Map, tlog *logrus.Entry, forwardFl
 	for nf, flowKey := range mapKeys {
 		flowMetrics := mapValues[nf]
 		aggregatedMetrics := m.aggregate(flowMetrics)
+		// If it iterated an entry that do not have updated flows
+		if aggregatedMetrics.StartMonoTimeNs == 0 {
+			continue
+		}
 		if aggregatedMetrics.StartMonoTimeNs > laterFlowNs {
 			laterFlowNs = aggregatedMetrics.StartMonoTimeNs
 		}
@@ -381,7 +385,9 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 // For synchronization purposes, we get/delete a whole snapshot of the flows map.
 // This way we avoid missing packets that could be updated on the
 // ebpf side while we process/aggregate them here
-// TODO: detect whether BatchLookupAndDelete is supported (e.g. not supported in Openshift 4.10) and use it selectively
+// Changing this method invaction by BatchLookupAndDelete could improve performance
+// TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
+// Supported Lookup/Delete oprations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 func (m *FlowTracer) lookupAndDeleteMapKeysValues(flowMap *ebpf.Map) ([]flow.RecordKey, [][]flow.RecordMetrics) {
 	var flowKeys []flow.RecordKey
 	var flowsValues [][]flow.RecordMetrics
@@ -399,9 +405,15 @@ func (m *FlowTracer) lookupAndDeleteMapKeysValues(flowMap *ebpf.Map) ([]flow.Rec
 	// Lookup and delete all map entries
 	for _, key := range flowKeys {
 		var v []flow.RecordMetrics
-		if err := flowMap.LookupAndDelete(key, &v); err != nil {
+		// Changing Lookup+Delete by LookupAndDelete would prevent some possible race conditions
+		// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
+		if err := flowMap.Lookup(key, &v); err != nil {
 			log.WithError(err).WithField("flowId", key).
-				Warnf("couldn't read Flow information for entry")
+				Warnf("couldn't read flow information for entry")
+		}
+		if err := flowMap.Delete(key); err != nil {
+			log.WithError(err).WithField("flowId", key).
+				Warnf("couldn't delete flow entry")
 		}
 		flowsValues = append(flowsValues, v)
 	}

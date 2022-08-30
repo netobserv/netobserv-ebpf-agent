@@ -4,6 +4,7 @@ package basic
 
 import (
 	"context"
+	"os"
 	"path"
 	"strconv"
 	"testing"
@@ -32,7 +33,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
+	if os.Getenv("ACTIONS_RUNNER_DEBUG") == "true" {
+		logrus.StandardLogger().SetLevel(logrus.DebugLevel)
+	}
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
