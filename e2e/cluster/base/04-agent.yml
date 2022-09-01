@@ -22,8 +22,6 @@ spec:
           privileged: true
           runAsUser: 0
         env:
-          - name: EVICTION_TIMEOUT
-            value: 5s
           - name: CACHE_ACTIVE_TIMEOUT
             value: 200ms
           - name: LOG_LEVEL

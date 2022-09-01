@@ -1,4 +1,0 @@
-package agent
-
-func systemSetup() {
-}

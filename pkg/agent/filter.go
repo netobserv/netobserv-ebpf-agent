@@ -4,15 +4,13 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 )
 
 type interfaceFilter struct {
 	allowedRegexpes  []*regexp.Regexp
-	allowedMatches   []ifaces.Name
+	allowedMatches   []string
 	excludedRegexpes []*regexp.Regexp
-	excludedMatches  []ifaces.Name
+	excludedMatches  []string
 }
 
 // initInterfaceFilter allows filtering network interfaces that are accepted/excluded by the user,
@@ -33,7 +31,7 @@ func initInterfaceFilter(allowed, excluded []string) (interfaceFilter, error) {
 			itf.allowedRegexpes = append(itf.allowedRegexpes, re)
 		} else {
 			// otherwise, store it as exact match definition
-			itf.allowedMatches = append(itf.allowedMatches, ifaces.Name(definition))
+			itf.allowedMatches = append(itf.allowedMatches, definition)
 		}
 	}
 
@@ -48,14 +46,14 @@ func initInterfaceFilter(allowed, excluded []string) (interfaceFilter, error) {
 			itf.excludedRegexpes = append(itf.excludedRegexpes, re)
 		} else {
 			// otherwise, store it as exact match definition
-			itf.excludedMatches = append(itf.excludedMatches, ifaces.Name(definition))
+			itf.excludedMatches = append(itf.excludedMatches, definition)
 		}
 	}
 
 	return itf, nil
 }
 
-func (itf *interfaceFilter) Allowed(name ifaces.Name) bool {
+func (itf *interfaceFilter) Allowed(name string) bool {
 	// if the allowed list is empty, any interface is allowed except if it matches the exclusion list
 	allowed := len(itf.allowedRegexpes)+len(itf.allowedMatches) == 0
 	// otherwise, we check if it appears in the allowed lists (both exact match and regexp)

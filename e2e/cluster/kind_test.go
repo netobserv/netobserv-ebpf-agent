@@ -1,13 +1,18 @@
 package cluster
 
 import (
+	"os"
 	"path"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOrderManifests(t *testing.T) {
+	if os.Getenv("ACTIONS_RUNNER_DEBUG") == "true" {
+		logrus.StandardLogger().SetLevel(logrus.DebugLevel)
+	}
 	tc := NewKind("foo", ".",
 		Deploy(Deployment{ManifestFile: "pods.yml"}),
 		Deploy(Deployment{Order: ExternalServices, ManifestFile: "sql"}),

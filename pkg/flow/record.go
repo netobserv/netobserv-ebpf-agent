@@ -8,9 +8,12 @@ import (
 	"time"
 )
 
+// Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
+const (
+	DirectionIngress = uint8(0)
+	DirectionEgress  = uint8(1)
+)
 const MacLen = 6
-
-var MAXNS int64 = 1000000000
 
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const IPv6Type = 0x86DD
@@ -41,37 +44,76 @@ type Transport struct {
 	Protocol uint8 `json:"Proto"`
 }
 
-// what identifies a flow
-type key struct {
+// RecordKey identifies a flow
+// Must coincide byte by byte with kernel-side flow_id_t (bpf/flow.h)
+type RecordKey struct {
 	EthProtocol uint16 `json:"Etype"`
 	Direction   uint8  `json:"FlowDirection"`
 	DataLink
 	Network
 	Transport
+	IFIndex uint32
+}
+
+// RecordMetrics provides flows metrics and timing information
+// Must coincide byte by byte with kernel-side flow_metrics_t (bpf/flow.h)
+type RecordMetrics struct {
+	Packets uint32
+	Bytes   uint64
+	// StartMonoTimeNs and EndMonoTimeNs are the start and end times as system monotonic timestamps
+	// in nanoseconds, as output from bpf_ktime_get_ns() (kernel space)
+	// and monotime.Now() (user space)
+	StartMonoTimeNs uint64
+	EndMonoTimeNs   uint64
 }
 
 // record structure as parsed from eBPF
 // it's important to emphasize that the fields in this structure have to coincide,
-// byte by byte, with the flow structure in the bpf/flow.h file
-
-type rawRecord struct {
-	key
-	Bytes uint64
-	Flags uint32 // Flags with some future space to highlight TCP states
+// byte by byte, with the flow_record_t structure in the bpf/flow.h file
+type RawRecord struct {
+	RecordKey
+	RecordMetrics
 }
 
 // Record contains accumulated metrics from a flow
 type Record struct {
-	rawRecord
+	RawRecord
+	// TODO: redundant field from RecordMetrics. Reorganize structs
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	Interface     string
-	Packets       uint32 // Packets field kept here
 }
 
-func (r *Record) Accumulate(src *Record) {
-	// assuming that the src record is later in time than the destination record
-	r.TimeFlowEnd = src.TimeFlowStart
+type InterfaceNamer func(ifIndex int) string
+
+func NewRecord(
+	key RecordKey,
+	metrics RecordMetrics,
+	currentTime time.Time,
+	monotonicCurrentTime uint64,
+	namer InterfaceNamer,
+) *Record {
+	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeNs)
+	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeNs)
+	return &Record{
+		RawRecord: RawRecord{
+			RecordKey:     key,
+			RecordMetrics: metrics,
+		},
+		Interface:     namer(int(key.IFIndex)),
+		TimeFlowStart: currentTime.Add(-startDelta),
+		TimeFlowEnd:   currentTime.Add(-endDelta),
+	}
+}
+
+func (r *RecordMetrics) Accumulate(src *RecordMetrics) {
+	// time == 0 if the value has not been yet set
+	if r.StartMonoTimeNs == 0 || r.StartMonoTimeNs > src.StartMonoTimeNs {
+		r.StartMonoTimeNs = src.StartMonoTimeNs
+	}
+	if r.EndMonoTimeNs == 0 || r.EndMonoTimeNs < src.EndMonoTimeNs {
+		r.EndMonoTimeNs = src.EndMonoTimeNs
+	}
 	r.Bytes += src.Bytes
 	r.Packets += src.Packets
 }
@@ -101,8 +143,8 @@ func (m *MacAddr) MarshalJSON() ([]byte, error) {
 }
 
 // ReadFrom reads a Record from a binary source, in LittleEndian order
-func ReadFrom(reader io.Reader) (*Record, error) {
-	var fr rawRecord
+func ReadFrom(reader io.Reader) (*RawRecord, error) {
+	var fr RawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
-	return &Record{rawRecord: fr}, err
+	return &fr, err
 }
