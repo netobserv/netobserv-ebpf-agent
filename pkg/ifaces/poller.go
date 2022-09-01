@@ -11,8 +11,8 @@ import (
 // notifications when interfaces are added or deleted.
 type Poller struct {
 	period     time.Duration
-	current    map[Name]struct{}
-	interfaces func() ([]Name, error)
+	current    map[Interface]struct{}
+	interfaces func() ([]Interface, error)
 	bufLen     int
 }
 
@@ -21,7 +21,7 @@ func NewPoller(period time.Duration, bufLen int) *Poller {
 		period:     period,
 		bufLen:     bufLen,
 		interfaces: netInterfaces,
-		current:    map[Name]struct{}{},
+		current:    map[Interface]struct{}{},
 	}
 }
 
@@ -33,11 +33,11 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 		ticker := time.NewTicker(np.period)
 		defer ticker.Stop()
 		for {
-			if names, err := np.interfaces(); err != nil {
+			if ifaces, err := np.interfaces(); err != nil {
 				log.WithError(err).Warn("fetching interface names")
 			} else {
-				log.WithField("names", names).Debug("fetched interface names")
-				np.diffNames(out, names)
+				log.WithField("names", ifaces).Debug("fetched interface names")
+				np.diffNames(out, ifaces)
 			}
 			select {
 			case <-ctx.Done():
@@ -54,28 +54,28 @@ func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 // diffNames compares and updates the internal account of interfaces with the latest list of
 // polled interfaces. It forwards Events for any detected addition or removal of interfaces.
-func (np *Poller) diffNames(events chan Event, names []Name) {
+func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 	// Check for new interfaces
-	acquired := map[Name]struct{}{}
-	for _, n := range names {
-		acquired[n] = struct{}{}
-		if _, ok := np.current[n]; !ok {
-			ilog.WithField("interface", n).Debug("added network interface")
-			np.current[n] = struct{}{}
+	acquired := map[Interface]struct{}{}
+	for _, iface := range ifaces {
+		acquired[iface] = struct{}{}
+		if _, ok := np.current[iface]; !ok {
+			ilog.WithField("interface", iface).Debug("added network interface")
+			np.current[iface] = struct{}{}
 			events <- Event{
 				Type:      EventAdded,
-				Interface: n,
+				Interface: iface,
 			}
 		}
 	}
 	// Check for deleted interfaces
-	for n := range np.current {
-		if _, ok := acquired[n]; !ok {
-			delete(np.current, n)
-			ilog.WithField("interface", n).Debug("deleted network interface")
+	for iface := range np.current {
+		if _, ok := acquired[iface]; !ok {
+			delete(np.current, iface)
+			ilog.WithField("interface", iface).Debug("deleted network interface")
 			events <- Event{
 				Type:      EventDeleted,
-				Interface: n,
+				Interface: iface,
 			}
 		}
 	}

@@ -16,7 +16,7 @@ spec:
       serviceAccountName: ebpf-agent-test
       containers:
         - name: flp
-          image: quay.io/netobserv/flowlogs-pipeline:latest
+          image: quay.io/netobserv/flowlogs-pipeline:v0.1.3-rc3
           ports:
             - containerPort: 9999
               hostPort: 9999

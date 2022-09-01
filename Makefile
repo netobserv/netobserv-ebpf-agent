@@ -81,8 +81,8 @@ generate: prereqs
 .PHONY: docker-generate
 docker-generate:
 	@echo "### Creating the container that generates the eBPF binaries"
-	docker build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE)
-	docker run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE)
+	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
 build: prereqs fmt lint test vendors compile

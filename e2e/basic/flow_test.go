@@ -4,6 +4,7 @@ package basic
 
 import (
 	"context"
+	"os"
 	"path"
 	"strconv"
 	"testing"
@@ -23,7 +24,7 @@ import (
 
 const (
 	clusterNamePrefix = "basic-test-cluster"
-	testTimeout       = 120 * time.Second
+	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
 
@@ -32,7 +33,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
+	if os.Getenv("ACTIONS_RUNNER_DEBUG") == "true" {
+		logrus.StandardLogger().SetLevel(logrus.DebugLevel)
+	}
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
@@ -89,14 +92,16 @@ func TestSinglePacketFlows(t *testing.T) {
 
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
-			for pktLen := 50; pktLen <= 60; pktLen++ {
-				logrus.WithField("destinationIP", serverPodIP).Info("Sending ICMP packet")
+			for pktLen := 50; pktLen <= 200; pktLen++ {
+				logrus.WithField("destinationIP", serverPodIP).Debug("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
 					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
 				require.NoError(t, err)
-				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Info("ping sent")
+				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Debug("ping sent")
 
 				sent, recv := getPingFlows(t, latestFlowMS)
+				logrus.Debugf("ping request flow: %#v", sent)
+				logrus.Debugf("ping response flow: %#v", recv)
 
 				assert.Equal(t, pingerIP, sent["SrcAddr"])
 				assert.Equal(t, serverPodIP, sent["DstAddr"])
@@ -107,7 +112,13 @@ func TestSinglePacketFlows(t *testing.T) {
 				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, recv["Bytes"])
 				assert.EqualValues(t, 1, recv["Packets"])
 
+				if t.Failed() {
+					logrus.Infof("latestFlowMS: %v (vs received %d)", latestFlowMS.UnixMilli(),
+						recv["TimeFlowEndMs"])
+					return ctx
+				}
 				latestFlowMS = asTime(recv["TimeFlowEndMs"])
+
 			}
 
 			return ctx
@@ -116,7 +127,7 @@ func TestSinglePacketFlows(t *testing.T) {
 }
 
 func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]interface{}) {
-	logrus.Info("Verifying that the request/return ICMP packets have been captured individually")
+	logrus.Debug("Verifying that the request/return ICMP packets have been captured individually")
 	var query *tester.LokiQueryResponse
 	var err error
 	test.Eventually(t, testTimeout, func(t require.TestingT) {
@@ -124,7 +135,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 			Query(1, `{SrcK8S_OwnerName="pinger",DstK8S_OwnerName="server"}|="\"Proto\":1,"`) // Proto 1 == ICMP
 		require.NoError(t, err)
 		require.NotNil(t, query)
-		require.Len(t, query.Data.Result, 1)
+		require.NotEmpty(t, query.Data.Result)
 		if len(query.Data.Result) > 0 {
 			sent, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)
@@ -143,7 +154,7 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 			recv, err = query.Data.Result[0].Values[0].FlowData()
 			require.NoError(t, err)
 			require.Less(t, newerThan.UnixMilli(),
-				asTime(sent["TimeFlowStartMs"]).UnixMilli())
+				asTime(recv["TimeFlowStartMs"]).UnixMilli())
 		}
 	}, test.Interval(time.Second))
 	return sent, recv

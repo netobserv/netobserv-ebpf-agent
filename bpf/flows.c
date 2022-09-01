@@ -1,10 +1,33 @@
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/in.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
+/*
+    Flows v2. A Flow-metric generator using TC.
+
+    This program can be hooked on to TC ingress/egress hook to monitor packets
+    to/from an interface.
+
+    Logic:
+        1) Store flow information in a per-cpu hash map.
+        2) Upon flow completion (tcp->fin event), evict the entry from map, and
+           send to userspace through ringbuffer.
+           Eviction for non-tcp flows need to done by userspace
+        3) When the map is full, we send the new flow entry to userspace via ringbuffer,
+            until an entry is available.
+        4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
+*/
+
 #include <linux/bpf.h>
-#include <linux/types.h>
+#include <linux/in.h>
+#include <linux/if_packet.h>
+#include <linux/if_vlan.h>
+#include <linux/ip.h>
+#include <linux/if_ether.h>
+#include <linux/ipv6.h>
+#include <linux/icmp.h>
+#include <linux/icmpv6.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <string.h>
+
+#include <stdbool.h>
 #include <linux/if_ether.h>
 
 #include <bpf_helpers.h>
@@ -19,12 +42,19 @@
 #define INGRESS 0
 #define EGRESS 1
 
-// TODO: for performance reasons, replace the ring buffer by a hashmap and
-// aggregate the flows here instead of the Go Accounter
+// Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
-} flows SEC(".maps");
+} direct_flows SEC(".maps");
+
+// Key: the flow identifier. Value: the flow metrics for that identifier.
+// The userspace will aggregate them into a single flow.
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, flow_metrics);
+} aggregated_flows SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
@@ -32,30 +62,31 @@ volatile const u32 sampling = 0;
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 // sets flow fields from IPv4 header information
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow) {
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    __builtin_memcpy(flow->network.src_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(flow->network.dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(flow->network.src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
-    __builtin_memcpy(flow->network.dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
-    flow->transport.protocol = ip->protocol;
-
+    __builtin_memcpy(id->src_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(id->dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    id->transport_protocol = ip->protocol;
+    id->src_port = 0;
+    id->dst_port = 0;
     switch (ip->protocol) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            flow->transport.src_port = __bpf_ntohs(tcp->source);
-            flow->transport.dst_port = __bpf_ntohs(tcp->dest);
+            id->src_port = __bpf_ntohs(tcp->source);
+            id->dst_port = __bpf_ntohs(tcp->dest);
         }
     } break;
     case IPPROTO_UDP: {
         struct udphdr *udp = (void *)ip + sizeof(*ip);
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            flow->transport.src_port = __bpf_ntohs(udp->source);
-            flow->transport.dst_port = __bpf_ntohs(udp->dest);
+            id->src_port = __bpf_ntohs(udp->source);
+            id->dst_port = __bpf_ntohs(udp->dest);
         }
     } break;
     default:
@@ -65,28 +96,29 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, struct flow *flow
 }
 
 // sets flow fields from IPv6 header information
-static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, struct flow *flow) {
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
 
-    flow->network.src_ip = ip->saddr;
-    flow->network.dst_ip = ip->daddr;
-    flow->transport.protocol = ip->nexthdr;
-
+    id->src_ip = ip->saddr;
+    id->dst_ip = ip->daddr;
+    id->transport_protocol = ip->nexthdr;
+    id->src_port = 0;
+    id->dst_port = 0;
     switch (ip->nexthdr) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = (void *)ip + sizeof(*ip);
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            flow->transport.src_port = __bpf_ntohs(tcp->source);
-            flow->transport.dst_port = __bpf_ntohs(tcp->dest);
+            id->src_port = __bpf_ntohs(tcp->source);
+            id->dst_port = __bpf_ntohs(tcp->dest);
         }
     } break;
     case IPPROTO_UDP: {
         struct udphdr *udp = (void *)ip + sizeof(*ip);
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            flow->transport.src_port = __bpf_ntohs(udp->source);
-            flow->transport.dst_port = __bpf_ntohs(udp->dest);
+            id->src_port = __bpf_ntohs(udp->source);
+            id->dst_port = __bpf_ntohs(udp->dest);
         }
     } break;
     default:
@@ -95,59 +127,90 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, struct flow *f
     return SUBMIT;
 }
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, struct flow *flow) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
-    __builtin_memcpy(flow->data_link.dst_mac, eth->h_dest, ETH_ALEN);
-    __builtin_memcpy(flow->data_link.src_mac, eth->h_source, ETH_ALEN);
-    flow->protocol = __bpf_ntohs(eth->h_proto);
-    // TODO: ETH_P_IPV6
-    if (flow->protocol == ETH_P_IP) {
+    __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
+    id->eth_protocol = __bpf_ntohs(eth->h_proto);
+
+    if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, flow);
-    } else if (flow->protocol == ETH_P_IPV6) {
+        return fill_iphdr(ip, data_end, id);
+    } else if (id->eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-        return fill_ip6hdr(ip6, data_end, flow);
+        return fill_ip6hdr(ip6, data_end, id);
+    } else {
+        // TODO : Need to implement other specific ethertypes if needed
+        // For now other parts of flow id remain zero
+        memset (&(id->src_ip),0, sizeof(struct in6_addr));
+        memset (&(id->dst_ip),0, sizeof(struct in6_addr));
+        id->transport_protocol = 0;
+        id->src_port = 0;
+        id->dst_port = 0;
     }
     return SUBMIT;
 }
 
-// parses flow information for a given direction (ingress/egress)
-static inline int flow_parse(struct __sk_buff *skb, u8 direction) {
 
+static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
-
-    void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
 
-    struct flow *flow = bpf_ringbuf_reserve(&flows, sizeof(struct flow), 0);
-    if (!flow) {
+    flow_id id;
+    u64 current_time = bpf_ktime_get_ns();
+    struct ethhdr *eth = data;
+    if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
         return TC_ACT_OK;
     }
+    id.if_index = skb->ifindex;
+    id.direction = direction;
 
-    struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, flow) == DISCARD) {
-        bpf_ringbuf_discard(flow, 0);
+    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
+    if (aggregate_flow != NULL) {
+        aggregate_flow->packets += 1;
+        aggregate_flow->bytes += skb->len;
+        aggregate_flow->end_mono_time_ts = current_time;
+
+        bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_EXIST);
     } else {
-        flow->direction = direction;
-        flow->bytes = skb->len;
-        bpf_ringbuf_submit(flow, 0);
+        // Key does not exist in the map, and will need to create a new entry.
+        flow_metrics new_flow = {
+            .packets = 1,
+            .bytes=skb->len,
+            .start_mono_time_ts = current_time,
+            .end_mono_time_ts = current_time,
+        };
+        
+        if (bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST) != 0) {
+            /*
+                When the map is full, we directly send the flow entry to userspace via ringbuffer,
+                until space is available in the kernel-side maps
+            */
+            flow_record *record = bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
+            if (!record) {
+                return TC_ACT_OK;
+            }
+            record->id = id;
+            record->metrics = new_flow;
+            bpf_ringbuf_submit(record, 0);
+        }
     }
     return TC_ACT_OK;
+
+}
+SEC("tc_ingress")
+int ingress_flow_parse (struct __sk_buff *skb) {
+    return flow_monitor(skb, INGRESS);
 }
 
-SEC("tc/ingress_flow_parse")
-static inline int ingress_flow_parse(struct __sk_buff *skb) {
-    return flow_parse(skb, INGRESS);
+SEC("tc_egress")
+int egress_flow_parse (struct __sk_buff *skb) {
+    return flow_monitor(skb, EGRESS);
 }
-
-SEC("tc/egress_flow_parse")
-static inline int egress_flow_parse(struct __sk_buff *skb) {
-    return flow_parse(skb, EGRESS);
-}
-
-char __license[] SEC("license") = "GPL";
+char _license[] SEC("license") = "GPL";

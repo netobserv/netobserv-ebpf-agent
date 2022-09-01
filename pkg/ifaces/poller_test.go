@@ -18,12 +18,12 @@ func TestPoller(t *testing.T) {
 	// fake net.Interfaces implementation that returns two different sets of
 	// interfaces on successive invocations
 	firstInvocation := true
-	var fakeInterfaces = func() ([]Name, error) {
+	var fakeInterfaces = func() ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
-			return []Name{"foo", "bar"}, nil
+			return []Interface{{"foo", 1}, {"bar", 2}}, nil
 		}
-		return []Name{"foo", "bae"}, nil
+		return []Interface{{"foo", 1}, {"bae", 3}}, nil
 	}
 	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
@@ -31,11 +31,19 @@ func TestPoller(t *testing.T) {
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)
 	// first poll: two interfaces are added
-	assert.Equal(t, Event{Type: EventAdded, Interface: "foo"}, getEvent(t, updates, timeout))
-	assert.Equal(t, Event{Type: EventAdded, Interface: "bar"}, getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"foo", 1}},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"bar", 2}},
+		getEvent(t, updates, timeout))
 	// second poll: one interface is added and another is removed
-	assert.Equal(t, Event{Type: EventAdded, Interface: "bae"}, getEvent(t, updates, timeout))
-	assert.Equal(t, Event{Type: EventDeleted, Interface: "bar"}, getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"bae", 3}},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2}},
+		getEvent(t, updates, timeout))
 	// successive polls: no more events are forwarded
 	select {
 	case ev := <-updates:
