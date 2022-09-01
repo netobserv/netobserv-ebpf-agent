@@ -24,7 +24,7 @@ import (
 
 const (
 	clusterNamePrefix = "basic-test-cluster"
-	testTimeout       = 120 * time.Second
+	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
 

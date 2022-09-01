@@ -250,7 +250,7 @@ func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics 
 		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
 		// might receive entries from previous collect-eviction timeslots.
 		// We need to check the flow time and discard old flows.
-		if mt.EndMonoTimeNs <= m.lastEvictionNs {
+		if mt.StartMonoTimeNs <= m.lastEvictionNs || mt.EndMonoTimeNs <= m.lastEvictionNs {
 			continue
 		}
 		aggr.Accumulate(&mt)
