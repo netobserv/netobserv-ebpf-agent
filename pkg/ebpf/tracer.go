@@ -46,6 +46,7 @@ type FlowTracer struct {
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	flowsEvictor   *sync.Cond
 	lastEvictionNs uint64
+	cacheMaxSize   int
 }
 
 // TODO: decouple flowtracer logic from eBPF maps access so we can inject mocks for testing
@@ -94,6 +95,7 @@ func NewFlowTracer(
 		interfaceNamer:  namer,
 		flowsEvictor:    sync.NewCond(&sync.Mutex{}),
 		lastEvictionNs:  uint64(monotime.Now()),
+		cacheMaxSize:    cacheMaxSize,
 	}, nil
 }
 
@@ -300,12 +302,9 @@ func (m *FlowTracer) evictFlows(tlog *logrus.Entry, forwardFlows chan<- []*flow.
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
 
-	mapKeys, mapValues := m.lookupAndDeleteMapKeysValues()
-
 	var forwardingFlows []*flow.Record
 	laterFlowNs := uint64(0)
-	for nf, flowKey := range mapKeys {
-		flowMetrics := mapValues[nf]
+	for flowKey, flowMetrics := range m.lookupAndDeleteFlowsMap() {
 		aggregatedMetrics := m.aggregate(flowMetrics)
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
 		if aggregatedMetrics.EndMonoTimeNs == 0 {
@@ -380,12 +379,12 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 // Changing this method invaction by BatchLookupAndDelete could improve performance
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete oprations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
-func (m *FlowTracer) lookupAndDeleteMapKeysValues() ([]flow.RecordKey, [][]flow.RecordMetrics) {
+func (m *FlowTracer) lookupAndDeleteFlowsMap() map[flow.RecordKey][]flow.RecordMetrics {
 	flowMap := m.objects.AggregatedFlows
-	var flowKeys []flow.RecordKey
-	var flowsValues [][]flow.RecordMetrics
 
 	iterator := flowMap.Iterate()
+	flows := make(map[flow.RecordKey][]flow.RecordMetrics, m.cacheMaxSize)
+
 	id := flow.RecordKey{}
 	var metrics []flow.RecordMetrics
 	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
@@ -395,8 +394,10 @@ func (m *FlowTracer) lookupAndDeleteMapKeysValues() ([]flow.RecordKey, [][]flow.
 			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
 		}
-		flowKeys = append(flowKeys, id)
-		flowsValues = append(flowsValues, metrics)
+		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
+		// (probably due to race conditions) so we need to re-join metrics again at userspace
+		// TODO: instrument how many times the keys are is repeated in the same eviction
+		flows[id] = append(flows[id], metrics...)
 	}
-	return flowKeys, flowsValues
+	return flows
 }

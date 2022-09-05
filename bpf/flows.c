@@ -171,6 +171,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     id.if_index = skb->ifindex;
     id.direction = direction;
 
+    // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
+    // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
     flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         aggregate_flow->packets += 1;
@@ -186,8 +188,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
         };
-        
-        if (bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST) != 0) {
+
+        // even if we know that the entry is new, another CPU might be concurrently inserting a flow
+        // so we need to specify BPF_ANY
+        if (bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY) != 0) {
             /*
                 When the map is full, we directly send the flow entry to userspace via ringbuffer,
                 until space is available in the kernel-side maps
