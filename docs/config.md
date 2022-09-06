@@ -17,7 +17,7 @@ The following environment variables are available to configure the NetObserv eBF
 * `SAMPLING` (default: disabled). Rate at which packets should be sampled and sent to the target
   collector. E.g. if set to 10, one out of 10 packets, on average, will be sent to the target
   collector.
-* `CACHE_MAX_FLOWS` (default: `1000`). Number of flows that can be accumulated in the accounting
+* `CACHE_MAX_FLOWS` (default: `5000`). Number of flows that can be accumulated in the accounting
   cache. If the accounter reaches the max number of flows, it flushes them to the collector.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
