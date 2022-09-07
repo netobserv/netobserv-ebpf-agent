@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi8/go-toolset:1.17.7 as builder
+FROM registry.access.redhat.com/ubi8/go-toolset:1.17.12 as builder
 
 ARG SW_VERSION="unknown"
 ARG GOVERSION="1.17.8"
