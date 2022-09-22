@@ -178,6 +178,11 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
+        // it might happen that start_mono_time hasn't been set due to
+        // the way percpu hashmap deal with concurrent map entries
+        if (aggregate_flow->start_mono_time_ts == 0) {
+            aggregate_flow->start_mono_time_ts = current_time;
+        }
 
         bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_EXIST);
     } else {
