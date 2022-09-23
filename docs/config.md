@@ -32,8 +32,6 @@ The following environment variables are available to configure the NetObserv eBF
   you actually need to set the `CACHE_MAX_FLOWS` and/or `MESSAGE_MAX_FLOW_ENTRIES`
 * `KAFKA_BATCH_SIZE` (default: `1048576`). Limit of the maximum size of a request in bytes before
   being sent to a Kafka partition.
-* `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
-  means that errors are ignored since the caller will not receive the returned value.
 * `KAFKA_COMPRESSION` (default: `none`). Compression codec to be used to compress messages. Accepted
   values: `none`, `gzip`, `snappy`, `lz4`, `zstd`.
 * `KAFKA_ENABLE_TLS` (default: false). If `true`, enable TLS encryption for Kafka messages. The following settings are used only when TLS is enabled:
@@ -47,10 +45,12 @@ The following environment variables are available to configure the NetObserv eBF
 ## Development-only variables
 
 The following configuration variables are mostly used for development and fine-grained debugging,
-so any user should need to change them.
+so no user should need to change them.
 
 * `BUFFERS_LENGTH` (default: `50`). Length of the internal communication channels between the different
   processing stages.
+* `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
+  means that errors are ignored since the caller will not receive the returned value.
 * `LISTEN_INTERFACES` (default: `watch`). Mechanism used by the agent to listen for added or removed
   network interfaces. Accepted values are:
   - `watch`: interfaces are traced immediately after they are created. This is
