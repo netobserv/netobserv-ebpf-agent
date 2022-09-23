@@ -23,15 +23,13 @@ The following environment variables are available to configure the NetObserv eBF
   that flows are kept in the accounting cache before being flushed to the collector.
 * `LOG_LEVEL` (default: `info`). From more to less verbose: `trace`, `debug`, `info`, `warn`,
   `error`, `fatal`, `panic`.
-* `MESSAGE_MAX_FLOW_ENTRIES` (default: unset). Number of flows to be grouped in a single
-  message as sent to the Flow Collector. If `0` (or unset), each message will contain the
-  number of flows determined by `CACHE_MAX_FLOWS`, at most. If this value is set to a number
-  lower than `CACHE_MAX_FLOWS`, each message with more than `MESSAGE_MAX_FLOW_ENTRIES` will be
-  split in multiple messages having at most the number of flows specified by this variable.
 * `KAFKA_BROKERS` (required if `EXPORT` is `kafka`). Comma-separated list of tha addresses of the
   brokers of the Kafka cluster that this agent is configured to send messages to.
 * `KAFKA_TOPIC`(default: `network-flows`). Name of the topic where the flows' processor will receive
   the flows from.
+* `KAFKA_BATCH_MESSAGES` (default: `1000`). Limit on how many messages will be buffered before being sent
+  to a Kafka partition.
+  you actually need to set the `CACHE_MAX_FLOWS` and/or `MESSAGE_MAX_FLOW_ENTRIES`
 * `KAFKA_BATCH_SIZE` (default: `1048576`). Limit of the maximum size of a request in bytes before
   being sent to a Kafka partition.
 * `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
@@ -53,10 +51,6 @@ so any user should need to change them.
 
 * `BUFFERS_LENGTH` (default: `50`). Length of the internal communication channels between the different
   processing stages.
-* `KAFKA_BATCH_MESSAGES` (default: `100`). Exposes an internal value from the used Kafka library.
-  It sets the limit on how many messages will be buffered before being sent to a partition. A
-  "message" is not a flow but a group of many flows. If you are thinking on setting this value,
-  you actually need to set the `CACHE_MAX_FLOWS` and/or `MESSAGE_MAX_FLOW_ENTRIES`
 * `LISTEN_INTERFACES` (default: `watch`). Mechanism used by the agent to listen for added or removed
   network interfaces. Accepted values are:
   - `watch`: interfaces are traced immediately after they are created. This is

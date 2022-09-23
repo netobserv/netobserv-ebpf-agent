@@ -73,7 +73,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				cfg.TargetHost, cfg.TargetPort)
 		}
 		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
-		grpcExporter, err := exporter.StartGRPCProto(target, cfg.MessageMaxFlowEntries)
+		grpcExporter, err := exporter.StartGRPCProto(target)
 		if err != nil {
 			return nil, err
 		}
@@ -96,16 +96,15 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			transport.TLS = tlsConfig
 		}
 		exportFunc = (&exporter.KafkaProto{
-			MaxMessageEntries: cfg.MessageMaxFlowEntries,
 			Writer: &kafkago.Writer{
-				Addr:  kafkago.TCP(cfg.KafkaBrokers...),
-				Topic: cfg.KafkaTopic,
+				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
+				Topic:     cfg.KafkaTopic,
+				BatchSize: cfg.KafkaBatchMessages,
 				// Assigning KafkaBatchSize to BatchBytes instead of BatchSize might be confusing here.
 				// The reason is that the "standard" Kafka name for this variable is "batch.size",
 				// which specifies the size of messages in terms of bytes, and not in terms of entries.
 				// We have decided to hide this library implementation detail and expose to the
 				// customer the common, standard name and meaning for batch.size
-				BatchSize:  cfg.KafkaBatchMessages,
 				BatchBytes: int64(cfg.KafkaBatchSize),
 				// Segmentio's Kafka-go does not behave as standard Kafka library, and would
 				// throttle any Write invocation until reaching the timeout.

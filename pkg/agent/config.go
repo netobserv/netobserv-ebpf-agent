@@ -38,12 +38,6 @@ type Config struct {
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`
 	// Logger level. From more to less verbose: trace, debug, info, warn, error, fatal, panic.
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
-	// MessageMaxFlowEntries sets the number of flows to be grouped in a single
-	// message as sent to the Flow Collector. If `0` (or unset), each message will contain the
-	// number of flows determined by CacheMaxFlows (at most). If this property is set to a number
-	// lower than CacheMaxFlows, each message with more than MessageMaxFlowEntries will be
-	// split in multiple messages having at most the number of flows specified by this variable.
-	MessageMaxFlowEntries int `env:"MESSAGE_MAX_FLOW_ENTRIES"`
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
 	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
 	Sampling int `env:"SAMPLING" envDefault:"0"`
@@ -61,13 +55,9 @@ type Config struct {
 	KafkaBrokers []string `env:"KAFKA_BROKERS" envSeparator:","`
 	// KafkaTopic is the name of the topic where the flows' processor will receive the flows from.
 	KafkaTopic string `env:"KAFKA_TOPIC" envDefault:"network-flows"`
-	// KafkaBatchMessages exposes an internal value from the used Kafka library and is exposed here
-	// for development, fine-grained tuning, so you don't need to set it. To tune the number of
-	// flows that are packed in a single message, you need to set CacheMaxFlows and/or
-	// MessageMaxFlowEntries.
 	// KafkaBatchMessages sets the limit on how many messages will be buffered before being sent to a
-	// partition. A "message" is not a flow but a group of many flows.
-	KafkaBatchMessages int `env:"KAFKA_BATCH_MESSAGES" envDefault:"100"`
+	// partition.
+	KafkaBatchMessages int `env:"KAFKA_BATCH_MESSAGES" envDefault:"1000"`
 	// KafkaBatchSize sets the limit, in bytes, of the maximum size of a request before being sent
 	// to a partition.
 	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"1048576"`

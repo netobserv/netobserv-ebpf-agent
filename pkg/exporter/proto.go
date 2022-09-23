@@ -7,19 +7,24 @@ import (
 )
 
 // flowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
-// into protobuf-encoded messages ready to be sent to the collector
+// into protobuf-encoded messages ready to be sent to the collector via GRPC
 func flowsToPB(inputRecords []*flow.Record) *pbflow.Records {
 	entries := make([]*pbflow.Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
-		if record.EthProtocol == flow.IPv6Type {
-			entries = append(entries, v6FlowToPB(record))
-		} else {
-			entries = append(entries, v4FlowToPB(record))
-		}
+		entries = append(entries, flowToPB(record))
 	}
 	return &pbflow.Records{
 		Entries: entries,
 	}
+}
+
+// flowsToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
+// into a protobuf-encoded message ready to be sent to the collector via kafka
+func flowToPB(record *flow.Record) *pbflow.Record {
+	if record.EthProtocol == flow.IPv6Type {
+		return v6FlowToPB(record)
+	}
+	return v4FlowToPB(record)
 }
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {

@@ -18,8 +18,7 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer            kafkaWriter
-	MaxMessageEntries int
+	Writer kafkaWriter
 }
 
 func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
@@ -31,22 +30,13 @@ func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
 
 func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 	klog.Debugf("sending %d records", len(records))
-
-	// Encode flows as fixed-length chunks for smaller kafka messages
-	var msgs []kafkago.Message
-	for kp.MaxMessageEntries != 0 && kp.MaxMessageEntries < len(records) {
-		pbBytes, err := proto.Marshal(flowsToPB(records[:kp.MaxMessageEntries]))
-		records = records[kp.MaxMessageEntries:]
+	msgs := make([]kafkago.Message, 0, len(records))
+	for _, record := range records {
+		pbBytes, err := proto.Marshal(flowToPB(record))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			continue
 		}
-		msgs = append(msgs, kafkago.Message{Value: pbBytes})
-	}
-	pbBytes, err := proto.Marshal(flowsToPB(records))
-	if err != nil {
-		klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
-	} else {
 		msgs = append(msgs, kafkago.Message{Value: pbBytes})
 	}
 

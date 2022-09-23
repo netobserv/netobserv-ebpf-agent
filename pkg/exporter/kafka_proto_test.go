@@ -46,10 +46,8 @@ func TestProtoConversion(t *testing.T) {
 	kj.ExportFlows(input)
 
 	require.Len(t, wc.messages, 1)
-	var msg pbflow.Records
-	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &msg))
-	require.Len(t, msg.Entries, 1)
-	r := msg.Entries[0]
+	var r pbflow.Record
+	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &r))
 	assert.EqualValues(t, 3, r.EthProtocol)
 	assert.EqualValues(t, 1, r.Direction)
 	assert.EqualValues(t, 0xaabbccddeeff, r.DataLink.SrcMac)
@@ -64,29 +62,6 @@ func TestProtoConversion(t *testing.T) {
 	assert.EqualValues(t, 789, r.Bytes)
 	assert.EqualValues(t, 987, r.Packets)
 	assert.Equal(t, "veth0", r.Interface)
-}
-
-func TestBatching(t *testing.T) {
-	wc := writerCapturer{}
-	kj := KafkaProto{Writer: &wc, MaxMessageEntries: 3}
-	input := make(chan []*flow.Record, 10)
-
-	// sending 8 records
-	input <- []*flow.Record{{}, {}, {}, {}, {}, {}, {}, {}}
-	close(input)
-	kj.ExportFlows(input)
-
-	// 8 records need to be batched in 3 messages
-	require.Len(t, wc.messages, 3)
-
-	// the number of messages per batch should be 3, 3 and 2
-	pbMsg := pbflow.Records{}
-	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &pbMsg))
-	assert.Len(t, pbMsg.Entries, 3)
-	require.NoError(t, proto.Unmarshal(wc.messages[1].Value, &pbMsg))
-	assert.Len(t, pbMsg.Entries, 3)
-	require.NoError(t, proto.Unmarshal(wc.messages[2].Value, &pbMsg))
-	assert.Len(t, pbMsg.Entries, 2)
 }
 
 type writerCapturer struct {
