@@ -55,12 +55,12 @@ type Config struct {
 	KafkaBrokers []string `env:"KAFKA_BROKERS" envSeparator:","`
 	// KafkaTopic is the name of the topic where the flows' processor will receive the flows from.
 	KafkaTopic string `env:"KAFKA_TOPIC" envDefault:"network-flows"`
-	// KafkaBatchSize sets the limit on how many messages will be buffered before being sent to a
+	// KafkaBatchMessages sets the limit on how many messages will be buffered before being sent to a
 	// partition.
-	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"100"`
-	// KafkaBatchBytes sets the limit of the maximum size of a request in bytes before being sent
+	KafkaBatchMessages int `env:"KAFKA_BATCH_MESSAGES" envDefault:"1000"`
+	// KafkaBatchSize sets the limit, in bytes, of the maximum size of a request before being sent
 	// to a partition.
-	KafkaBatchBytes int `env:"KAFKA_BATCH_BYTES" envDefault:"1048576"`
+	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"1048576"`
 	// KafkaAsync. If it's true, the message writing process will never block. It also means that
 	// errors are ignored since the caller will not receive the returned value.
 	KafkaAsync bool `env:"KAFKA_ASYNC" envDefault:"true"`

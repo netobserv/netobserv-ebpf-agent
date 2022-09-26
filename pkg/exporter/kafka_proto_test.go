@@ -2,15 +2,16 @@ package exporter
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // IPAddrFromNetIP returns IPAddr from net.IP
@@ -20,9 +21,9 @@ func IPAddrFromNetIP(netIP net.IP) flow.IPAddr {
 	return arr
 }
 
-func TestJSONConversion(t *testing.T) {
+func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
-	kj := KafkaJSON{Writer: &wc}
+	kj := KafkaProto{Writer: &wc}
 	input := make(chan []*flow.Record, 10)
 	record := flow.Record{}
 	record.EthProtocol = 3
@@ -30,7 +31,7 @@ func TestJSONConversion(t *testing.T) {
 	record.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
 	record.SrcAddr = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.DstAddr = IPAddrFromNetIP(net.ParseIP("aabb:ccdd:eeff::2233"))
+	record.DstAddr = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
 	record.SrcPort = 4321
 	record.DstPort = 1234
 	record.Protocol = 210
@@ -45,24 +46,22 @@ func TestJSONConversion(t *testing.T) {
 	kj.ExportFlows(input)
 
 	require.Len(t, wc.messages, 1)
-	var msg map[string]interface{}
-	require.NoError(t, json.Unmarshal(wc.messages[0].Value, &msg))
-	assert.EqualValues(t, 3, msg["Etype"])
-	assert.EqualValues(t, 1, msg["FlowDirection"])
-	assert.Equal(t, "aa:bb:cc:dd:ee:ff", msg["SrcMac"])
-	assert.Equal(t, "11:22:33:44:55:66", msg["DstMac"])
-	assert.Equal(t, "192.1.2.3", msg["SrcAddr"])
-	assert.Equal(t, "aabb:ccdd:eeff::2233", msg["DstAddr"])
-	assert.EqualValues(t, 4321, msg["SrcPort"])
-	assert.EqualValues(t, 1234, msg["DstPort"])
-	assert.EqualValues(t, 210, msg["Proto"])
-	assert.EqualValues(t, record.TimeFlowStart.Unix(), msg["TimeFlowStart"])
-	assert.EqualValues(t, record.TimeFlowEnd.Unix(), msg["TimeFlowEnd"])
-	assert.EqualValues(t, record.TimeFlowStart.UnixMilli(), msg["TimeFlowStartMs"])
-	assert.EqualValues(t, record.TimeFlowEnd.UnixMilli(), msg["TimeFlowEndMs"])
-	assert.EqualValues(t, 789, msg["Bytes"])
-	assert.EqualValues(t, 987, msg["Packets"])
-	assert.Equal(t, "veth0", msg["Interface"])
+	var r pbflow.Record
+	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &r))
+	assert.EqualValues(t, 3, r.EthProtocol)
+	assert.EqualValues(t, 1, r.Direction)
+	assert.EqualValues(t, 0xaabbccddeeff, r.DataLink.SrcMac)
+	assert.EqualValues(t, 0x112233445566, r.DataLink.DstMac)
+	assert.EqualValues(t, 0xC0010203 /* 192.1.2.3 */, r.Network.SrcAddr.GetIpv4())
+	assert.EqualValues(t, 0x7F030201 /* 127.3.2.1 */, r.Network.DstAddr.GetIpv4())
+	assert.EqualValues(t, 4321, r.Transport.SrcPort)
+	assert.EqualValues(t, 1234, r.Transport.DstPort)
+	assert.EqualValues(t, 210, r.Transport.Protocol)
+	assert.Equal(t, record.TimeFlowStart.UnixMilli(), r.TimeFlowStart.AsTime().UnixMilli())
+	assert.Equal(t, record.TimeFlowEnd.UnixMilli(), r.TimeFlowEnd.AsTime().UnixMilli())
+	assert.EqualValues(t, 789, r.Bytes)
+	assert.EqualValues(t, 987, r.Packets)
+	assert.Equal(t, "veth0", r.Interface)
 }
 
 type writerCapturer struct {
