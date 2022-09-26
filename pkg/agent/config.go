@@ -61,7 +61,6 @@ type Config struct {
 	// KafkaBatchSize sets the limit, in bytes, of the maximum size of a request before being sent
 	// to a partition.
 	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"1048576"`
-	// KafkaLingerMS sets the amount of time to wait before sending a
 	// KafkaAsync. If it's true, the message writing process will never block. It also means that
 	// errors are ignored since the caller will not receive the returned value.
 	KafkaAsync bool `env:"KAFKA_ASYNC" envDefault:"true"`

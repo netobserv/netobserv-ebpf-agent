@@ -115,6 +115,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				Async:        cfg.KafkaAsync,
 				Compression:  compression,
 				Transport:    &transport,
+				Balancer:     &kafkago.RoundRobin{},
 			},
 		}).ExportFlows
 	default:
