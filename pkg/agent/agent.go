@@ -225,7 +225,13 @@ func (f *Flows) processRecords(tracedRecords <-chan []*flow.Record) *node.Termin
 	alog.Debug("registering exporter")
 	export := node.AsTerminal(f.exporter)
 	alog.Debug("connecting graph")
-	tracersCollector.SendsTo(export)
+	if f.cfg.Deduper == DeduperFirstCome {
+		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry))
+		tracersCollector.SendsTo(deduper)
+		deduper.SendsTo(export)
+	} else {
+		tracersCollector.SendsTo(export)
+	}
 	alog.Debug("starting graph")
 	tracersCollector.Start()
 	return export
