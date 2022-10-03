@@ -19,7 +19,7 @@ type deduperCache struct {
 	// value: listElement pointing to a struct entry
 	ifaces map[RecordKey]*list.Element
 	// element: entry structs of the ifaces map ordered by expiry time
-	ll *list.List
+	entries *list.List
 }
 
 type entry struct {
@@ -33,9 +33,9 @@ type entry struct {
 // (no activity for it during the expiration time)
 func Dedupe(expireTime time.Duration) func(in <-chan []*Record, out chan<- []*Record) {
 	cache := &deduperCache{
-		expire: expireTime,
-		ll:     list.New(),
-		ifaces: map[RecordKey]*list.Element{},
+		expire:  expireTime,
+		entries: list.New(),
+		ifaces:  map[RecordKey]*list.Element{},
 	}
 	return func(in <-chan []*Record, out chan<- []*Record) {
 		for records := range in {
@@ -64,7 +64,7 @@ func (c *deduperCache) isDupe(key *RecordKey) bool {
 	if ele, ok := c.ifaces[rk]; ok {
 		fEntry := ele.Value.(*entry)
 		fEntry.expiryTime = timeNow().Add(c.expire)
-		c.ll.MoveToFront(ele)
+		c.entries.MoveToFront(ele)
 		// The input flow is duplicate if its interface is different to the interface
 		// of the non-duplicate flow that was first registered in the cache
 		return fEntry.ifIndex != key.IFIndex
@@ -76,23 +76,23 @@ func (c *deduperCache) isDupe(key *RecordKey) bool {
 		ifIndex:    key.IFIndex,
 		expiryTime: timeNow().Add(c.expire),
 	}
-	c.ifaces[rk] = c.ll.PushFront(&e)
+	c.ifaces[rk] = c.entries.PushFront(&e)
 	return false
 }
 
 func (c *deduperCache) removeExpired() {
 	now := timeNow()
-	ele := c.ll.Back()
+	ele := c.entries.Back()
 	evicted := 0
 	for ele != nil && now.After(ele.Value.(*entry).expiryTime) {
 		evicted++
-		c.ll.Remove(ele)
+		c.entries.Remove(ele)
 		delete(c.ifaces, *ele.Value.(*entry).key)
-		ele = c.ll.Back()
+		ele = c.entries.Back()
 	}
 	if evicted > 0 {
 		dlog.WithFields(logrus.Fields{
-			"current":    c.ll.Len(),
+			"current":    c.entries.Len(),
 			"evicted":    evicted,
 			"expiryTime": c.expire,
 		}).Debug("entries evicted from the deduper cache")

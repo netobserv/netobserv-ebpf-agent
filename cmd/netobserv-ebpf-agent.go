@@ -33,6 +33,9 @@ func main() {
 				Error("PProf HTTP listener stopped working")
 		}()
 	}
+	if config.DeduperFCExpiry == 0 {
+		config.DeduperFCExpiry = 2 * config.CacheActiveTimeout
+	}
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 

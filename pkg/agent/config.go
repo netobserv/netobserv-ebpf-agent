@@ -47,7 +47,8 @@ type Config struct {
 	// a flow hasn't been received for that expiry time, the deduplicator forgets it. That means
 	// that a flow from a connection that has been inactive during that period could be forwarded
 	// again from a different interface.
-	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY" envDefault:"30s"`
+	// If the value is not set, it will default to 2 * CacheActiveTimeout
+	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY"`
 	// Logger level. From more to less verbose: trace, debug, info, warn, error, fatal, panic.
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.

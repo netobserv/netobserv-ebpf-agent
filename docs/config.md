@@ -25,11 +25,10 @@ The following environment variables are available to configure the NetObserv eBF
   When enabled, it will detect duplicate flows (flows that have been detected e.g. through
   both the physical and a virtual interface).
   `firstCome` will forward only flows from the first interface the flows are received from.
-* `DEDUPER_FC_EXPIRY` (default: `30s`). Specifies the expiry duration of the flows `firstCome`
+* `DEDUPER_FC_EXPIRY` (default: `2 * CACHE_ACTIVE_TIMEOUT`). Specifies the expiry duration of the `firstCome`
   deduplicator. After a flow hasn't been received for that expiry time, the deduplicator forgets it.
   That means that a flow from a connection that has been inactive during that period could be
   forwarded again from a different interface.
-  DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY" envDefault:"30s"`
 * `LOG_LEVEL` (default: `info`). From more to less verbose: `trace`, `debug`, `info`, `warn`,
   `error`, `fatal`, `panic`.
 * `KAFKA_BROKERS` (required if `EXPORT` is `kafka`). Comma-separated list of tha addresses of the
