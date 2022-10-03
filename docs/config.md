@@ -21,6 +21,14 @@ The following environment variables are available to configure the NetObserv eBF
   cache. If the accounter reaches the max number of flows, it flushes them to the collector.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
+* `DEDUPER` (default: `none`, disabled). Accepted values are `none` (disabled) and `firstCome`.
+  When enabled, it will detect duplicate flows (flows that have been detected e.g. through
+  both the physical and a virtual interface).
+  `firstCome` will forward only flows from the first interface the flows are received from.
+* `DEDUPER_FC_EXPIRY` (default: `2 * CACHE_ACTIVE_TIMEOUT`). Specifies the expiry duration of the `firstCome`
+  deduplicator. After a flow hasn't been received for that expiry time, the deduplicator forgets it.
+  That means that a flow from a connection that has been inactive during that period could be
+  forwarded again from a different interface.
 * `LOG_LEVEL` (default: `info`). From more to less verbose: `trace`, `debug`, `info`, `warn`,
   `error`, `fatal`, `panic`.
 * `KAFKA_BROKERS` (required if `EXPORT` is `kafka`). Comma-separated list of tha addresses of the
