@@ -139,7 +139,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	case DirectionBoth:
 	// do nothing
 	default:
-		alog.Warnf("uknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
+		alog.Warnf("unknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
 	}
 
 	tracer, err := ebpf.NewFlowTracer(

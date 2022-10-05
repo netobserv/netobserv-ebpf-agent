@@ -145,40 +145,6 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 	return nil
 }
 
-func (m *FlowTracer) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ilog := log.WithField("iface", iface)
-	if !m.enableIngress {
-		ilog.Debug("ignoring ingress traffic, according to user configuration")
-		return nil
-	}
-	// Fetch events on ingress
-	ingressAttrs := netlink.FilterAttrs{
-		LinkIndex: ipvlan.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_INGRESS,
-		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  unix.ETH_P_ALL,
-		Priority:  1,
-	}
-	ingressFilter := &netlink.BpfFilter{
-		FilterAttrs:  ingressAttrs,
-		Fd:           m.objects.IngressFlowParse.FD(),
-		Name:         "tc/ingress_flow_parse",
-		DirectAction: true,
-	}
-	if err := netlink.FilterDel(ingressFilter); err == nil {
-		ilog.Warn("ingress filter already existed. Deleted it")
-	}
-	if err := netlink.FilterAdd(ingressFilter); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
-		} else {
-			return fmt.Errorf("failed to create ingress filter: %w", err)
-		}
-	}
-	m.ingressFilters[iface] = ingressFilter
-	return nil
-}
-
 func (m *FlowTracer) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
 	ilog := log.WithField("iface", iface)
 	if !m.enableEgress {
@@ -210,6 +176,40 @@ func (m *FlowTracer) registerEgress(iface ifaces.Interface, ipvlan netlink.Link)
 		}
 	}
 	m.egressFilters[iface] = egressFilter
+	return nil
+}
+
+func (m *FlowTracer) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ilog := log.WithField("iface", iface)
+	if !m.enableIngress {
+		ilog.Debug("ignoring ingress traffic, according to user configuration")
+		return nil
+	}
+	// Fetch events on ingress
+	ingressAttrs := netlink.FilterAttrs{
+		LinkIndex: ipvlan.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_INGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  unix.ETH_P_ALL,
+		Priority:  1,
+	}
+	ingressFilter := &netlink.BpfFilter{
+		FilterAttrs:  ingressAttrs,
+		Fd:           m.objects.IngressFlowParse.FD(),
+		Name:         "tc/ingress_flow_parse",
+		DirectAction: true,
+	}
+	if err := netlink.FilterDel(ingressFilter); err == nil {
+		ilog.Warn("ingress filter already existed. Deleted it")
+	}
+	if err := netlink.FilterAdd(ingressFilter); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
+		} else {
+			return fmt.Errorf("failed to create ingress filter: %w", err)
+		}
+	}
+	m.ingressFilters[iface] = ingressFilter
 	return nil
 }
 
