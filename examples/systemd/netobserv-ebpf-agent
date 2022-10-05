@@ -1,0 +1,7 @@
+# default settings for netobserv-ebpf-agent
+# used by systemd unit
+# /etc/default/netobserv-ebpf-agent
+
+DIRECTION=both
+FLOWS_TARGET_HOST=127.0.0.1
+FLOWS_TARGET_PORT=9999
