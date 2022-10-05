@@ -5,5 +5,5 @@ metadata:
   labels:
     strimzi.io/cluster: "kafka-cluster"
 spec:
-  partitions: 1
+  partitions: 12
   replicas: 1

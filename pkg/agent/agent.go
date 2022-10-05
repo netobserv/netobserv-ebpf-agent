@@ -130,8 +130,21 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return iface
 	}
 
+	ingress, egress := true, true
+	switch cfg.Direction {
+	case DirectionIngress:
+		ingress, egress = true, false
+	case DirectionEgress:
+		ingress, egress = false, true
+	case DirectionBoth:
+	// do nothing
+	default:
+		alog.Warnf("uknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
+	}
+
 	tracer, err := ebpf.NewFlowTracer(
 		cfg.Sampling, cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout,
+		ingress, egress,
 		interfaceNamer,
 	)
 	if err != nil {
