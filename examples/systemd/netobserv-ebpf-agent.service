@@ -1,0 +1,12 @@
+[Unit]
+Description=Netobserv eBPF Agent
+After=network.target
+
+[Service]
+EnvironmentFile=-/etc/default/netobserv-ebpf-agent
+ExecStart=/opt/netobserv-ebpf-agent/bin/netobserv-ebpf-agent
+Restart=on-failure
+Type=exec
+
+[Install]
+WantedBy=multi-user.target
