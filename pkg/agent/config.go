@@ -9,6 +9,9 @@ const (
 	ListenWatch      = "watch"
 	DeduperNone      = "none"
 	DeduperFirstCome = "firstCome"
+	DirectionIngress = "ingress"
+	DirectionEgress  = "egress"
+	DirectionBoth    = "both"
 )
 
 type Config struct {
@@ -49,6 +52,9 @@ type Config struct {
 	// again from a different interface.
 	// If the value is not set, it will default to 2 * CacheActiveTimeout
 	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY"`
+	// Direction allows selecting which flows to trace according to its direction. Accepted values
+	// are "ingress", "egress" or "both" (default).
+	Direction string `env:"DIRECTION" envDefault:"both"`
 	// Logger level. From more to less verbose: trace, debug, info, warn, error, fatal, panic.
 	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.

@@ -47,12 +47,15 @@ type FlowTracer struct {
 	flowsEvictor   *sync.Cond
 	lastEvictionNs uint64
 	cacheMaxSize   int
+	enableIngress  bool
+	enableEgress   bool
 }
 
 // TODO: decouple flowtracer logic from eBPF maps access so we can inject mocks for testing
 func NewFlowTracer(
 	sampling, cacheMaxSize, buffersLength int,
 	evictionTimeout time.Duration,
+	ingress, egress bool,
 	namer flow.InterfaceNamer,
 ) (*FlowTracer, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -96,6 +99,8 @@ func NewFlowTracer(
 		flowsEvictor:    sync.NewCond(&sync.Mutex{}),
 		lastEvictionNs:  uint64(monotime.Now()),
 		cacheMaxSize:    cacheMaxSize,
+		enableIngress:   ingress,
+		enableEgress:    egress,
 	}, nil
 }
 
@@ -129,6 +134,23 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 	}
 	m.qdiscs[iface] = qdisc
 
+	if err := m.registerEgress(iface, ipvlan); err != nil {
+		return err
+	}
+
+	if err := m.registerIngress(iface, ipvlan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *FlowTracer) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ilog := log.WithField("iface", iface)
+	if !m.enableEgress {
+		ilog.Debug("ignoring egress traffic, according to user configuration")
+		return nil
+	}
 	// Fetch events on egress
 	egressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
@@ -146,7 +168,7 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 	if err := netlink.FilterDel(egressFilter); err == nil {
 		ilog.Warn("egress filter already existed. Deleted it")
 	}
-	if err = netlink.FilterAdd(egressFilter); err != nil {
+	if err := netlink.FilterAdd(egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
 		} else {
@@ -154,7 +176,15 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 		}
 	}
 	m.egressFilters[iface] = egressFilter
+	return nil
+}
 
+func (m *FlowTracer) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ilog := log.WithField("iface", iface)
+	if !m.enableIngress {
+		ilog.Debug("ignoring ingress traffic, according to user configuration")
+		return nil
+	}
 	// Fetch events on ingress
 	ingressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
@@ -172,7 +202,7 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 	if err := netlink.FilterDel(ingressFilter); err == nil {
 		ilog.Warn("ingress filter already existed. Deleted it")
 	}
-	if err = netlink.FilterAdd(ingressFilter); err != nil {
+	if err := netlink.FilterAdd(ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
 		} else {
@@ -376,9 +406,9 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 // For synchronization purposes, we get/delete a whole snapshot of the flows map.
 // This way we avoid missing packets that could be updated on the
 // ebpf side while we process/aggregate them here
-// Changing this method invaction by BatchLookupAndDelete could improve performance
+// Changing this method invocation by BatchLookupAndDelete could improve performance
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
-// Supported Lookup/Delete oprations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
+// Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 func (m *FlowTracer) lookupAndDeleteFlowsMap() map[flow.RecordKey][]flow.RecordMetrics {
 	flowMap := m.objects.AggregatedFlows
 
