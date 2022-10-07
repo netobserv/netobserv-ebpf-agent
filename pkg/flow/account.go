@@ -52,6 +52,8 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 			}
 			evictingEntries := c.entries
 			c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+			logrus.WithField("flows", len(evictingEntries)).
+				Debug("evicting flows from userspace accounter on timeout")
 			go c.evict(evictingEntries, out)
 		case record, ok := <-in:
 			if !ok {
@@ -69,12 +71,13 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
 					c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+					logrus.WithField("flows", len(evictingEntries)).
+						Debug("evicting flows from userspace accounter after reaching cache max length")
 					go c.evict(evictingEntries, out)
 				}
 				c.entries[record.RecordKey] = &record.RecordMetrics
 			}
 		}
-
 	}
 }
 

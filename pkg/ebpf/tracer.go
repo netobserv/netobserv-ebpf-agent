@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -296,10 +297,13 @@ func (m *FlowTracer) pollAndForwardAggregateFlows(ctx context.Context, forwardFl
 		<-ctx.Done()
 	}()
 	go func() {
+		// flow eviction loop. It just keeps waiting for eviction until someone triggers the
+		// flowsEvictor.Broadcast signal
 		for {
 			// make sure we only evict once at a time, even if there are multiple eviction signals
 			m.flowsEvictor.L.Lock()
 			m.flowsEvictor.Wait()
+			tlog.Debug("eviction signal received")
 			m.evictFlows(tlog, forwardFlows)
 			m.flowsEvictor.L.Unlock()
 
@@ -315,13 +319,13 @@ func (m *FlowTracer) pollAndForwardAggregateFlows(ctx context.Context, forwardFl
 	for {
 		select {
 		case <-ctx.Done():
-			tlog.Debug("evicting flows after context cancelation")
+			tlog.Debug("triggering flow eviction after context cancelation")
 			m.flowsEvictor.Broadcast()
 			ticker.Stop()
 			tlog.Debug("exiting monitor")
 			return
 		case <-ticker.C:
-			tlog.Debug("evicting flows on timer")
+			tlog.Debug("triggering flow eviction on timer")
 			m.flowsEvictor.Broadcast()
 		}
 	}
@@ -372,6 +376,8 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Reco
 func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
 	go m.accounter.Account(flowAccount, forwardFlows)
+	isForwarding := int32(0)
+	forwardedFlows := int32(0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -393,13 +399,32 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 				log.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
-			log.WithField("direction", readFlow.Direction).
-				Debug("received flow from ringbuffer. Evicting in-memory maps to leave free space")
+			if logrus.IsLevelEnabled(logrus.DebugLevel) {
+				m.logRingBufferFlows(&forwardedFlows, &isForwarding)
+			}
+			// forces a flow's eviction to leave room for new flows in the ebpf cache
 			m.flowsEvictor.Broadcast()
 
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			flowAccount <- readFlow
 		}
+	}
+}
+
+// logRingBufferFlows avoids flooding logs on long series of evicted flows by grouping how
+// many flows are forwarded
+func (m *FlowTracer) logRingBufferFlows(forwardedFlows, isForwarding *int32) {
+	atomic.AddInt32(forwardedFlows, 1)
+	if atomic.CompareAndSwapInt32(isForwarding, 0, 1) {
+		go func() {
+			time.Sleep(m.evictionTimeout)
+			log.WithFields(logrus.Fields{
+				"flows":         atomic.LoadInt32(forwardedFlows),
+				"cacheMaxFlows": m.cacheMaxSize,
+			}).Debug("received flows via ringbuffer. You might want to increase the CACHE_MAX_FLOWS value")
+			atomic.StoreInt32(forwardedFlows, 0)
+			atomic.StoreInt32(isForwarding, 0)
+		}()
 	}
 }
 
@@ -409,6 +434,7 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 // Changing this method invocation by BatchLookupAndDelete could improve performance
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
+// Race conditions here causes that some flows are lost in high-load scenarios
 func (m *FlowTracer) lookupAndDeleteFlowsMap() map[flow.RecordKey][]flow.RecordMetrics {
 	flowMap := m.objects.AggregatedFlows
 
