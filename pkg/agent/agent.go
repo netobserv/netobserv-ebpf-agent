@@ -168,11 +168,10 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 // until the passed context is canceled
 func (f *Flows) Run(ctx context.Context) error {
 	alog.Info("starting Flows agent")
-	tracedRecords, err := f.interfacesManager(ctx)
+	graph, err := f.processPipeline(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("starting processing graph: %w", err)
 	}
-	graph := f.processRecords(tracedRecords)
 
 	alog.Info("Flows agent successfully started")
 	<-ctx.Done()
@@ -187,7 +186,7 @@ func (f *Flows) Run(ctx context.Context) error {
 
 // interfacesManager uses an informer to check new/deleted network interfaces. For each running
 // interface, it registers a flow tracer that will forward new flows to the returned channel
-func (f *Flows) interfacesManager(ctx context.Context) (<-chan []*flow.Record, error) {
+func (f *Flows) interfacesManager(ctx context.Context) (node.InitFunc, error) {
 	slog := alog.WithField("function", "interfacesManager")
 
 	slog.Debug("subscribing for network interface events")
@@ -196,11 +195,7 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan []*flow.Record, e
 		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 
-	tracedRecords := make(chan []*flow.Record, f.cfg.BuffersLength)
-
 	tctx, cancelTracer := context.WithCancel(ctx)
-	go f.tracer.Trace(tctx, tracedRecords)
-
 	go func() {
 		for {
 			select {
@@ -208,7 +203,6 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan []*flow.Record, e
 				slog.Debug("canceling flow tracer")
 				cancelTracer()
 				slog.Debug("closing channel and exiting internal goroutine")
-				close(tracedRecords)
 				return
 			case event := <-ifaceEvents:
 				slog.WithField("event", event).Debug("received event")
@@ -225,25 +219,28 @@ func (f *Flows) interfacesManager(ctx context.Context) (<-chan []*flow.Record, e
 		}
 	}()
 
-	return tracedRecords, nil
+	return func(out chan<- []*flow.Record) {
+		f.tracer.Trace(tctx, out)
+	}, nil
 }
 
-// processRecords creates the tracers --> accounter --> forwarder Flow processing graph
-func (f *Flows) processRecords(tracedRecords <-chan []*flow.Record) *node.Terminal {
-	// The start node receives Records from the eBPF flow tracers. Currently it is just an external
-	// channel forwarder, as the Pipes library does not yet accept
-	// adding/removing nodes dynamically: https://github.com/mariomac/pipes/issues/5
+// processPipeline creates the tracers --> accounter --> forwarder Flow processing graph
+func (f *Flows) processPipeline(ctx context.Context) (*node.Terminal, error) {
+
 	alog.Debug("registering tracers' input")
-	tracersCollector := node.AsInit(func(out chan<- []*flow.Record) {
-		for i := range tracedRecords {
-			out <- i
-		}
-	})
+	tracedRecords, err := f.interfacesManager(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tracersCollector := node.AsInit(tracedRecords)
+
 	alog.Debug("registering exporter")
-	export := node.AsTerminal(f.exporter)
+	export := node.AsTerminal(f.exporter,
+		node.ChannelBufferLen(f.cfg.BuffersLength))
 	alog.Debug("connecting graph")
 	if f.cfg.Deduper == DeduperFirstCome {
-		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry))
+		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry),
+			node.ChannelBufferLen(f.cfg.BuffersLength))
 		tracersCollector.SendsTo(deduper)
 		deduper.SendsTo(export)
 	} else {
@@ -251,7 +248,7 @@ func (f *Flows) processRecords(tracedRecords <-chan []*flow.Record) *node.Termin
 	}
 	alog.Debug("starting graph")
 	tracersCollector.Start()
-	return export
+	return export, nil
 }
 
 func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {

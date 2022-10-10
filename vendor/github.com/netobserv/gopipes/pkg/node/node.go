@@ -11,9 +11,6 @@ import (
 	"github.com/netobserv/gopipes/pkg/internal/refl"
 )
 
-// todo: make it configurable
-const chBufLen = 20
-
 // InitFunc is a function that receives a writable channel as unique argument, and sends
 // value to that channel during an indefinite amount of time.
 // TODO: with Go 1.18, this will be
@@ -151,9 +148,10 @@ func AsInit(fun InitFunc) *Init {
 	}
 }
 
-// AsMiddle wraps an MiddleFunc into an Middle node.
+// AsMiddle wraps an MiddleFunc into an Middle node, allowing to configure some instantiation
+// parameters by means of an optional list of node.CreationOption.
 // It panics if the MiddleFunc does not follow the func(<-chan,chan<-) signature.
-func AsMiddle(fun MiddleFunc) *Middle {
+func AsMiddle(fun MiddleFunc, opts ...CreationOption) *Middle {
 	fn := refl.WrapFunction(fun)
 	// check that the arguments are a read channel and a write channel
 	fn.AssertNumberOfArguments(2)
@@ -165,17 +163,19 @@ func AsMiddle(fun MiddleFunc) *Middle {
 	if !outCh.CanSend() {
 		panic(fn.String() + " second argument should be a writable channel")
 	}
+	options := getOptions(opts...)
 	return &Middle{
-		inputs:  connect.NewJoiner(inCh, chBufLen),
+		inputs:  connect.NewJoiner(inCh, options.channelBufferLen),
 		fun:     fn,
 		inType:  inCh.ElemType(),
 		outType: outCh.ElemType(),
 	}
 }
 
-// AsTerminal wraps a TerminalFunc into a Terminal node.
+// AsTerminal wraps a TerminalFunc into a Terminal node, allowing to configure some instantiation
+// parameters by means of an optional list of node.CreationOption.
 // It panics if the TerminalFunc does not follow the func(<-chan) signature.
-func AsTerminal(fun TerminalFunc) *Terminal {
+func AsTerminal(fun TerminalFunc, opts ...CreationOption) *Terminal {
 	fn := refl.WrapFunction(fun)
 	// check that the arguments are only a read channel
 	fn.AssertNumberOfArguments(1)
@@ -183,8 +183,9 @@ func AsTerminal(fun TerminalFunc) *Terminal {
 	if !inCh.CanReceive() {
 		panic(fn.String() + " first argument should be a readable channel")
 	}
+	options := getOptions(opts...)
 	return &Terminal{
-		inputs: connect.NewJoiner(inCh, chBufLen),
+		inputs: connect.NewJoiner(inCh, options.channelBufferLen),
 		fun:    fn,
 		done:   make(chan struct{}),
 		inType: inCh.ElemType(),
@@ -243,4 +244,12 @@ func assertChannelsCompatibility(srcInputType refl.ChannelType, outputs []Receiv
 			panic(fmt.Sprintf("unknown Receiver implementor %T. This is a bug! fix it", out))
 		}
 	}
+}
+
+func getOptions(opts ...CreationOption) creationOptions {
+	options := defaultOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	return options
 }
