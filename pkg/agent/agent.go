@@ -132,7 +132,13 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 
 	ingress, egress := flowDirections(cfg)
 
+	debug := false
+	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
+		debug = true
+	}
+
 	tracer, err := ebpf.NewFlowTracer(
+		debug,
 		cfg.Sampling, cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout,
 		ingress, egress,
 		interfaceNamer,

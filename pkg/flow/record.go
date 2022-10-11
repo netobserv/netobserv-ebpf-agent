@@ -65,6 +65,8 @@ type RecordMetrics struct {
 	// and monotime.Now() (user space)
 	StartMonoTimeNs uint64
 	EndMonoTimeNs   uint64
+
+	Errno uint8
 }
 
 // record structure as parsed from eBPF
