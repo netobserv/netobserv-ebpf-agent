@@ -129,9 +129,7 @@ func getPingFlows(t *testing.T, newerThan time.Time, expectedBytes int) (sent, r
 	logrus.Debug("Verifying that the request/return ICMP packets have been captured individually")
 	var query *tester.LokiQueryResponse
 	var err error
-	// We need to check a reasonable number of flows before
-	// due to the chance of out-of-order submission (e.g. a later flow received via ringbuffer
-	// is forwarded before an older flow stored in the hashmap)
+
 	test.Eventually(t, 20*time.Second, func(t require.TestingT) {
 		query, err = testCluster.Loki().
 			Query(1, fmt.Sprintf(
