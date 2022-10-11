@@ -130,7 +130,7 @@ func getPingFlows(t *testing.T, newerThan time.Time, expectedBytes int) (sent, r
 	var query *tester.LokiQueryResponse
 	var err error
 
-	test.Eventually(t, 20*time.Second, func(t require.TestingT) {
+	test.Eventually(t, time.Minute, func(t require.TestingT) {
 		query, err = testCluster.Loki().
 			Query(1, fmt.Sprintf(
 				`{SrcK8S_OwnerName="pinger",DstK8S_OwnerName="server"}`+
@@ -150,7 +150,7 @@ func getPingFlows(t *testing.T, newerThan time.Time, expectedBytes int) (sent, r
 		}
 	}, test.Interval(time.Second))
 
-	test.Eventually(t, 20*time.Second, func(t require.TestingT) {
+	test.Eventually(t, time.Minute, func(t require.TestingT) {
 		query, err = testCluster.Loki().
 			Query(1, fmt.Sprintf(`{SrcK8S_OwnerName="server",DstK8S_OwnerName="pinger"}`+
 				`|~"\"Proto\":1[,}]"`+ // Proto 1 == ICMP
