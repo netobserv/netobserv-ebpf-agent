@@ -35,6 +35,11 @@ type Config struct {
 	// BuffersLength establishes the length of communication channels between the different processing
 	// stages
 	BuffersLength int `env:"BUFFERS_LENGTH" envDefault:"50"`
+	// ExporterBufferLength establishes the length of the buffer of flow batches (not individual flows)
+	// that can be accumulated before the Kafka or GRPC exporter. When this buffer is full (e.g.
+	// because the Kafka or GRPC endpoint is slow), incoming flow batches will be dropped. If unset,
+	// its value is the same as the BUFFERS_LENGTH property.
+	ExporterBufferLength int `env:"EXPORTER_BUFFER_LENGTH"`
 	// CacheMaxFlows specifies how many flows can be accumulated in the accounting cache before
 	// being flushed for its later export
 	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"5000"`

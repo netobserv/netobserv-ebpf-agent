@@ -59,6 +59,10 @@ so no user should need to change them.
 
 * `BUFFERS_LENGTH` (default: `50`). Length of the internal communication channels between the different
   processing stages.
+* `EXPORTER_BUFFER_LENGTH` (default: value of `BUFFERS_LENGTH`) establishes the length of the buffer
+  of flow batches (not individual flows) that can be accumulated before the Kafka or GRPC exporter.
+  When this buffer is full (e.g. because the Kafka or GRPC endpoint is slow), incoming flow batches
+  will be dropped. If unset, its value is the same as the BUFFERS_LENGTH property.
 * `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
   means that errors are ignored since the caller will not receive the returned value.
 * `LISTEN_INTERFACES` (default: `watch`). Mechanism used by the agent to listen for added or removed
