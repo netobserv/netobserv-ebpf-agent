@@ -73,16 +73,16 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, out chan<- []*R
 		// make sure we only evict once at a time, even if there are multiple eviction signals
 		m.evictionCond.L.Lock()
 		m.evictionCond.Wait()
-		mtlog.Debug("evictionSynchronization signal received")
-		m.evictFlows(out)
-		m.evictionCond.L.Unlock()
-
-		// if context is canceled, stops the goroutine after evicting flows
 		select {
 		case <-ctx.Done():
+			mtlog.Debug("context canceled. Stopping goroutine before evicting flows")
 			return
 		default:
+			mtlog.Debug("evictionSynchronization signal received")
+			m.evictFlows(out)
 		}
+		m.evictionCond.L.Unlock()
+
 	}
 }
 
