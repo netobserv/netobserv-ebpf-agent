@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
+	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
@@ -20,16 +22,23 @@ var alog = logrus.WithField("component", "agent.Flows")
 
 // Flows reporting agent
 type Flows struct {
-	exporter   flowExporter
+	cfg *Config
+
+	// input data providers
 	interfaces ifaces.Informer
 	filter     interfaceFilter
-	tracer     flowTracer
-	cfg        *Config
+	ebpf       ebpfRegisterer
+
+	// processing nodes to be wired in the buildAndStartPipeline method
+	mapTracer *flow.MapTracer
+	rbTracer  *flow.RingBufTracer
+	accounter *flow.Accounter
+	exporter  flowExporter
 }
 
-// flowTracer abstracts the interface of ebpf.FlowTracer to allow dependency injection in tests
-type flowTracer interface {
-	Trace(ctx context.Context, forwardFlows chan<- []*flow.Record)
+// ebpfRegisterer abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
+type ebpfRegisterer interface {
+	io.Closer
 	Register(iface ifaces.Interface) error
 }
 
@@ -65,7 +74,62 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
 
 	// configure selected exporter
-	var exportFunc flowExporter
+	exportFunc, err := buildFlowExporter(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	interfaceNamer := func(ifIndex int) string {
+		iface, ok := registerer.IfaceNameForIndex(ifIndex)
+		if !ok {
+			return "unknown"
+		}
+		return iface
+	}
+
+	ingress, egress := flowDirections(cfg)
+
+	debug := false
+	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
+		debug = true
+	}
+
+	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
+	if err != nil {
+		return nil, err
+	}
+
+	mapTracer := flow.NewMapTracer(fetcher, interfaceNamer, cfg.CacheActiveTimeout)
+	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout)
+	accounter := flow.NewAccounter(
+		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, interfaceNamer, time.Now, monotime.Now)
+	return &Flows{
+		ebpf:       fetcher,
+		exporter:   exportFunc,
+		interfaces: informer,
+		filter:     filter,
+		cfg:        cfg,
+		mapTracer:  mapTracer,
+		rbTracer:   rbTracer,
+		accounter:  accounter,
+	}, nil
+}
+
+func flowDirections(cfg *Config) (ingress, egress bool) {
+	switch cfg.Direction {
+	case DirectionIngress:
+		return true, false
+	case DirectionEgress:
+		return false, true
+	case DirectionBoth:
+		return true, true
+	default:
+		alog.Warnf("unknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
+		return true, true
+	}
+}
+
+func buildFlowExporter(cfg *Config) (flowExporter, error) {
 	switch cfg.Export {
 	case "grpc":
 		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
@@ -77,7 +141,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		if err != nil {
 			return nil, err
 		}
-		exportFunc = grpcExporter.ExportFlows
+		return grpcExporter.ExportFlows, nil
 	case "kafka":
 		if len(cfg.KafkaBrokers) == 0 {
 			return nil, errors.New("at least one Kafka broker is needed")
@@ -95,7 +159,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			}
 			transport.TLS = tlsConfig
 		}
-		exportFunc = (&exporter.KafkaProto{
+		return (&exporter.KafkaProto{
 			Writer: &kafkago.Writer{
 				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
 				Topic:     cfg.KafkaTopic,
@@ -117,71 +181,29 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				Transport:    &transport,
 				Balancer:     &kafkago.RoundRobin{},
 			},
-		}).ExportFlows
+		}).ExportFlows, nil
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
 
-	interfaceNamer := func(ifIndex int) string {
-		iface, ok := registerer.IfaceNameForIndex(ifIndex)
-		if !ok {
-			return "unknown"
-		}
-		return iface
-	}
-
-	ingress, egress := flowDirections(cfg)
-
-	debug := false
-	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
-		debug = true
-	}
-
-	tracer, err := ebpf.NewFlowTracer(
-		debug,
-		cfg.Sampling, cfg.CacheMaxFlows, cfg.BuffersLength, cfg.CacheActiveTimeout,
-		ingress, egress,
-		interfaceNamer,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Flows{
-		tracer:     tracer,
-		exporter:   exportFunc,
-		interfaces: informer,
-		filter:     filter,
-		cfg:        cfg,
-	}, nil
-}
-
-func flowDirections(cfg *Config) (ingress, egress bool) {
-	switch cfg.Direction {
-	case DirectionIngress:
-		return true, false
-	case DirectionEgress:
-		return false, true
-	case DirectionBoth:
-		return true, true
-	default:
-		alog.Warnf("unknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
-		return true, true
-	}
 }
 
 // Run a Flows agent. The function will keep running in the same thread
 // until the passed context is canceled
 func (f *Flows) Run(ctx context.Context) error {
 	alog.Info("starting Flows agent")
-	graph, err := f.processPipeline(ctx)
+	graph, err := f.buildAndStartPipeline(ctx)
 	if err != nil {
 		return fmt.Errorf("starting processing graph: %w", err)
 	}
 
 	alog.Info("Flows agent successfully started")
 	<-ctx.Done()
+
 	alog.Info("stopping Flows agent")
+	if err := f.ebpf.Close(); err != nil {
+		alog.WithError(err).Warn("eBPF resources not correctly closed")
+	}
 
 	alog.Debug("waiting for all nodes to finish their pending work")
 	<-graph.Done()
@@ -191,24 +213,22 @@ func (f *Flows) Run(ctx context.Context) error {
 }
 
 // interfacesManager uses an informer to check new/deleted network interfaces. For each running
-// interface, it registers a flow tracer that will forward new flows to the returned channel
-func (f *Flows) interfacesManager(ctx context.Context) (node.InitFunc, error) {
+// interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
+// TODO: consider move this method and "onInterfaceAdded" to another type
+func (f *Flows) interfacesManager(ctx context.Context) error {
 	slog := alog.WithField("function", "interfacesManager")
 
 	slog.Debug("subscribing for network interface events")
 	ifaceEvents, err := f.interfaces.Subscribe(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("instantiating interfaces' informer: %w", err)
+		return fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 
-	tctx, cancelTracer := context.WithCancel(ctx)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				slog.Debug("canceling flow tracer")
-				cancelTracer()
-				slog.Debug("closing channel and exiting internal goroutine")
+				slog.Debug("stopping interfaces' listener")
 				return
 			case event := <-ifaceEvents:
 				slog.WithField("event", event).Debug("received event")
@@ -217,7 +237,7 @@ func (f *Flows) interfacesManager(ctx context.Context) (node.InitFunc, error) {
 					f.onInterfaceAdded(event.Interface)
 				case ifaces.EventDeleted:
 					// qdiscs, ingress and egress filters are automatically deleted so we don't need to
-					// specifically detach them from the tracer
+					// specifically detach them from the ebpfFetcher
 				default:
 					slog.WithField("event", event).Warn("unknown event type")
 				}
@@ -225,35 +245,44 @@ func (f *Flows) interfacesManager(ctx context.Context) (node.InitFunc, error) {
 		}
 	}()
 
-	return func(out chan<- []*flow.Record) {
-		f.tracer.Trace(tctx, out)
-	}, nil
+	return nil
 }
 
-// processPipeline creates the tracers --> accounter --> forwarder Flow processing graph
-func (f *Flows) processPipeline(ctx context.Context) (*node.Terminal, error) {
+// buildAndStartPipeline creates the ETL flow processing graph.
+// For a more visual view, check the docs/architecture.md document.
+func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, error) {
 
-	alog.Debug("registering tracers' input")
-	tracedRecords, err := f.interfacesManager(ctx)
+	alog.Debug("registering interfaces' listener in background")
+	err := f.interfacesManager(ctx)
 	if err != nil {
 		return nil, err
 	}
-	tracersCollector := node.AsInit(tracedRecords)
 
-	alog.Debug("registering exporter")
+	alog.Debug("connecting flows' processing graph")
+	mapTracer := node.AsInit(f.mapTracer.TraceLoop(ctx))
+	rbTracer := node.AsInit(f.rbTracer.TraceLoop(ctx))
+
+	accounter := node.AsMiddle(f.accounter.Account,
+		node.ChannelBufferLen(f.cfg.BuffersLength))
+
 	export := node.AsTerminal(f.exporter,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
-	alog.Debug("connecting graph")
+
+	rbTracer.SendsTo(accounter)
+
 	if f.cfg.Deduper == DeduperFirstCome {
 		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry),
 			node.ChannelBufferLen(f.cfg.BuffersLength))
-		tracersCollector.SendsTo(deduper)
+		mapTracer.SendsTo(deduper)
+		accounter.SendsTo(deduper)
 		deduper.SendsTo(export)
 	} else {
-		tracersCollector.SendsTo(export)
+		mapTracer.SendsTo(export)
+		accounter.SendsTo(export)
 	}
 	alog.Debug("starting graph")
-	tracersCollector.Start()
+	mapTracer.Start()
+	rbTracer.Start()
 	return export, nil
 }
 
@@ -264,10 +293,10 @@ func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	alog.WithField("interface", iface).Info("interface detected. Registering flow tracer")
-	if err := f.tracer.Register(iface); err != nil {
+	alog.WithField("interface", iface).Info("interface detected. Registering flow ebpfFetcher")
+	if err := f.ebpf.Register(iface); err != nil {
 		alog.WithField("interface", iface).WithError(err).
-			Warn("can't register flow tracer. Ignoring")
+			Warn("can't register flow ebpfFetcher. Ignoring")
 		return
 	}
 }

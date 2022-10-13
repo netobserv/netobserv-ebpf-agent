@@ -1,20 +1,13 @@
 package ebpf
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/gavv/monotime"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/sirupsen/logrus"
@@ -33,41 +26,28 @@ const (
 	aggregatedFlowsMap = "aggregated_flows"
 )
 
-var log = logrus.WithField("component", "ebpf.FlowTracer")
+var log = logrus.WithField("component", "ebpf.FlowFetcher")
 
-// FlowTracer reads and forwards the Flows from the Transmission Control, for a given interface.
-type FlowTracer struct {
-	evictionTimeout time.Duration
-	objects         *bpfObjects
-	qdiscs          map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters   map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters  map[ifaces.Interface]*netlink.BpfFilter
-	flows           *ringbuf.Reader
-	buffersLength   int
-	accounter       *flow.Accounter
-	interfaceNamer  flow.InterfaceNamer
-	// manages the access to the eviction routines, avoiding two evictions happening at the same time
-	flowsEvictor   *sync.Cond
-	lastEvictionNs uint64
+// FlowFetcher reads and forwards the Flows from the Traffic Control hooks in the eBPF kernel space.
+// It provides access both to flows that are aggregated in the kernel space (via PerfCPU hashmap)
+// and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
+// in the map
+type FlowFetcher struct {
+	objects        *bpfObjects
+	qdiscs         map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters  map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader  *ringbuf.Reader
 	cacheMaxSize   int
 	enableIngress  bool
 	enableEgress   bool
-	// ringBuf supports atomic logging of ringBuffer metrics
-	ringBuf struct {
-		isForwarding   int32
-		forwardedFlows int32
-		mapFullErrs    int32
-	}
 }
 
-// TODO: decouple flowtracer logic from eBPF maps access so we can inject mocks for testing
-func NewFlowTracer(
+func NewFlowFetcher(
 	traceMessages bool,
-	sampling, cacheMaxSize, buffersLength int,
-	evictionTimeout time.Duration,
+	sampling, cacheMaxSize int,
 	ingress, egress bool,
-	namer flow.InterfaceNamer,
-) (*FlowTracer, error) {
+) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
@@ -101,27 +81,21 @@ func NewFlowTracer(
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
-	return &FlowTracer{
-		objects:         &objects,
-		evictionTimeout: evictionTimeout,
-		buffersLength:   buffersLength,
-		accounter:       flow.NewAccounter(cacheMaxSize, evictionTimeout, namer, time.Now, monotime.Now),
-		flows:           flows,
-		egressFilters:   map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:          map[ifaces.Interface]*netlink.GenericQdisc{},
-		interfaceNamer:  namer,
-		flowsEvictor:    sync.NewCond(&sync.Mutex{}),
-		lastEvictionNs:  uint64(monotime.Now()),
-		cacheMaxSize:    cacheMaxSize,
-		enableIngress:   ingress,
-		enableEgress:    egress,
+	return &FlowFetcher{
+		objects:        &objects,
+		ringbufReader:  flows,
+		egressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters: map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:         map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:   cacheMaxSize,
+		enableIngress:  ingress,
+		enableEgress:   egress,
 	}, nil
 }
 
-// Register and links the eBPF tracer into the system. The program should invoke Unregister
+// Register and links the eBPF fetcher into the system. The program should invoke Unregister
 // before exiting.
-func (m *FlowTracer) Register(iface ifaces.Interface) error {
+func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	ipvlan, err := netlink.LinkByIndex(iface.Index)
@@ -160,7 +134,7 @@ func (m *FlowTracer) Register(iface ifaces.Interface) error {
 	return nil
 }
 
-func (m *FlowTracer) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
 	ilog := log.WithField("iface", iface)
 	if !m.enableEgress {
 		ilog.Debug("ignoring egress traffic, according to user configuration")
@@ -194,7 +168,7 @@ func (m *FlowTracer) registerEgress(iface ifaces.Interface, ipvlan netlink.Link)
 	return nil
 }
 
-func (m *FlowTracer) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
 	ilog := log.WithField("iface", iface)
 	if !m.enableIngress {
 		ilog.Debug("ignoring ingress traffic, according to user configuration")
@@ -228,16 +202,18 @@ func (m *FlowTracer) registerIngress(iface ifaces.Interface, ipvlan netlink.Link
 	return nil
 }
 
-// Unregister the eBPF tracer from the system.
-// We don't need an "Unregister(iface)" method because the filters and qdiscs
+// Close the eBPF fetcher from the system.
+// We don't need an "Close(iface)" method because the filters and qdiscs
 // are automatically removed when the interface is down
-func (m *FlowTracer) stopAndUnregister() error {
+func (m *FlowFetcher) Close() error {
+	log.Debug("unregistering eBPF objects")
+
 	var errs []error
-	// m.flows.Read is a blocking operation, so we need to close the ring buffer
+	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
-	if m.flows != nil {
-		if err := m.flows.Close(); err != nil {
+	if m.ringbufReader != nil {
+		if err := m.ringbufReader.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -280,6 +256,7 @@ func (m *FlowTracer) stopAndUnregister() error {
 	if len(errs) == 0 {
 		return nil
 	}
+
 	var errStrings []string
 	for _, err := range errs {
 		errStrings = append(errStrings, err.Error())
@@ -287,175 +264,12 @@ func (m *FlowTracer) stopAndUnregister() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
-func (m *FlowTracer) aggregate(metrics []flow.RecordMetrics) flow.RecordMetrics {
-	if len(metrics) == 0 {
-		log.Warn("invoked aggregate with no values")
-		return flow.RecordMetrics{}
-	}
-	aggr := flow.RecordMetrics{}
-	for _, mt := range metrics {
-		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
-		// might receive entries from previous collect-eviction timeslots.
-		// We need to check the flow time and discard old flows.
-		if mt.StartMonoTimeNs <= m.lastEvictionNs || mt.EndMonoTimeNs <= m.lastEvictionNs {
-			continue
-		}
-		aggr.Accumulate(&mt)
-	}
-	return aggr
+func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
+	return m.ringbufReader.Read()
 }
 
-func (m *FlowTracer) pollAndForwardAggregateFlows(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	tlog := log.WithField("map", m.objects.AggregatedFlows.String())
-	go func() {
-		<-ctx.Done()
-	}()
-	go func() {
-		// flow eviction loop. It just keeps waiting for eviction until someone triggers the
-		// flowsEvictor.Broadcast signal
-		for {
-			// make sure we only evict once at a time, even if there are multiple eviction signals
-			m.flowsEvictor.L.Lock()
-			m.flowsEvictor.Wait()
-			tlog.Debug("eviction signal received")
-			m.evictFlows(tlog, forwardFlows)
-			m.flowsEvictor.L.Unlock()
-
-			// if context is canceled, stops the goroutine after evicting flows
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-		}
-	}()
-	ticker := time.NewTicker(m.evictionTimeout)
-	for {
-		select {
-		case <-ctx.Done():
-			tlog.Debug("triggering flow eviction after context cancelation")
-			m.flowsEvictor.Broadcast()
-			ticker.Stop()
-			tlog.Debug("exiting monitor")
-			return
-		case <-ticker.C:
-			tlog.Debug("triggering flow eviction on timer")
-			m.flowsEvictor.Broadcast()
-		}
-	}
-}
-
-func (m *FlowTracer) evictFlows(tlog *logrus.Entry, forwardFlows chan<- []*flow.Record) {
-	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
-	monotonicTimeNow := monotime.Now()
-	currentTime := time.Now()
-
-	var forwardingFlows []*flow.Record
-	laterFlowNs := uint64(0)
-	for flowKey, flowMetrics := range m.lookupAndDeleteFlowsMap() {
-		aggregatedMetrics := m.aggregate(flowMetrics)
-		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
-		if aggregatedMetrics.EndMonoTimeNs == 0 {
-			continue
-		}
-		// If it iterated an entry that do not have updated flows
-		if aggregatedMetrics.EndMonoTimeNs > laterFlowNs {
-			laterFlowNs = aggregatedMetrics.EndMonoTimeNs
-		}
-		forwardingFlows = append(forwardingFlows, flow.NewRecord(
-			flowKey,
-			aggregatedMetrics,
-			currentTime,
-			uint64(monotonicTimeNow),
-			m.interfaceNamer,
-		))
-	}
-	m.lastEvictionNs = laterFlowNs
-	forwardFlows <- forwardingFlows
-	tlog.WithField("count", len(forwardingFlows)).Debug("flows evicted")
-}
-
-// Trace and forward the read flows until the passed context is Done
-func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	go func() {
-		<-ctx.Done()
-		if err := m.stopAndUnregister(); err != nil {
-			log.WithError(err).Warn("unregistering eBPF objects")
-		}
-	}()
-	go m.pollAndForwardAggregateFlows(ctx, forwardFlows)
-	m.listenAndForwardRingBuffer(ctx, forwardFlows)
-}
-
-func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
-	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
-	go m.accounter.Account(flowAccount, forwardFlows)
-	debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Debug("exiting flow tracer")
-			return
-		default:
-			event, err := m.flows.Read()
-			if err != nil {
-				if errors.Is(err, ringbuf.ErrClosed) {
-					log.Debug("Received signal, exiting..")
-					return
-				}
-				log.WithError(err).Warn("reading from ring buffer")
-				continue
-			}
-			// Parses the ringbuf event entry into an Event structure.
-			readFlow, err := flow.ReadFrom(bytes.NewBuffer(event.RawSample))
-			if err != nil {
-				log.WithError(err).Warn("reading ringbuf event")
-				continue
-			}
-			mapFullError := readFlow.Errno == uint8(syscall.E2BIG)
-			if debugging {
-				m.logRingBufferFlows(mapFullError)
-			}
-			// if the flow was received due to lack of space in the eBPF map
-			// forces a flow's eviction to leave room for new flows in the ebpf cache
-			if mapFullError {
-				m.flowsEvictor.Broadcast()
-			}
-
-			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
-			flowAccount <- readFlow
-		}
-	}
-}
-
-// logRingBufferFlows avoids flooding logs on long series of evicted flows by grouping how
-// many flows are forwarded
-func (m *FlowTracer) logRingBufferFlows(mapFullErr bool) {
-	atomic.AddInt32(&m.ringBuf.forwardedFlows, 1)
-	if mapFullErr {
-		atomic.AddInt32(&m.ringBuf.mapFullErrs, 1)
-	}
-	if atomic.CompareAndSwapInt32(&m.ringBuf.isForwarding, 0, 1) {
-		go func() {
-			time.Sleep(m.evictionTimeout)
-			mfe := atomic.LoadInt32(&m.ringBuf.mapFullErrs)
-			l := log.WithFields(logrus.Fields{
-				"flows":         atomic.LoadInt32(&m.ringBuf.forwardedFlows),
-				"mapFullErrs":   mfe,
-				"cacheMaxFlows": m.cacheMaxSize,
-			})
-			if mfe == 0 {
-				l.Debug("received flows via ringbuffer")
-			} else {
-				l.Debug("received flows via ringbuffer. You might want to increase the CACHE_MAX_FLOWS value")
-			}
-			atomic.StoreInt32(&m.ringBuf.forwardedFlows, 0)
-			atomic.StoreInt32(&m.ringBuf.isForwarding, 0)
-			atomic.StoreInt32(&m.ringBuf.mapFullErrs, 0)
-		}()
-	}
-}
-
+// LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
+// It returns a map where the key
 // For synchronization purposes, we get/delete a whole snapshot of the flows map.
 // This way we avoid missing packets that could be updated on the
 // ebpf side while we process/aggregate them here
@@ -463,7 +277,7 @@ func (m *FlowTracer) logRingBufferFlows(mapFullErr bool) {
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
-func (m *FlowTracer) lookupAndDeleteFlowsMap() map[flow.RecordKey][]flow.RecordMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap() map[flow.RecordKey][]flow.RecordMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
