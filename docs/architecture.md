@@ -13,7 +13,6 @@ flowchart TD
     E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
     E <--> |"polls<br/>PerCPUHashMap"| M(flow.MapTracer)
     RB --> |chan *flow.Record| ACC(flow.Accounter)
-
     ACC --> |"chan []*flow.Record"| DD(flow.Deduper)
     M --> |"chan []*flow.Record"| DD
 
@@ -24,5 +23,4 @@ flowchart TD
     DD --> |"chan []*flow.Record"| CL(flow.CapacityLimiter)
 
     CL --> |"chan []*flow.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
-
 ```
