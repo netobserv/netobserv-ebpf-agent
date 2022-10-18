@@ -185,6 +185,7 @@ func buildFlowExporter(cfg *Config) (flowExporter, error) {
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
+
 }
 
 // Run a Flows agent. The function will keep running in the same thread

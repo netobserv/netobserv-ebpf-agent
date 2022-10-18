@@ -41,12 +41,6 @@ type FlowFetcher struct {
 	cacheMaxSize   int
 	enableIngress  bool
 	enableEgress   bool
-	// ringBuf supports atomic logging of ringBuffer metrics
-	ringBuf struct {
-		isForwarding   int32
-		forwardedFlows int32
-		mapFullErrs    int32
-	}
 }
 
 func NewFlowFetcher(
