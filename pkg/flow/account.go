@@ -31,7 +31,7 @@ func NewAccounter(
 	return &Accounter{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      make(map[RecordKey]*RecordMetrics, maxEntries),
+		entries:      map[RecordKey]*RecordMetrics{},
 		namer:        ifaceNamer,
 		clock:        clock,
 		monoClock:    monoClock,
@@ -51,10 +51,10 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+			c.entries = map[RecordKey]*RecordMetrics{}
 			logrus.WithField("flows", len(evictingEntries)).
 				Debug("evicting flows from userspace accounter on timeout")
-			go c.evict(evictingEntries, out)
+			c.evict(evictingEntries, out)
 		case record, ok := <-in:
 			if !ok {
 				alog.Debug("input channel closed. Evicting entries")
@@ -70,10 +70,10 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
-					c.entries = make(map[RecordKey]*RecordMetrics, c.maxEntries)
+					c.entries = map[RecordKey]*RecordMetrics{}
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
-					go c.evict(evictingEntries, out)
+					c.evict(evictingEntries, out)
 				}
 				c.entries[record.RecordKey] = &record.RecordMetrics
 			}
