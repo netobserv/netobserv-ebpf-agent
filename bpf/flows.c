@@ -58,6 +58,7 @@ struct {
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
+volatile const u8 trace_messages = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
@@ -184,7 +185,15 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
 
-        bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_EXIST);
+        long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
+        if (trace_messages && ret != 0) {
+            // usually error -16 (-EBUSY) is printed here.
+            // In this case, the flow is dropped, as submitting it to the ringbuffer would cause
+            // a duplicated UNION of flows (two different flows with partial aggregation of the same packets),
+            // which can't be deduplicated.
+            // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
+            bpf_printk("error updating flow %d\n", ret);
+        }
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
@@ -196,13 +205,23 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
         // so we need to specify BPF_ANY
-        if (bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY) != 0) {
-            /*
-                When the map is full, we directly send the flow entry to userspace via ringbuffer,
-                until space is available in the kernel-side maps
-            */
+        long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
+        if (ret != 0) {
+            // usually error -16 (-EBUSY) or -7 (E2BIG) is printed here.
+            // In this case, we send the single-packet flow via ringbuffer as in the worst case we can have
+            // a repeated INTERSECTION of flows (different flows aggregating different packets),
+            // which can be re-aggregated at userpace.
+            // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
+            if (trace_messages) {
+                bpf_printk("error adding flow %d\n", ret);
+            }
+
+            new_flow.errno = -ret;
             flow_record *record = bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
             if (!record) {
+                if (trace_messages) {
+                    bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
+                }
                 return TC_ACT_OK;
             }
             record->id = id;

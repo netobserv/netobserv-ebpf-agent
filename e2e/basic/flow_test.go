@@ -4,6 +4,7 @@ package basic
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"strconv"
@@ -99,17 +100,15 @@ func TestSinglePacketFlows(t *testing.T) {
 				require.NoError(t, err)
 				logrus.WithFields(logrus.Fields{"stdOut": stdOut, "stdErr": stdErr}).Debug("ping sent")
 
-				sent, recv := getPingFlows(t, latestFlowMS)
+				sent, recv := getPingFlows(t, latestFlowMS, pktLen+ipIcmpHeadersLen)
 				logrus.Debugf("ping request flow: %#v", sent)
 				logrus.Debugf("ping response flow: %#v", recv)
 
 				assert.Equal(t, pingerIP, sent["SrcAddr"])
 				assert.Equal(t, serverPodIP, sent["DstAddr"])
-				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, sent["Bytes"])
 				assert.EqualValues(t, 1, sent["Packets"])
 				assert.Equal(t, pingerIP, recv["DstAddr"])
 				assert.Equal(t, serverPodIP, recv["SrcAddr"])
-				assert.EqualValues(t, pktLen+ipIcmpHeadersLen, recv["Bytes"])
 				assert.EqualValues(t, 1, recv["Packets"])
 
 				if t.Failed() {
@@ -126,15 +125,22 @@ func TestSinglePacketFlows(t *testing.T) {
 	).Feature())
 }
 
-func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]interface{}) {
+func getPingFlows(t *testing.T, newerThan time.Time, expectedBytes int) (sent, recv map[string]interface{}) {
 	logrus.Debug("Verifying that the request/return ICMP packets have been captured individually")
 	var query *tester.LokiQueryResponse
 	var err error
-	test.Eventually(t, testTimeout, func(t require.TestingT) {
+
+	test.Eventually(t, time.Minute, func(t require.TestingT) {
 		query, err = testCluster.Loki().
-			Query(1, `{SrcK8S_OwnerName="pinger",DstK8S_OwnerName="server"}|="\"Proto\":1,"`) // Proto 1 == ICMP
+			Query(1, fmt.Sprintf(
+				`{SrcK8S_OwnerName="pinger",DstK8S_OwnerName="server"}`+
+					`|~"\"Proto\":1[,}]"`+ // Proto 1 == ICMP
+					`|~"\"Bytes\":%d[,}]"`, expectedBytes))
 		require.NoError(t, err)
 		require.NotNil(t, query)
+		if query == nil {
+			return
+		}
 		require.NotEmpty(t, query.Data.Result)
 		if len(query.Data.Result) > 0 {
 			sent, err = query.Data.Result[0].Values[0].FlowData()
@@ -144,11 +150,16 @@ func getPingFlows(t *testing.T, newerThan time.Time) (sent, recv map[string]inte
 		}
 	}, test.Interval(time.Second))
 
-	test.Eventually(t, testTimeout, func(t require.TestingT) {
+	test.Eventually(t, time.Minute, func(t require.TestingT) {
 		query, err = testCluster.Loki().
-			Query(1, `{DstK8S_OwnerName="pinger",SrcK8S_OwnerName="server"}|="\"Proto\":1,"`) // Proto 1 == ICMP
+			Query(1, fmt.Sprintf(`{SrcK8S_OwnerName="server",DstK8S_OwnerName="pinger"}`+
+				`|~"\"Proto\":1[,}]"`+ // Proto 1 == ICMP
+				`|~"\"Bytes\":%d[,}]"`, expectedBytes))
 		require.NoError(t, err)
 		require.NotNil(t, query)
+		if query == nil {
+			return
+		}
 		require.Len(t, query.Data.Result, 1)
 		if len(query.Data.Result) > 0 {
 			recv, err = query.Data.Result[0].Values[0].FlowData()

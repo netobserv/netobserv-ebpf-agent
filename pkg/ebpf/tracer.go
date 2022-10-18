@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -28,6 +29,7 @@ const (
 	qdiscType = "clsact"
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
+	constTraceMessages = "trace_messages"
 	aggregatedFlowsMap = "aggregated_flows"
 )
 
@@ -50,10 +52,17 @@ type FlowTracer struct {
 	cacheMaxSize   int
 	enableIngress  bool
 	enableEgress   bool
+	// ringBuf supports atomic logging of ringBuffer metrics
+	ringBuf struct {
+		isForwarding   int32
+		forwardedFlows int32
+		mapFullErrs    int32
+	}
 }
 
 // TODO: decouple flowtracer logic from eBPF maps access so we can inject mocks for testing
 func NewFlowTracer(
+	traceMessages bool,
 	sampling, cacheMaxSize, buffersLength int,
 	evictionTimeout time.Duration,
 	ingress, egress bool,
@@ -73,8 +82,13 @@ func NewFlowTracer(
 	// Resize aggregated flows map according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
 
+	traceMsgs := 0
+	if traceMessages {
+		traceMsgs = 1
+	}
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling: uint32(sampling),
+		constSampling:      uint32(sampling),
+		constTraceMessages: uint8(traceMsgs),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -376,8 +390,7 @@ func (m *FlowTracer) Trace(ctx context.Context, forwardFlows chan<- []*flow.Reco
 func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlows chan<- []*flow.Record) {
 	flowAccount := make(chan *flow.RawRecord, m.buffersLength)
 	go m.accounter.Account(flowAccount, forwardFlows)
-	isForwarding := int32(0)
-	forwardedFlows := int32(0)
+	debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
 	for {
 		select {
 		case <-ctx.Done():
@@ -399,11 +412,15 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 				log.WithError(err).Warn("reading ringbuf event")
 				continue
 			}
-			if logrus.IsLevelEnabled(logrus.DebugLevel) {
-				m.logRingBufferFlows(&forwardedFlows, &isForwarding)
+			mapFullError := readFlow.Errno == uint8(syscall.E2BIG)
+			if debugging {
+				m.logRingBufferFlows(mapFullError)
 			}
+			// if the flow was received due to lack of space in the eBPF map
 			// forces a flow's eviction to leave room for new flows in the ebpf cache
-			m.flowsEvictor.Broadcast()
+			if mapFullError {
+				m.flowsEvictor.Broadcast()
+			}
 
 			// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 			flowAccount <- readFlow
@@ -413,17 +430,28 @@ func (m *FlowTracer) listenAndForwardRingBuffer(ctx context.Context, forwardFlow
 
 // logRingBufferFlows avoids flooding logs on long series of evicted flows by grouping how
 // many flows are forwarded
-func (m *FlowTracer) logRingBufferFlows(forwardedFlows, isForwarding *int32) {
-	atomic.AddInt32(forwardedFlows, 1)
-	if atomic.CompareAndSwapInt32(isForwarding, 0, 1) {
+func (m *FlowTracer) logRingBufferFlows(mapFullErr bool) {
+	atomic.AddInt32(&m.ringBuf.forwardedFlows, 1)
+	if mapFullErr {
+		atomic.AddInt32(&m.ringBuf.mapFullErrs, 1)
+	}
+	if atomic.CompareAndSwapInt32(&m.ringBuf.isForwarding, 0, 1) {
 		go func() {
 			time.Sleep(m.evictionTimeout)
-			log.WithFields(logrus.Fields{
-				"flows":         atomic.LoadInt32(forwardedFlows),
+			mfe := atomic.LoadInt32(&m.ringBuf.mapFullErrs)
+			l := log.WithFields(logrus.Fields{
+				"flows":         atomic.LoadInt32(&m.ringBuf.forwardedFlows),
+				"mapFullErrs":   mfe,
 				"cacheMaxFlows": m.cacheMaxSize,
-			}).Debug("received flows via ringbuffer. You might want to increase the CACHE_MAX_FLOWS value")
-			atomic.StoreInt32(forwardedFlows, 0)
-			atomic.StoreInt32(isForwarding, 0)
+			})
+			if mfe == 0 {
+				l.Debug("received flows via ringbuffer")
+			} else {
+				l.Debug("received flows via ringbuffer. You might want to increase the CACHE_MAX_FLOWS value")
+			}
+			atomic.StoreInt32(&m.ringBuf.forwardedFlows, 0)
+			atomic.StoreInt32(&m.ringBuf.isForwarding, 0)
+			atomic.StoreInt32(&m.ringBuf.mapFullErrs, 0)
 		}()
 	}
 }
