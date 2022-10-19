@@ -265,8 +265,16 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
-	export := node.AsTerminal(f.exporter,
+	limiter := node.AsMiddle((&flow.CapacityLimiter{}).Limit,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
+
+	ebl := f.cfg.ExporterBufferLength
+	if ebl == 0 {
+		ebl = f.cfg.BuffersLength
+	}
+
+	export := node.AsTerminal(f.exporter,
+		node.ChannelBufferLen(ebl))
 
 	rbTracer.SendsTo(accounter)
 
@@ -275,11 +283,12 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 			node.ChannelBufferLen(f.cfg.BuffersLength))
 		mapTracer.SendsTo(deduper)
 		accounter.SendsTo(deduper)
-		deduper.SendsTo(export)
+		deduper.SendsTo(limiter)
 	} else {
-		mapTracer.SendsTo(export)
-		accounter.SendsTo(export)
+		mapTracer.SendsTo(limiter)
+		accounter.SendsTo(limiter)
 	}
+	limiter.SendsTo(export)
 	alog.Debug("starting graph")
 	mapTracer.Start()
 	rbTracer.Start()
