@@ -15,7 +15,8 @@ const (
 )
 
 type Config struct {
-	// Export selects the flows' exporter protocol. Accepted values are: grpc (default) or kafka.
+	// Export selects the flows' exporter protocol. Accepted values are: grpc (default) or kafka
+	// or ipfix+udp or ipfix+tcp.
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"

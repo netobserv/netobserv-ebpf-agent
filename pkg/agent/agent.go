@@ -182,6 +182,30 @@ func buildFlowExporter(cfg *Config) (flowExporter, error) {
 				Balancer:     &kafkago.RoundRobin{},
 			},
 		}).ExportFlows, nil
+	case "ipfix+udp":
+		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+			return nil, fmt.Errorf("missing target host or port: %s:%d",
+				cfg.TargetHost, cfg.TargetPort)
+		}
+		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+
+		ipfix, err := exporter.StartIPFIXProto(target, "udp")
+		if err != nil {
+			return nil, err
+		}
+		return ipfix.ExportFlows, nil
+	case "ipfix+tcp":
+		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+			return nil, fmt.Errorf("missing target host or port: %s:%d",
+				cfg.TargetHost, cfg.TargetPort)
+		}
+		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
+
+		ipfix, err := exporter.StartIPFIXProto(target, "tcp")
+		if err != nil {
+			return nil, err
+		}
+		return ipfix.ExportFlows, nil
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
