@@ -60,6 +60,21 @@ func TestDedupe(t *testing.T) {
 	assert.Equal(t, []*Record{oneIf2}, deduped)
 }
 
+func TestDedupe_SameInterface_DifferentDirection(t *testing.T) {
+
+	input := make(chan []*Record, 100)
+	output := make(chan []*Record, 100)
+
+	go Dedupe(time.Minute, false)(input, output)
+
+	oneIf1DifferentDirection := *oneIf1
+	oneIf1DifferentDirection.Direction = 0
+
+	input <- []*Record{oneIf1, &oneIf1DifferentDirection}
+	deduped := receiveTimeout(t, output)
+	assert.Equal(t, []*Record{oneIf1, &oneIf1DifferentDirection}, deduped)
+}
+
 func TestDedupe_JustMark(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)

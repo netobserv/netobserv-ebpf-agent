@@ -64,7 +64,9 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 // another interface
 func (c *deduperCache) isDupe(key *RecordKey) bool {
 	rk := *key
+	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IFIndex = 0
+	rk.Direction = 0
 	rk.DataLink = DataLink{}
 	// If a flow has been accounted previously, whatever its interface was,
 	// it updates the expiry time for that flow

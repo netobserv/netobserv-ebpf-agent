@@ -49,6 +49,7 @@ func (m *TracerFake) AppendLookupResults(results map[flow.RecordKey][]flow.Recor
 	m.mapLookups <- results
 }
 
+//nolint:gocritic // we don't care about efficiency of a large argument in test fakes
 func (m *TracerFake) AppendRingBufEvent(flow flow.RawRecord) error {
 	encodedRecord := bytes.Buffer{}
 	if err := binary.Write(&encodedRecord, binary.LittleEndian, flow); err != nil {
