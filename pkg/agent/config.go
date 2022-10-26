@@ -57,6 +57,8 @@ type Config struct {
 	// again from a different interface.
 	// If the value is not set, it will default to 2 * CacheActiveTimeout
 	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY"`
+	// DeduperJustMark will just mark duplicates (boolean field) instead of dropping them.
+	DeduperJustMark bool `env:"DEDUPER_JUST_MARK"`
 	// Direction allows selecting which flows to trace according to its direction. Accepted values
 	// are "ingress", "egress" or "both" (default).
 	Direction string `env:"DIRECTION" envDefault:"both"`

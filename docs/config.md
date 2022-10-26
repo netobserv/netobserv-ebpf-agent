@@ -29,6 +29,8 @@ The following environment variables are available to configure the NetObserv eBF
   deduplicator. After a flow hasn't been received for that expiry time, the deduplicator forgets it.
   That means that a flow from a connection that has been inactive during that period could be
   forwarded again from a different interface.
+* `DEDUPER_JUST_MARK` (default: `false`) will mark duplicates (adding an extra boolean field)
+  instead of dropping them.
 * `DIRECTION` (default: `both`). Allows selecting which flows to trace according to its direction.
   Accepted values are `ingress`, `egress` or `both`.
 * `LOG_LEVEL` (default: `info`). From more to less verbose: `trace`, `debug`, `info`, `warn`,
