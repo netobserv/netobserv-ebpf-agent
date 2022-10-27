@@ -60,48 +60,6 @@ func TestDedupe(t *testing.T) {
 	assert.Equal(t, []*Record{oneIf2}, deduped)
 }
 
-func TestDedupe_SameInterface_DifferentDirection(t *testing.T) {
-
-	input := make(chan []*Record, 100)
-	output := make(chan []*Record, 100)
-
-	go Dedupe(time.Minute, false)(input, output)
-
-	oneIf1DifferentDirection := *oneIf1
-	oneIf1DifferentDirection.Direction = 0
-
-	input <- []*Record{oneIf1, &oneIf1DifferentDirection}
-	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf1, &oneIf1DifferentDirection}, deduped)
-}
-
-func TestDedupe_JustMark(t *testing.T) {
-	input := make(chan []*Record, 100)
-	output := make(chan []*Record, 100)
-
-	go Dedupe(time.Minute, true)(input, output)
-
-	input <- []*Record{
-		oneIf2, // record 1 at interface 2: should be accepted witout modification
-		twoIf1, // record 2 at interface 1: should be accepted without modification
-		oneIf1, // record 1 duplicate at interface 1: should be accepted with modification
-		twoIf2, // record 2 duplicate at interface 2: should be accepted with modification
-		oneIf2, // record 1 at interface 1: should be accepted without modification
-	}
-	deduped := receiveTimeout(t, output)
-	oneIf1M := *oneIf1
-	oneIf1M.Duplicate = true
-	twoIf2M := *twoIf2
-	twoIf2M.Duplicate = true
-	assert.Equal(t, []*Record{oneIf2, twoIf1, &oneIf1M, &twoIf2M, oneIf2}, deduped)
-
-	// should still accept without modification records with same key, same interface,
-	// and modify these with same key, different interface
-	input <- []*Record{oneIf1, oneIf2}
-	deduped = receiveTimeout(t, output)
-	assert.Equal(t, []*Record{&oneIf1M, oneIf2}, deduped)
-}
-
 func TestDedupe_EvictFlows(t *testing.T) {
 	tm := &timerMock{now: time.Now()}
 	timeNow = tm.Now
