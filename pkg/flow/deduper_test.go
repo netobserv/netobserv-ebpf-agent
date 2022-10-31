@@ -40,7 +40,7 @@ func TestDedupe(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(time.Minute)(input, output)
+	go Dedupe(time.Minute, false)(input, output)
 
 	input <- []*Record{
 		oneIf2, // record 1 at interface 2: should be accepted
@@ -66,7 +66,7 @@ func TestDedupe_EvictFlows(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(15*time.Second)(input, output)
+	go Dedupe(15*time.Second, false)(input, output)
 
 	// Should only accept records 1 and 2, at interface 1
 	input <- []*Record{oneIf1, twoIf1, oneIf2}

@@ -55,6 +55,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		},
 		Packets:   uint64(fr.Packets),
 		Interface: fr.Interface,
+		Duplicate: fr.Duplicate,
 	}
 }
 
@@ -86,6 +87,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		},
 		Packets:   uint64(fr.Packets),
 		Interface: fr.Interface,
+		Duplicate: fr.Duplicate,
 	}
 }
 
