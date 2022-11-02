@@ -201,6 +201,12 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .bytes=skb->len,
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
+	    .fin = 0,
+	    .syn = 0,
+	    .rst = 0,
+	    .psh = 0,
+	    .ack = 0,
+	    .urg = 0,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
