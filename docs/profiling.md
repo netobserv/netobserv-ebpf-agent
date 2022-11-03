@@ -44,7 +44,7 @@
 Example:
 
 ```
-curl "http://localhost:6060/debug/pprof/trace?duration=20" -o trace20s
+curl "http://localhost:6060/debug/pprof/trace?seconds=20" -o trace20s
 curl "http://localhost:6060/debug/pprof/profile?duration=20" -o profile20s
 curl "http://localhost:6060/debug/pprof/heap?gc" -o heap
 curl "http://localhost:6060/debug/pprof/allocs" -o allocs
