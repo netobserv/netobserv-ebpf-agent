@@ -65,14 +65,15 @@ type RecordMetrics struct {
 	// and monotime.Now() (user space)
 	StartMonoTimeNs uint64
 	EndMonoTimeNs   uint64
+	Flags           uint32
+	Errno           uint8
 
-	Errno uint8
-	Fin   byte
+	/*Fin   byte
 	Syn   byte
 	Rst   byte
 	Psh   byte
 	Ack   byte
-	Urg   byte
+	Urg   byte*/
 }
 
 // record structure as parsed from eBPF
@@ -130,6 +131,7 @@ func (r *RecordMetrics) Accumulate(src *RecordMetrics) {
 	}
 	r.Bytes += src.Bytes
 	r.Packets += src.Packets
+	r.Flags = src.Flags
 }
 
 // IP returns the net.IP equivalent object

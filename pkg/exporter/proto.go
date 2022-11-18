@@ -9,6 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+//var klog = logrus.WithField("component", "exporter/KafkaProto")
+
 // flowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
 func flowsToPB(inputRecords []*flow.Record, maxLen int) []*pbflow.Records {
@@ -32,12 +34,16 @@ func flowsToPB(inputRecords []*flow.Record, maxLen int) []*pbflow.Records {
 // into a protobuf-encoded message ready to be sent to the collector via kafka
 func flowToPB(record *flow.Record) *pbflow.Record {
 	if record.EthProtocol == flow.IPv6Type {
+		klog.Info("IPv6")
 		return v6FlowToPB(record)
 	}
+	klog.Info("IPv4")
 	return v4FlowToPB(record)
 }
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
+	klog.Info(reflect.TypeOf(fr.Flags))
+	klog.Info(reflect.TypeOf(fr.Interface))
 	return &pbflow.Record{
 		EthProtocol: uint32(fr.EthProtocol),
 		Direction:   pbflow.Direction(fr.Direction),
@@ -64,9 +70,14 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
 		Packets:   uint64(fr.Packets),
+<<<<<<< HEAD
 		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
 		AgentIp:   agentIP(fr.AgentIP),
+=======
+		Flags:     uint32(fr.Flags),
+		Interface: string(fr.Interface),
+>>>>>>> eb04940 (Adding TCP flags to record metrics.TODO: Remove log stmts)
 	}
 }
 
@@ -97,6 +108,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
 		Packets:   uint64(fr.Packets),
+		Flags:     uint32(fr.Flags),
 		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
 		AgentIp:   agentIP(fr.AgentIP),

@@ -37,6 +37,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			continue
 		}
+		klog.Info(pbBytes)
 		msgs = append(msgs, kafkago.Message{Value: pbBytes})
 	}
 

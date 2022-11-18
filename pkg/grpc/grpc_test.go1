@@ -29,7 +29,7 @@ func TestGRPCCommunication(t *testing.T) {
 	go func() {
 		_, err = client.Send(context.Background(),
 			&pbflow.Records{Entries: []*pbflow.Record{{
-				EthProtocol: 123, Bytes: 456, Network: &pbflow.Network{
+				EthProtocol: 123, Flags: 1, Bytes: 456, Network: &pbflow.Network{
 					SrcAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x11223344},
 					},
@@ -43,7 +43,7 @@ func TestGRPCCommunication(t *testing.T) {
 		require.NoError(t, err)
 		_, err = client.Send(context.Background(),
 			&pbflow.Records{Entries: []*pbflow.Record{{
-				EthProtocol: 789, Bytes: 101, Network: &pbflow.Network{
+				EthProtocol: 789, Flags: 1, Bytes: 101, Network: &pbflow.Network{
 					SrcAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x44332211},
 					},
@@ -66,6 +66,7 @@ func TestGRPCCommunication(t *testing.T) {
 	assert.Len(t, rs.Entries, 1)
 	r := rs.Entries[0]
 	assert.EqualValues(t, 123, r.EthProtocol)
+	assert.EqualValues(t, 1, r.Flags)
 	assert.EqualValues(t, 456, r.Bytes)
 	assert.EqualValues(t, 0x11223344, r.GetNetwork().GetSrcAddr().GetIpv4())
 	assert.EqualValues(t, 0x55667788, r.GetNetwork().GetDstAddr().GetIpv4())
@@ -78,6 +79,7 @@ func TestGRPCCommunication(t *testing.T) {
 	assert.Len(t, rs.Entries, 1)
 	r = rs.Entries[0]
 	assert.EqualValues(t, 789, r.EthProtocol)
+	assert.EqualValues(t, 1, r.Flags)
 	assert.EqualValues(t, 101, r.Bytes)
 	assert.EqualValues(t, 0x44332211, r.GetNetwork().GetSrcAddr().GetIpv4())
 	assert.EqualValues(t, 0x88776655, r.GetNetwork().GetDstAddr().GetIpv4())
@@ -114,7 +116,7 @@ func TestConstructorOptions(t *testing.T) {
 
 	go func() {
 		_, err = client.Send(context.Background(),
-			&pbflow.Records{Entries: []*pbflow.Record{{EthProtocol: 123, Bytes: 456}}})
+			&pbflow.Records{Entries: []*pbflow.Record{{EthProtocol: 123, Bytes: 456, Flags: 1}}})
 		require.NoError(t, err)
 	}()
 
@@ -140,6 +142,7 @@ func BenchmarkGRPCCommunication(b *testing.B) {
 	f := &pbflow.Record{
 		EthProtocol:   2048,
 		Bytes:         456,
+		Flags: 1,
 		Direction:     pbflow.Direction_EGRESS,
 		TimeFlowStart: timestamppb.Now(),
 		TimeFlowEnd:   timestamppb.Now(),
