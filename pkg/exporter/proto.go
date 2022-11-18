@@ -6,21 +6,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// flowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
+// FlowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
-func flowsToPB(inputRecords []*flow.Record) *pbflow.Records {
+func FlowsToPB(inputRecords []*flow.Record) *pbflow.Records {
 	entries := make([]*pbflow.Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
-		entries = append(entries, flowToPB(record))
+		entries = append(entries, FlowToPB(record))
 	}
 	return &pbflow.Records{
 		Entries: entries,
 	}
 }
 
-// flowsToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
+// FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
-func flowToPB(record *flow.Record) *pbflow.Record {
+func FlowToPB(record *flow.Record) *pbflow.Record {
 	if record.EthProtocol == flow.IPv6Type {
 		return v6FlowToPB(record)
 	}

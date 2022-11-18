@@ -85,7 +85,7 @@ docker-generate:
 	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: build
-build: prereqs fmt lint test vendors compile
+build: prereqs fmt lint test vendors compile plugins
 
 .PHONY: compile
 compile:
@@ -132,3 +132,9 @@ tests-e2e: prereqs
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...
+
+.PHONY: plugins
+plugins:
+	@echo "### compiling plugins"
+	$(MAKE) -C plugins/grpc build
+	$(MAKE) -C plugins/kafka build

@@ -103,6 +103,8 @@ type Config struct {
 	KafkaTLSUserCertPath string `env:"KAFKA_TLS_USER_CERT_PATH"`
 	// KafkaTLSUserKeyPath is the path to the user (client) private key for mTLS connections
 	KafkaTLSUserKeyPath string `env:"KAFKA_TLS_USER_KEY_PATH"`
+	// PluginsDir tells where the agent can load Golang plugins
+	PluginsDir string `env:"PLUGINS_DIR" envDefault:"plugins"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
 }

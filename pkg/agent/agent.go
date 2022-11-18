@@ -2,20 +2,18 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"plugin"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
-	kafkago "github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
 )
 
@@ -102,10 +100,11 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	// configure selected exporter
-	exportFunc, err := buildFlowExporter(cfg)
+	exportImpl, err := buildFlowExporter(cfg)
 	if err != nil {
 		return nil, err
 	}
+	exportFunc := exportImpl.ExportFlows
 
 	ingress, egress := flowDirections(cfg)
 
@@ -174,63 +173,21 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config) (flowExporter, error) {
-	switch cfg.Export {
-	case "grpc":
-		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
-			return nil, fmt.Errorf("missing target host or port: %s:%d",
-				cfg.TargetHost, cfg.TargetPort)
-		}
-		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
-		grpcExporter, err := exporter.StartGRPCProto(target)
-		if err != nil {
-			return nil, err
-		}
-		return grpcExporter.ExportFlows, nil
-	case "kafka":
-		if len(cfg.KafkaBrokers) == 0 {
-			return nil, errors.New("at least one Kafka broker is needed")
-		}
-		var compression compress.Compression
-		if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
-			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
-				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
-		}
-		transport := kafkago.Transport{}
-		if cfg.KafkaEnableTLS {
-			tlsConfig, err := buildTLSConfig(cfg)
-			if err != nil {
-				return nil, err
-			}
-			transport.TLS = tlsConfig
-		}
-		return (&exporter.KafkaProto{
-			Writer: &kafkago.Writer{
-				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
-				Topic:     cfg.KafkaTopic,
-				BatchSize: cfg.KafkaBatchMessages,
-				// Assigning KafkaBatchSize to BatchBytes instead of BatchSize might be confusing here.
-				// The reason is that the "standard" Kafka name for this variable is "batch.size",
-				// which specifies the size of messages in terms of bytes, and not in terms of entries.
-				// We have decided to hide this library implementation detail and expose to the
-				// customer the common, standard name and meaning for batch.size
-				BatchBytes: int64(cfg.KafkaBatchSize),
-				// Segmentio's Kafka-go does not behave as standard Kafka library, and would
-				// throttle any Write invocation until reaching the timeout.
-				// Since we invoke write once each CacheActiveTimeout, we can safely disable this
-				// timeout throttling
-				// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
-				BatchTimeout: time.Nanosecond,
-				Async:        cfg.KafkaAsync,
-				Compression:  compression,
-				Transport:    &transport,
-				Balancer:     &kafkago.RoundRobin{},
-			},
-		}).ExportFlows, nil
-	default:
-		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
+func buildFlowExporter(cfg *Config) (Exporter, error) {
+	path := filepath.Join(cfg.PluginsDir, cfg.Export+".so")
+	plg, err := plugin.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening %q plugin for %q exporter: %w", path, cfg.Export, err)
 	}
-
+	sym, err := plg.Lookup("ExporterPlugin")
+	if err != nil {
+		return nil, fmt.Errorf("fetching ExporterPlugin symbol from %q exporter: %w", cfg.Export, err)
+	}
+	instantiator, ok := sym.(ExporterPlugin)
+	if !ok {
+		return nil, fmt.Errorf("ExporterPlugin function in plugin %q does not follow correct signature", path)
+	}
+	return instantiator(cfg)
 }
 
 // Run a Flows agent. The function will keep running in the same thread
