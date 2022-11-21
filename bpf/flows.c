@@ -186,32 +186,32 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 				if(iph->protocol == IPPROTO_TCP) {
 					const struct tcphdr *th = (struct tcphdr*)(data + sizeof(struct iphdr));
 					if((void*)th + sizeof(struct tcphdr) <= data_end) {
-						bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
-					if(th->fin){
-						flags_t = setBit(flags_t,0);		
-					}
-					if(th->syn){
-						flags_t = setBit(flags_t,1);		
-					}
-					if(th->rst){
-						flags_t = setBit(flags_t,2);		
-					}
-					if(th->psh){
-						flags_t = setBit(flags_t,3);		
-					}
-					if(th->ack){
-						flags_t = setBit(flags_t,4);		
-					}
-					if(th->urg){
-						flags_t = setBit(flags_t,5);		
-					}
-					if(th->ece){
-						flags_t = setBit(flags_t,6);		
-					}
-					if(th->cwr){
-						flags_t = setBit(flags_t,7);		
-					}
-					bpf_printk("Flags: %d", flags_t);
+						//bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
+						if(th->fin){
+							flags_t = setBit(flags_t,0);		
+						}
+						if(th->syn){
+							flags_t = setBit(flags_t,1);		
+						}
+						if(th->rst){
+							flags_t = setBit(flags_t,2);		
+						}
+						if(th->psh){
+							flags_t = setBit(flags_t,3);		
+						}
+						if(th->ack){
+							flags_t = setBit(flags_t,4);		
+						}
+						if(th->urg){
+							flags_t = setBit(flags_t,5);		
+						}
+						if(th->ece){
+							flags_t = setBit(flags_t,6);		
+						}
+						if(th->cwr){
+							flags_t = setBit(flags_t,7);		
+						}
+						//bpf_printk("Flags: %d", flags_t);
 					}
 				}
 			}	
