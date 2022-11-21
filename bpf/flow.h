@@ -17,24 +17,13 @@ typedef struct flow_metrics_t {
 	// as output from bpf_ktime_get_ns()
 	u64 start_mono_time_ts;
 	u64 end_mono_time_ts;
+	// TCP Flags from https://www.ietf.org/rfc/rfc793.txt
 	u16 flags;
 	// The positive errno of a failed map insertion that caused a flow
 	// to be sent via ringbuffer.
 	// 0 otherwise
 	// https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
 	u8 errno;
-	/*u_int16_t fin:1;
-	u_int16_t syn:1;
-	u_int16_t rst:1;
-	u_int16_t psh:1;
-	u_int16_t ack:1;
-	u_int16_t urg:1;*/
-	/*u32 fin;
-	u32 syn;
-	u32 rst;
-	u32 psh;
-	u32 ack;
-	u32 urg;*/
 } __attribute__((packed)) flow_metrics;
 
 // Attributes that uniquely identify a flow
