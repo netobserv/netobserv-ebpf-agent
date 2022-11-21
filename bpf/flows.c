@@ -178,6 +178,45 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 	}
 	id.if_index = skb->ifindex;
 	id.direction = direction;
+	u16 flags_t = 0;
+	if((void*)eth + sizeof(struct ethhdr) <= data_end) {
+		if(bpf_ntohs(eth->h_proto) == ETH_P_IP) {
+			const struct iphdr *iph = (struct iphdr*)(data + sizeof(struct ethhdr));
+			if((void*)iph + sizeof(struct iphdr) <= data_end) {
+				if(iph->protocol == IPPROTO_TCP) {
+					const struct tcphdr *th = (struct tcphdr*)(data + sizeof(struct iphdr));
+					if((void*)th + sizeof(struct tcphdr) <= data_end) {
+						bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
+					if(th->fin){
+						flags_t = setBit(flags_t,0);		
+					}
+					if(th->syn){
+						flags_t = setBit(flags_t,1);		
+					}
+					if(th->rst){
+						flags_t = setBit(flags_t,2);		
+					}
+					if(th->psh){
+						flags_t = setBit(flags_t,3);		
+					}
+					if(th->ack){
+						flags_t = setBit(flags_t,4);		
+					}
+					if(th->urg){
+						flags_t = setBit(flags_t,5);		
+					}
+					if(th->ece){
+						flags_t = setBit(flags_t,6);		
+					}
+					if(th->cwr){
+						flags_t = setBit(flags_t,7);		
+					}
+					bpf_printk("Flags: %d", flags_t);
+					}
+				}
+			}	
+		}
+	}
 
 	//struct tcphdr *tcp_header;
 	// TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
@@ -192,7 +231,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 		if (aggregate_flow->start_mono_time_ts == 0) {
 			aggregate_flow->start_mono_time_ts = current_time;
 		}
-		aggregate_flow->flags += skb->len;
+		aggregate_flow->flags |= flags_t ;
 		long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
 		if (trace_messages && ret != 0) {
 			// usually error -16 (-EBUSY) is printed here.
@@ -204,45 +243,6 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 		}
 	} else {
 		// Key does not exist in the map, and will need to create a new entry.
-		u32 flags_t = 0;
-		if((void*)eth + sizeof(struct ethhdr) <= data_end) {
-			if(bpf_ntohs(eth->h_proto) == ETH_P_IP) {
-				const struct iphdr *iph = (struct iphdr*)(data + sizeof(struct ethhdr));
-				if((void*)iph + sizeof(struct iphdr) <= data_end) {
-					if(iph->protocol == IPPROTO_TCP) {
-						const struct tcphdr *th = (struct tcphdr*)(data + sizeof(struct iphdr));
-						if((void*)th + sizeof(struct tcphdr) <= data_end) {
-							bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
-						}
-						if(th->fin){
-							flags_t = setBit(flags_t,0);		
-						}
-						if(th->syn){
-							flags_t = setBit(flags_t,1);		
-						}
-						if(th->rst){
-							flags_t = setBit(flags_t,2);		
-						}
-						if(th->psh){
-							flags_t = setBit(flags_t,3);		
-						}
-						if(th->ack){
-							flags_t = setBit(flags_t,4);		
-						}
-						if(th->urg){
-							flags_t = setBit(flags_t,5);		
-						}
-						if(th->ece){
-							flags_t = setBit(flags_t,6);		
-						}
-						if(th->cwr){
-							flags_t = setBit(flags_t,7);		
-						}
-						bpf_printk("Flags: %d", flags_t);
-					}
-				}	
-			}
-		}
 		flow_metrics new_flow = {
 			.packets = 1,
 			.bytes=skb->len,
@@ -252,7 +252,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 			//Flags[0] = Fin, [1] = Syn, [2] = Rst, [3] = Psh, [4] = Ack, [5] = Urg, [6] = Ece, [7] = cwr
 			.flags = flags_t,//skb->len,
 		};
-		
+
 		// even if we know that the entry is new, another CPU might be concurrently inserting a flow
 		// so we need to specify BPF_ANY
 		long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);

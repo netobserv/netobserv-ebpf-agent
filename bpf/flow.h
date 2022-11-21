@@ -17,7 +17,7 @@ typedef struct flow_metrics_t {
 	// as output from bpf_ktime_get_ns()
 	u64 start_mono_time_ts;
 	u64 end_mono_time_ts;
-	u32 flags;
+	u16 flags;
 	// The positive errno of a failed map insertion that caused a flow
 	// to be sent via ringbuffer.
 	// 0 otherwise

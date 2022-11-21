@@ -39,7 +39,7 @@ func TestProtoConversion(t *testing.T) {
 	record.TimeFlowEnd = time.Now()
 	record.Bytes = 789
 	record.Packets = 987
-	record.Flags = uint32(1)
+	record.Flags = uint16(1)
 	record.Interface = "veth0"
 
 	input <- []*flow.Record{&record}
@@ -62,7 +62,7 @@ func TestProtoConversion(t *testing.T) {
 	assert.Equal(t, record.TimeFlowEnd.UnixMilli(), r.TimeFlowEnd.AsTime().UnixMilli())
 	assert.EqualValues(t, 789, r.Bytes)
 	assert.EqualValues(t, 987, r.Packets)
-	assert.EqualValues(t, uint32(1), r.Flags)
+	assert.EqualValues(t, uint16(1), r.Flags)
 	assert.Equal(t, "veth0", r.Interface)
 }
 

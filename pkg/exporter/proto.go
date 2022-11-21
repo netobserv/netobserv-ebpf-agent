@@ -3,7 +3,6 @@ package exporter
 import (
 	"encoding/binary"
 	"net"
-
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -34,16 +33,12 @@ func flowsToPB(inputRecords []*flow.Record, maxLen int) []*pbflow.Records {
 // into a protobuf-encoded message ready to be sent to the collector via kafka
 func flowToPB(record *flow.Record) *pbflow.Record {
 	if record.EthProtocol == flow.IPv6Type {
-		klog.Info("IPv6")
 		return v6FlowToPB(record)
 	}
-	klog.Info("IPv4")
 	return v4FlowToPB(record)
 }
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
-	klog.Info(reflect.TypeOf(fr.Flags))
-	klog.Info(reflect.TypeOf(fr.Interface))
 	return &pbflow.Record{
 		EthProtocol: uint32(fr.EthProtocol),
 		Direction:   pbflow.Direction(fr.Direction),
