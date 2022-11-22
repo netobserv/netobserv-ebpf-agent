@@ -28,11 +28,6 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, // u64 flow_end_time
 		0x13, 0x14, //flags
 		0x33, // u8 errno
-		/*0x00, //syn
-		0x00, //rst
-		0x00, //psh
-		0x00, //ack
-		0x00, //urg*/
 
 	}))
 	require.NoError(t, err)
@@ -63,12 +58,6 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			EndMonoTimeNs:   0x1a19181716151413,
 			Flags:           0x1413,
 			Errno:           0x33,
-			/*Fin:             0x01,
-			Syn:             0x00,
-			Rst:             0x00,
-			Psh:             0x00,
-			Ack:             0x00,
-			Urg:             0x00,*/
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses
