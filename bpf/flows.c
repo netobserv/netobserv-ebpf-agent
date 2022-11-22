@@ -50,9 +50,9 @@ struct {
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 // The userspace will aggregate them into a single flow.
 struct {
-     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-     __type(key, flow_id);
-     __type(value, flow_metrics);
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, flow_metrics);
 } aggregated_flows SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
@@ -62,11 +62,11 @@ volatile const u8 trace_messages = 0;
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 //Set specific bit in a 16bit int
-u16  setBit(u16 n ,uint pos) {
-      if (pos > 15)
+u16 setBit(u16 n, uint pos) {
+    if (pos > 15)
         return 0;
-      n |= (1 << pos);
-      return n;
+    n |= (1 << pos);
+    return n;
 }
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
@@ -135,31 +135,30 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
 }
 // sets flow fields from Ethernet header information
 static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
-      if ((void *)eth + sizeof(*eth) > data_end) {
-            return DISCARD;
-      }
-      __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
-      __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
-      id->eth_protocol = __bpf_ntohs(eth->h_proto);
+    if ((void *)eth + sizeof(*eth) > data_end) {
+        return DISCARD;
+    }
+    __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
+    id->eth_protocol = __bpf_ntohs(eth->h_proto);
 
-      if (id->eth_protocol == ETH_P_IP) {
-            struct iphdr *ip = (void *)eth + sizeof(*eth);
-            return fill_iphdr(ip, data_end, id);
-      } else if (id->eth_protocol == ETH_P_IPV6) {
-            struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-            return fill_ip6hdr(ip6, data_end, id);
-      } else {
-            // TODO : Need to implement other specific ethertypes if needed
-            // For now other parts of flow id remain zero
-            memset (&(id->src_ip),0, sizeof(struct in6_addr));
-            memset (&(id->dst_ip),0, sizeof(struct in6_addr));
-            id->transport_protocol = 0;
-            id->src_port = 0;
-            id->dst_port = 0;
-      }
-      return SUBMIT;
+    if (id->eth_protocol == ETH_P_IP) {
+        struct iphdr *ip = (void *)eth + sizeof(*eth);
+        return fill_iphdr(ip, data_end, id);
+    } else if (id->eth_protocol == ETH_P_IPV6) {
+        struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+        return fill_ip6hdr(ip6, data_end, id);
+    } else {
+        // TODO : Need to implement other specific ethertypes if needed
+        // For now other parts of flow id remain zero
+        memset(&(id->src_ip), 0, sizeof(struct in6_addr));
+        memset(&(id->dst_ip), 0, sizeof(struct in6_addr));
+        id->transport_protocol = 0;
+        id->src_port = 0;
+        id->dst_port = 0;
+    }
+    return SUBMIT;
 }
-
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
@@ -178,42 +177,42 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     id.if_index = skb->ifindex;
     id.direction = direction;
     u16 flags_t = 0;
-    if((void*)eth + sizeof(struct ethhdr) <= data_end) {
-        if(bpf_ntohs(eth->h_proto) == ETH_P_IP) {
-            const struct iphdr *iph = (struct iphdr*)(data + sizeof(struct ethhdr));
-            if((void*)iph + sizeof(struct iphdr) <= data_end) {
-                if(iph->protocol == IPPROTO_TCP) {
-                    const struct tcphdr *th = (struct tcphdr*)(data + sizeof(struct iphdr));
-                    if((void*)th + sizeof(struct tcphdr) <= data_end) {
+    if ((void *)eth + sizeof(struct ethhdr) <= data_end) {
+        if (bpf_ntohs(eth->h_proto) == ETH_P_IP) {
+            const struct iphdr *iph = (struct iphdr *)(data + sizeof(struct ethhdr));
+            if ((void *)iph + sizeof(struct iphdr) <= data_end) {
+                if (iph->protocol == IPPROTO_TCP) {
+                    const struct tcphdr *th = (struct tcphdr *)(data + sizeof(struct iphdr));
+                    if ((void *)th + sizeof(struct tcphdr) <= data_end) {
                         //bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
-                        if(th->fin){
-                            flags_t = setBit(flags_t,0);		
+                        if (th->fin) {
+                            flags_t = setBit(flags_t, 0);
                         }
-                        if(th->syn){
-                            flags_t = setBit(flags_t,1);		
+                        if (th->syn) {
+                            flags_t = setBit(flags_t, 1);
                         }
-                        if(th->rst){
-                            flags_t = setBit(flags_t,2);		
+                        if (th->rst) {
+                            flags_t = setBit(flags_t, 2);
                         }
-                        if(th->psh){
-                            flags_t = setBit(flags_t,3);		
+                        if (th->psh) {
+                            flags_t = setBit(flags_t, 3);
                         }
-                        if(th->ack){
-                            flags_t = setBit(flags_t,4);		
+                        if (th->ack) {
+                            flags_t = setBit(flags_t, 4);
                         }
-                        if(th->urg){
-                            flags_t = setBit(flags_t,5);		
+                        if (th->urg) {
+                            flags_t = setBit(flags_t, 5);
                         }
-                        if(th->ece){
-                            flags_t = setBit(flags_t,6);		
+                        if (th->ece) {
+                            flags_t = setBit(flags_t, 6);
                         }
-                        if(th->cwr){
-                            flags_t = setBit(flags_t,7);		
+                        if (th->cwr) {
+                            flags_t = setBit(flags_t, 7);
                         }
                         //bpf_printk("Flags: %d", flags_t);
                     }
                 }
-            }	
+            }
         }
     }
 
@@ -230,7 +229,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (aggregate_flow->start_mono_time_ts == 0) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
-        aggregate_flow->flags |= flags_t ;
+        aggregate_flow->flags |= flags_t;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -243,13 +242,13 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
-                .packets = 1,
-                .bytes=skb->len,
-                .start_mono_time_ts = current_time,
-                .end_mono_time_ts = current_time,
-                //Get flags from packet header
-                //Flags[0] = Fin, [1] = Syn, [2] = Rst, [3] = Psh, [4] = Ack, [5] = Urg, [6] = Ece, [7] = cwr
-                .flags = flags_t,//skb->len,
+            .packets = 1,
+            .bytes = skb->len,
+            .start_mono_time_ts = current_time,
+            .end_mono_time_ts = current_time,
+            //Get flags from packet header
+            //Flags[0] = Fin, [1] = Syn, [2] = Rst, [3] = Psh, [4] = Ack, [5] = Urg, [6] = Ece, [7] = cwr
+            .flags = flags_t, //skb->len,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
@@ -281,12 +280,12 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     return TC_ACT_OK;
 }
 SEC("tc_ingress")
-int ingress_flow_parse (struct __sk_buff *skb) {
+int ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
 }
 
 SEC("tc_egress")
-int egress_flow_parse (struct __sk_buff *skb) {
+int egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
 }
 char _license[] SEC("license") = "GPL";
