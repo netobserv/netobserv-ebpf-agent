@@ -16,7 +16,7 @@ spec:
       serviceAccountName: ebpf-agent-test
       containers:
         - name: flp
-          image: quay.io/netobserv/flowlogs-pipeline:latest
+          image: quay.io/netobserv/flowlogs-pipeline:main
           args:
             - --config=/etc/flp/config.yaml
           volumeMounts:
