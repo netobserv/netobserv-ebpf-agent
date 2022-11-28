@@ -52,6 +52,7 @@ typedef struct flow_record_t {
     flow_metrics metrics;
 } __attribute__((packed)) flow_record;
 
+// Payload Meta is a tuple containing information about the payload
 typedef struct payload_meta_t {
 	u32 if_index;
 	u32 pkt_len;
