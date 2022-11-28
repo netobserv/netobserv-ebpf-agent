@@ -51,4 +51,9 @@ typedef struct flow_record_t {
     flow_id id;
     flow_metrics metrics;
 } __attribute__((packed)) flow_record;
+
+typedef struct payload_meta_t {
+	u32 if_index;
+	u32 pkt_len;
+} __attribute__((packed)) payload_meta;
 #endif

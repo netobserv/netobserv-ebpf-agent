@@ -48,6 +48,14 @@ struct {
     __uint(max_entries, 1 << 24);
 } direct_flows SEC(".maps");
 
+
+// Perf Buffer to submit packet payloads to userspace
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(int));
+    __uint(value_size, sizeof(int));
+} packet_payloads SEC(".maps");
+
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 // The userspace will aggregate them into a single flow.
 struct {
@@ -58,7 +66,9 @@ struct {
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
-volatile const u8 trace_messages = 0;
+volatile const u8  trace_messages = 0;
+volatile const u32 payload_size = 64;
+
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
@@ -232,6 +242,28 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     return TC_ACT_OK;
 
 }
+
+static inline int export_packet_payload (struct __sk_buff *skb) {
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
+    payload_meta meta;
+
+    meta.if_index = skb->ifindex;
+    meta.pkt_len = data_end - data;
+    bpf_skb_output(skb, &packet_payloads, ((u64) meta.pkt_len << 32) | BPF_F_CURRENT_CPU, &meta, sizeof(meta));
+    return TC_ACT_OK;
+}
+
+SEC("pano_ingress")
+int pano_ingress_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
+SEC("pano_egress")
+int pano_egress_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
 SEC("tc_ingress")
 int ingress_flow_parse (struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
