@@ -3,9 +3,9 @@ name: pull request - e2e tests
 #todo: check caching dependencies: https://github.com/actions/cache
 on:
   push:
-    branches: [ main ]
+    branches: [ 'main', 'release-*' ]
   pull_request:
-    branches: [ main ]
+    branches: [ 'main', 'release-*' ]
 
 jobs:
   e2e-tests:
