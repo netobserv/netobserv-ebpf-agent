@@ -189,7 +189,7 @@ func buildFlowExporter(cfg *Config) (flowExporter, error) {
 		}
 		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
 
-		ipfix, err := exporter.StartIPFIXProto(target, "udp")
+		ipfix, err := exporter.StartIPFIXExporter(target, "udp")
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +201,7 @@ func buildFlowExporter(cfg *Config) (flowExporter, error) {
 		}
 		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
 
-		ipfix, err := exporter.StartIPFIXProto(target, "tcp")
+		ipfix, err := exporter.StartIPFIXExporter(target, "tcp")
 		if err != nil {
 			return nil, err
 		}
