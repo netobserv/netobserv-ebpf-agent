@@ -1,8 +1,8 @@
 // Package cluster cointains the base setup for the test environment. This is:
-// - Deployment manifests for a base cluster: Loki, permissions, flowlogs-processor and the
-//   local version of the agent. As well as the cluster configuration for ports exposure.
-// - Utility classes to programmatically manage the Kind cluster and some of its components
-//   (e.g. Loki)
+//   - Deployment manifests for a base cluster: Loki, permissions, flowlogs-processor and the
+//     local version of the agent. As well as the cluster configuration for ports exposure.
+//   - Utility classes to programmatically manage the Kind cluster and some of its components
+//     (e.g. Loki)
 package cluster
 
 import (
