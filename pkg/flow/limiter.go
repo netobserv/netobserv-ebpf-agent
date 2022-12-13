@@ -21,7 +21,7 @@ type CapacityLimiter struct {
 func (c *CapacityLimiter) Limit(in <-chan []*Record, out chan<- []*Record) {
 	go c.logDroppedFlows()
 	for i := range in {
-		if len(out) < cap(out) {
+		if len(out) < cap(out) || cap(out) == 0 {
 			out <- i
 		} else {
 			c.droppedFlows += len(i)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -20,6 +21,35 @@ import (
 
 var alog = logrus.WithField("component", "agent.Flows")
 
+// Status of the agent service. Helps on the health report as well as making some asynchronous
+// tests waiting for the agent to accept flows.
+type Status int
+
+const (
+	StatusNotStarted Status = iota
+	StatusStarting
+	StatusStarted
+	StatusStopping
+	StatusStopped
+)
+
+func (s Status) String() string {
+	switch s {
+	case StatusNotStarted:
+		return "StatusNotStarted"
+	case StatusStarting:
+		return "StatusStarting"
+	case StatusStarted:
+		return "StatusStarted"
+	case StatusStopping:
+		return "StatusStopping"
+	case StatusStopped:
+		return "StatusStopped"
+	default:
+		return "invalid"
+	}
+}
+
 // Flows reporting agent
 type Flows struct {
 	cfg *Config
@@ -27,19 +57,24 @@ type Flows struct {
 	// input data providers
 	interfaces ifaces.Informer
 	filter     interfaceFilter
-	ebpf       ebpfRegisterer
+	ebpf       ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
 	exporter  flowExporter
+
+	status Status
 }
 
-// ebpfRegisterer abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
-type ebpfRegisterer interface {
+// ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
+type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
+
+	LookupAndDeleteMap() map[flow.RecordKey][]flow.RecordMetrics
+	ReadRingBuf() (ringbuf.Record, error)
 }
 
 // flowExporter abstract the ExportFlows' method of exporter.GRPCProto to allow dependency injection
@@ -49,12 +84,6 @@ type flowExporter func(in <-chan []*flow.Record)
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
-
-	// configure allow/deny interfaces filter
-	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-	if err != nil {
-		return nil, fmt.Errorf("configuring interface filters: %w", err)
-	}
 
 	// configure informer for new interfaces
 	var informer ifaces.Informer
@@ -71,20 +100,11 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			Warn("wrong interface listen method. Using file watcher as default")
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
-	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
 
 	// configure selected exporter
 	exportFunc, err := buildFlowExporter(cfg)
 	if err != nil {
 		return nil, err
-	}
-
-	interfaceNamer := func(ifIndex int) string {
-		iface, ok := registerer.IfaceNameForIndex(ifIndex)
-		if !ok {
-			return "unknown"
-		}
-		return iface
 	}
 
 	ingress, egress := flowDirections(cfg)
@@ -99,14 +119,39 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
+	return flowsAgent(cfg, informer, fetcher, exportFunc)
+}
+
+// flowsAgent is a private constructor with injectable dependencies, usable for tests
+func flowsAgent(cfg *Config,
+	informer ifaces.Informer,
+	fetcher ebpfFlowFetcher,
+	exporter flowExporter,
+) (*Flows, error) {
+	// configure allow/deny interfaces filter
+	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+	if err != nil {
+		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	}
+
+	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
+
+	interfaceNamer := func(ifIndex int) string {
+		iface, ok := registerer.IfaceNameForIndex(ifIndex)
+		if !ok {
+			return "unknown"
+		}
+		return iface
+	}
+
 	mapTracer := flow.NewMapTracer(fetcher, interfaceNamer, cfg.CacheActiveTimeout)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout)
 	accounter := flow.NewAccounter(
 		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, interfaceNamer, time.Now, monotime.Now)
 	return &Flows{
 		ebpf:       fetcher,
-		exporter:   exportFunc,
-		interfaces: informer,
+		exporter:   exporter,
+		interfaces: registerer,
 		filter:     filter,
 		cfg:        cfg,
 		mapTracer:  mapTracer,
@@ -215,15 +260,18 @@ func buildFlowExporter(cfg *Config) (flowExporter, error) {
 // Run a Flows agent. The function will keep running in the same thread
 // until the passed context is canceled
 func (f *Flows) Run(ctx context.Context) error {
+	f.status = StatusStarting
 	alog.Info("starting Flows agent")
 	graph, err := f.buildAndStartPipeline(ctx)
 	if err != nil {
 		return fmt.Errorf("starting processing graph: %w", err)
 	}
 
+	f.status = StatusStarted
 	alog.Info("Flows agent successfully started")
 	<-ctx.Done()
 
+	f.status = StatusStopping
 	alog.Info("stopping Flows agent")
 	if err := f.ebpf.Close(); err != nil {
 		alog.WithError(err).Warn("eBPF resources not correctly closed")
@@ -232,8 +280,13 @@ func (f *Flows) Run(ctx context.Context) error {
 	alog.Debug("waiting for all nodes to finish their pending work")
 	<-graph.Done()
 
+	f.status = StatusStopped
 	alog.Info("Flows agent stopped")
 	return nil
+}
+
+func (f *Flows) Status() Status {
+	return f.status
 }
 
 // interfacesManager uses an informer to check new/deleted network interfaces. For each running
@@ -303,7 +356,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 	rbTracer.SendsTo(accounter)
 
 	if f.cfg.Deduper == DeduperFirstCome {
-		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry),
+		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry, f.cfg.DeduperJustMark),
 			node.ChannelBufferLen(f.cfg.BuffersLength))
 		mapTracer.SendsTo(deduper)
 		accounter.SendsTo(deduper)

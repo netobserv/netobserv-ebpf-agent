@@ -1,8 +1,8 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi8/go-toolset:1.17.12 as builder
+FROM registry.access.redhat.com/ubi8/go-toolset:1.18.4 as builder
 
 ARG SW_VERSION="unknown"
-ARG GOVERSION="1.17.8"
+ARG GOVERSION="1.18.4"
 
 WORKDIR /opt/app-root
 
@@ -20,7 +20,7 @@ COPY Makefile Makefile
 RUN make compile
 
 # Create final image from minimal + built binary
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.6
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.7
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
