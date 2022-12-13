@@ -1,6 +1,6 @@
 FROM fedora:35
 
-ARG GOVERSION="1.17.12"
+ARG GOVERSION="1.18.4"
 ARG PROTOCVERSION="3.19.4"
 
 # Installs dependencies that are required to compile eBPF programs
