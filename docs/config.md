@@ -2,9 +2,9 @@
 
 The following environment variables are available to configure the NetObserv eBFP Agent:
 
-* `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka`.
-* `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc`). Host name or IP of the target Flow collector.
-* `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc`). Port of the target flow collector.
+* `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka` or `ipfix+tcp` or `ipfix+udp`.
+* `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the target Flow collector.
+* `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow collector.
 * `INTERFACES` (optional). Comma-separated list of the interface names from where flows will be collected. If 
   empty, the agent will use all the interfaces in the system, excepting the ones listed in
   the `EXCLUDE_INTERFACES` variable.
