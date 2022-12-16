@@ -26,6 +26,7 @@ func (ef *ExporterFake) Export(in <-chan []*flow.Record) {
 }
 
 func (ef *ExporterFake) Get(t *testing.T, timeout time.Duration) []*flow.Record {
+	t.Helper()
 	select {
 	case <-time.After(timeout):
 		t.Fatalf("timeout %s while waiting for a message to be exported", timeout)

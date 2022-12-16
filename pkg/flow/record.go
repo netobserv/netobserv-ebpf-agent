@@ -91,16 +91,16 @@ type Record struct {
 	// "exclude from aggregation". Otherwise rates, sums, etc... values would be multiplied by the
 	// number of interfaces this flow is observed from.
 	Duplicate bool
-}
 
-type InterfaceNamer func(ifIndex int) string
+	// AgentIP provides information about the source of the flow (the Agent that traced it)
+	AgentIP net.IP
+}
 
 func NewRecord(
 	key RecordKey,
 	metrics RecordMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
-	namer InterfaceNamer,
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeNs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeNs)
@@ -109,7 +109,6 @@ func NewRecord(
 			RecordKey:     key,
 			RecordMetrics: metrics,
 		},
-		Interface:     namer(int(key.IFIndex)),
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}

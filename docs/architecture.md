@@ -23,5 +23,7 @@ flowchart TD
 
     DD --> |"chan []*flow.Record"| CL(flow.CapacityLimiter)
 
-    CL --> |"chan []*flow.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
+    CL --> |"chan []*flow.Record"| DC(flow.Decorator)
+    
+    DC --> |"chan []*flow.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
 ```

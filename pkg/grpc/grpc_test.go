@@ -36,6 +36,8 @@ func TestGRPCCommunication(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x55667788},
 					},
+				}, AgentIp: &pbflow.IP{
+					IpFamily: &pbflow.IP_Ipv4{Ipv4: 0xaabbccdd},
 				}}},
 			})
 		require.NoError(t, err)
@@ -48,6 +50,8 @@ func TestGRPCCommunication(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x88776655},
 					},
+				}, AgentIp: &pbflow.IP{
+					IpFamily: &pbflow.IP_Ipv4{Ipv4: 0xddccbbaa},
 				}}},
 			})
 		require.NoError(t, err)
@@ -65,6 +69,7 @@ func TestGRPCCommunication(t *testing.T) {
 	assert.EqualValues(t, 456, r.Bytes)
 	assert.EqualValues(t, 0x11223344, r.GetNetwork().GetSrcAddr().GetIpv4())
 	assert.EqualValues(t, 0x55667788, r.GetNetwork().GetDstAddr().GetIpv4())
+	assert.EqualValues(t, 0xaabbccdd, r.GetAgentIp().GetIpv4())
 	select {
 	case rs = <-serverOut:
 	case <-time.After(timeout):
@@ -76,6 +81,7 @@ func TestGRPCCommunication(t *testing.T) {
 	assert.EqualValues(t, 101, r.Bytes)
 	assert.EqualValues(t, 0x44332211, r.GetNetwork().GetSrcAddr().GetIpv4())
 	assert.EqualValues(t, 0x88776655, r.GetNetwork().GetDstAddr().GetIpv4())
+	assert.EqualValues(t, 0xddccbbaa, r.GetAgentIp().GetIpv4())
 
 	select {
 	case rs = <-serverOut:

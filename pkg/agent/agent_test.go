@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var agentIP = "192.168.1.13"
 
 const timeout = 2 * time.Second
 
@@ -171,6 +174,28 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 	assert.Lenf(t, key1Flows, 2, "both key1 flows should have been forwarded: %#v", key1Flows)
 }
 
+func TestFlowsAgent_Decoration(t *testing.T) {
+	export := testAgent(t, &Config{
+		CacheActiveTimeout: 10 * time.Millisecond,
+		CacheMaxFlows:      100,
+	})
+
+	exported := export.Get(t, timeout)
+	assert.Len(t, exported, 3)
+
+	// Tests that the decoration stage has been properly executed. It should
+	// add the interface name and the agent IP
+	for _, f := range exported {
+		assert.Equal(t, agentIP, f.AgentIP.String())
+		switch f.RecordKey {
+		case key1, key2:
+			assert.Equal(t, "foo", f.Interface)
+		default:
+			assert.Equal(t, "bar", f.Interface)
+		}
+	}
+}
+
 func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	ebpf := test.NewTracerFake()
 	export := test.NewExporterFake()
@@ -178,7 +203,8 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 		test.SliceInformerFake{
 			{Name: "foo", Index: 3},
 			{Name: "bar", Index: 4},
-		}, ebpf, export.Export)
+		}, ebpf, export.Export,
+		net.ParseIP(agentIP))
 	require.NoError(t, err)
 
 	go func() {

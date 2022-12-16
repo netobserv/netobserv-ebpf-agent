@@ -16,7 +16,6 @@ type Accounter struct {
 	entries      map[RecordKey]*RecordMetrics
 	clock        func() time.Time
 	monoClock    func() time.Duration
-	namer        InterfaceNamer
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -24,7 +23,7 @@ var alog = logrus.WithField("component", "flow/Accounter")
 // NewAccounter creates a new Accounter.
 // The cache has no limit and it's assumed that eviction is done by the caller.
 func NewAccounter(
-	maxEntries int, evictTimeout time.Duration, ifaceNamer InterfaceNamer,
+	maxEntries int, evictTimeout time.Duration,
 	clock func() time.Time,
 	monoClock func() time.Duration,
 ) *Accounter {
@@ -32,7 +31,6 @@ func NewAccounter(
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
 		entries:      map[RecordKey]*RecordMetrics{},
-		namer:        ifaceNamer,
 		clock:        clock,
 		monoClock:    monoClock,
 	}
@@ -86,7 +84,7 @@ func (c *Accounter) evict(entries map[RecordKey]*RecordMetrics, evictor chan<- [
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, *metrics, now, monotonicNow, c.namer))
+		records = append(records, NewRecord(key, *metrics, now, monotonicNow))
 	}
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records
