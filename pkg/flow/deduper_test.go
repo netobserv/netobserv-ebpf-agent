@@ -21,7 +21,7 @@ var (
 	}, RecordMetrics: RecordMetrics{
 		Packets: 2, Bytes: 456,
 	}}, Interface: "123456789"}
-	// another fow from 2 different interfaces and directions
+	// another fow from 2 different interfaces
 	twoIf1 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
 		EthProtocol: 1, Direction: 1, Transport: Transport{SrcPort: 333, DstPort: 456},
 		DataLink: DataLink{DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}}, IFIndex: 1,
@@ -29,7 +29,7 @@ var (
 		Packets: 2, Bytes: 456,
 	}}, Interface: "eth0"}
 	twoIf2 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
-		EthProtocol: 1, Direction: 0, Transport: Transport{SrcPort: 333, DstPort: 456},
+		EthProtocol: 1, Direction: 1, Transport: Transport{SrcPort: 333, DstPort: 456},
 		DataLink: DataLink{DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}}, IFIndex: 2,
 	}, RecordMetrics: RecordMetrics{
 		Packets: 2, Bytes: 456,
