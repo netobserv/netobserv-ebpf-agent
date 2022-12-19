@@ -1,6 +1,9 @@
 package exporter
 
 import (
+	"encoding/binary"
+	"net"
+
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -56,6 +59,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		Packets:   uint64(fr.Packets),
 		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
+		AgentIp:   agentIP(fr.AgentIP),
 	}
 }
 
@@ -88,6 +92,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		Packets:   uint64(fr.Packets),
 		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
+		AgentIp:   agentIP(fr.AgentIP),
 	}
 }
 
@@ -100,4 +105,12 @@ func macToUint64(m *flow.MacAddr) uint64 {
 		(uint64(m[2]) << 24) |
 		(uint64(m[1]) << 32) |
 		(uint64(m[0]) << 40)
+}
+
+func agentIP(nip net.IP) *pbflow.IP {
+	if ip := nip.To4(); ip != nil {
+		return &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: binary.BigEndian.Uint32(ip)}}
+	}
+	// IPv6 address
+	return &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: nip}}
 }
