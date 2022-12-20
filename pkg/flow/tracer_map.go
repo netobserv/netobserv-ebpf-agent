@@ -16,7 +16,6 @@ var mtlog = logrus.WithField("component", "flow.MapTracer")
 // a flow Record structure, and performs the accumulation of each perCPU-record into a single flow
 type MapTracer struct {
 	mapFetcher      mapFetcher
-	interfaceNamer  InterfaceNamer
 	evictionTimeout time.Duration
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond   *sync.Cond
@@ -27,10 +26,9 @@ type mapFetcher interface {
 	LookupAndDeleteMap() map[RecordKey][]RecordMetrics
 }
 
-func NewMapTracer(fetcher mapFetcher, namer InterfaceNamer, evictionTimeout time.Duration) *MapTracer {
+func NewMapTracer(fetcher mapFetcher, evictionTimeout time.Duration) *MapTracer {
 	return &MapTracer{
 		mapFetcher:      fetcher,
-		interfaceNamer:  namer,
 		evictionTimeout: evictionTimeout,
 		lastEvictionNs:  uint64(monotime.Now()),
 		evictionCond:    sync.NewCond(&sync.Mutex{}),
@@ -108,7 +106,6 @@ func (m *MapTracer) evictFlows(forwardFlows chan<- []*Record) {
 			aggregatedMetrics,
 			currentTime,
 			uint64(monotonicTimeNow),
-			m.interfaceNamer,
 		))
 	}
 	m.lastEvictionNs = laterFlowNs

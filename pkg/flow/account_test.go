@@ -37,9 +37,7 @@ var k3 = RecordKey{
 func TestEvict_MaxEntries(t *testing.T) {
 	// GIVEN an accounter
 	now := time.Date(2022, 8, 23, 16, 33, 22, 0, time.UTC)
-	acc := NewAccounter(2, time.Hour, func(ifIndex int) string {
-		return "foo"
-	}, func() time.Time {
+	acc := NewAccounter(2, time.Hour, func() time.Time {
 		return now
 	}, func() time.Duration {
 		return 1000
@@ -103,7 +101,6 @@ func TestEvict_MaxEntries(t *testing.T) {
 			},
 			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
 			TimeFlowEnd:   now.Add(-(1000 - 789) * time.Nanosecond),
-			Interface:     "foo",
 		},
 		k2: {
 			RawRecord: RawRecord{
@@ -114,7 +111,6 @@ func TestEvict_MaxEntries(t *testing.T) {
 			},
 			TimeFlowStart: now.Add(-(1000 - 456) * time.Nanosecond),
 			TimeFlowEnd:   now.Add(-(1000 - 456) * time.Nanosecond),
-			Interface:     "foo",
 		},
 	}, received)
 }
@@ -122,9 +118,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 func TestEvict_Period(t *testing.T) {
 	// GIVEN an accounter
 	now := time.Date(2022, 8, 23, 16, 33, 22, 0, time.UTC)
-	acc := NewAccounter(200, 20*time.Millisecond, func(ifIndex int) string {
-		return "foo"
-	}, func() time.Time {
+	acc := NewAccounter(200, 20*time.Millisecond, func() time.Time {
 		return now
 	}, func() time.Duration {
 		return 1000
@@ -182,7 +176,6 @@ func TestEvict_Period(t *testing.T) {
 				EndMonoTimeNs:   789,
 			},
 		},
-		Interface:     "foo",
 		TimeFlowStart: now.Add(-1000 + 123),
 		TimeFlowEnd:   now.Add(-1000 + 789),
 	}, *records[0])
@@ -198,7 +191,6 @@ func TestEvict_Period(t *testing.T) {
 				EndMonoTimeNs:   1456,
 			},
 		},
-		Interface:     "foo",
 		TimeFlowStart: now.Add(-1000 + 1123),
 		TimeFlowEnd:   now.Add(-1000 + 1456),
 	}, *records[0])

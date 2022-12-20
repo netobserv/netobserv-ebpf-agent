@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -65,6 +66,10 @@ type Flows struct {
 	accounter *flow.Accounter
 	exporter  flowExporter
 
+	// elements used to decorate flows with extra information
+	interfaceNamer flow.InterfaceNamer
+	agentIP        net.IP
+
 	status Status
 }
 
@@ -101,6 +106,13 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	}
 
+	alog.Debug("acquiring Agent IP")
+	agentIP, err := fetchAgentIP(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("acquiring Agent IP: %w", err)
+	}
+	alog.Debug("agent IP: " + agentIP.String())
+
 	// configure selected exporter
 	exportFunc, err := buildFlowExporter(cfg)
 	if err != nil {
@@ -119,7 +131,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, informer, fetcher, exportFunc)
+	return flowsAgent(cfg, informer, fetcher, exportFunc, agentIP)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
@@ -127,6 +139,7 @@ func flowsAgent(cfg *Config,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter flowExporter,
+	agentIP net.IP,
 ) (*Flows, error) {
 	// configure allow/deny interfaces filter
 	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
@@ -144,19 +157,21 @@ func flowsAgent(cfg *Config,
 		return iface
 	}
 
-	mapTracer := flow.NewMapTracer(fetcher, interfaceNamer, cfg.CacheActiveTimeout)
+	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout)
 	accounter := flow.NewAccounter(
-		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, interfaceNamer, time.Now, monotime.Now)
+		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now)
 	return &Flows{
-		ebpf:       fetcher,
-		exporter:   exporter,
-		interfaces: registerer,
-		filter:     filter,
-		cfg:        cfg,
-		mapTracer:  mapTracer,
-		rbTracer:   rbTracer,
-		accounter:  accounter,
+		ebpf:           fetcher,
+		exporter:       exporter,
+		interfaces:     registerer,
+		filter:         filter,
+		cfg:            cfg,
+		mapTracer:      mapTracer,
+		rbTracer:       rbTracer,
+		accounter:      accounter,
+		agentIP:        agentIP,
+		interfaceNamer: interfaceNamer,
 	}, nil
 }
 
@@ -345,6 +360,9 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 	limiter := node.AsMiddle((&flow.CapacityLimiter{}).Limit,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
+	decorator := node.AsMiddle(flow.Decorate(f.agentIP, f.interfaceNamer),
+		node.ChannelBufferLen(f.cfg.BuffersLength))
+
 	ebl := f.cfg.ExporterBufferLength
 	if ebl == 0 {
 		ebl = f.cfg.BuffersLength
@@ -365,7 +383,9 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 		mapTracer.SendsTo(limiter)
 		accounter.SendsTo(limiter)
 	}
-	limiter.SendsTo(export)
+	limiter.SendsTo(decorator)
+	decorator.SendsTo(export)
+
 	alog.Debug("starting graph")
 	mapTracer.Start()
 	rbTracer.Start()

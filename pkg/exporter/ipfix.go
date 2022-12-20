@@ -12,6 +12,9 @@ import (
 
 var ilog = logrus.WithField("component", "exporter/IPFIXProto")
 
+// TODO: encode also the equivalent of the Protobuf's AgentIP field in a format that is binary-
+// compatible with OVN-K.
+
 type IPFIX struct {
 	hostPort     string
 	exporter     *ipfixExporter.ExportingProcess

@@ -37,6 +37,9 @@ message Record {
   // if true, the same flow has been recorded via another interface.
   // From all the duplicate flows, one will set this value to false and the rest will be true.
   bool duplicate = 11;
+
+  // Agent IP address to help identifying the source of the flow
+  IP agent_ip = 12;
 }
 
 message DataLink {

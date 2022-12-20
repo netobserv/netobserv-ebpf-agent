@@ -12,9 +12,28 @@ const (
 	DirectionIngress = "ingress"
 	DirectionEgress  = "egress"
 	DirectionBoth    = "both"
+
+	IPTypeAny  = "any"
+	IPTypeIPV4 = "ipv4"
+	IPTypeIPV6 = "ipv6"
+
+	IPIfaceExternal    = "external"
+	IPIfaceLocal       = "local"
+	IPIfaceNamedPrefix = "name:"
 )
 
 type Config struct {
+	// AgentIP allows overriding the reported Agent IP address on each flow.
+	AgentIP string `env:"AGENT_IP"`
+	// AgentIPIface specifies which interface should the agent pick the IP address from in order to
+	// report it in the AgentIP field on each flow. Accepted values are: external (default), local,
+	// or name:<interface name> (e.g. name:eth0).
+	// If the AgentIP configuration property is set, this property has no effect.
+	AgentIPIface string `env:"AGENT_IP_IFACE" envDefault:"external"`
+	// AgentIPType specifies which type of IP address (IPv4 or IPv6 or any) should the agent report
+	// in the AgentID field of each flow. Accepted values are: any (default), ipv4, ipv6.
+	// If the AgentIP configuration property is set, this property has no effect.
+	AgentIPType string `env:"AGENT_IP_TYPE" envDefault:"any"`
 	// Export selects the flows' exporter protocol. Accepted values are: grpc (default) or kafka
 	// or ipfix+udp or ipfix+tcp.
 	Export string `env:"EXPORT" envDefault:"grpc"`
