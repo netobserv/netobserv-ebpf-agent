@@ -67,6 +67,7 @@ func (c *deduperCache) isDupe(key *RecordKey) bool {
 	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IFIndex = 0
 	rk.DataLink = DataLink{}
+	rk.Direction = 0
 	// If a flow has been accounted previously, whatever its interface was,
 	// it updates the expiry time for that flow
 	if ele, ok := c.ifaces[rk]; ok {
