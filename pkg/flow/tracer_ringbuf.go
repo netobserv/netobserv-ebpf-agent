@@ -51,7 +51,7 @@ func NewRingBufTracer(
 	}
 }
 
-func (m *RingBufTracer) TraceLoop(ctx context.Context) node.InitFunc {
+func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord] {
 	return func(out chan<- *RawRecord) {
 		debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
 		for {

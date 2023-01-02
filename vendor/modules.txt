@@ -107,11 +107,10 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/netobserv/gopipes v0.2.0
-## explicit; go 1.17
-github.com/netobserv/gopipes/pkg/internal/connect
-github.com/netobserv/gopipes/pkg/internal/refl
+# github.com/netobserv/gopipes v0.3.0
+## explicit; go 1.18
 github.com/netobserv/gopipes/pkg/node
+github.com/netobserv/gopipes/pkg/node/internal/connect
 # github.com/paulbellamy/ratecounter v0.2.0
 ## explicit
 github.com/paulbellamy/ratecounter

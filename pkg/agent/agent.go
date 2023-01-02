@@ -64,7 +64,7 @@ type Flows struct {
 	mapTracer *flow.MapTracer
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
-	exporter  flowExporter
+	exporter  node.TerminalFunc[[]*flow.Record]
 
 	// elements used to decorate flows with extra information
 	interfaceNamer flow.InterfaceNamer
@@ -81,10 +81,6 @@ type ebpfFlowFetcher interface {
 	LookupAndDeleteMap() map[flow.RecordKey][]flow.RecordMetrics
 	ReadRingBuf() (ringbuf.Record, error)
 }
-
-// flowExporter abstract the ExportFlows' method of exporter.GRPCProto to allow dependency injection
-// in tests
-type flowExporter func(in <-chan []*flow.Record)
 
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
@@ -138,7 +134,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 func flowsAgent(cfg *Config,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
-	exporter flowExporter,
+	exporter node.TerminalFunc[[]*flow.Record],
 	agentIP net.IP,
 ) (*Flows, error) {
 	// configure allow/deny interfaces filter
@@ -189,7 +185,7 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config) (flowExporter, error) {
+func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 	switch cfg.Export {
 	case "grpc":
 		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
@@ -342,7 +338,7 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
-func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, error) {
+func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*flow.Record], error) {
 
 	alog.Debug("registering interfaces' listener in background")
 	err := f.interfacesManager(ctx)
@@ -351,8 +347,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal, erro
 	}
 
 	alog.Debug("connecting flows' processing graph")
-	mapTracer := node.AsInit(f.mapTracer.TraceLoop(ctx))
-	rbTracer := node.AsInit(f.rbTracer.TraceLoop(ctx))
+	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx))
+	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
 
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))

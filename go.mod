@@ -1,13 +1,13 @@
 module github.com/netobserv/netobserv-ebpf-agent
 
-go 1.17
+go 1.18
 
 require (
 	github.com/caarlos0/env/v6 v6.9.1
 	github.com/cilium/ebpf v0.8.1
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
-	github.com/netobserv/gopipes v0.2.0
+	github.com/netobserv/gopipes v0.3.0
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/segmentio/kafka-go v0.4.35
 	github.com/sirupsen/logrus v1.8.1
