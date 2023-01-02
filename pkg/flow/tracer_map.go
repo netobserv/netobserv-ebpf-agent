@@ -41,7 +41,7 @@ func (m *MapTracer) Flush() {
 	m.evictionCond.Broadcast()
 }
 
-func (m *MapTracer) TraceLoop(ctx context.Context) node.InitFunc {
+func (m *MapTracer) TraceLoop(ctx context.Context) node.StartFunc[[]*Record] {
 	return func(out chan<- []*Record) {
 		evictionTicker := time.NewTicker(m.evictionTimeout)
 		go m.evictionSynchronization(ctx, out)
