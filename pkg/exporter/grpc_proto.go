@@ -16,16 +16,21 @@ var glog = logrus.WithField("component", "exporter/GRPCProto")
 type GRPCProto struct {
 	hostPort   string
 	clientConn *grpc.ClientConnection
+	// maxFlowsPerMessage limits the maximum number of flows per GRPC message.
+	// If a message contains more flows than this number, the GRPC message will be split into
+	// multiple messages.
+	maxFlowsPerMessage int
 }
 
-func StartGRPCProto(hostPort string) (*GRPCProto, error) {
+func StartGRPCProto(hostPort string, maxFlowsPerMessage int) (*GRPCProto, error) {
 	clientConn, err := grpc.ConnectClient(hostPort)
 	if err != nil {
 		return nil, err
 	}
 	return &GRPCProto{
-		hostPort:   hostPort,
-		clientConn: clientConn,
+		hostPort:           hostPort,
+		clientConn:         clientConn,
+		maxFlowsPerMessage: maxFlowsPerMessage,
 	}, nil
 }
 
@@ -34,10 +39,11 @@ func StartGRPCProto(hostPort string) (*GRPCProto, error) {
 func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 	log := glog.WithField("collector", g.hostPort)
 	for inputRecords := range input {
-		pbRecords := flowsToPB(inputRecords)
-		log.Debugf("sending %d records", len(pbRecords.Entries))
-		if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
-			log.WithError(err).Error("couldn't send flow records to collector")
+		for _, pbRecords := range flowsToPB(inputRecords, g.maxFlowsPerMessage) {
+			log.Debugf("sending %d records", len(pbRecords.Entries))
+			if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
+				log.WithError(err).Error("couldn't send flow records to collector")
+			}
 		}
 	}
 	if err := g.clientConn.Close(); err != nil {

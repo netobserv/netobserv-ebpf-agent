@@ -5,6 +5,8 @@ The following environment variables are available to configure the NetObserv eBF
 * `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka` or `ipfix+tcp` or `ipfix+udp`.
 * `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the target Flow collector.
 * `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow collector.
+* `GRPC_MESSAGE_MAX_FLOWS` (default: `10000`). Specifies the limit, in number of flows, of each GRPC
+  message. Messages larger than that number will be split and submitted sequentially.
 * `AGENT_IP` (optional). Allows overriding the reported Agent IP address on each flow.
 * `AGENT_IP_IFACE` (default: `external`). Specifies which interface should the agent pick the IP
   address from in order to report it in the AgentIP field on each flow. Accepted values are:

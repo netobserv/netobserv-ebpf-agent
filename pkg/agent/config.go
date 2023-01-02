@@ -42,6 +42,9 @@ type Config struct {
 	TargetHost string `env:"FLOWS_TARGET_HOST"`
 	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
 	TargetPort int `env:"FLOWS_TARGET_PORT"`
+	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
+	// larger than that number will be split and submitted sequentially.
+	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
 	// Interfaces contains the interface names from where flows will be collected. If empty, the agent
 	// will fetch all the interfaces in the system, excepting the ones listed in ExcludeInterfaces.
 	// If an entry is enclosed by slashes (e.g. `/br-/`), it will match as regular expression,
