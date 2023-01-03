@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: testzz
-    runs-on: ubuntu-latest
+    runs-on: centos-latest
     strategy:
       matrix:
         go-version: ['1.18']
