@@ -13,16 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ['1.17', '1.18']
+        go-version: ['1.18']
     steps:
     - name: install make
       run: sudo apt-get install make
     - name: set up go 1.x
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
-        go-version: ${{ matrix.go }}
+        go-version: ${{ matrix.go-version }}
     - name: checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: run end-to-end tests
       run: make tests-e2e
     - name: upload e2e test logs
