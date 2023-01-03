@@ -10,7 +10,7 @@ const (
 	DeduperNone      = "none"
 	DeduperFirstCome = "firstCome"
 	DirectionIngress = "ingress"
-	DirectionEgress  = "egress"
+	DirectionEgress  = "egress"dsqdsq
 	DirectionBoth    = "both"
 
 	IPTypeAny  = "any"
