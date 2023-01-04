@@ -11,14 +11,21 @@ import (
 
 // flowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
-func flowsToPB(inputRecords []*flow.Record) *pbflow.Records {
+func flowsToPB(inputRecords []*flow.Record, maxLen int) []*pbflow.Records {
 	entries := make([]*pbflow.Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
 		entries = append(entries, flowToPB(record))
 	}
-	return &pbflow.Records{
-		Entries: entries,
+	var records []*pbflow.Records
+	for len(entries) > 0 {
+		end := len(entries)
+		if end > maxLen {
+			end = maxLen
+		}
+		records = append(records, &pbflow.Records{Entries: entries[:end]})
+		entries = entries[end:]
 	}
+	return records
 }
 
 // flowsToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,

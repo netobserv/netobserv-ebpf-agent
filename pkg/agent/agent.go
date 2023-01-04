@@ -193,7 +193,7 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 				cfg.TargetHost, cfg.TargetPort)
 		}
 		target := fmt.Sprintf("%s:%d", cfg.TargetHost, cfg.TargetPort)
-		grpcExporter, err := exporter.StartGRPCProto(target)
+		grpcExporter, err := exporter.StartGRPCProto(target, cfg.GRPCMessageMaxFlows)
 		if err != nil {
 			return nil, err
 		}
