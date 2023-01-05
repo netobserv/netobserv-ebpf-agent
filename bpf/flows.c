@@ -188,13 +188,15 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 if (iph->protocol == IPPROTO_TCP) {
                     const struct tcphdr *th = (struct tcphdr *)(data + sizeof(struct iphdr));
                     if ((void *)th + sizeof(struct tcphdr) <= data_end) {
-                        /*bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);*/
-                        if (th->ack && th->syn) {
+                        //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake. 
+			if (th->ack && th->syn) {
                             flags_t |= SYN_ACK_FLAG;
                         }
+			// If both ACK and FIN are set, then it is graceful termination from server.
 			else if (th->ack && th->fin ) {
                             flags_t |= FIN_ACK_FLAG;
                         }
+			// If both ACK and RST are set, then it is abrupt connection termination. 
 			else if (th->ack && th->rst ) {
                             flags_t |= RST_ACK_FLAG;
                         }
@@ -219,7 +221,6 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 			else if (th->cwr) {
                             flags_t |= CWR_FLAG;
                         }
-                        //bpf_printk("Flags: %d", flags_t);
                     }
                 }
             }
