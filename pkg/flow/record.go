@@ -67,13 +67,6 @@ type RecordMetrics struct {
 	EndMonoTimeNs   uint64
 	Flags           uint16
 	Errno           uint8
-
-	/*Fin   byte
-	Syn   byte
-	Rst   byte
-	Psh   byte
-	Ack   byte
-	Urg   byte*/
 }
 
 // record structure as parsed from eBPF

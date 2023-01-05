@@ -41,6 +41,17 @@
 #define INGRESS 0
 #define EGRESS 1
 
+#define FIN_FLAG 1
+#define SYN_FLAG 2
+#define RST_FLAG 4
+#define URG_FLAG 8
+#define PSH_FLAG 16
+#define ECE_FLAG 32
+#define CWR_FLAG 64
+#define SYN_ACK_FLAG 128
+#define FIN_ACK_FLAG 256
+#define RST_ACK_FLAG 512
+
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -61,13 +72,6 @@ volatile const u8 trace_messages = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
-//Set specific bit in a 16bit int
-u16 setBit(u16 n, uint pos) {
-    if (pos > 15)
-        return 0;
-    n |= (1 << pos);
-    return n;
-}
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
     if ((void *)ip + sizeof(*ip) > data_end) {
@@ -184,30 +188,36 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 if (iph->protocol == IPPROTO_TCP) {
                     const struct tcphdr *th = (struct tcphdr *)(data + sizeof(struct iphdr));
                     if ((void *)th + sizeof(struct tcphdr) <= data_end) {
-                        //bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);
-                        if (th->fin) {
-                            flags_t = setBit(flags_t, 0);
+                        /*bpf_printk("fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d, ece=%d, cwr=%d, res1=%d doff=%d\n",th->fin, th->syn, th->rst, th->psh, th->ack,th->urg,th->ece, th->cwr, th->res1, th->doff);*/
+                        if (th->ack && th->syn) {
+                            flags_t |= SYN_ACK_FLAG;
                         }
-                        if (th->syn) {
-                            flags_t = setBit(flags_t, 1);
+			else if (th->ack && th->fin ) {
+                            flags_t |= FIN_ACK_FLAG;
                         }
-                        if (th->rst) {
-                            flags_t = setBit(flags_t, 2);
+			else if (th->ack && th->rst ) {
+                            flags_t |= RST_ACK_FLAG;
                         }
-                        if (th->psh) {
-                            flags_t = setBit(flags_t, 3);
+			else if (th->fin) {
+                            flags_t |= FIN_FLAG;
                         }
-                        if (th->ack) {
-                            flags_t = setBit(flags_t, 4);
+			else if (th->syn) {
+                            flags_t |= SYN_FLAG;
                         }
-                        if (th->urg) {
-                            flags_t = setBit(flags_t, 5);
+			else if (th->rst) {
+                            flags_t |= RST_FLAG;
                         }
-                        if (th->ece) {
-                            flags_t = setBit(flags_t, 6);
+			else if (th->psh) {
+                            flags_t |= PSH_FLAG;
                         }
-                        if (th->cwr) {
-                            flags_t = setBit(flags_t, 7);
+			else if (th->urg) {
+                            flags_t |= URG_FLAG;
+                        }
+			else if (th->ece) {
+                            flags_t |= ECE_FLAG;
+                        }
+			else if (th->cwr) {
+                            flags_t |= CWR_FLAG;
                         }
                         //bpf_printk("Flags: %d", flags_t);
                     }
@@ -248,7 +258,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .end_mono_time_ts = current_time,
             //Get flags from packet header
             //Flags[0] = Fin, [1] = Syn, [2] = Rst, [3] = Psh, [4] = Ack, [5] = Urg, [6] = Ece, [7] = cwr
-            .flags = flags_t, //skb->len,
+            .flags = flags_t, 
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
