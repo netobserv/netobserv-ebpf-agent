@@ -39,6 +39,42 @@ func addElementToTemplate(log *logrus.Entry, elementName string, value []byte, e
 	return nil
 }
 
+func AddRecordValuesToTemplate(log *logrus.Entry, elements *[]entities.InfoElementWithValue) error {
+	err := addElementToTemplate(log, "octetDeltaCount", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "tcpControlBits", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "flowStartSeconds", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "flowStartMilliseconds", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "flowEndSeconds", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "flowEndMilliseconds", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "packetDeltaCount", nil, elements)
+	if err != nil {
+		return err
+	}
+	err = addElementToTemplate(log, "interfaceName", nil, elements)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func SendTemplateRecordv4(log *logrus.Entry, exporter *ipfixExporter.ExportingProcess) (uint16, []entities.InfoElementWithValue, error) {
 	templateID := exporter.NewTemplateID()
 	templateSet := entities.NewSet(false)
@@ -84,35 +120,10 @@ func SendTemplateRecordv4(log *logrus.Entry, exporter *ipfixExporter.ExportingPr
 	if err != nil {
 		return 0, nil, err
 	}
-	err = addElementToTemplate(log, "octetDeltaCount", nil, &elements)
+	err = AddRecordValuesToTemplate(log, &elements)
 	if err != nil {
 		return 0, nil, err
 	}
-	err = addElementToTemplate(log, "flowStartSeconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowStartMilliseconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowEndSeconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowEndMilliseconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "packetDeltaCount", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "interfaceName", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-
 	err = templateSet.AddRecord(elements, templateID)
 	if err != nil {
 		return 0, nil, err
@@ -170,31 +181,7 @@ func SendTemplateRecordv6(log *logrus.Entry, exporter *ipfixExporter.ExportingPr
 	if err != nil {
 		return 0, nil, err
 	}
-	err = addElementToTemplate(log, "octetDeltaCount", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowStartSeconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowStartMilliseconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowEndSeconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "flowEndMilliseconds", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "packetDeltaCount", nil, &elements)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate(log, "interfaceName", nil, &elements)
+	err = AddRecordValuesToTemplate(log, &elements)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -262,6 +249,27 @@ func setIPv4Address(ieValPtr *entities.InfoElementWithValue, ipAddress net.IP) {
 		ieVal.SetIPAddressValue(ipAddress)
 	}
 }
+func setIERecordValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
+	ieVal := *ieValPtr
+	switch ieVal.GetName() {
+	case "octetDeltaCount":
+		ieVal.SetUnsigned64Value(record.Bytes)
+	case "tcpControlBits":
+		ieVal.SetUnsigned16Value(record.Flags)
+	case "flowStartSeconds":
+		ieVal.SetUnsigned32Value(uint32(record.TimeFlowStart.Unix()))
+	case "flowStartMilliseconds":
+		ieVal.SetUnsigned64Value(uint64(record.TimeFlowStart.UnixMilli()))
+	case "flowEndSeconds":
+		ieVal.SetUnsigned32Value(uint32(record.TimeFlowEnd.Unix()))
+	case "flowEndMilliseconds":
+		ieVal.SetUnsigned64Value(uint64(record.TimeFlowEnd.UnixMilli()))
+	case "packetDeltaCount":
+		ieVal.SetUnsigned64Value(uint64(record.Packets))
+	case "interfaceName":
+		ieVal.SetStringValue(record.Interface)
+	}
+}
 func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 	ieVal := *ieValPtr
 	switch ieVal.GetName() {
@@ -289,26 +297,12 @@ func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 		ieVal.SetUnsigned16Value(record.Transport.SrcPort)
 	case "destinationTransportPort":
 		ieVal.SetUnsigned16Value(record.Transport.DstPort)
-	case "octetDeltaCount":
-		ieVal.SetUnsigned64Value(record.Bytes)
-	case "flowStartSeconds":
-		ieVal.SetUnsigned32Value(uint32(record.TimeFlowStart.Unix()))
-	case "flowStartMilliseconds":
-		ieVal.SetUnsigned64Value(uint64(record.TimeFlowStart.UnixMilli()))
-	case "flowEndSeconds":
-		ieVal.SetUnsigned32Value(uint32(record.TimeFlowEnd.Unix()))
-	case "flowEndMilliseconds":
-		ieVal.SetUnsigned64Value(uint64(record.TimeFlowEnd.UnixMilli()))
-	case "packetDeltaCount":
-		ieVal.SetUnsigned64Value(uint64(record.Packets))
-	case "interfaceName":
-		ieVal.SetStringValue(record.Interface)
 	}
-
 }
 func setEntities(record *flow.Record, elements *[]entities.InfoElementWithValue) {
 	for _, ieVal := range *elements {
 		setIEValue(record, &ieVal)
+		setIERecordValue(record, &ieVal)
 	}
 }
 func (ipf *IPFIX) sendDataRecord(log *logrus.Entry, record *flow.Record, v6 bool) error {

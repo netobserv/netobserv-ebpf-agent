@@ -2,10 +2,11 @@ package exporter
 
 import (
 	"encoding/binary"
+	"net"
+
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"net"
 )
 
 //var klog = logrus.WithField("component", "exporter/KafkaProto")
