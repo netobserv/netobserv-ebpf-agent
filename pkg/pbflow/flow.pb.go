@@ -177,8 +177,8 @@ type Record struct {
 	// From all the duplicate flows, one will set this value to false and the rest will be true.
 	Duplicate bool `protobuf:"varint,11,opt,name=duplicate,proto3" json:"duplicate,omitempty"`
 	// Agent IP address to help identifying the source of the flow
-	AgentIp *IP `protobuf:"bytes,12,opt,name=agent_ip,json=agentIp,proto3" json:"agent_ip,omitempty"`
-	Flags     uint32     `protobuf:"varint,13,opt,name=flags,proto3" json:"flags,omitempty"`
+	AgentIp *IP    `protobuf:"bytes,12,opt,name=agent_ip,json=agentIp,proto3" json:"agent_ip,omitempty"`
+	Flags   uint32 `protobuf:"varint,13,opt,name=flags,proto3" json:"flags,omitempty"`
 }
 
 func (x *Record) Reset() {
@@ -295,6 +295,7 @@ func (x *Record) GetAgentIp() *IP {
 		return x.AgentIp
 	}
 	return nil
+}
 
 func (x *Record) GetFlags() uint32 {
 	if x != nil {

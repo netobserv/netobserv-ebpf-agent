@@ -2,10 +2,10 @@ package exporter
 
 import (
 	"encoding/binary"
-	"net"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"net"
 )
 
 //var klog = logrus.WithField("component", "exporter/KafkaProto")
@@ -65,14 +65,10 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
 		Packets:   uint64(fr.Packets),
-<<<<<<< HEAD
-		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
 		AgentIp:   agentIP(fr.AgentIP),
-=======
 		Flags:     uint32(fr.Flags),
 		Interface: string(fr.Interface),
->>>>>>> eb04940 (Adding TCP flags to record metrics.TODO: Remove log stmts)
 	}
 }
 
