@@ -41,16 +41,19 @@
 #define INGRESS 0
 #define EGRESS 1
 
-#define FIN_FLAG 1
-#define SYN_FLAG 2
-#define RST_FLAG 4
-#define URG_FLAG 8
-#define PSH_FLAG 16
-#define ECE_FLAG 32
-#define CWR_FLAG 64
-#define SYN_ACK_FLAG 128
-#define FIN_ACK_FLAG 256
-#define RST_ACK_FLAG 512
+// Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
+#define FIN_FLAG 0x01
+#define SYN_FLAG 0x02
+#define RST_FLAG 0x04
+#define PSH_FLAG 0x08
+#define ACK_FLAG 0x10
+#define URG_FLAG 0x20
+#define ECE_FLAG 0x40
+#define CWR_FLAG 0x80
+// Custom flags exported
+#define SYN_ACK_FLAG 0x100
+#define FIN_ACK_FLAG 0x200
+#define RST_ACK_FLAG 0x400
 
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
@@ -72,8 +75,35 @@ volatile const u8 trace_messages = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
+// sets the TCP header flags for connection information
+static inline void set_flags(struct tcphdr *th, u16 *flags) {
+    //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake. 
+	if (th->ack && th->syn) {
+        *flags |= SYN_ACK_FLAG;
+    } else if (th->ack && th->fin ) {
+        // If both ACK and FIN are set, then it is graceful termination from server.
+        *flags |= FIN_ACK_FLAG;
+    } else if (th->ack && th->rst ) {
+        // If both ACK and RST are set, then it is abrupt connection termination. 
+        *flags |= RST_ACK_FLAG;
+    } else if (th->fin) {
+        *flags |= FIN_FLAG;
+    } else if (th->syn) {
+        *flags |= SYN_FLAG;
+    } else if (th->rst) {
+        *flags |= RST_FLAG;
+    } else if (th->psh) {
+        *flags |= PSH_FLAG;
+    } else if (th->urg) {
+        *flags |= URG_FLAG;
+    } else if (th->ece) {
+        *flags |= ECE_FLAG;
+    } else if (th->cwr) {
+        *flags |= CWR_FLAG;
+    }
+}
 // sets flow fields from IPv4 header information
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
@@ -91,6 +121,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
             id->src_port = __bpf_ntohs(tcp->source);
             id->dst_port = __bpf_ntohs(tcp->dest);
+            set_flags(tcp, flags);
         }
     } break;
     case IPPROTO_UDP: {
@@ -107,7 +138,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
 }
 
 // sets flow fields from IPv6 header information
-static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
@@ -138,7 +169,7 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
     return SUBMIT;
 }
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
@@ -148,10 +179,10 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
 
     if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, id);
+        return fill_iphdr(ip, data_end, id, flags);
     } else if (id->eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-        return fill_ip6hdr(ip6, data_end, id);
+        return fill_ip6hdr(ip6, data_end, id, flags);
     } else {
         // TODO : Need to implement other specific ethertypes if needed
         // For now other parts of flow id remain zero
@@ -175,59 +206,13 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     flow_id id;
     u64 current_time = bpf_ktime_get_ns();
     struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
+    u16 flags = 0;
+    if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
     id.if_index = skb->ifindex;
     id.direction = direction;
-    u16 flags_t = 0;
-    if ((void *)eth + sizeof(struct ethhdr) <= data_end) {
-        if (bpf_ntohs(eth->h_proto) == ETH_P_IP) {
-            const struct iphdr *iph = (struct iphdr *)(data + sizeof(struct ethhdr));
-            if ((void *)iph + sizeof(struct iphdr) <= data_end) {
-                if (iph->protocol == IPPROTO_TCP) {
-                    const struct tcphdr *th = (struct tcphdr *)(data + sizeof(struct iphdr));
-                    if ((void *)th + sizeof(struct tcphdr) <= data_end) {
-                        //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake. 
-			if (th->ack && th->syn) {
-                            flags_t |= SYN_ACK_FLAG;
-                        }
-			// If both ACK and FIN are set, then it is graceful termination from server.
-			else if (th->ack && th->fin ) {
-                            flags_t |= FIN_ACK_FLAG;
-                        }
-			// If both ACK and RST are set, then it is abrupt connection termination. 
-			else if (th->ack && th->rst ) {
-                            flags_t |= RST_ACK_FLAG;
-                        }
-			else if (th->fin) {
-                            flags_t |= FIN_FLAG;
-                        }
-			else if (th->syn) {
-                            flags_t |= SYN_FLAG;
-                        }
-			else if (th->rst) {
-                            flags_t |= RST_FLAG;
-                        }
-			else if (th->psh) {
-                            flags_t |= PSH_FLAG;
-                        }
-			else if (th->urg) {
-                            flags_t |= URG_FLAG;
-                        }
-			else if (th->ece) {
-                            flags_t |= ECE_FLAG;
-                        }
-			else if (th->cwr) {
-                            flags_t |= CWR_FLAG;
-                        }
-                    }
-                }
-            }
-        }
-    }
 
-    //struct tcphdr *tcp_header;
     // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
     flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
@@ -240,7 +225,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (aggregate_flow->start_mono_time_ts == 0) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
-        aggregate_flow->flags |= flags_t;
+        aggregate_flow->flags |= flags;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -257,9 +242,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .bytes = skb->len,
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
-            //Get flags from packet header
-            //Flags[0] = Fin, [1] = Syn, [2] = Rst, [3] = Psh, [4] = Ack, [5] = Urg, [6] = Ece, [7] = cwr
-            .flags = flags_t, 
+            .flags = flags, 
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
