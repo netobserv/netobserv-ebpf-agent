@@ -4,4 +4,3 @@
 bin/
 e2e-logs
 ebpf-agent.tar
-*.swp
