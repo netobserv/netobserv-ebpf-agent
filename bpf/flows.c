@@ -78,7 +78,7 @@ const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 // sets the TCP header flags for connection information
 static inline void set_flags(struct tcphdr *th, u16 *flags) {
     //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake. 
-	if (th->ack && th->syn) {
+    if (th->ack && th->syn) {
         *flags |= SYN_ACK_FLAG;
     } else if (th->ack && th->fin ) {
         // If both ACK and FIN are set, then it is graceful termination from server.
