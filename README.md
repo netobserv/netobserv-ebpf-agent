@@ -1,5 +1,7 @@
 # Network Observability eBPF Agent
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/netobserv/netobserv-ebpf-agent)](https://goreportcard.com/report/github.com/netobserv/netobserv-ebpf-agent)
+
 The Network Observability eBPF Agent allows collecting and aggregating all the ingress and
 egress flows on a Linux host (required a Kernel 4.18+ with eBPF enabled).
 
