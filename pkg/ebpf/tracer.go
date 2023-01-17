@@ -278,7 +278,7 @@ func (m *FlowFetcher) Close() error {
 // types.
 func doIgnoreNoDev[T any](sysCall func(T) error, dev T, log *logrus.Entry) error {
 	if err := sysCall(dev); err != nil {
-		if err == unix.ENODEV {
+		if errors.Is(err, unix.ENODEV) {
 			log.WithError(err).Debug("can't delete. Probably the " +
 				"associated container or interface has been deleted immediatelly before this task")
 		} else {
