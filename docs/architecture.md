@@ -6,7 +6,6 @@ The following graph provides a birds' eye view on how the different components a
 
 For more info on each component, please check their corresponding Go docs.
 
-
 ```mermaid
 flowchart TD
     E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
@@ -14,6 +13,7 @@ flowchart TD
 
     E --> |"polls<br/>PerCPUHashMap"| M(flow.MapTracer)
     RB --> |chan *flow.Record| ACC(flow.Accounter)
+    RB -.-> |flushes| M
     ACC --> |"chan []*flow.Record"| DD(flow.Deduper)
     M --> |"chan []*flow.Record"| DD
 

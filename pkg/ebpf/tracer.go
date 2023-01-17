@@ -233,22 +233,25 @@ func (m *FlowFetcher) Close() error {
 		m.objects = nil
 	}
 	for iface, ef := range m.egressFilters {
-		log.WithField("interface", iface).Debug("deleting egress filter")
-		if err := netlink.FilterDel(ef); err != nil {
+		log := log.WithField("interface", iface)
+		log.Debug("deleting egress filter")
+		if err := doIgnoreNoDev(netlink.FilterDel, netlink.Filter(ef), log); err != nil {
 			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
 	m.egressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
 	for iface, igf := range m.ingressFilters {
-		log.WithField("interface", iface).Debug("deleting ingress filter")
-		if err := netlink.FilterDel(igf); err != nil {
+		log := log.WithField("interface", iface)
+		log.Debug("deleting ingress filter")
+		if err := doIgnoreNoDev(netlink.FilterDel, netlink.Filter(igf), log); err != nil {
 			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
 		}
 	}
 	m.ingressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
 	for iface, qd := range m.qdiscs {
-		log.WithField("interface", iface).Debug("deleting Qdisc")
-		if err := netlink.QdiscDel(qd); err != nil {
+		log := log.WithField("interface", iface)
+		log.Debug("deleting Qdisc")
+		if err := doIgnoreNoDev(netlink.QdiscDel, netlink.Qdisc(qd), log); err != nil {
 			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
 	}
@@ -262,6 +265,27 @@ func (m *FlowFetcher) Close() error {
 		errStrings = append(errStrings, err.Error())
 	}
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
+}
+
+// doIgnoreNoDev runs the provided syscall over the provided device and ignores the error
+// if the cause is a non-existing device (just logs the error as debug).
+// If the agent is deployed as part of the Network Observability pipeline, normally
+// undeploying the FlowCollector could cause the agent to try to remove resources
+// from Pods that have been removed immediately before (e.g. flowlogs-pipeline or the
+// console plugin), so we avoid logging some errors that would unnecessarily raise the
+// user's attention.
+// This function uses generics because the set of provided functions accept different argument
+// types.
+func doIgnoreNoDev[T any](sysCall func(T) error, dev T, log *logrus.Entry) error {
+	if err := sysCall(dev); err != nil {
+		if err == unix.ENODEV {
+			log.WithError(err).Debug("can't delete. Probably the " +
+				"associated container or interface has been deleted immediatelly before this task")
+		} else {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {

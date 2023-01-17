@@ -48,8 +48,6 @@ func (m *MapTracer) TraceLoop(ctx context.Context) node.StartFunc[[]*Record] {
 		for {
 			select {
 			case <-ctx.Done():
-				mtlog.Debug("triggering flow eviction after context cancelation")
-				m.Flush()
 				evictionTicker.Stop()
 				mtlog.Debug("exiting trace loop due to context cancellation")
 				return
@@ -77,14 +75,14 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, out chan<- []*R
 			return
 		default:
 			mtlog.Debug("evictionSynchronization signal received")
-			m.evictFlows(out)
+			m.evictFlows(ctx, out)
 		}
 		m.evictionCond.L.Unlock()
 
 	}
 }
 
-func (m *MapTracer) evictFlows(forwardFlows chan<- []*Record) {
+func (m *MapTracer) evictFlows(ctx context.Context, forwardFlows chan<- []*Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
@@ -109,7 +107,12 @@ func (m *MapTracer) evictFlows(forwardFlows chan<- []*Record) {
 		))
 	}
 	m.lastEvictionNs = laterFlowNs
-	forwardFlows <- forwardingFlows
+	select {
+	case <-ctx.Done():
+		mtlog.Debug("skipping flow eviction as agent is being stopped")
+	default:
+		forwardFlows <- forwardingFlows
+	}
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }
 
