@@ -55,19 +55,19 @@ func TestEvict_MaxEntries(t *testing.T) {
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 123, Packets: 1, StartMonoTimeNs: 123, EndMonoTimeNs: 123,
+			Bytes: 123, Packets: 1, StartMonoTimeNs: 123, EndMonoTimeNs: 123, Flags: 1,
 		},
 	}
 	inputs <- &RawRecord{
 		RecordKey: k2,
 		RecordMetrics: RecordMetrics{
-			Bytes: 456, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456,
+			Bytes: 456, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456, Flags: 1,
 		},
 	}
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 321, Packets: 1, StartMonoTimeNs: 789, EndMonoTimeNs: 789,
+			Bytes: 321, Packets: 1, StartMonoTimeNs: 789, EndMonoTimeNs: 789, Flags: 1,
 		},
 	}
 	requireNoEviction(t, evictor)
@@ -76,7 +76,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 	inputs <- &RawRecord{
 		RecordKey: k3,
 		RecordMetrics: RecordMetrics{
-			Bytes: 111, Packets: 1, StartMonoTimeNs: 888, EndMonoTimeNs: 888,
+			Bytes: 111, Packets: 1, StartMonoTimeNs: 888, EndMonoTimeNs: 888, Flags: 1,
 		},
 	}
 
@@ -96,7 +96,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			RawRecord: RawRecord{
 				RecordKey: k1,
 				RecordMetrics: RecordMetrics{
-					Bytes: 444, Packets: 2, StartMonoTimeNs: 123, EndMonoTimeNs: 789,
+					Bytes: 444, Packets: 2, StartMonoTimeNs: 123, EndMonoTimeNs: 789, Flags: 1,
 				},
 			},
 			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
@@ -106,7 +106,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			RawRecord: RawRecord{
 				RecordKey: k2,
 				RecordMetrics: RecordMetrics{
-					Bytes: 456, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456,
+					Bytes: 456, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456, Flags: 1,
 				},
 			},
 			TimeFlowStart: now.Add(-(1000 - 456) * time.Nanosecond),
@@ -132,19 +132,19 @@ func TestEvict_Period(t *testing.T) {
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 10, Packets: 1, StartMonoTimeNs: 123, EndMonoTimeNs: 123,
+			Bytes: 10, Packets: 1, StartMonoTimeNs: 123, EndMonoTimeNs: 123, Flags: 1,
 		},
 	}
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 10, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456,
+			Bytes: 10, Packets: 1, StartMonoTimeNs: 456, EndMonoTimeNs: 456, Flags: 1,
 		},
 	}
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 10, Packets: 1, StartMonoTimeNs: 789, EndMonoTimeNs: 789,
+			Bytes: 10, Packets: 1, StartMonoTimeNs: 789, EndMonoTimeNs: 789, Flags: 1,
 		},
 	}
 	// Forcing at least one eviction here
@@ -152,13 +152,13 @@ func TestEvict_Period(t *testing.T) {
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 10, Packets: 1, StartMonoTimeNs: 1123, EndMonoTimeNs: 1123,
+			Bytes: 10, Packets: 1, StartMonoTimeNs: 1123, EndMonoTimeNs: 1123, Flags: 1,
 		},
 	}
 	inputs <- &RawRecord{
 		RecordKey: k1,
 		RecordMetrics: RecordMetrics{
-			Bytes: 10, Packets: 1, StartMonoTimeNs: 1456, EndMonoTimeNs: 1456,
+			Bytes: 10, Packets: 1, StartMonoTimeNs: 1456, EndMonoTimeNs: 1456, Flags: 1,
 		},
 	}
 
@@ -174,6 +174,7 @@ func TestEvict_Period(t *testing.T) {
 				Packets:         3,
 				StartMonoTimeNs: 123,
 				EndMonoTimeNs:   789,
+				Flags:           1,
 			},
 		},
 		TimeFlowStart: now.Add(-1000 + 123),
@@ -189,6 +190,7 @@ func TestEvict_Period(t *testing.T) {
 				Packets:         2,
 				StartMonoTimeNs: 1123,
 				EndMonoTimeNs:   1456,
+				Flags:           1,
 			},
 		},
 		TimeFlowStart: now.Add(-1000 + 1123),

@@ -26,7 +26,6 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <string.h>
-
 #include <stdbool.h>
 #include <linux/if_ether.h>
 
@@ -41,6 +40,20 @@
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 #define INGRESS 0
 #define EGRESS 1
+
+// Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
+#define FIN_FLAG 0x01
+#define SYN_FLAG 0x02
+#define RST_FLAG 0x04
+#define PSH_FLAG 0x08
+#define ACK_FLAG 0x10
+#define URG_FLAG 0x20
+#define ECE_FLAG 0x40
+#define CWR_FLAG 0x80
+// Custom flags exported
+#define SYN_ACK_FLAG 0x100
+#define FIN_ACK_FLAG 0x200
+#define RST_ACK_FLAG 0x400
 
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
@@ -62,8 +75,35 @@ volatile const u8 trace_messages = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
+// sets the TCP header flags for connection information
+static inline void set_flags(struct tcphdr *th, u16 *flags) {
+    //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake. 
+    if (th->ack && th->syn) {
+        *flags |= SYN_ACK_FLAG;
+    } else if (th->ack && th->fin ) {
+        // If both ACK and FIN are set, then it is graceful termination from server.
+        *flags |= FIN_ACK_FLAG;
+    } else if (th->ack && th->rst ) {
+        // If both ACK and RST are set, then it is abrupt connection termination. 
+        *flags |= RST_ACK_FLAG;
+    } else if (th->fin) {
+        *flags |= FIN_FLAG;
+    } else if (th->syn) {
+        *flags |= SYN_FLAG;
+    } else if (th->rst) {
+        *flags |= RST_FLAG;
+    } else if (th->psh) {
+        *flags |= PSH_FLAG;
+    } else if (th->urg) {
+        *flags |= URG_FLAG;
+    } else if (th->ece) {
+        *flags |= ECE_FLAG;
+    } else if (th->cwr) {
+        *flags |= CWR_FLAG;
+    }
+}
 // sets flow fields from IPv4 header information
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
@@ -81,6 +121,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
             id->src_port = __bpf_ntohs(tcp->source);
             id->dst_port = __bpf_ntohs(tcp->dest);
+            set_flags(tcp, flags);
         }
     } break;
     case IPPROTO_UDP: {
@@ -97,7 +138,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id) {
 }
 
 // sets flow fields from IPv6 header information
-static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)ip + sizeof(*ip) > data_end) {
         return DISCARD;
     }
@@ -113,6 +154,7 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
             id->src_port = __bpf_ntohs(tcp->source);
             id->dst_port = __bpf_ntohs(tcp->dest);
+            set_flags(tcp, flags);
         }
     } break;
     case IPPROTO_UDP: {
@@ -128,7 +170,7 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id) {
     return SUBMIT;
 }
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u16 *flags) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
@@ -138,22 +180,21 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id) {
 
     if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, id);
+        return fill_iphdr(ip, data_end, id, flags);
     } else if (id->eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-        return fill_ip6hdr(ip6, data_end, id);
+        return fill_ip6hdr(ip6, data_end, id, flags);
     } else {
         // TODO : Need to implement other specific ethertypes if needed
         // For now other parts of flow id remain zero
-        memset (&(id->src_ip),0, sizeof(struct in6_addr));
-        memset (&(id->dst_ip),0, sizeof(struct in6_addr));
+        memset(&(id->src_ip), 0, sizeof(struct in6_addr));
+        memset(&(id->dst_ip), 0, sizeof(struct in6_addr));
         id->transport_protocol = 0;
         id->src_port = 0;
         id->dst_port = 0;
     }
     return SUBMIT;
 }
-
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
@@ -166,7 +207,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     flow_id id;
     u64 current_time = bpf_ktime_get_ns();
     struct ethhdr *eth = data;
-    if (fill_ethhdr(eth, data_end, &id) == DISCARD) {
+    u16 flags = 0;
+    if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
         return TC_ACT_OK;
     }
     id.if_index = skb->ifindex;
@@ -184,7 +226,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (aggregate_flow->start_mono_time_ts == 0) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
-
+        aggregate_flow->flags |= flags;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -198,9 +240,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
             .packets = 1,
-            .bytes=skb->len,
+            .bytes = skb->len,
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
+            .flags = flags, 
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
@@ -230,15 +273,14 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         }
     }
     return TC_ACT_OK;
-
 }
 SEC("tc_ingress")
-int ingress_flow_parse (struct __sk_buff *skb) {
+int ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
 }
 
 SEC("tc_egress")
-int egress_flow_parse (struct __sk_buff *skb) {
+int egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
 }
 char _license[] SEC("license") = "GPL";

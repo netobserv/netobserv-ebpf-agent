@@ -24,7 +24,7 @@ func IPAddrFromNetIP(netIP net.IP) flow.IPAddr {
 func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
 	kj := KafkaProto{Writer: &wc}
-	input := make(chan []*flow.Record, 10)
+	input := make(chan []*flow.Record, 11)
 	record := flow.Record{}
 	record.EthProtocol = 3
 	record.Direction = 1
@@ -39,6 +39,7 @@ func TestProtoConversion(t *testing.T) {
 	record.TimeFlowEnd = time.Now()
 	record.Bytes = 789
 	record.Packets = 987
+	record.Flags = uint16(1)
 	record.Interface = "veth0"
 
 	input <- []*flow.Record{&record}
@@ -61,6 +62,7 @@ func TestProtoConversion(t *testing.T) {
 	assert.Equal(t, record.TimeFlowEnd.UnixMilli(), r.TimeFlowEnd.AsTime().UnixMilli())
 	assert.EqualValues(t, 789, r.Bytes)
 	assert.EqualValues(t, 987, r.Packets)
+	assert.EqualValues(t, uint16(1), r.Flags)
 	assert.Equal(t, "veth0", r.Interface)
 }
 
