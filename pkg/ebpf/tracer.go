@@ -279,8 +279,9 @@ func (m *FlowFetcher) Close() error {
 func doIgnoreNoDev[T any](sysCall func(T) error, dev T, log *logrus.Entry) error {
 	if err := sysCall(dev); err != nil {
 		if errors.Is(err, unix.ENODEV) {
-			log.WithError(err).Debug("can't delete. Probably the " +
-				"associated container or interface has been deleted immediatelly before this task")
+			log.WithError(err).Error("can't delete. Ignore this error if other pods or interfaces " +
+				" are also being deleted at this moment. For example, if you are undeploying " +
+				" a FlowCollector or Deployment where this agent is part of")
 		} else {
 			return err
 		}
