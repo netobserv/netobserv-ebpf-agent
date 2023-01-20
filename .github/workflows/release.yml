@@ -19,15 +19,14 @@ jobs:
         go: ['1.18']
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: validate tag
-        id: validate_tag
         run: |
           tag=`git describe --exact-match --tags 2> /dev/null`
           if [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
               echo "$tag is a valid release tag"
               set -e
-              echo "::set-output name=tag::$tag"
+              echo "tag=$tag" >> $GITHUB_ENV
           else
               echo "$tag is NOT a valid release tag"
               exit 1
@@ -35,11 +34,11 @@ jobs:
       - name: install make
         run: sudo apt-get install make
       - name: set up go 1.x
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
       - name: build images
-        run: SW_VERSION="${{ steps.validate_tag.outputs.tag }}" make image-build
+        run: SW_VERSION="${{ env.tag }}" make image-build
       - name: podman login to quay.io
         uses: redhat-actions/podman-login@v1
         with:
@@ -51,7 +50,7 @@ jobs:
         uses: redhat-actions/push-to-registry@v2
         with:
           image: ${{ env.IMAGE }}
-          tags: ${{ steps.validate_tag.outputs.tag }}
+          tags: ${{ env.tag }}
           registry: ${{ env.REGISTRY }}
       - name: print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
