@@ -253,9 +253,9 @@ func setIERecordValue(record *flow.Record, ieValPtr *entities.InfoElementWithVal
 	ieVal := *ieValPtr
 	switch ieVal.GetName() {
 	case "octetDeltaCount":
-		ieVal.SetUnsigned64Value(record.Bytes)
+		ieVal.SetUnsigned64Value(record.Metrics.Bytes)
 	case "tcpControlBits":
-		ieVal.SetUnsigned16Value(record.Flags)
+		ieVal.SetUnsigned16Value(record.Metrics.Flags)
 	case "flowStartSeconds":
 		ieVal.SetUnsigned32Value(uint32(record.TimeFlowStart.Unix()))
 	case "flowStartMilliseconds":
@@ -265,7 +265,7 @@ func setIERecordValue(record *flow.Record, ieValPtr *entities.InfoElementWithVal
 	case "flowEndMilliseconds":
 		ieVal.SetUnsigned64Value(uint64(record.TimeFlowEnd.UnixMilli()))
 	case "packetDeltaCount":
-		ieVal.SetUnsigned64Value(uint64(record.Packets))
+		ieVal.SetUnsigned64Value(uint64(record.Metrics.Packets))
 	case "interfaceName":
 		ieVal.SetStringValue(record.Interface)
 	}
@@ -274,29 +274,27 @@ func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 	ieVal := *ieValPtr
 	switch ieVal.GetName() {
 	case "ethernetType":
-		ieVal.SetUnsigned16Value(record.EthProtocol)
+		ieVal.SetUnsigned16Value(record.Id.EthProtocol)
 	case "flowDirection":
-		ieVal.SetUnsigned8Value(record.Direction)
+		ieVal.SetUnsigned8Value(record.Id.Direction)
 	case "sourceMacAddress":
-		ieVal.SetMacAddressValue(record.DataLink.SrcMac[:])
+		ieVal.SetMacAddressValue(record.Id.SrcMac[:])
 	case "destinationMacAddress":
-		ieVal.SetMacAddressValue(record.DataLink.DstMac[:])
+		ieVal.SetMacAddressValue(record.Id.DstMac[:])
 	case "sourceIPv4Address":
-		setIPv4Address(ieValPtr, record.Network.SrcAddr.IP().To4())
+		setIPv4Address(ieValPtr, flow.IP(record.Id.SrcIp).To4())
 	case "destinationIPv4Address":
-		setIPv4Address(ieValPtr, record.Network.DstAddr.IP().To4())
+		setIPv4Address(ieValPtr, flow.IP(record.Id.DstIp).To4())
 	case "sourceIPv6Address":
-		ieVal.SetIPAddressValue(record.Network.SrcAddr.IP())
+		ieVal.SetIPAddressValue(record.Id.SrcIp[:])
 	case "destinationIPv6Address":
-		ieVal.SetIPAddressValue(record.Network.DstAddr.IP())
-	case "protocolIdentifier":
-		ieVal.SetUnsigned8Value(record.Transport.Protocol)
-	case "nextHeaderIPv6":
-		ieVal.SetUnsigned8Value(record.Transport.Protocol)
+		ieVal.SetIPAddressValue(record.Id.DstIp[:])
+	case "protocolIdentifier", "nextHeaderIPv6":
+		ieVal.SetUnsigned8Value(record.Id.TransportProtocol)
 	case "sourceTransportPort":
-		ieVal.SetUnsigned16Value(record.Transport.SrcPort)
+		ieVal.SetUnsigned16Value(record.Id.SrcPort)
 	case "destinationTransportPort":
-		ieVal.SetUnsigned16Value(record.Transport.DstPort)
+		ieVal.SetUnsigned16Value(record.Id.DstPort)
 	}
 }
 func setEntities(record *flow.Record, elements *[]entities.InfoElementWithValue) {
@@ -336,7 +334,7 @@ func (ipf *IPFIX) ExportFlows(input <-chan []*flow.Record) {
 	log := ilog.WithField("collector", ipf.hostPort)
 	for inputRecords := range input {
 		for _, record := range inputRecords {
-			if record.EthProtocol == flow.IPv6Type {
+			if record.Id.EthProtocol == flow.IPv6Type {
 				err := ipf.sendDataRecord(log, record, true)
 				if err != nil {
 					log.WithError(err).Error("Failed in send IPFIX data record")

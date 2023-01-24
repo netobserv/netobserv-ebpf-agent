@@ -13,7 +13,7 @@ func Decorate(agentIP net.IP, ifaceNamer InterfaceNamer) func(in <-chan []*Recor
 	return func(in <-chan []*Record, out chan<- []*Record) {
 		for flows := range in {
 			for _, flow := range flows {
-				flow.Interface = ifaceNamer(int(flow.IFIndex))
+				flow.Interface = ifaceNamer(int(flow.Id.IfIndex))
 				flow.AgentIP = agentIP
 			}
 			out <- flows

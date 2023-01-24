@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 
 	"github.com/cilium/ebpf/ringbuf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 )
@@ -12,14 +13,14 @@ import (
 // TracerFake fakes the kernel-side eBPF map structures for testing
 type TracerFake struct {
 	interfaces map[ifaces.Interface]struct{}
-	mapLookups chan map[flow.RecordKey][]flow.RecordMetrics
+	mapLookups chan map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	ringBuf    chan ringbuf.Record
 }
 
 func NewTracerFake() *TracerFake {
 	return &TracerFake{
 		interfaces: map[ifaces.Interface]struct{}{},
-		mapLookups: make(chan map[flow.RecordKey][]flow.RecordMetrics, 100),
+		mapLookups: make(chan map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics, 100),
 		ringBuf:    make(chan ringbuf.Record, 100),
 	}
 }
@@ -32,12 +33,12 @@ func (m *TracerFake) Register(iface ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) LookupAndDeleteMap() map[flow.RecordKey][]flow.RecordMetrics {
+func (m *TracerFake) LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
 	select {
 	case r := <-m.mapLookups:
 		return r
 	default:
-		return map[flow.RecordKey][]flow.RecordMetrics{}
+		return map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics{}
 	}
 }
 
@@ -45,7 +46,7 @@ func (m *TracerFake) ReadRingBuf() (ringbuf.Record, error) {
 	return <-m.ringBuf, nil
 }
 
-func (m *TracerFake) AppendLookupResults(results map[flow.RecordKey][]flow.RecordMetrics) {
+func (m *TracerFake) AppendLookupResults(results map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics) {
 	m.mapLookups <- results
 }
 

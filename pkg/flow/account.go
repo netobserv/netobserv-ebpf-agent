@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 // Accounter accumulates flows metrics in memory and eventually evicts them via an evictor channel.
@@ -13,7 +15,7 @@ import (
 type Accounter struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      map[RecordKey]*RecordMetrics
+	entries      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 	clock        func() time.Time
 	monoClock    func() time.Duration
 }
@@ -30,7 +32,7 @@ func NewAccounter(
 	return &Accounter{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      map[RecordKey]*RecordMetrics{},
+		entries:      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
 		clock:        clock,
 		monoClock:    monoClock,
 	}
@@ -49,7 +51,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = map[RecordKey]*RecordMetrics{}
+			c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 			logrus.WithField("flows", len(evictingEntries)).
 				Debug("evicting flows from userspace accounter on timeout")
 			c.evict(evictingEntries, out)
@@ -63,23 +65,23 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				alog.Debug("exiting account routine")
 				return
 			}
-			if stored, ok := c.entries[record.RecordKey]; ok {
-				stored.Accumulate(&record.RecordMetrics)
+			if stored, ok := c.entries[record.Id]; ok {
+				Accumulate(stored, &record.Metrics)
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
-					c.entries = map[RecordKey]*RecordMetrics{}
+					c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
 					c.evict(evictingEntries, out)
 				}
-				c.entries[record.RecordKey] = &record.RecordMetrics
+				c.entries[record.Id] = &record.Metrics
 			}
 		}
 	}
 }
 
-func (c *Accounter) evict(entries map[RecordKey]*RecordMetrics, evictor chan<- []*Record) {
+func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*Record) {
 	now := c.clock()
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))

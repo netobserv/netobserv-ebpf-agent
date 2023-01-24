@@ -31,7 +31,7 @@ func flowsToPB(inputRecords []*flow.Record, maxLen int) []*pbflow.Records {
 // flowsToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
 func flowToPB(record *flow.Record) *pbflow.Record {
-	if record.EthProtocol == flow.IPv6Type {
+	if record.Id.EthProtocol == flow.IPv6Type {
 		return v6FlowToPB(record)
 	}
 	return v4FlowToPB(record)
@@ -39,22 +39,22 @@ func flowToPB(record *flow.Record) *pbflow.Record {
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 	return &pbflow.Record{
-		EthProtocol: uint32(fr.EthProtocol),
-		Direction:   pbflow.Direction(fr.Direction),
+		EthProtocol: uint32(fr.Id.EthProtocol),
+		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
-			SrcMac: macToUint64(&fr.DataLink.SrcMac),
-			DstMac: macToUint64(&fr.DataLink.DstMac),
+			SrcMac: macToUint64(&fr.Id.SrcMac),
+			DstMac: macToUint64(&fr.Id.DstMac),
 		},
 		Network: &pbflow.Network{
-			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: fr.Network.SrcAddr.IntEncodeV4()}},
-			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: fr.Network.DstAddr.IntEncodeV4()}},
+			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.SrcIp)}},
+			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.DstIp)}},
 		},
 		Transport: &pbflow.Transport{
-			Protocol: uint32(fr.Transport.Protocol),
-			SrcPort:  uint32(fr.Transport.SrcPort),
-			DstPort:  uint32(fr.Transport.DstPort),
+			Protocol: uint32(fr.Id.TransportProtocol),
+			SrcPort:  uint32(fr.Id.SrcPort),
+			DstPort:  uint32(fr.Id.DstPort),
 		},
-		Bytes: fr.Bytes,
+		Bytes: fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -63,32 +63,32 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Packets),
+		Packets:   uint64(fr.Metrics.Packets),
 		Duplicate: fr.Duplicate,
 		AgentIp:   agentIP(fr.AgentIP),
-		Flags:     uint32(fr.Flags),
+		Flags:     uint32(fr.Metrics.Flags),
 		Interface: string(fr.Interface),
 	}
 }
 
 func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 	return &pbflow.Record{
-		EthProtocol: uint32(fr.EthProtocol),
-		Direction:   pbflow.Direction(fr.Direction),
+		EthProtocol: uint32(fr.Id.EthProtocol),
+		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
-			SrcMac: macToUint64(&fr.DataLink.SrcMac),
-			DstMac: macToUint64(&fr.DataLink.DstMac),
+			SrcMac: macToUint64(&fr.Id.SrcMac),
+			DstMac: macToUint64(&fr.Id.DstMac),
 		},
 		Network: &pbflow.Network{
-			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Network.SrcAddr[:]}},
-			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Network.DstAddr[:]}},
+			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Id.SrcIp[:]}},
+			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Id.DstIp[:]}},
 		},
 		Transport: &pbflow.Transport{
-			Protocol: uint32(fr.Transport.Protocol),
-			SrcPort:  uint32(fr.Transport.SrcPort),
-			DstPort:  uint32(fr.Transport.DstPort),
+			Protocol: uint32(fr.Id.TransportProtocol),
+			SrcPort:  uint32(fr.Id.SrcPort),
+			DstPort:  uint32(fr.Id.DstPort),
 		},
-		Bytes: fr.Bytes,
+		Bytes: fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -97,8 +97,8 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Packets),
-		Flags:     uint32(fr.Flags),
+		Packets:   uint64(fr.Metrics.Packets),
+		Flags:     uint32(fr.Metrics.Flags),
 		Interface: fr.Interface,
 		Duplicate: fr.Duplicate,
 		AgentIp:   agentIP(fr.AgentIP),
@@ -107,7 +107,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 
 // Mac bytes are encoded in the same order as in the array. This is, a Mac
 // like 11:22:33:44:55:66 will be encoded as 0x112233445566
-func macToUint64(m *flow.MacAddr) uint64 {
+func macToUint64(m *[flow.MacLen]uint8) uint64 {
 	return uint64(m[5]) |
 		(uint64(m[4]) << 8) |
 		(uint64(m[3]) << 16) |

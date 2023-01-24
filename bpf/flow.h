@@ -26,6 +26,9 @@ typedef struct flow_metrics_t {
     u8 errno;
 } __attribute__((packed)) flow_metrics;
 
+// Force emitting struct flow_metrics into the ELF.
+const struct flow_metrics_t *unused1 __attribute__((unused));
+
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
     u16 eth_protocol;
@@ -36,8 +39,8 @@ typedef struct flow_id_t {
     // L3 network layer
     // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
     // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
-    struct in6_addr src_ip;
-    struct in6_addr dst_ip;
+    u8 src_ip[16];
+    u8 dst_ip[16];
     // L4 transport layer
     u16 src_port;
     u16 dst_port;
@@ -46,6 +49,9 @@ typedef struct flow_id_t {
     u32 if_index;
 } __attribute__((packed)) flow_id;
 
+// Force emitting struct flow_id into the ELF.
+const struct flow_id_t *unused2 __attribute__((unused));
+
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.
 // Contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
@@ -53,4 +59,7 @@ typedef struct flow_record_t {
     flow_id id;
     flow_metrics metrics;
 } __attribute__((packed)) flow_record;
+
+// Force emitting struct flow_record into the ELF.
+const struct flow_record_t *unused3 __attribute__((unused));
 #endif

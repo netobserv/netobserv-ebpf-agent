@@ -5,33 +5,35 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 var (
 	// the same flow from 2 different interfaces
-	oneIf1 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
-		EthProtocol: 1, Direction: 1, Transport: Transport{SrcPort: 123, DstPort: 456},
-		DataLink: DataLink{DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}}, IFIndex: 1,
-	}, RecordMetrics: RecordMetrics{
+	oneIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
+		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	oneIf2 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
-		EthProtocol: 1, Direction: 1, Transport: Transport{SrcPort: 123, DstPort: 456},
-		DataLink: DataLink{DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}}, IFIndex: 2,
-	}, RecordMetrics: RecordMetrics{
+	oneIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
+		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "123456789"}
 	// another fow from 2 different interfaces and directions
-	twoIf1 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
-		EthProtocol: 1, Direction: 1, Transport: Transport{SrcPort: 333, DstPort: 456},
-		DataLink: DataLink{DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}}, IFIndex: 1,
-	}, RecordMetrics: RecordMetrics{
+	twoIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 1, SrcPort: 333, DstPort: 456,
+		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	twoIf2 = &Record{RawRecord: RawRecord{RecordKey: RecordKey{
-		EthProtocol: 1, Direction: 0, Transport: Transport{SrcPort: 333, DstPort: 456},
-		DataLink: DataLink{DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}}, IFIndex: 2,
-	}, RecordMetrics: RecordMetrics{
+	twoIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 0, SrcPort: 333, DstPort: 456,
+		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "123456789"}
 )

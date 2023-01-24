@@ -9,6 +9,7 @@ import (
 	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
@@ -37,7 +38,7 @@ func TestGRPCProto_ExportFlows_AgentIP(t *testing.T) {
 		{AgentIP: net.ParseIP("10.9.8.7")},
 	}
 	flows <- []*flow.Record{
-		{RawRecord: flow.RawRecord{RecordKey: flow.RecordKey{EthProtocol: flow.IPv6Type}},
+		{RawRecord: flow.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: flow.IPv6Type}},
 			AgentIP: net.ParseIP("8888::1111")},
 	}
 	go exporter.ExportFlows(flows)
@@ -78,7 +79,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	flows := make(chan []*flow.Record, 10)
 	var input []*flow.Record
 	for i := 0; i < 25000; i++ {
-		input = append(input, &flow.Record{RawRecord: flow.RawRecord{RecordKey: flow.RecordKey{
+		input = append(input, &flow.Record{RawRecord: flow.RawRecord{Id: ebpf.BpfFlowId{
 			EthProtocol: flow.IPv6Type,
 		}}, AgentIP: net.ParseIP("1111::1111"), Interface: "12345678"})
 	}
