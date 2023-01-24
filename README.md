@@ -6,7 +6,7 @@ The Network Observability eBPF Agent allows collecting and aggregating all the i
 egress flows on a Linux host (required a Kernel 4.18+ with eBPF enabled).
 
 * [How to compile](#how-to-compile)
-* [Hot to configure](#how-to-configure)
+* [How to configure](#how-to-configure)
 * [How to run](#how-to-run)
 * [Development receipts](#development-receipts)
 * [Known issues](#known-issues)
