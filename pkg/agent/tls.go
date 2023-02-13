@@ -3,7 +3,7 @@ package agent
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"os"
 )
 
 func buildTLSConfig(cfg *Config) (*tls.Config, error) {
@@ -11,7 +11,7 @@ func buildTLSConfig(cfg *Config) (*tls.Config, error) {
 		InsecureSkipVerify: cfg.KafkaTLSInsecureSkipVerify,
 	}
 	if cfg.KafkaTLSCACertPath != "" {
-		caCert, err := ioutil.ReadFile(cfg.KafkaTLSCACertPath)
+		caCert, err := os.ReadFile(cfg.KafkaTLSCACertPath)
 		if err != nil {
 			return nil, err
 		}
@@ -19,11 +19,11 @@ func buildTLSConfig(cfg *Config) (*tls.Config, error) {
 		tlsConfig.RootCAs.AppendCertsFromPEM(caCert)
 
 		if cfg.KafkaTLSUserCertPath != "" && cfg.KafkaTLSUserKeyPath != "" {
-			userCert, err := ioutil.ReadFile(cfg.KafkaTLSUserCertPath)
+			userCert, err := os.ReadFile(cfg.KafkaTLSUserCertPath)
 			if err != nil {
 				return nil, err
 			}
-			userKey, err := ioutil.ReadFile(cfg.KafkaTLSUserKeyPath)
+			userKey, err := os.ReadFile(cfg.KafkaTLSUserKeyPath)
 			if err != nil {
 				return nil, err
 			}

@@ -3,7 +3,7 @@ package tester
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -33,7 +33,7 @@ func (l *Loki) get(pathQuery string) (status int, body string, err error) {
 	if err != nil {
 		return 0, "", err
 	}
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp.StatusCode, "", err
 	}
