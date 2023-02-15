@@ -83,7 +83,7 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	if err != nil {
 		return fmt.Errorf("parsing data received from the ring buffer: %w", err)
 	}
-	mapFullError := readFlow.Errno == uint8(syscall.E2BIG)
+	mapFullError := readFlow.Metrics.Errno == uint8(syscall.E2BIG)
 	if debugging {
 		m.stats.logRingBufferFlows(mapFullError)
 	}

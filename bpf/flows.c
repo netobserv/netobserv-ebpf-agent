@@ -108,10 +108,10 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u16 
         return DISCARD;
     }
 
-    __builtin_memcpy(id->src_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(id->dst_ip.s6_addr, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(id->src_ip.s6_addr + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
-    __builtin_memcpy(id->dst_ip.s6_addr + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
     id->transport_protocol = ip->protocol;
     id->src_port = 0;
     id->dst_port = 0;
@@ -143,8 +143,8 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u
         return DISCARD;
     }
 
-    id->src_ip = ip->saddr;
-    id->dst_ip = ip->daddr;
+    __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, 16);
+    __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, 16);
     id->transport_protocol = ip->nexthdr;
     id->src_port = 0;
     id->dst_port = 0;

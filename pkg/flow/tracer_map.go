@@ -8,6 +8,8 @@ import (
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/sirupsen/logrus"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 var mtlog = logrus.WithField("component", "flow.MapTracer")
@@ -23,7 +25,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap() map[RecordKey][]RecordMetrics
+	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 }
 
 func NewMapTracer(fetcher mapFetcher, evictionTimeout time.Duration) *MapTracer {
@@ -92,12 +94,12 @@ func (m *MapTracer) evictFlows(ctx context.Context, forwardFlows chan<- []*Recor
 	for flowKey, flowMetrics := range m.mapFetcher.LookupAndDeleteMap() {
 		aggregatedMetrics := m.aggregate(flowMetrics)
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
-		if aggregatedMetrics.EndMonoTimeNs == 0 {
+		if aggregatedMetrics.EndMonoTimeTs == 0 {
 			continue
 		}
 		// If it iterated an entry that do not have updated flows
-		if aggregatedMetrics.EndMonoTimeNs > laterFlowNs {
-			laterFlowNs = aggregatedMetrics.EndMonoTimeNs
+		if aggregatedMetrics.EndMonoTimeTs > laterFlowNs {
+			laterFlowNs = aggregatedMetrics.EndMonoTimeTs
 		}
 		forwardingFlows = append(forwardingFlows, NewRecord(
 			flowKey,
@@ -116,20 +118,20 @@ func (m *MapTracer) evictFlows(ctx context.Context, forwardFlows chan<- []*Recor
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }
 
-func (m *MapTracer) aggregate(metrics []RecordMetrics) RecordMetrics {
+func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) ebpf.BpfFlowMetrics {
 	if len(metrics) == 0 {
 		mtlog.Warn("invoked aggregate with no values")
-		return RecordMetrics{}
+		return ebpf.BpfFlowMetrics{}
 	}
-	aggr := RecordMetrics{}
+	aggr := ebpf.BpfFlowMetrics{}
 	for _, mt := range metrics {
 		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
 		// might receive entries from previous collect-eviction timeslots.
 		// We need to check the flow time and discard old flows.
-		if mt.StartMonoTimeNs <= m.lastEvictionNs || mt.EndMonoTimeNs <= m.lastEvictionNs {
+		if mt.StartMonoTimeTs <= m.lastEvictionNs || mt.EndMonoTimeTs <= m.lastEvictionNs {
 			continue
 		}
-		aggr.Accumulate(&mt)
+		Accumulate(&aggr, &mt)
 	}
 	return aggr
 }

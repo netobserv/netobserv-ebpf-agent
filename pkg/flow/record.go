@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 // Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
@@ -28,54 +30,8 @@ type Direction uint8
 // (same behavior as Go's net.IP type)
 type IPAddr [net.IPv6len]uint8
 
-type DataLink struct {
-	SrcMac MacAddr
-	DstMac MacAddr
-}
-
-type Network struct {
-	SrcAddr IPAddr
-	DstAddr IPAddr
-}
-
-type Transport struct {
-	SrcPort  uint16
-	DstPort  uint16
-	Protocol uint8 `json:"Proto"`
-}
-
-// RecordKey identifies a flow
-// Must coincide byte by byte with kernel-side flow_id_t (bpf/flow.h)
-type RecordKey struct {
-	EthProtocol uint16 `json:"Etype"`
-	Direction   uint8  `json:"FlowDirection"`
-	DataLink
-	Network
-	Transport
-	IFIndex uint32
-}
-
-// RecordMetrics provides flows metrics and timing information
-// Must coincide byte by byte with kernel-side flow_metrics_t (bpf/flow.h)
-type RecordMetrics struct {
-	Packets uint32
-	Bytes   uint64
-	// StartMonoTimeNs and EndMonoTimeNs are the start and end times as system monotonic timestamps
-	// in nanoseconds, as output from bpf_ktime_get_ns() (kernel space)
-	// and monotime.Now() (user space)
-	StartMonoTimeNs uint64
-	EndMonoTimeNs   uint64
-	Flags           uint16
-	Errno           uint8
-}
-
 // record structure as parsed from eBPF
-// it's important to emphasize that the fields in this structure have to coincide,
-// byte by byte, with the flow_record_t structure in the bpf/flow.h file
-type RawRecord struct {
-	RecordKey
-	RecordMetrics
-}
+type RawRecord ebpf.BpfFlowRecordT
 
 // Record contains accumulated metrics from a flow
 type Record struct {
@@ -97,30 +53,30 @@ type Record struct {
 }
 
 func NewRecord(
-	key RecordKey,
-	metrics RecordMetrics,
+	key ebpf.BpfFlowId,
+	metrics ebpf.BpfFlowMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 ) *Record {
-	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeNs)
-	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeNs)
+	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
+	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
 	return &Record{
 		RawRecord: RawRecord{
-			RecordKey:     key,
-			RecordMetrics: metrics,
+			Id:      key,
+			Metrics: metrics,
 		},
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}
 }
 
-func (r *RecordMetrics) Accumulate(src *RecordMetrics) {
+func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	// time == 0 if the value has not been yet set
-	if r.StartMonoTimeNs == 0 || r.StartMonoTimeNs > src.StartMonoTimeNs {
-		r.StartMonoTimeNs = src.StartMonoTimeNs
+	if r.StartMonoTimeTs == 0 || r.StartMonoTimeTs > src.StartMonoTimeTs {
+		r.StartMonoTimeTs = src.StartMonoTimeTs
 	}
-	if r.EndMonoTimeNs == 0 || r.EndMonoTimeNs < src.EndMonoTimeNs {
-		r.EndMonoTimeNs = src.EndMonoTimeNs
+	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
+		r.EndMonoTimeTs = src.EndMonoTimeTs
 	}
 	r.Bytes += src.Bytes
 	r.Packets += src.Packets
@@ -128,19 +84,19 @@ func (r *RecordMetrics) Accumulate(src *RecordMetrics) {
 }
 
 // IP returns the net.IP equivalent object
-func (ia *IPAddr) IP() net.IP {
+func IP(ia IPAddr) net.IP {
 	return ia[:]
 }
 
 // IntEncodeV4 encodes an IPv4 address as an integer (in network encoding, big endian).
 // It assumes that the passed IP is already IPv4. Otherwise it would just encode the
 // last 4 bytes of an IPv6 address
-func (ia *IPAddr) IntEncodeV4() uint32 {
+func IntEncodeV4(ia [net.IPv6len]uint8) uint32 {
 	return binary.BigEndian.Uint32(ia[net.IPv6len-net.IPv4len : net.IPv6len])
 }
 
 func (ia *IPAddr) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + ia.IP().String() + `"`), nil
+	return []byte(`"` + IP(*ia).String() + `"`), nil
 }
 
 func (m *MacAddr) String() string {

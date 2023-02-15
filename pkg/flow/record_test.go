@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 func TestRecordBinaryEncoding(t *testing.T) {
@@ -33,34 +35,28 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, RawRecord{
-		RecordKey: RecordKey{
-			EthProtocol: 0x0201,
-			Direction:   0x03,
-			DataLink: DataLink{
-				SrcMac: MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
-				DstMac: MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-			},
-			Network: Network{
-				SrcAddr: IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
-				DstAddr: IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
-			},
-			Transport: Transport{
-				SrcPort:  0x0f0e,
-				DstPort:  0x1110,
-				Protocol: 0x12,
-			},
-			IFIndex: 0x16151413,
+		Id: ebpf.BpfFlowId{
+			EthProtocol:       0x0201,
+			Direction:         0x03,
+			SrcMac:            MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
+			DstMac:            MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+			SrcIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
+			DstIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
+			SrcPort:           0x0f0e,
+			DstPort:           0x1110,
+			TransportProtocol: 0x12,
+			IfIndex:           0x16151413,
 		},
-		RecordMetrics: RecordMetrics{
+		Metrics: ebpf.BpfFlowMetrics{
 			Packets:         0x09080706,
 			Bytes:           0x1a19181716151413,
-			StartMonoTimeNs: 0x1a19181716151413,
-			EndMonoTimeNs:   0x1a19181716151413,
+			StartMonoTimeTs: 0x1a19181716151413,
+			EndMonoTimeTs:   0x1a19181716151413,
 			Flags:           0x1413,
 			Errno:           0x33,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses
-	assert.Equal(t, "6.7.8.9", fr.Network.SrcAddr.IP().String())
-	assert.Equal(t, "10.11.12.13", fr.Network.DstAddr.IP().String())
+	assert.Equal(t, "6.7.8.9", IP(fr.Id.SrcIp).String())
+	assert.Equal(t, "10.11.12.13", IP(fr.Id.DstIp).String())
 }
