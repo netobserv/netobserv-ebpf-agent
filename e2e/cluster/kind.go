@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"path"
 	"sort"
 	"testing"
@@ -264,7 +264,7 @@ func deployManifestFile(definition Deployment,
 ) error {
 	log.WithField("file", definition.ManifestFile).Info("deploying manifest file")
 
-	b, err := ioutil.ReadFile(definition.ManifestFile)
+	b, err := os.ReadFile(definition.ManifestFile)
 	if err != nil {
 		return fmt.Errorf("reading manifest file %q: %w", definition.ManifestFile, err)
 	}

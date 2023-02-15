@@ -21,7 +21,7 @@ linters:
     - varcheck
 linters-settings:
   stylecheck:
-    go: "1.18"
+    go: "1.19"
   gocritic:
     enabled-checks:
       - hugeParam

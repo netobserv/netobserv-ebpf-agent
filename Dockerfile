@@ -1,8 +1,7 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi9/go-toolset:1.18.4 as builder
+FROM docker.io/library/golang:1.19 as builder
 
 ARG SW_VERSION="unknown"
-ARG GOVERSION="1.18.4"
 
 WORKDIR /opt/app-root
 
@@ -20,7 +19,7 @@ COPY Makefile Makefile
 RUN make compile
 
 # Create final image from minimal + built binary
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.1.0
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.1
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
