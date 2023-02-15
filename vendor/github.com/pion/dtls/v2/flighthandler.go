@@ -2,13 +2,15 @@ package dtls
 
 import (
 	"context"
+
+	"github.com/pion/dtls/v2/pkg/protocol/alert"
 )
 
 // Parse received handshakes and return next flightVal
-type flightParser func(context.Context, flightConn, *State, *handshakeCache, *handshakeConfig) (flightVal, *alert, error)
+type flightParser func(context.Context, flightConn, *State, *handshakeCache, *handshakeConfig) (flightVal, *alert.Alert, error)
 
 // Generate flights
-type flightGenerator func(flightConn, *State, *handshakeCache, *handshakeConfig) ([]*packet, *alert, error)
+type flightGenerator func(flightConn, *State, *handshakeCache, *handshakeConfig) ([]*packet, *alert.Alert, error)
 
 func (f flightVal) getFlightParser() (flightParser, error) {
 	switch f {
@@ -22,8 +24,12 @@ func (f flightVal) getFlightParser() (flightParser, error) {
 		return flight3Parse, nil
 	case flight4:
 		return flight4Parse, nil
+	case flight4b:
+		return flight4bParse, nil
 	case flight5:
 		return flight5Parse, nil
+	case flight5b:
+		return flight5bParse, nil
 	case flight6:
 		return flight6Parse, nil
 	default:
@@ -45,8 +51,12 @@ func (f flightVal) getFlightGenerator() (gen flightGenerator, retransmit bool, e
 		return flight3Generate, true, nil
 	case flight4:
 		return flight4Generate, true, nil
+	case flight4b:
+		return flight4bGenerate, true, nil
 	case flight5:
 		return flight5Generate, true, nil
+	case flight5b:
+		return flight5bGenerate, true, nil
 	case flight6:
 		return flight6Generate, true, nil
 	default:
