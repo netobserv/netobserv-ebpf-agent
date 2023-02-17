@@ -83,7 +83,9 @@ func fromExternal(ipType string) (net.IP, error) {
 	// This will just establish an external dialer where we can pickup the external
 	// host address
 	addrStr := "8.8.8.8:80"
-	if ipType == IPTypeIPV6 {
+	// When IPType is "any" and we have interface with IPv6 address only then use ipv6 dns address
+	ip, _ := fromLocal(IPTypeIPV4)
+	if ipType == IPTypeIPV6 || (ipType == IPTypeAny && ip == nil) {
 		addrStr = "[2001:4860:4860::8888]:80"
 	}
 	conn, err := dial("udp", addrStr)

@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ func TestGRPCCommunication(t *testing.T) {
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut)
 	require.NoError(t, err)
-	cc, err := ConnectClient(fmt.Sprintf("127.0.0.1:%d", port))
+	cc, err := ConnectClient("127.0.0.1", port)
 	require.NoError(t, err)
 	client := cc.Client()
 
@@ -110,7 +109,7 @@ func TestConstructorOptions(t *testing.T) {
 			return handler(ctx, req)
 		})))
 	require.NoError(t, err)
-	cc, err := ConnectClient(fmt.Sprintf("127.0.0.1:%d", port))
+	cc, err := ConnectClient("127.0.0.1", port)
 	require.NoError(t, err)
 	client := cc.Client()
 
@@ -127,14 +126,14 @@ func TestConstructorOptions(t *testing.T) {
 	}
 }
 
-func BenchmarkGRPCCommunication(b *testing.B) {
+func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 	port, err := test.FreeTCPPort()
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
 	collector, err := StartCollector(port, serverOut)
 	require.NoError(b, err)
 	defer collector.Close()
-	cc, err := ConnectClient(fmt.Sprintf("127.0.0.1:%d", port))
+	cc, err := ConnectClient("127.0.0.1", port)
 	require.NoError(b, err)
 	defer cc.Close()
 	client := cc.Client()
@@ -152,6 +151,55 @@ func BenchmarkGRPCCommunication(b *testing.B) {
 			},
 			DstAddr: &pbflow.IP{
 				IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x55667788},
+			},
+		},
+		DataLink: &pbflow.DataLink{
+			DstMac: 0x112233445566,
+			SrcMac: 0x665544332211,
+		},
+		Transport: &pbflow.Transport{
+			Protocol: 1,
+			SrcPort:  23000,
+			DstPort:  443,
+		},
+	}
+	records := &pbflow.Records{}
+	for i := 0; i < 100; i++ {
+		records.Entries = append(records.Entries, f)
+	}
+	for i := 0; i < b.N; i++ {
+		if _, err := client.Send(context.Background(), records); err != nil {
+			require.Fail(b, "error", err)
+		}
+		<-serverOut
+	}
+}
+
+func BenchmarkIPv6GRPCCommunication(b *testing.B) {
+	port, err := test.FreeTCPPort()
+	require.NoError(b, err)
+	serverOut := make(chan *pbflow.Records, 1000)
+	collector, err := StartCollector(port, serverOut)
+	require.NoError(b, err)
+	defer collector.Close()
+	cc, err := ConnectClient("::1", port)
+	require.NoError(b, err)
+	defer cc.Close()
+	client := cc.Client()
+
+	f := &pbflow.Record{
+		EthProtocol:   2048,
+		Bytes:         456,
+		Flags:         1,
+		Direction:     pbflow.Direction_EGRESS,
+		TimeFlowStart: timestamppb.Now(),
+		TimeFlowEnd:   timestamppb.Now(),
+		Network: &pbflow.Network{
+			SrcAddr: &pbflow.IP{
+				IpFamily: &pbflow.IP_Ipv6{Ipv6: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}},
+			},
+			DstAddr: &pbflow.IP{
+				IpFamily: &pbflow.IP_Ipv6{Ipv6: []byte{11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 24, 25, 26}},
 			},
 		},
 		DataLink: &pbflow.DataLink{

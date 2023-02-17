@@ -4,6 +4,7 @@ import (
 	"net"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/vmware/go-ipfix/pkg/entities"
 	ipfixExporter "github.com/vmware/go-ipfix/pkg/exporter"
@@ -16,7 +17,8 @@ var ilog = logrus.WithField("component", "exporter/IPFIXProto")
 // compatible with OVN-K.
 
 type IPFIX struct {
-	hostPort     string
+	hostIP       string
+	hostPort     int
 	exporter     *ipfixExporter.ExportingProcess
 	templateIDv4 uint16
 	templateIDv6 uint16
@@ -199,23 +201,24 @@ func SendTemplateRecordv6(log *logrus.Entry, exporter *ipfixExporter.ExportingPr
 }
 
 // Sends out Template record to the IPFIX collector
-func StartIPFIXExporter(hostPort string, transportProto string) (*IPFIX, error) {
-	log := ilog.WithField("collector", hostPort)
+func StartIPFIXExporter(hostIP string, hostPort int, transportProto string) (*IPFIX, error) {
+	socket := utils.GetSocket(hostIP, hostPort)
+	log := ilog.WithField("collector", socket)
 
 	registry.LoadRegistry()
 	// Create exporter using local server info
 	input := ipfixExporter.ExporterInput{
-		CollectorAddress:    hostPort,
+		CollectorAddress:    socket,
 		CollectorProtocol:   transportProto,
 		ObservationDomainID: 1,
 		TempRefTimeout:      1,
 	}
 	exporter, err := ipfixExporter.InitExportingProcess(input)
 	if err != nil {
-		log.Fatalf("Got error when connecting to local server %s: %v", hostPort, err)
+		log.Fatalf("Got error when connecting to local server %s: %v", socket, err)
 		return nil, err
 	}
-	log.Infof("Created exporter connecting to local server with address: %s", hostPort)
+	log.Infof("Created exporter connecting to local server with address: %s", socket)
 
 	templateIDv4, entitiesV4, err := SendTemplateRecordv4(log, exporter)
 	if err != nil {
@@ -232,6 +235,7 @@ func StartIPFIXExporter(hostPort string, transportProto string) (*IPFIX, error) 
 	log.Infof("entities v6 %+v", entitiesV6)
 
 	return &IPFIX{
+		hostIP:       hostIP,
 		hostPort:     hostPort,
 		exporter:     exporter,
 		templateIDv4: templateIDv4,
@@ -331,7 +335,8 @@ func (ipf *IPFIX) sendDataRecord(log *logrus.Entry, record *flow.Record, v6 bool
 // ExportFlows accepts slices of *flow.Record by its input channel, converts them
 // to IPFIX Records, and submits them to the collector.
 func (ipf *IPFIX) ExportFlows(input <-chan []*flow.Record) {
-	log := ilog.WithField("collector", ipf.hostPort)
+	socket := utils.GetSocket(ipf.hostIP, ipf.hostPort)
+	log := ilog.WithField("collector", socket)
 	for inputRecords := range input {
 		for _, record := range inputRecords {
 			if record.Id.EthProtocol == flow.IPv6Type {

@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -13,9 +14,10 @@ type ClientConnection struct {
 	conn   *grpc.ClientConn
 }
 
-func ConnectClient(address string) (*ClientConnection, error) {
+func ConnectClient(hostIP string, hostPort int) (*ClientConnection, error) {
 	// TODO: allow configuring some options (keepalive, backoff...)
-	conn, err := grpc.Dial(address,
+	socket := utils.GetSocket(hostIP, hostPort)
+	conn, err := grpc.Dial(socket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err

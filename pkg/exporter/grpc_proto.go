@@ -5,6 +5,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,7 +15,8 @@ var glog = logrus.WithField("component", "exporter/GRPCProto")
 // by its input channel, converts them to *pbflow.Records instances, and submits
 // them to the collector.
 type GRPCProto struct {
-	hostPort   string
+	hostIP     string
+	hostPort   int
 	clientConn *grpc.ClientConnection
 	// maxFlowsPerMessage limits the maximum number of flows per GRPC message.
 	// If a message contains more flows than this number, the GRPC message will be split into
@@ -22,12 +24,13 @@ type GRPCProto struct {
 	maxFlowsPerMessage int
 }
 
-func StartGRPCProto(hostPort string, maxFlowsPerMessage int) (*GRPCProto, error) {
-	clientConn, err := grpc.ConnectClient(hostPort)
+func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int) (*GRPCProto, error) {
+	clientConn, err := grpc.ConnectClient(hostIP, hostPort)
 	if err != nil {
 		return nil, err
 	}
 	return &GRPCProto{
+		hostIP:             hostIP,
 		hostPort:           hostPort,
 		clientConn:         clientConn,
 		maxFlowsPerMessage: maxFlowsPerMessage,
@@ -37,7 +40,8 @@ func StartGRPCProto(hostPort string, maxFlowsPerMessage int) (*GRPCProto, error)
 // ExportFlows accepts slices of *flow.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
 func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
-	log := glog.WithField("collector", g.hostPort)
+	socket := utils.GetSocket(g.hostIP, g.hostPort)
+	log := glog.WithField("collector", socket)
 	for inputRecords := range input {
 		for _, pbRecords := range flowsToPB(inputRecords, g.maxFlowsPerMessage) {
 			log.Debugf("sending %d records", len(pbRecords.Entries))
