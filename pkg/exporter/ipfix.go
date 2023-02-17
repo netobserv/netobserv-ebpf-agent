@@ -321,9 +321,16 @@ func (ipf *IPFIX) sendDataRecord(log *logrus.Entry, record *flow.Record, v6 bool
 	if err != nil {
 		return err
 	}
-	err = dataSet.AddRecord(ipf.entitiesV4, templateID)
-	if err != nil {
-		return err
+	if v6 {
+		err = dataSet.AddRecord(ipf.entitiesV6, templateID)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = dataSet.AddRecord(ipf.entitiesV4, templateID)
+		if err != nil {
+			return err
+		}
 	}
 	_, err = ipf.exporter.SendSet(dataSet)
 	if err != nil {
