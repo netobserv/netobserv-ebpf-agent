@@ -25,6 +25,10 @@ func NewTracerFake() *TracerFake {
 	}
 }
 
+func (m *TracerFake) IsBpfdEnabled() bool {
+	return false
+}
+
 func (m *TracerFake) Close() error {
 	return nil
 }
