@@ -6,12 +6,15 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+
+	bpfdHelpers "github.com/redhat-et/bpfd/bpfd-operator/pkg/helpers"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
@@ -20,9 +23,12 @@ import (
 const (
 	qdiscType = "clsact"
 	// constants defined in flows.c as "volatile const"
-	constSampling      = "sampling"
-	constTraceMessages = "trace_messages"
-	aggregatedFlowsMap = "aggregated_flows"
+	constSampling           = "sampling"
+	constTraceMessages      = "trace_messages"
+	aggregatedFlowsMap      = "aggregated_flows"
+	directFlowsMap          = "direct_flows"
+	bpfProgramConfigIngress = "netobserv-flow-monitor-ingress"
+	bpfProgramConfigEgress  = "netobserv-flow-monitor-egress"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -32,11 +38,16 @@ var log = logrus.WithField("component", "ebpf.FlowFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
+	// Used when bpf is loaded via netlink
 	objects        *BpfObjects
 	qdiscs         map[ifaces.Interface]*netlink.GenericQdisc
 	egressFilters  map[ifaces.Interface]*netlink.BpfFilter
 	ingressFilters map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader  *ringbuf.Reader
+	// Used by bpfd
+	maps    map[string]*ebpf.Map
+	useBpfd bool
+	// Used when bpf is loaded via bpfd
+	ringbufReaders []*ringbuf.Reader
 	cacheMaxSize   int
 	enableIngress  bool
 	enableEgress   bool
@@ -46,6 +57,7 @@ func NewFlowFetcher(
 	traceMessages bool,
 	sampling, cacheMaxSize int,
 	ingress, egress bool,
+	interfaces []string,
 ) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
@@ -53,42 +65,102 @@ func NewFlowFetcher(
 	}
 
 	objects := BpfObjects{}
-	spec, err := LoadBpf()
-	if err != nil {
-		return nil, fmt.Errorf("loading BPF data: %w", err)
+	flows := []*ringbuf.Reader{}
+	maps := map[string]*ebpf.Map{}
+	bpfdEnabled := false
+	c := bpfdHelpers.GetClientOrDie()
+	ingressMaps := map[string]map[string]*ebpf.Map{}
+	egressMaps := map[string]map[string]*ebpf.Map{}
+
+	// Helper to check if bpfd is being used and to load maps if so
+	for _, intf := range interfaces {
+		ingressMap, err := bpfdHelpers.GetMaps(c, fmt.Sprintf("%s-%s", bpfProgramConfigIngress, intf), []string{aggregatedFlowsMap, directFlowsMap}, &ebpf.LoadPinOptions{})
+		if err != nil {
+			log.WithError(err).Info("Ingress net-observ bpf program not found via bpfd loading via netlink")
+			break
+		}
+
+		egressMap, err := bpfdHelpers.GetMaps(c, fmt.Sprintf("%s-%s", bpfProgramConfigEgress, intf), []string{aggregatedFlowsMap, directFlowsMap}, &ebpf.LoadPinOptions{})
+		if err != nil {
+			log.WithError(err).Info("Egress net-observ bpf program not found via bpfd loading via netlink")
+			break
+		}
+
+		if ingressMaps != nil && egressMaps != nil {
+			log.WithField("interface", intf).Info("Bpfd is enabled successfully found maps")
+			bpfdEnabled = true
+		}
+
+		ingressMaps[intf] = ingressMap
+		egressMaps[intf] = egressMap
+
+		maps[fmt.Sprintf("ingress_%s_%s", aggregatedFlowsMap, intf)] = ingressMap[aggregatedFlowsMap]
+		maps[fmt.Sprintf("egress_%s_%s", aggregatedFlowsMap, intf)] = egressMap[aggregatedFlowsMap]
+
+		maps[fmt.Sprintf("ingress_%s_%s", directFlowsMap, intf)] = ingressMap[directFlowsMap]
+		maps[fmt.Sprintf("egress_%s_%s", directFlowsMap, intf)] = egressMap[directFlowsMap]
+
+		// read events from igress+egress ringbuffers
+		ingressflows, err := ringbuf.NewReader(ingressMap[directFlowsMap])
+		if err != nil {
+			return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
+		}
+
+		flows = append(flows, ingressflows)
+
+		egressflows, err := ringbuf.NewReader(egressMap[directFlowsMap])
+		if err != nil {
+			return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
+		}
+
+		flows = append(flows, egressflows)
+
 	}
 
-	// Resize aggregated flows map according to user-provided configuration
-	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
+	// If not loaded via bpfd do it ourselves
+	if !bpfdEnabled {
+		spec, err := LoadBpf()
+		if err != nil {
+			return nil, fmt.Errorf("loading BPF data: %w", err)
+		}
 
-	traceMsgs := 0
-	if traceMessages {
-		traceMsgs = 1
-	}
-	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:      uint32(sampling),
-		constTraceMessages: uint8(traceMsgs),
-	}); err != nil {
-		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
-	}
-	if err := spec.LoadAndAssign(&objects, nil); err != nil {
-		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		// Resize aggregated flows map according to user-provided configuration
+		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
+
+		traceMsgs := 0
+		if traceMessages {
+			traceMsgs = 1
+		}
+		if err := spec.RewriteConstants(map[string]interface{}{
+			constSampling:      uint32(sampling),
+			constTraceMessages: uint8(traceMsgs),
+		}); err != nil {
+			return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
+		}
+		if err := spec.LoadAndAssign(&objects, nil); err != nil {
+			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+
+		// read events from igress+egress ringbuffer
+		flow, err := ringbuf.NewReader(objects.DirectFlows)
+		if err != nil {
+			return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
+		}
+
+		flows = append(flows, flow)
 	}
 
-	// read events from igress+egress ringbuffer
-	flows, err := ringbuf.NewReader(objects.DirectFlows)
-	if err != nil {
-		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
-	}
 	return &FlowFetcher{
 		objects:        &objects,
-		ringbufReader:  flows,
+		maps:           maps,
+		ringbufReaders: flows,
 		egressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
 		ingressFilters: map[ifaces.Interface]*netlink.BpfFilter{},
 		qdiscs:         map[ifaces.Interface]*netlink.GenericQdisc{},
 		cacheMaxSize:   cacheMaxSize,
 		enableIngress:  ingress,
 		enableEgress:   egress,
+		useBpfd:        bpfdEnabled,
 	}, nil
 }
 
@@ -211,9 +283,11 @@ func (m *FlowFetcher) Close() error {
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
-	if m.ringbufReader != nil {
-		if err := m.ringbufReader.Close(); err != nil {
-			errs = append(errs, err)
+	if m.ringbufReaders != nil {
+		for _, ringbufReader := range m.ringbufReaders {
+			if err := ringbufReader.Close(); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 	if m.objects != nil {
@@ -289,7 +363,22 @@ func doIgnoreNoDev[T any](sysCall func(T) error, dev T, log *logrus.Entry) error
 }
 
 func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
-	return m.ringbufReader.Read()
+	var records ringbuf.Record
+
+	for _, ringbufReader := range m.ringbufReaders {
+		record, err := ringbufReader.Read()
+		if err != nil {
+			return records, err
+		}
+
+		records.RawSample = append(records.RawSample, record.RawSample...)
+	}
+
+	return records, nil
+}
+
+func (m *FlowFetcher) IsBpfdEnabled() bool {
+	return m.useBpfd
 }
 
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
@@ -302,24 +391,39 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
 func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId][]BpfFlowMetrics {
-	flowMap := m.objects.AggregatedFlows
+	var flowMaps []*ebpf.Map
 
-	iterator := flowMap.Iterate()
+	if !m.useBpfd {
+		flowMaps = []*ebpf.Map{m.objects.AggregatedFlows}
+	} else {
+		// Add all aggregated flows maps
+		for k, v := range m.maps {
+			if strings.Contains(k, aggregatedFlowsMap) {
+				flowMaps = append(flowMaps, v)
+			}
+		}
+	}
+
 	flows := make(map[BpfFlowId][]BpfFlowMetrics, m.cacheMaxSize)
 
-	id := BpfFlowId{}
-	var metrics []BpfFlowMetrics
-	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
-	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
-	for iterator.Next(&id, &metrics) {
-		if err := flowMap.Delete(id); err != nil {
-			log.WithError(err).WithField("flowId", id).
-				Warnf("couldn't delete flow entry")
+	for _, flowMap := range flowMaps {
+		iterator := flowMap.Iterate()
+
+		id := BpfFlowId{}
+		var metrics []BpfFlowMetrics
+		// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
+		// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
+		for iterator.Next(&id, &metrics) {
+			if err := flowMap.Delete(id); err != nil {
+				log.WithError(err).WithField("flowId", id).
+					Warnf("couldn't delete flow entry")
+			}
+			// We observed that eBFP PerCPU map might insert multiple times the same key in the map
+			// (probably due to race conditions) so we need to re-join metrics again at userspace
+			// TODO: instrument how many times the keys are is repeated in the same eviction
+			flows[id] = append(flows[id], metrics...)
 		}
-		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
-		// (probably due to race conditions) so we need to re-join metrics again at userspace
-		// TODO: instrument how many times the keys are is repeated in the same eviction
-		flows[id] = append(flows[id], metrics...)
 	}
+
 	return flows
 }

@@ -59,9 +59,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//     *BpfObjects
-//     *BpfPrograms
-//     *BpfMaps
+//	*BpfObjects
+//	*BpfPrograms
+//	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -152,5 +152,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfeb.o
 var _BpfBytes []byte

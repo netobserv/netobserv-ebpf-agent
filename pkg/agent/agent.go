@@ -76,6 +76,7 @@ type Flows struct {
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
 type ebpfFlowFetcher interface {
 	io.Closer
+	IsBpfdEnabled() bool
 	Register(iface ifaces.Interface) error
 
 	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
@@ -122,7 +123,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		debug = true
 	}
 
-	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
+	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress, cfg.Interfaces)
 	if err != nil {
 		return nil, err
 	}
@@ -390,10 +391,13 @@ func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	alog.WithField("interface", iface).Info("interface detected. Registering flow ebpfFetcher")
-	if err := f.ebpf.Register(iface); err != nil {
-		alog.WithField("interface", iface).WithError(err).
-			Warn("can't register flow ebpfFetcher. Ignoring")
-		return
+
+	if !f.ebpf.IsBpfdEnabled() {
+		alog.WithField("interface", iface).Info("interface detected. Registering flow ebpfFetcher")
+		if err := f.ebpf.Register(iface); err != nil {
+			alog.WithField("interface", iface).WithError(err).
+				Warn("can't register flow ebpfFetcher. Ignoring")
+			return
+		}
 	}
 }
