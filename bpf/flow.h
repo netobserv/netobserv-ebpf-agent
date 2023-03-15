@@ -45,6 +45,9 @@ typedef struct flow_id_t {
     u16 src_port;
     u16 dst_port;
     u8 transport_protocol;
+    // ICMP protocol
+    u8  icmp_type;
+    u8  icmp_code;
     // OS interface index
     u32 if_index;
 } __attribute__((packed)) flow_id;

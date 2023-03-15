@@ -25,6 +25,8 @@ type BpfFlowIdT struct {
 	SrcPort           uint16
 	DstPort           uint16
 	TransportProtocol uint8
+	IcmpType          uint8
+	IcmpCode          uint8
 	IfIndex           uint32
 }
 

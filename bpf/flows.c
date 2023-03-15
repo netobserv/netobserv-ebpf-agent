@@ -13,7 +13,6 @@
             until an entry is available.
         4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
-
 #include <linux/bpf.h>
 #include <linux/in.h>
 #include <linux/if_packet.h>
@@ -54,6 +53,15 @@
 #define SYN_ACK_FLAG 0x100
 #define FIN_ACK_FLAG 0x200
 #define RST_ACK_FLAG 0x400
+
+// SCTP protocol header structure, its defined here because its not
+// exported by the kernel headers like other protocols.
+struct sctphdr {
+    __be16 source;
+    __be16 dest;
+    __be32 vtag;
+    __le32 checksum;
+};
 
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
@@ -104,71 +112,111 @@ static inline void set_flags(struct tcphdr *th, u16 *flags) {
         *flags |= CWR_FLAG;
     }
 }
+
+// L4_info structure contains L4 headers parsed information.
+struct l4_info_t {
+    // TCP/UDP/SCTP source port in host byte order
+    u16 src_port;
+    // TCP/UDP/SCTP destination port in host byte order
+    u16 dst_port;
+    // ICMPv4/ICMPv6 type value
+    u8 icmp_type;
+    // ICMPv4/ICMPv6 code value
+    u8 icmp_code;
+    // TCP flags
+    u16 flags;
+};
+
+// Extract L4 info for the supported protocols
+static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
+                               struct l4_info_t *l4_info) {
+	switch (protocol) {
+    case IPPROTO_TCP: {
+        struct tcphdr *tcp = l4_hdr_start;
+        if ((void *)tcp + sizeof(*tcp) <= data_end) {
+            l4_info->src_port = __bpf_ntohs(tcp->source);
+            l4_info->dst_port = __bpf_ntohs(tcp->dest);
+            set_flags(tcp, &l4_info->flags);
+        }
+    } break;
+    case IPPROTO_UDP: {
+        struct udphdr *udp = l4_hdr_start;
+        if ((void *)udp + sizeof(*udp) <= data_end) {
+            l4_info->src_port = __bpf_ntohs(udp->source);
+            l4_info->dst_port = __bpf_ntohs(udp->dest);
+        }
+    } break;
+    case IPPROTO_SCTP: {
+        struct sctphdr *sctph = l4_hdr_start;
+        if ((void *)sctph + sizeof(*sctph) <= data_end) {
+            l4_info->src_port = __bpf_ntohs(sctph->source);
+            l4_info->dst_port = __bpf_ntohs(sctph->dest);
+        }
+    } break;
+    case IPPROTO_ICMP: {
+        struct icmphdr *icmph = l4_hdr_start;
+        if ((void *)icmph + sizeof(*icmph) <= data_end) {
+            l4_info->icmp_type = icmph->type;
+            l4_info->icmp_code = icmph->code;
+        }
+    } break;
+    case IPPROTO_ICMPV6: {
+        struct icmp6hdr *icmp6h = l4_hdr_start;
+         if ((void *)icmp6h + sizeof(*icmp6h) <= data_end) {
+            l4_info->icmp_type = icmp6h->icmp6_type;
+            l4_info->icmp_code = icmp6h->icmp6_code;
+        }
+    } break;
+    default:
+        break;
+    }
+}
+
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u16 *flags) {
-    if ((void *)ip + sizeof(*ip) > data_end) {
+    struct l4_info_t l4_info;
+    void *l4_hdr_start;
+
+    l4_hdr_start = (void *)ip + sizeof(*ip);
+    if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-
+    __builtin_memset(&l4_info, 0, sizeof(l4_info));
     __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
     __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
     __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
     __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
     id->transport_protocol = ip->protocol;
-    id->src_port = 0;
-    id->dst_port = 0;
-    switch (ip->protocol) {
-    case IPPROTO_TCP: {
-        struct tcphdr *tcp = (void *)ip + sizeof(*ip);
-        if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            id->src_port = __bpf_ntohs(tcp->source);
-            id->dst_port = __bpf_ntohs(tcp->dest);
-            set_flags(tcp, flags);
-        }
-    } break;
-    case IPPROTO_UDP: {
-        struct udphdr *udp = (void *)ip + sizeof(*ip);
-        if ((void *)udp + sizeof(*udp) <= data_end) {
-            id->src_port = __bpf_ntohs(udp->source);
-            id->dst_port = __bpf_ntohs(udp->dest);
-        }
-    } break;
-    default:
-        break;
-    }
+    fill_l4info(l4_hdr_start, data_end, ip->protocol, &l4_info);
+    id->src_port = l4_info.src_port;
+    id->dst_port = l4_info.dst_port;
+    id->icmp_type = l4_info.icmp_type;
+    id->icmp_code = l4_info.icmp_code;
+    *flags = l4_info.flags;
+
     return SUBMIT;
 }
 
 // sets flow fields from IPv6 header information
 static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u16 *flags) {
-    if ((void *)ip + sizeof(*ip) > data_end) {
+    struct l4_info_t l4_info;
+    void *l4_hdr_start;
+
+    l4_hdr_start = (void *)ip + sizeof(*ip);
+    if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-
+    __builtin_memset(&l4_info, 0, sizeof(l4_info));
     __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, 16);
     __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, 16);
     id->transport_protocol = ip->nexthdr;
-    id->src_port = 0;
-    id->dst_port = 0;
-    switch (ip->nexthdr) {
-    case IPPROTO_TCP: {
-        struct tcphdr *tcp = (void *)ip + sizeof(*ip);
-        if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            id->src_port = __bpf_ntohs(tcp->source);
-            id->dst_port = __bpf_ntohs(tcp->dest);
-            set_flags(tcp, flags);
-        }
-    } break;
-    case IPPROTO_UDP: {
-        struct udphdr *udp = (void *)ip + sizeof(*ip);
-        if ((void *)udp + sizeof(*udp) <= data_end) {
-            id->src_port = __bpf_ntohs(udp->source);
-            id->dst_port = __bpf_ntohs(udp->dest);
-        }
-    } break;
-    default:
-        break;
-    }
+    fill_l4info(l4_hdr_start, data_end, ip->nexthdr, &l4_info);
+    id->src_port = l4_info.src_port;
+    id->dst_port = l4_info.dst_port;
+    id->icmp_type = l4_info.icmp_type;
+    id->icmp_code = l4_info.icmp_code;
+    *flags = l4_info.flags;
+
     return SUBMIT;
 }
 // sets flow fields from Ethernet header information
@@ -207,6 +255,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     void *data = (void *)(long)skb->data;
 
     flow_id id;
+    __builtin_memset(&id, 0, sizeof(id));
     u64 current_time = bpf_ktime_get_ns();
     struct ethhdr *eth = data;
     u16 flags = 0;
