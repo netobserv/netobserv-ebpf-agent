@@ -162,6 +162,10 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 			SrcPort:  23000,
 			DstPort:  443,
 		},
+		Icmp: &pbflow.Icmp{
+			IcmpType: 8,
+			IcmpCode: 10,
+		},
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
@@ -210,6 +214,10 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 			Protocol: 1,
 			SrcPort:  23000,
 			DstPort:  443,
+		},
+		Icmp: &pbflow.Icmp{
+			IcmpType: 8,
+			IcmpCode: 10,
 		},
 	}
 	records := &pbflow.Records{}

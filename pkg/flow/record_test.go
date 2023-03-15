@@ -23,6 +23,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x0e, 0x0f, // transport: u16 src_port
 		0x10, 0x11, // transport: u16 dst_port
 		0x12,                   // transport: u8 transport_protocol
+		0x00,                   // icmp: u8 icmp_type
+		0x00,                   // icmp: u8 icmp_code
 		0x13, 0x14, 0x15, 0x16, // interface index
 		0x06, 0x07, 0x08, 0x09, // u32 packets
 		0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, // u64 bytes
@@ -45,6 +47,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			SrcPort:           0x0f0e,
 			DstPort:           0x1110,
 			TransportProtocol: 0x12,
+			IcmpType:          0x00,
+			IcmpCode:          0x00,
 			IfIndex:           0x16151413,
 		},
 		Metrics: ebpf.BpfFlowMetrics{
