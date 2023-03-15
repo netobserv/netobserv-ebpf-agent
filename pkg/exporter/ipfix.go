@@ -122,6 +122,14 @@ func SendTemplateRecordv4(log *logrus.Entry, exporter *ipfixExporter.ExportingPr
 	if err != nil {
 		return 0, nil, err
 	}
+	err = addElementToTemplate(log, "icmpTypeIPv4", nil, &elements)
+	if err != nil {
+		return 0, nil, err
+	}
+	err = addElementToTemplate(log, "icmpCodeIPv4", nil, &elements)
+	if err != nil {
+		return 0, nil, err
+	}
 	err = AddRecordValuesToTemplate(log, &elements)
 	if err != nil {
 		return 0, nil, err
@@ -180,6 +188,14 @@ func SendTemplateRecordv6(log *logrus.Entry, exporter *ipfixExporter.ExportingPr
 		return 0, nil, err
 	}
 	err = addElementToTemplate(log, "destinationTransportPort", nil, &elements)
+	if err != nil {
+		return 0, nil, err
+	}
+	err = addElementToTemplate(log, "icmpTypeIPv6", nil, &elements)
+	if err != nil {
+		return 0, nil, err
+	}
+	err = addElementToTemplate(log, "icmpCodeIPv6", nil, &elements)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -299,6 +315,10 @@ func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 		ieVal.SetUnsigned16Value(record.Id.SrcPort)
 	case "destinationTransportPort":
 		ieVal.SetUnsigned16Value(record.Id.DstPort)
+	case "icmpTypeIPv4", "icmpTypeIPv6":
+		ieVal.SetUnsigned8Value(record.Id.IcmpType)
+	case "icmpCodeIPv4", "icmpCodeIPv6":
+		ieVal.SetUnsigned8Value(record.Id.IcmpCode)
 	}
 }
 func setEntities(record *flow.Record, elements *[]entities.InfoElementWithValue) {
