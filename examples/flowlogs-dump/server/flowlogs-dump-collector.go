@@ -72,7 +72,7 @@ func main() {
 	for records := range receivedRecords {
 		for _, record := range records.Entries {
 			if record.EthProtocol == ipv6 {
-				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s dir:%d bytes:%d packets:%d flags:%d ends: %v\n",
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v\n",
 					ipProto[record.EthProtocol],
 					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
 					record.Interface,
@@ -81,6 +81,8 @@ func main() {
 					net.IP(record.Network.GetDstAddr().GetIpv6()).To16(),
 					record.Transport.DstPort,
 					protocolByNumber[record.Transport.Protocol],
+					record.Icmp.IcmpType,
+					record.Icmp.IcmpCode,
 					record.Direction,
 					record.Bytes,
 					record.Packets,
@@ -88,7 +90,7 @@ func main() {
 					record.TimeFlowEnd.AsTime().Local().Format("15:04:05.000000"),
 				)
 			} else {
-				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s dir:%d bytes:%d packets:%d flags:%d ends: %v\n",
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v\n",
 					ipProto[record.EthProtocol],
 					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
 					record.Interface,
@@ -97,6 +99,8 @@ func main() {
 					ipIntToNetIP(record.Network.GetDstAddr().GetIpv4()).String(),
 					record.Transport.DstPort,
 					protocolByNumber[record.Transport.Protocol],
+					record.Icmp.IcmpType,
+					record.Icmp.IcmpCode,
 					record.Direction,
 					record.Bytes,
 					record.Packets,
