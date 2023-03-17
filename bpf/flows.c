@@ -90,6 +90,8 @@ static inline void set_flags(struct tcphdr *th, u16 *flags) {
         *flags |= FIN_FLAG;
     } else if (th->syn) {
         *flags |= SYN_FLAG;
+    } else if (th->ack) {
+        *flags |= ACK_FLAG;
     } else if (th->rst) {
         *flags |= RST_FLAG;
     } else if (th->psh) {
