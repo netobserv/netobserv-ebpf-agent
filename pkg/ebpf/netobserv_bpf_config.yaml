@@ -1,0 +1,37 @@
+apiVersion: bpfd.io/v1alpha1
+kind: BpfProgramConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: bpfprogramconfig
+  name: netobserv-flow-monitor-ingress
+spec:
+  ## Must correspond to image section name
+  name: flow_parse
+  type: TC
+  # Select all nodes
+  nodeselector: {}
+  attachpoint:
+    networkmultiattach:
+      interface: eth0
+      priority: 50
+      direction: INGRESS
+  bytecode: image://quay.io/bpfd-bytecode/netobserv_ingress:latest
+---
+apiVersion: bpfd.io/v1alpha1
+kind: BpfProgramConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: bpfprogramconfig
+  name: netobserv-flow-monitor-egress
+spec:
+  ## Must correspond to image section name
+  name: flow_parse
+  type: TC
+  # Select all nodes
+  nodeselector: {}
+  attachpoint:
+    networkmultiattach:
+      interface: eth0
+      priority: 50
+      direction: EGRESS
+  bytecode: image://quay.io/bpfd-bytecode/netobserv_egress:latest
