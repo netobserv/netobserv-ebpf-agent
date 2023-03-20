@@ -54,6 +54,10 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Id.SrcPort),
 			DstPort:  uint32(fr.Id.DstPort),
 		},
+		Icmp: &pbflow.Icmp{
+			IcmpType: uint32(fr.Id.IcmpType),
+			IcmpCode: uint32(fr.Id.IcmpCode),
+		},
 		Bytes: fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
@@ -87,6 +91,10 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Protocol: uint32(fr.Id.TransportProtocol),
 			SrcPort:  uint32(fr.Id.SrcPort),
 			DstPort:  uint32(fr.Id.DstPort),
+		},
+		Icmp: &pbflow.Icmp{
+			IcmpType: uint32(fr.Id.IcmpType),
+			IcmpCode: uint32(fr.Id.IcmpCode),
 		},
 		Bytes: fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{

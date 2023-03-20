@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -72,6 +73,12 @@ func NewFlowFetcher(
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
+		var ve *ebpf.VerifierError
+		if errors.As(err, &ve) {
+			// Using %+v will print the whole verifier error, not just the last
+			// few lines.
+			log.Infof("Verifier error: %+v", ve)
+		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
 
