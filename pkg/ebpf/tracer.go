@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -16,7 +17,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t Bpf ../../bpf/tc-agent/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
@@ -34,10 +35,12 @@ var log = logrus.WithField("component", "ebpf.FlowFetcher")
 // in the map
 type FlowFetcher struct {
 	objects        *BpfObjects
+	perfobjects    *BpfSockObjects
 	qdiscs         map[ifaces.Interface]*netlink.GenericQdisc
 	egressFilters  map[ifaces.Interface]*netlink.BpfFilter
 	ingressFilters map[ifaces.Interface]*netlink.BpfFilter
 	ringbufReader  *ringbuf.Reader
+	perfbufReader  *perf.Reader
 	cacheMaxSize   int
 	enableIngress  bool
 	enableEgress   bool

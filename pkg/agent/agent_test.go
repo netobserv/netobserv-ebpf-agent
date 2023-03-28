@@ -68,6 +68,7 @@ func TestFlowsAgent_Deduplication(t *testing.T) {
 		CacheMaxFlows:      100,
 		DeduperJustMark:    false,
 		Deduper:            DeduperFirstCome,
+		EBPFAgentSelector:  EBPFTCAgent,
 	})
 
 	exported := export.Get(t, timeout)
@@ -107,6 +108,7 @@ func TestFlowsAgent_DeduplicationJustMark(t *testing.T) {
 		CacheMaxFlows:      100,
 		DeduperJustMark:    true,
 		Deduper:            DeduperFirstCome,
+		EBPFAgentSelector:  EBPFTCAgent,
 	})
 
 	exported := export.Get(t, timeout)
@@ -146,6 +148,7 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 		CacheActiveTimeout: 10 * time.Millisecond,
 		CacheMaxFlows:      100,
 		Deduper:            DeduperNone,
+		EBPFAgentSelector:  EBPFTCAgent,
 	})
 
 	exported := export.Get(t, timeout)
@@ -182,6 +185,7 @@ func TestFlowsAgent_Decoration(t *testing.T) {
 	export := testAgent(t, &Config{
 		CacheActiveTimeout: 10 * time.Millisecond,
 		CacheMaxFlows:      100,
+		EBPFAgentSelector:  EBPFTCAgent,
 	})
 
 	exported := export.Get(t, timeout)
@@ -203,11 +207,12 @@ func TestFlowsAgent_Decoration(t *testing.T) {
 func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	ebpfTracer := test.NewTracerFake()
 	export := test.NewExporterFake()
+	perfExport := test.NewPerfExporterFake()
 	agent, err := flowsAgent(cfg,
 		test.SliceInformerFake{
 			{Name: "foo", Index: 3},
 			{Name: "bar", Index: 4},
-		}, ebpfTracer, export.Export,
+		}, ebpfTracer, export.Export, perfExport.Export,
 		net.ParseIP(agentIP))
 	require.NoError(t, err)
 
@@ -219,18 +224,20 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	})
 
 	now := uint64(monotime.Now())
-	key1Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
-		{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
-	}
-	key2Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
-	}
+	if cfg.EBPFAgentSelector == EBPFTCAgent {
+		key1Metrics := []ebpf.BpfFlowMetrics{
+			{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
+			{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
+		}
+		key2Metrics := []ebpf.BpfFlowMetrics{
+			{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
+		}
 
-	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics{
-		key1:     key1Metrics,
-		key1Dupe: key1Metrics,
-		key2:     key2Metrics,
-	})
+		ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics{
+			key1:     key1Metrics,
+			key1Dupe: key1Metrics,
+			key2:     key2Metrics,
+		})
+	}
 	return export
 }

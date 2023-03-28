@@ -20,6 +20,8 @@ const (
 	IPIfaceExternal    = "external"
 	IPIfaceLocal       = "local"
 	IPIfaceNamedPrefix = "name:"
+	EBPFTCAgent        = "tc-agent"
+	EBPFSocketAgent    = "sock-agent"
 )
 
 type Config struct {
@@ -128,4 +130,6 @@ type Config struct {
 	KafkaTLSUserKeyPath string `env:"KAFKA_TLS_USER_KEY_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
+	//EnableTCPTracePoint will enable TCP socket tracepoint hook to allow generating events when tcp connection state changes
+	EBPFAgentSelector string `env:"EBPF_AGENT_SELECTOR" envDefault:"tc-agent"`
 }

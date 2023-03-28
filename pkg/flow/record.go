@@ -113,3 +113,9 @@ func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	err := binary.Read(reader, binary.LittleEndian, &fr)
 	return &fr, err
 }
+
+func ReadFromPerf(reader io.Reader) (*ebpf.BpfSockEventT, error) {
+	var perf ebpf.BpfSockEventT
+	err := binary.Read(reader, binary.LittleEndian, &perf)
+	return &perf, err
+}

@@ -53,8 +53,15 @@ func main() {
 		<-stopper
 		canceler()
 	}()
-	if err := flowsAgent.Run(ctx); err != nil {
-		logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
+	switch config.EBPFAgentSelector {
+	case agent.EBPFTCAgent:
+		if err := flowsAgent.Run(ctx); err != nil {
+			logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
+		}
+	case agent.EBPFSocketAgent:
+		if err := flowsAgent.RunPerf(ctx); err != nil {
+			logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
+		}
 	}
 }
 

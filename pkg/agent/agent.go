@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
@@ -61,10 +62,13 @@ type Flows struct {
 	ebpf       ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
-	mapTracer *flow.MapTracer
-	rbTracer  *flow.RingBufTracer
-	accounter *flow.Accounter
-	exporter  node.TerminalFunc[[]*flow.Record]
+	mapTracer     *flow.MapTracer
+	rbTracer      *flow.RingBufTracer
+	perfTracer    *flow.PerfBufTracer
+	accounter     *flow.Accounter
+	perfAccounter *flow.PerfAccounter
+	exporter      node.TerminalFunc[[]*flow.Record]
+	perfExporter  node.TerminalFunc[[]*ebpf.BpfSockEventT]
 
 	// elements used to decorate flows with extra information
 	interfaceNamer flow.InterfaceNamer
@@ -80,12 +84,14 @@ type ebpfFlowFetcher interface {
 
 	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	ReadRingBuf() (ringbuf.Record, error)
+	ReadPerfBuf() (perf.Record, error)
 }
 
 // FlowsAgent instantiates a new agent, given a configuration.
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
-
+	var fetcher *ebpf.FlowFetcher
+	var err error
 	// configure informer for new interfaces
 	var informer ifaces.Informer
 	switch cfg.ListenInterfaces {
@@ -114,20 +120,35 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	perfExportFunc, err := buildPerfExporter(cfg)
+	if err != nil {
+		return nil, err
+	}
 	ingress, egress := flowDirections(cfg)
 
 	debug := false
 	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
 		debug = true
 	}
-
-	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
-	if err != nil {
-		return nil, err
+	// Ebpf Agent selector
+	switch cfg.EBPFAgentSelector {
+	case EBPFSocketAgent:
+		alog.Debug("eBPF socket hook is selected")
+		fetcher, err = ebpf.NewSockFetcher()
+		if err != nil {
+			return nil, err
+		}
+	case EBPFTCAgent:
+		alog.Debug("eBPF TC hook is selected")
+		fetcher, err = ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupport agent type %s", cfg.EBPFAgentSelector)
 	}
 
-	return flowsAgent(cfg, informer, fetcher, exportFunc, agentIP)
+	return flowsAgent(cfg, informer, fetcher, exportFunc, perfExportFunc, agentIP)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
@@ -135,6 +156,7 @@ func flowsAgent(cfg *Config,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*flow.Record],
+	perfExporter node.TerminalFunc[[]*ebpf.BpfSockEventT],
 	agentIP net.IP,
 ) (*Flows, error) {
 	// configure allow/deny interfaces filter
@@ -155,17 +177,22 @@ func flowsAgent(cfg *Config,
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout)
+	perfTracer := flow.NewPerfBufTracer(fetcher, cfg.CacheActiveTimeout)
 	accounter := flow.NewAccounter(
 		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now)
+	perfAccounter := flow.NewPerfAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
 	return &Flows{
 		ebpf:           fetcher,
 		exporter:       exporter,
+		perfExporter:   perfExporter,
 		interfaces:     registerer,
 		filter:         filter,
 		cfg:            cfg,
 		mapTracer:      mapTracer,
 		rbTracer:       rbTracer,
+		perfTracer:     perfTracer,
 		accounter:      accounter,
+		perfAccounter:  perfAccounter,
 		agentIP:        agentIP,
 		interfaceNamer: interfaceNamer,
 	}, nil
@@ -263,6 +290,24 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 
 }
 
+func buildPerfExporter(cfg *Config) (node.TerminalFunc[[]*ebpf.BpfSockEventT], error) {
+	switch cfg.Export {
+	case "grpc":
+		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+			return nil, fmt.Errorf("missing target host or port: %s:%d",
+				cfg.TargetHost, cfg.TargetPort)
+		}
+		grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows)
+		if err != nil {
+			return nil, err
+		}
+		return grpcExporter.ExportPerfLogs, nil
+	default:
+		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
+	}
+
+}
+
 // Run a Flows agent. The function will keep running in the same thread
 // until the passed context is canceled
 func (f *Flows) Run(ctx context.Context) error {
@@ -272,7 +317,31 @@ func (f *Flows) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("starting processing graph: %w", err)
 	}
+	f.status = StatusStarted
+	alog.Info("Flows agent successfully started")
+	<-ctx.Done()
 
+	f.status = StatusStopping
+	alog.Info("stopping Flows agent")
+	if err := f.ebpf.Close(); err != nil {
+		alog.WithError(err).Warn("eBPF resources not correctly closed")
+	}
+
+	alog.Debug("waiting for all nodes to finish their pending work")
+	<-graph.Done()
+
+	f.status = StatusStopped
+	alog.Info("Flows agent stopped")
+	return nil
+}
+
+func (f *Flows) RunPerf(ctx context.Context) error {
+	f.status = StatusStarting
+	alog.Info("starting Flows agent")
+	graph, err := f.buildAndStartPerfPipeline(ctx)
+	if err != nil {
+		return fmt.Errorf("starting processing graph: %w", err)
+	}
 	f.status = StatusStarted
 	alog.Info("Flows agent successfully started")
 	<-ctx.Done()
@@ -334,7 +403,6 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
 func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*flow.Record], error) {
-
 	alog.Debug("registering interfaces' listener in background")
 	err := f.interfacesManager(ctx)
 	if err != nil {
@@ -377,13 +445,45 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	limiter.SendsTo(decorator)
 	decorator.SendsTo(export)
 
-	alog.Debug("starting graph")
+	alog.Debug("starting ebpf TC graph")
 	mapTracer.Start()
 	rbTracer.Start()
 	return export, nil
 }
 
+// buildAndStartPerfPipeline creates the ETL flow processing graph.
+// For a more visual view, check the docs/architecture.md document.
+func (f *Flows) buildAndStartPerfPipeline(ctx context.Context) (*node.Terminal[[]*ebpf.BpfSockEventT], error) {
+
+	alog.Debug("connecting flows' processing graph")
+	perfTracer := node.AsStart(f.perfTracer.TraceLoop(ctx))
+	perfAccounter := node.AsMiddle(f.perfAccounter.PerfAccount, node.ChannelBufferLen(f.cfg.BuffersLength))
+	limiter := node.AsMiddle((&flow.CapacityLimiter{}).PerfLimit,
+		node.ChannelBufferLen(f.cfg.BuffersLength))
+	decorator := node.AsMiddle(flow.PerfDecorate(),
+		node.ChannelBufferLen(f.cfg.BuffersLength))
+
+	ebl := f.cfg.ExporterBufferLength
+	if ebl == 0 {
+		ebl = f.cfg.BuffersLength
+	}
+
+	perfExport := node.AsTerminal(f.perfExporter,
+		node.ChannelBufferLen(ebl))
+	perfTracer.SendsTo(perfAccounter)
+	perfAccounter.SendsTo(limiter)
+	limiter.SendsTo(decorator)
+	decorator.SendsTo(perfExport)
+	alog.Debug("starting ebpf socket graph")
+	perfTracer.Start()
+	return perfExport, nil
+}
+
 func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
+	// for socket agent we need to skip tc hook
+	if f.cfg.EBPFAgentSelector == EBPFSocketAgent {
+		return
+	}
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	if !f.filter.Allowed(iface.Name) {
 		alog.WithField("interface", iface).
