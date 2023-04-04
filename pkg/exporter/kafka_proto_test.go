@@ -21,6 +21,12 @@ func IPAddrFromNetIP(netIP net.IP) flow.IPAddr {
 	return arr
 }
 
+func ByteArrayFromNetIP(netIP net.IP) []uint8 {
+	var arr [net.IPv6len]uint8
+	copy(arr[:], (netIP)[0:net.IPv6len])
+	return arr[:]
+}
+
 func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
 	kj := KafkaProto{Writer: &wc}
@@ -66,6 +72,38 @@ func TestProtoConversion(t *testing.T) {
 	assert.EqualValues(t, 987, r.Packets)
 	assert.EqualValues(t, uint16(1), r.Flags)
 	assert.Equal(t, "veth0", r.Interface)
+	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("127.3.2.1")), wc.messages[0].Key[0:16])
+	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("192.1.2.3")), wc.messages[0].Key[16:])
+}
+
+func TestIdenticalKeys(t *testing.T) {
+	record := flow.Record{}
+	record.Id.EthProtocol = 3
+	record.Id.Direction = 1
+	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
+	record.Id.SrcIp = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.DstIp = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.SrcPort = 4321
+	record.Id.DstPort = 1234
+	record.Id.IcmpType = 8
+	record.Id.TransportProtocol = 210
+	record.TimeFlowStart = time.Now().Add(-5 * time.Second)
+	record.TimeFlowEnd = time.Now()
+	record.Metrics.Bytes = 789
+	record.Metrics.Packets = 987
+	record.Metrics.Flags = uint16(1)
+	record.Interface = "veth0"
+
+	key1 := getFlowKey(&record)
+
+	record.Id.SrcIp = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.DstIp = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	key2 := getFlowKey(&record)
+
+	// Both keys should be identical
+	assert.Equal(t, key1, key2)
+
 }
 
 type writerCapturer struct {
