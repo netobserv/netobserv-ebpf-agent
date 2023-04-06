@@ -28,6 +28,18 @@ func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
 	}
 }
 
+func getFlowKey(record *flow.Record) []byte {
+	// We are sorting IP address so flows from on ip to a second IP get the same key whatever the direction is
+	for k := range record.Id.SrcIp {
+		if record.Id.SrcIp[k] < record.Id.DstIp[k] {
+			return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
+		} else if record.Id.SrcIp[k] > record.Id.DstIp[k] {
+			return append(record.Id.DstIp[:], record.Id.SrcIp[:]...)
+		}
+	}
+	return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
+}
+
 func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 	klog.Debugf("sending %d records", len(records))
 	msgs := make([]kafkago.Message, 0, len(records))
@@ -37,7 +49,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			continue
 		}
-		msgs = append(msgs, kafkago.Message{Value: pbBytes})
+		msgs = append(msgs, kafkago.Message{Value: pbBytes, Key: getFlowKey(record)})
 	}
 
 	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
