@@ -29,6 +29,7 @@ func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
 }
 
 func getFlowKey(record *flow.Record) []byte {
+	// We are sorting IP address so flows from on ip to a second IP get the same key whatever the direction is
 	for k := range record.Id.SrcIp {
 		if record.Id.SrcIp[k] < record.Id.DstIp[k] {
 			return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
