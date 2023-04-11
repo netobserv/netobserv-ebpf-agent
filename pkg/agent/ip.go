@@ -113,7 +113,7 @@ func findAddress(addrs []net.Addr, ipType string) (net.IP, bool) {
 }
 
 func getIP(pip net.IP, ipType string) (net.IP, bool) {
-	if pip == nil || pip.IsLoopback() {
+	if pip == nil || pip.IsLoopback() || pip.IsLinkLocalUnicast() {
 		return nil, false
 	}
 	switch ipType {
