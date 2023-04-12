@@ -3,6 +3,7 @@ package exporter
 import (
 	"context"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
@@ -44,6 +45,22 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 	log := glog.WithField("collector", socket)
 	for inputRecords := range input {
 		for _, pbRecords := range flowsToPB(inputRecords, g.maxFlowsPerMessage) {
+			log.Debugf("sending %d records", len(pbRecords.Entries))
+			if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
+				log.WithError(err).Error("couldn't send flow records to collector")
+			}
+		}
+	}
+	if err := g.clientConn.Close(); err != nil {
+		log.WithError(err).Warn("couldn't close flow export client")
+	}
+}
+
+func (g *GRPCProto) ExportPerfLogs(input <-chan []*ebpf.BpfSockEventT) {
+	socket := utils.GetSocket(g.hostIP, g.hostPort)
+	log := glog.WithField("collector", socket)
+	for inputRecords := range input {
+		for _, pbRecords := range perfLogsToPB(inputRecords, g.maxFlowsPerMessage) {
 			log.Debugf("sending %d records", len(pbRecords.Entries))
 			if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
 				log.WithError(err).Error("couldn't send flow records to collector")

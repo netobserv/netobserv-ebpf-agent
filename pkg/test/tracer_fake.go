@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
@@ -15,6 +16,7 @@ type TracerFake struct {
 	interfaces map[ifaces.Interface]struct{}
 	mapLookups chan map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	ringBuf    chan ringbuf.Record
+	perfBuf    chan perf.Record
 }
 
 func NewTracerFake() *TracerFake {
@@ -22,6 +24,7 @@ func NewTracerFake() *TracerFake {
 		interfaces: map[ifaces.Interface]struct{}{},
 		mapLookups: make(chan map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics, 100),
 		ringBuf:    make(chan ringbuf.Record, 100),
+		perfBuf:    make(chan perf.Record, 100),
 	}
 }
 
@@ -58,4 +61,18 @@ func (m *TracerFake) AppendRingBufEvent(flow flow.RawRecord) error {
 	}
 	m.ringBuf <- ringbuf.Record{RawSample: encodedRecord.Bytes()}
 	return nil
+}
+
+//nolint:gocritic // we don't care about efficiency of a large argument in test fakes
+func (m *TracerFake) AppendPerfBufEvent(event ebpf.BpfSockEventT) error {
+	encodedRecord := bytes.Buffer{}
+	if err := binary.Write(&encodedRecord, binary.LittleEndian, event); err != nil {
+		return err
+	}
+	m.perfBuf <- perf.Record{RawSample: encodedRecord.Bytes()}
+	return nil
+}
+
+func (m *TracerFake) ReadPerfBuf() (perf.Record, error) {
+	return <-m.perfBuf, nil
 }

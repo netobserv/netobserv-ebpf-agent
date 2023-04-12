@@ -12,11 +12,14 @@ Build the flowlogs-dump-collector (the server that receives logs from the agent 
 ```bash
 go build -mod vendor -o bin/flowlogs-dump-collector examples/flowlogs-dump/server/flowlogs-dump-collector.go  
 ```
-Start the agent using:
+Start the TC agent using:
 ```bash
 sudo FLOWS_TARGET_HOST=127.0.0.1 FLOWS_TARGET_PORT=9999 ./bin/netobserv-ebpf-agent
 ```
-
+Start the TCP socket agent using:
+```bash
+sudo FLOWS_TARGET_HOST=127.0.0.1 FLOWS_TARGET_PORT=9999 EBPF_AGENT_SELECTOR="sock-agent"  ./bin/netobserv-ebpf-agent
+```
 Start the flowlogs-dump-collector using: (in a secondary shell)
 ```bash
 ./bin/flowlogs-dump-collector -listen_port=9999

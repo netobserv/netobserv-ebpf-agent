@@ -61,9 +61,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//     *BpfObjects
-//     *BpfPrograms
-//     *BpfMaps
+//	*BpfObjects
+//	*BpfPrograms
+//	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -97,6 +97,7 @@ type BpfProgramSpecs struct {
 type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
+	Events          *ebpf.MapSpec `ebpf:"events"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -120,12 +121,14 @@ func (o *BpfObjects) Close() error {
 type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
+	Events          *ebpf.Map `ebpf:"events"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AggregatedFlows,
 		m.DirectFlows,
+		m.Events,
 	)
 }
 
@@ -154,5 +157,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfel.o
 var _BpfBytes []byte
