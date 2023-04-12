@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -98,7 +99,7 @@ type Flows struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     interfaceFilter
+	filter     InterfaceFilter
 	ebpf       ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -176,10 +177,42 @@ func flowsAgent(cfg *Config,
 	exporter node.TerminalFunc[[]*flow.Record],
 	agentIP net.IP,
 ) (*Flows, error) {
-	// configure allow/deny interfaces filter
-	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-	if err != nil {
-		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	var filter InterfaceFilter
+
+	if len(cfg.InterfaceIPs) > 0 {
+		// configure ip interface filter
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Prefix, error) {
+			iface, err := net.InterfaceByName(ifaceName)
+			if err != nil {
+				return []netip.Prefix{}, fmt.Errorf("error retrieving interface by name: %w", err)
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				return []netip.Prefix{}, fmt.Errorf("error retrieving addresses from interface: %w", err)
+			}
+
+			prefixes := []netip.Prefix{}
+			for _, addr := range addrs {
+				prefix, err := netip.ParsePrefix(addr.String())
+				if err != nil {
+					return []netip.Prefix{}, fmt.Errorf("parsing given ip to netip.Prefix: %w", err)
+				}
+				prefixes = append(prefixes, prefix)
+			}
+			return prefixes, nil
+
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
+		}
+		filter = &f
+	} else {
+		// configure allow/deny regexp interfaces filter
+		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface filters: %w", err)
+		}
+		filter = &f
 	}
 
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
@@ -415,7 +448,11 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 
 func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	if !f.filter.Allowed(iface.Name) {
+	allowed, err := f.filter.Allowed(iface.Name)
+	if err != nil {
+		alog.WithField("interface", iface).Errorf("encountered error determining if interface is allowed: %v", err)
+	}
+	if !allowed {
 		alog.WithField("interface", iface).
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
