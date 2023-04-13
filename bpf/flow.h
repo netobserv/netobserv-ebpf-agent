@@ -10,6 +10,12 @@ typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
 
+#define ETH_ALEN 6
+#define ETH_P_IP 0x0800
+#define ETH_P_IPV6 0x86DD
+#define ETH_P_ARP 0x0806
+#define IPPROTO_ICMPV6 58
+
 typedef struct flow_metrics_t {
     u32 packets;
     u64 bytes;
@@ -39,8 +45,8 @@ typedef struct flow_id_t {
     // L3 network layer
     // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
     // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
-    u8 src_ip[16];
-    u8 dst_ip[16];
+    u8 src_ip[IP_MAX_LEN];
+    u8 dst_ip[IP_MAX_LEN];
     // L4 transport layer
     u16 src_port;
     u16 dst_port;

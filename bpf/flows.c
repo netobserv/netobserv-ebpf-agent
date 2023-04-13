@@ -13,23 +13,8 @@
             until an entry is available.
         4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
-#include <linux/bpf.h>
-#include <linux/in.h>
-#include <linux/if_packet.h>
-#include <linux/if_vlan.h>
-#include <linux/ip.h>
-#include <linux/if_ether.h>
-#include <linux/ipv6.h>
-#include <linux/icmp.h>
-#include <linux/icmpv6.h>
-#include <linux/udp.h>
-#include <linux/tcp.h>
-#include <string.h>
-#include <stdbool.h>
-#include <linux/if_ether.h>
-
+#include <vmlinux.h>
 #include <bpf_helpers.h>
-#include <bpf_endian.h>
 
 #include "flow.h"
 
@@ -54,14 +39,17 @@
 #define FIN_ACK_FLAG 0x200
 #define RST_ACK_FLAG 0x400
 
-// SCTP protocol header structure, its defined here because its not
-// exported by the kernel headers like other protocols.
-struct sctphdr {
-    __be16 source;
-    __be16 dest;
-    __be32 vtag;
-    __le32 checksum;
-};
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+	__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define bpf_ntohs(x)		__builtin_bswap16(x)
+#define bpf_htons(x)		__builtin_bswap16(x)
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
+	__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define bpf_ntohs(x)		(x)
+#define bpf_htons(x)		(x)
+#else
+# error "Endianness detection needs to be set up for your compiler?!"
+#endif
 
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
@@ -134,23 +122,23 @@ static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
     case IPPROTO_TCP: {
         struct tcphdr *tcp = l4_hdr_start;
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            l4_info->src_port = __bpf_ntohs(tcp->source);
-            l4_info->dst_port = __bpf_ntohs(tcp->dest);
+            l4_info->src_port = bpf_ntohs(tcp->source);
+            l4_info->dst_port = bpf_ntohs(tcp->dest);
             set_flags(tcp, &l4_info->flags);
         }
     } break;
     case IPPROTO_UDP: {
         struct udphdr *udp = l4_hdr_start;
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            l4_info->src_port = __bpf_ntohs(udp->source);
-            l4_info->dst_port = __bpf_ntohs(udp->dest);
+            l4_info->src_port = bpf_ntohs(udp->source);
+            l4_info->dst_port = bpf_ntohs(udp->dest);
         }
     } break;
     case IPPROTO_SCTP: {
         struct sctphdr *sctph = l4_hdr_start;
         if ((void *)sctph + sizeof(*sctph) <= data_end) {
-            l4_info->src_port = __bpf_ntohs(sctph->source);
-            l4_info->dst_port = __bpf_ntohs(sctph->dest);
+            l4_info->src_port = bpf_ntohs(sctph->source);
+            l4_info->dst_port = bpf_ntohs(sctph->dest);
         }
     } break;
     case IPPROTO_ICMP: {
@@ -226,7 +214,7 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u
     }
     __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
     __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
-    id->eth_protocol = __bpf_ntohs(eth->h_proto);
+    id->eth_protocol = bpf_ntohs(eth->h_proto);
 
     if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
@@ -237,8 +225,8 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u
     } else {
         // TODO : Need to implement other specific ethertypes if needed
         // For now other parts of flow id remain zero
-        memset(&(id->src_ip), 0, sizeof(struct in6_addr));
-        memset(&(id->dst_ip), 0, sizeof(struct in6_addr));
+        __builtin_memset(&(id->src_ip), 0, sizeof(struct in6_addr));
+        __builtin_memset(&(id->dst_ip), 0, sizeof(struct in6_addr));
         id->transport_protocol = 0;
         id->src_port = 0;
         id->dst_port = 0;
