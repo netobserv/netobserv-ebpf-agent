@@ -75,23 +75,29 @@ func TestInterfaceFilter_InterfaceIPs(t *testing.T) {
 		case "eth1":
 			return []netip.Prefix{netip.MustParsePrefix("198.51.100.2/24")}, nil
 
+		case "eth2":
+			return []netip.Prefix{netip.MustParsePrefix("2001:db8::1/32"), netip.MustParsePrefix("198.51.100.3/24")}, nil
+
+		case "eth3":
+			return []netip.Prefix{netip.MustParsePrefix("2001:db8::2/32")}, nil
+
 		default:
 			panic("unexpected interface name")
 		}
 	}
 
-	ifaces, err := initIPInterfaceFilter([]string{"198.51.100.1/24"}, mockIPByIface)
+	ifaces, err := initIPInterfaceFilter([]string{"198.51.100.1/24", "2001:db8::1/32"}, mockIPByIface)
 	require.NoError(t, err)
 
 	// Allowed
-	for _, iface := range []string{"eth0"} {
+	for _, iface := range []string{"eth0", "eth2"} {
 		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.True(t, allowed)
 	}
 	// Not Allowed
-	for _, iface := range []string{"eth1"} {
+	for _, iface := range []string{"eth1", "eth3"} {
 		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
