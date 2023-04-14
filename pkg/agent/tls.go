@@ -35,5 +35,5 @@ func buildTLSConfig(cfg *Config) (*tls.Config, error) {
 		}
 		return tlsConfig, nil
 	}
-	return nil, nil
+	return tlsConfig, nil
 }

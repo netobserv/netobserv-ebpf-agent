@@ -214,6 +214,13 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 			}
 			transport.TLS = tlsConfig
 		}
+		if cfg.KafkaEnableSASL {
+			mechanism, err := buildSASLConfig(cfg)
+			if err != nil {
+				return nil, err
+			}
+			transport.SASL = mechanism
+		}
 		return (&exporter.KafkaProto{
 			Writer: &kafkago.Writer{
 				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
