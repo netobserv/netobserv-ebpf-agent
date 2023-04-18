@@ -27,22 +27,15 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: checkout
         uses: actions/checkout@v3
-      - name: build images
-        run: make ci-images-build
-      - name: podman login to quay.io
-        uses: redhat-actions/podman-login@v1
+      - name: docker login to quay.io
+        uses: docker/login-action@v2
         with:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
           registry: quay.io
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: push to quay.io
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ env.IMAGE }}
-          tags: ${{ env.TAGS }} ${{ env.short_sha }}
-          registry: ${{ env.REGISTRY }}
+      - name: build and push images
+        run: make ci-images-push
       - name: print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"

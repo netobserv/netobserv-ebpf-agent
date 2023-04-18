@@ -8,6 +8,9 @@ BUILD_VERSION := $(shell git describe --long HEAD)
 BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
 BUILD_SHA := $(shell git rev-parse --short HEAD)
 
+GOARCH ?= amd64
+MULTIARCH_TARGETS := amd64 arm64 ppc64le
+
 # In CI, to be replaced by `netobserv`
 IMAGE_ORG ?= $(USER)
 
@@ -33,13 +36,8 @@ PROTOC_ARTIFACTS := pkg/pbflow
 EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 
 # Image building tool (docker / podman)
-ifndef OCI_BIN
-	ifeq (,$(shell which podman 2>/dev/null))
-	OCI_BIN=docker
-	else
-	OCI_BIN=podman
-	endif
-endif
+OCI_BIN_PATH := $(shell which podman  || which docker)
+OCI_BIN ?= $(shell v='$(OCI_BIN_PATH)'; echo "$${v##*/}")
 
 .PHONY: vendors
 vendors:
@@ -90,7 +88,7 @@ build: prereqs fmt lint test vendors compile
 .PHONY: compile
 compile:
 	@echo "### Compiling project"
-	GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
+	GOARCH=${GOARCH} GOOS=$(GOOS) go build -ldflags "-X main.version=${SW_VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 .PHONY: test
 test:
@@ -112,16 +110,43 @@ coverage-report-html: cov-exclude-generated
 	go tool cover --html=./cover.out
 
 .PHONY: image-build
-image-build: ## Build OCI image with the manager.
-	$(OCI_BIN) build --build-arg SW_VERSION="$(SW_VERSION)" -t ${IMG} .
+image-build: image-build/$(GOARCH)
+image-build/%:
+	@echo 'building image for arch $*'
+#The --load option is ignored by podman but required for docker
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$* --build-arg TARGETARCH=$* --build-arg BUILDPLATFORM=linux/amd64 -t ${IMG}-$* -f Dockerfile .
+
+.PHONY: image-push
+image-push: image-push/$(GOARCH)
+image-push/%: image-build/%
+	@echo 'pushing image ${IMG}-$*'
+	DOCKER_BUILDKIT=1 $(OCI_BIN) push ${IMG}-$*
+
+.PHONY: multiarch-manifest-build
+multiarch-manifest-build: $(foreach T,$(MULTIARCH_TARGETS),image-push/$T )
+	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMG} --amend ${IMG}-amd64 --amend ${IMG}-arm64 --amend ${IMG}-ppc64le
+
+.PHONY: multiarch-manifest-push
+multiarch-manifest-push: multiarch-manifest-build
+	@echo 'publish manifest $(SW_VERSION) to $(IMAGE_TAG_BASE)'
+ifeq (${OCI_BIN} , docker)
+		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG}
+else
+		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG} docker://${IMG}
+endif
 
 .PHONY: ci-images-build
 ci-images-build: image-build
-	$(OCI_BIN) build --build-arg BASE_IMAGE=$(IMG) -t $(IMG_SHA) -f scripts/shortlived.Dockerfile .
+	$(OCI_BIN) build --build-arg IMAGE_TAG_BASE=$(IMG) -t $(IMG_SHA) -f scripts/shortlived.Dockerfile .
 
-.PHONY: image-push
-image-push: ## Push OCI image with the manager.
-	$(OCI_BIN) push ${IMG}
+.PHONY: ci-images-push
+ci-images-push:
+	DOCKER_BUILDKIT=1 $(OCI_BIN) push $(IMG_SHA)
+	ifeq ($(SW_VERSION), main)
+		# Also tag "latest" only for branch "main"
+		DOCKER_BUILDKIT=1 $(OCI_BIN) push ${IMG}
+		DOCKER_BUILDKIT=1 $(OCI_BIN) push $(IMAGE_TAG_BASE):latest
+	endif
 
 .PHONY: tests-e2e
 .ONESHELL:
