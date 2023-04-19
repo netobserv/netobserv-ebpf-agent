@@ -140,11 +140,13 @@ coverage-report-html: cov-exclude-generated
 
 .PHONY: image-build
 image-build:
+	trap 'exit' INT
 	$(foreach target,$(MULTIARCH_TARGETS),$(call build_target,$(target)))
 	$(call build_manifest)
 
 .PHONY: image-push
 image-push: image-build
+	trap 'exit' INT
 	$(foreach target,$(MULTIARCH_TARGETS),$(call push_target,$(target)))
 	$(call push_manifest)
 
