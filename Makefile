@@ -39,6 +39,35 @@ EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 OCI_BIN_PATH := $(shell which podman  || which docker)
 OCI_BIN ?= $(shell v='$(OCI_BIN_PATH)'; echo "$${v##*/}")
 
+# build a single arch target provided as argument
+define build_target
+	@echo 'building image for arch $(1)';
+	#The --load option is ignored by podman but required for docker
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$(1) --build-arg TARGETARCH=$(1) --build-arg BUILDPLATFORM=linux/amd64 -t ${IMG}-$(1) -f Dockerfile .;
+endef
+
+# build multiarch manifest containing the MULTIARCH_TARGETS
+define build_manifest
+	@echo 'building manifest $(SW_VERSION) to $(IMAGE_TAG_BASE)';
+	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMG} $(foreach target,$(MULTIARCH_TARGETS),--amend ${IMG}-$(target));
+endef
+
+# push a single arch target image
+define push_target
+	@echo 'pushing image ${IMG}-$(1)';
+	DOCKER_BUILDKIT=1 $(OCI_BIN) push ${IMG}-$(1);
+endef
+
+# push multiarch manifest
+define push_manifest
+	@echo 'publish manifest $(SW_VERSION) to $(IMAGE_TAG_BASE)';
+	ifeq (${OCI_BIN} , docker)
+		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG};
+	else
+		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG} docker://${IMG};
+	endif
+endef
+
 .PHONY: vendors
 vendors:
 	@echo "### Checking vendors"
@@ -110,30 +139,14 @@ coverage-report-html: cov-exclude-generated
 	go tool cover --html=./cover.out
 
 .PHONY: image-build
-image-build: image-build/$(GOARCH)
-image-build/%:
-	@echo 'building image for arch $*'
-#The --load option is ignored by podman but required for docker
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$* --build-arg TARGETARCH=$* --build-arg BUILDPLATFORM=linux/amd64 -t ${IMG}-$* -f Dockerfile .
+image-build:
+	$(foreach target,$(MULTIARCH_TARGETS),$(call build_target,$(target)))
+	$(call build_manifest)
 
 .PHONY: image-push
-image-push: image-push/$(GOARCH)
-image-push/%: image-build/%
-	@echo 'pushing image ${IMG}-$*'
-	DOCKER_BUILDKIT=1 $(OCI_BIN) push ${IMG}-$*
-
-.PHONY: multiarch-manifest-build
-multiarch-manifest-build: $(foreach T,$(MULTIARCH_TARGETS),image-push/$T )
-	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMG} --amend ${IMG}-amd64 --amend ${IMG}-arm64 --amend ${IMG}-ppc64le
-
-.PHONY: multiarch-manifest-push
-multiarch-manifest-push: multiarch-manifest-build
-	@echo 'publish manifest $(SW_VERSION) to $(IMAGE_TAG_BASE)'
-ifeq (${OCI_BIN} , docker)
-		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG}
-else
-		DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMG} docker://${IMG}
-endif
+image-push: image-build
+	$(foreach target,$(MULTIARCH_TARGETS),$(call push_target,$(target)))
+	$(call push_manifest)
 
 .PHONY: ci-images-build
 ci-images-build: image-build
