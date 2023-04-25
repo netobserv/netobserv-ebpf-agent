@@ -44,6 +44,6 @@ jobs:
           password: ${{ env.REGISTRY_PASSWORD }}
           registry: quay.io
       - name: build and push images
-        run: SW_VERSION="${{ env.tag }}" make image-push
+        run: VERSION="${{ env.tag }}" make images
       - name: print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"

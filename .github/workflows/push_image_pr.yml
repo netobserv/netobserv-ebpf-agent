@@ -7,7 +7,8 @@ env:
   REGISTRY_USER: netobserv+github_ci
   REGISTRY: quay.io/netobserv
   IMAGE: netobserv-ebpf-agent
-  IMAGE_ORG: netobserv
+  ORG: netobserv
+  VERSION: temp
 
 jobs:
   push-pr-image:
@@ -37,7 +38,9 @@ jobs:
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: build and push images
-        run: SW_VERSION=temp make ci-images-push
+        run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }} make images
+      - name: build and push manifest
+        run: IMAGE_ORG=${{ env.ORG }} VERSION=${{ env.VERSION }} make ci-manifest
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}

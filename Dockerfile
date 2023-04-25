@@ -6,7 +6,7 @@ FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.19 as builder
 
 ARG TARGETPLATFORM
 ARG TARGETARCH=amd64
-ARG SW_VERSION="unknown"
+ARG VERSION="unknown"
 
 WORKDIR /opt/app-root
 
@@ -19,6 +19,7 @@ COPY vendor/ vendor/
 COPY go.mod go.mod
 COPY go.sum go.sum
 COPY Makefile Makefile
+COPY .mk/ .mk/
 
 # Build
 RUN GOARCH=$TARGETARCH make compile

@@ -5,11 +5,10 @@ on:
 
 env:
   REGISTRY_USER: netobserv+github_ci
-  REGISTRY_PASSWORD: ${{ secrets.QUAY_SECRET }}
   REGISTRY: quay.io/netobserv
   IMAGE: netobserv-ebpf-agent
-  IMAGE_ORG: netobserv
-  TAGS: main
+  ORG: netobserv
+  VERSION: main
 
 jobs:
   push-image:
@@ -31,11 +30,9 @@ jobs:
         uses: docker/login-action@v2
         with:
           username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          password: ${{ secrets.QUAY_SECRET }}
           registry: quay.io
-      - name: get short sha
-        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: build and push images
-        run: make ci-images-push
+      - name: build and push manifest with images
+        run: IMAGE_ORG=${{ env.ORG }} VERSION=${{ env.VERSION }} make ci
       - name: print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
