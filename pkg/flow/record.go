@@ -54,7 +54,7 @@ type Record struct {
 
 func NewRecord(
 	key ebpf.BpfFlowId,
-	metrics ebpf.BpfFlowMetrics,
+	metrics *ebpf.BpfFlowMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 ) *Record {
@@ -63,7 +63,7 @@ func NewRecord(
 	return &Record{
 		RawRecord: RawRecord{
 			Id:      key,
-			Metrics: metrics,
+			Metrics: *metrics,
 		},
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),

@@ -42,6 +42,11 @@ message Record {
   IP agent_ip = 12;
   uint32 flags = 13;
   Icmp   icmp = 14;
+  uint64 tcp_drop_bytes = 15;
+  uint64 tcp_drop_packets = 16;
+  uint32 tcp_drop_flags = 17;
+  uint32 tcp_drop_state = 18;
+  uint32 tcp_drop_cause = 19;
 }
 
 message DataLink {

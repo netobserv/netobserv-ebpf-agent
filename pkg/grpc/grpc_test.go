@@ -139,9 +139,10 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 	client := cc.Client()
 
 	f := &pbflow.Record{
-		EthProtocol:   2048,
-		Bytes:         456,
-		Flags:         1,
+		EthProtocol: 2048,
+		Bytes:       456,
+		Flags:       1,
+
 		Direction:     pbflow.Direction_EGRESS,
 		TimeFlowStart: timestamppb.Now(),
 		TimeFlowEnd:   timestamppb.Now(),
@@ -166,6 +167,11 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 			IcmpType: 8,
 			IcmpCode: 10,
 		},
+		TcpDropBytes:   100,
+		TcpDropPackets: 1,
+		TcpDropFlags:   1,
+		TcpDropState:   2,
+		TcpDropCause:   3,
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
@@ -219,6 +225,11 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 			IcmpType: 8,
 			IcmpCode: 10,
 		},
+		TcpDropBytes:   100,
+		TcpDropPackets: 1,
+		TcpDropFlags:   1,
+		TcpDropState:   2,
+		TcpDropCause:   3,
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {

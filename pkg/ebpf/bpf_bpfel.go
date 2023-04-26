@@ -39,11 +39,20 @@ type BpfFlowMetricsT struct {
 	EndMonoTimeTs   uint64
 	Flags           uint16
 	Errno           uint8
+	TcpDrops        BpfTcpDropsT
 }
 
 type BpfFlowRecordT struct {
 	Id      BpfFlowId
 	Metrics BpfFlowMetrics
+}
+
+type BpfTcpDropsT struct {
+	Packets   uint32
+	Bytes     uint64
+	Flags     uint16
+	State     uint8
+	DropCause uint32
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -61,9 +70,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//	*BpfObjects
-//	*BpfPrograms
-//	*BpfMaps
+//     *BpfObjects
+//     *BpfPrograms
+//     *BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -89,6 +98,7 @@ type BpfSpecs struct {
 type BpfProgramSpecs struct {
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
+	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -135,12 +145,14 @@ func (m *BpfMaps) Close() error {
 type BpfPrograms struct {
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
 }
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.EgressFlowParse,
 		p.IngressFlowParse,
+		p.KfreeSkb,
 	)
 }
 
@@ -154,6 +166,5 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
-//
 //go:embed bpf_bpfel.o
 var _BpfBytes []byte

@@ -138,4 +138,6 @@ type Config struct {
 	ProfilePort int `env:"PROFILE_PORT"`
 	// EnableGC enables golang garbage collection run at the end of every map eviction, default is true
 	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`
+	// EnableTcpDrops enable TCP drops eBPF hook to account for tcp dropped flows
+	EnableTCPDrops bool `env:"ENABLE_TCP_DROPS" envDefault:"false"`
 }

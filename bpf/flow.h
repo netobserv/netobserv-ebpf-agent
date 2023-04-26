@@ -10,6 +10,8 @@ typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
 
+#define AF_INET  2
+#define AF_INET6 10
 #define ETH_ALEN 6
 #define ETH_P_IP 0x0800
 #define ETH_P_IPV6 0x86DD
@@ -30,8 +32,17 @@ typedef struct flow_metrics_t {
     // 0 otherwise
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
+    struct tcp_drops_t {
+        u32 packets;
+        u64 bytes;
+        u16 flags;
+        u8 state;
+        u32 drop_cause;
+    } __attribute__((packed)) tcp_drops;
 } __attribute__((packed)) flow_metrics;
 
+// Force emitting struct tcp_drops into the ELF.
+const struct tcp_drops_t *unused0 __attribute__((unused));
 // Force emitting struct flow_metrics into the ELF.
 const struct flow_metrics_t *unused1 __attribute__((unused));
 

@@ -67,11 +67,16 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: string(fr.Interface),
+		Packets:        uint64(fr.Metrics.Packets),
+		Duplicate:      fr.Duplicate,
+		AgentIp:        agentIP(fr.AgentIP),
+		Flags:          uint32(fr.Metrics.Flags),
+		Interface:      string(fr.Interface),
+		TcpDropBytes:   fr.Metrics.TcpDrops.Bytes,
+		TcpDropPackets: uint64(fr.Metrics.TcpDrops.Packets),
+		TcpDropFlags:   uint32(fr.Metrics.TcpDrops.Flags),
+		TcpDropState:   uint32(fr.Metrics.TcpDrops.State),
+		TcpDropCause:   uint32(fr.Metrics.TcpDrops.DropCause),
 	}
 }
 
@@ -105,11 +110,16 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: fr.Interface,
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
+		Packets:        uint64(fr.Metrics.Packets),
+		Flags:          uint32(fr.Metrics.Flags),
+		Interface:      fr.Interface,
+		Duplicate:      fr.Duplicate,
+		AgentIp:        agentIP(fr.AgentIP),
+		TcpDropBytes:   fr.Metrics.TcpDrops.Bytes,
+		TcpDropPackets: uint64(fr.Metrics.TcpDrops.Packets),
+		TcpDropFlags:   uint32(fr.Metrics.TcpDrops.Flags),
+		TcpDropState:   uint32(fr.Metrics.TcpDrops.State),
+		TcpDropCause:   uint32(fr.Metrics.TcpDrops.DropCause),
 	}
 }
 
