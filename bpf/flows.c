@@ -73,11 +73,13 @@ struct {
 } aggregated_flows SEC(".maps");
 
 // Common hashmap to keep track of all flow sequences.
+// LRU hashmap is used because if some syn packet is received but ack is not
+// then the hashmap entry will need to be evicted
 // Key is flow_seq_id which is standard 4 tuple and a sequence id
 //     sequence id is specific to the type of transport protocol
 // Value is u64 which represents the occurrence timestamp of the packet.
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
     __type(key, flow_seq_id);
     __type(value, u64);
@@ -140,6 +142,7 @@ static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
             id->src_port = bpf_ntohs(tcp->source);
             id->dst_port = bpf_ntohs(tcp->dest);
             set_flags(tcp, &pkt->flags);
+            pkt->l4_hdr = (void *) tcp;
         }
     } break;
     case IPPROTO_UDP: {
@@ -248,20 +251,20 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt)
 static __always_inline void fill_flow_seq_id(flow_seq_id *seq_id, pkt_info *pkt, u32 seq, u8 reversed) {
     flow_id *id = pkt->id;
     if (reversed) {
-        __builtin_memcpy(seq_id->src_ip, id->dst_ip, 16);
-        __builtin_memcpy(seq_id->dst_ip, id->src_ip, 16);
+        __builtin_memcpy(seq_id->src_ip, id->dst_ip, IP_MAX_LEN);
+        __builtin_memcpy(seq_id->dst_ip, id->src_ip, IP_MAX_LEN);
         seq_id->src_port = id->dst_port;
         seq_id->dst_port = id->src_port;
     } else {
-        __builtin_memcpy(seq_id->src_ip, id->src_ip, 16);
-        __builtin_memcpy(seq_id->dst_ip, id->dst_ip, 16);
+        __builtin_memcpy(seq_id->src_ip, id->src_ip, IP_MAX_LEN);
+        __builtin_memcpy(seq_id->dst_ip, id->dst_ip, IP_MAX_LEN);
         seq_id->src_port = id->src_port;
         seq_id->dst_port = id->dst_port;
     }
     seq_id->seq_id = seq;
 }
 
-static __always_inline void calculate_rtt_metric(pkt_info *pkt, u8 direction, void *data_end) {
+static __always_inline void calculate_flow_rtt(pkt_info *pkt, u8 direction, void *data_end) {
     flow_seq_id seq_id;
     __builtin_memset(&seq_id, 0, sizeof(flow_seq_id));
 
@@ -269,8 +272,8 @@ static __always_inline void calculate_rtt_metric(pkt_info *pkt, u8 direction, vo
     {
     case IPPROTO_TCP: {
             struct tcphdr *tcp = (struct tcphdr *) pkt->l4_hdr;
-            if ((tcp == NULL) || ((void *)tcp + sizeof(struct tcphdr) < data_end)) {
-                                return; // Make verifier happy.
+            if ( !tcp || ((void *)tcp + sizeof(*tcp) > data_end) ) {
+                break;
             }
             if ((direction == EGRESS) && IS_SYN_PACKET(pkt)) {
                 // Record the outgoing syn sequence number
@@ -279,25 +282,27 @@ static __always_inline void calculate_rtt_metric(pkt_info *pkt, u8 direction, vo
 
                 long ret = bpf_map_update_elem(&flow_sequences, &seq_id, &pkt->current_ts, BPF_ANY);
                 if (trace_messages && ret != 0) {
-                    bpf_printk("Error saving flow sequence record to the map %d", ret);
+                    bpf_printk("err saving flow sequence record %d", ret);
                 }
+                break;
             }
             if ((direction == INGRESS) && IS_ACK_PACKET(pkt)) {
                 // Stored sequence should be ack_seq - 1
                 u32 seq = bpf_ntohl(tcp->ack_seq) - 1;
                 // check reversed flow
                 fill_flow_seq_id(&seq_id, pkt, seq, 1); 
-    
+
                 u64 *prev_ts = bpf_map_lookup_elem(&flow_sequences, &seq_id);
                 if (prev_ts != NULL) {
-                    pkt->rtt = *prev_ts - pkt->current_ts;
+                    pkt->rtt = pkt->current_ts - *prev_ts;
                     // Delete the flow from flow sequence map so if it
                     // restarts we have a new RTT calculation.
                     long ret = bpf_map_delete_elem(&flow_sequences, &seq_id);
                     if (trace_messages && ret != 0) {
-                        bpf_printk("Failed to evict the flow sequence after calculating RTT: %d", ret);
+                        bpf_printk("error evicting flow sequence: %d", ret);
                     }
                 }
+                break;
             }
         } break;
     default:
@@ -307,13 +312,13 @@ static __always_inline void calculate_rtt_metric(pkt_info *pkt, u8 direction, vo
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
-    // Record the current time first.
-    u64 current_time = bpf_ktime_get_ns();
-
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
+
+    // Record the current time first.
+    u64 current_time = bpf_ktime_get_ns();
 
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
@@ -322,6 +327,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     __builtin_memset(&pkt, 0, sizeof(pkt));
 
     pkt.id = &id;
+    pkt.current_ts = current_time;
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
@@ -331,7 +337,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    calculate_rtt_metric(&pkt, direction, data_end);
+    calculate_flow_rtt(&pkt, direction, data_end);
 
     //Set extra fields
     id.if_index = skb->ifindex;
@@ -350,7 +356,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
         aggregate_flow->flags |= pkt.flags;
-        aggregate_flow->flow_rtt = pkt.rtt;
+
+        if (pkt.rtt != 0) { // If it is non zero then
+            aggregate_flow->flow_rtt = pkt.rtt;
+        }
 
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
