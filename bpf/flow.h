@@ -23,6 +23,7 @@ typedef struct flow_metrics_t {
     // as output from bpf_ktime_get_ns()
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
+    u64 flow_rtt;
     // TCP Flags from https://www.ietf.org/rfc/rfc793.txt
     u16 flags;
     // The positive errno of a failed map insertion that caused a flow
@@ -60,6 +61,16 @@ typedef struct flow_id_t {
 
 // Force emitting struct flow_id into the ELF.
 const struct flow_id_t *unused2 __attribute__((unused));
+
+// Standard 4 tuple and a sequence identifier.
+// No need to emit this struct. It's used only in kernel space
+typedef struct flow_seq_id_t {
+    u16 src_port;
+    u16 dst_port;
+    u8 src_ip[16];
+    u8 dst_ip[16];
+    u32 seq_id;
+} __attribute__((packed)) flow_seq_id;
 
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.

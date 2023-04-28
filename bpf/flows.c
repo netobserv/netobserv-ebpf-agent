@@ -39,14 +39,21 @@
 #define FIN_ACK_FLAG 0x200
 #define RST_ACK_FLAG 0x400
 
+#define IS_SYN_PACKET(pkt)    ((pkt->flags & SYN_FLAG) || (pkt->flags & SYN_ACK_FLAG))
+#define IS_ACK_PACKET(pkt)    ((pkt->flags & ACK_FLAG) || (pkt->flags & SYN_ACK_FLAG))
+
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
-	__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define bpf_ntohs(x)		__builtin_bswap16(x)
-#define bpf_htons(x)		__builtin_bswap16(x)
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define bpf_ntohs(x)        __builtin_bswap16(x)
+#define bpf_htons(x)        __builtin_bswap16(x)
+#define bpf_ntohl(x)        __builtin_bswap32(x)
+#define bpf_htonl(x)        __builtin_bswap32(x)
 #elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
-	__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#define bpf_ntohs(x)		(x)
-#define bpf_htons(x)		(x)
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define bpf_ntohs(x)        (x)
+#define bpf_htons(x)        (x)
+#define bpf_ntohl(x)        (x)
+#define bpf_htonl(x)        (x)
 #else
 # error "Endianness detection needs to be set up for your compiler?!"
 #endif
@@ -64,6 +71,17 @@ struct {
     __type(key, flow_id);
     __type(value, flow_metrics);
 } aggregated_flows SEC(".maps");
+
+// Common hashmap to keep track of all flow sequences.
+// Key is flow_seq_id which is standard 4 tuple and a sequence id
+//     sequence id is specific to the type of transport protocol
+// Value is u64 which represents the occurrence timestamp of the packet.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
+    __type(key, flow_seq_id);
+    __type(value, u64);
+} flow_sequences SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
@@ -101,58 +119,59 @@ static inline void set_flags(struct tcphdr *th, u16 *flags) {
     }
 }
 
-// L4_info structure contains L4 headers parsed information.
-struct l4_info_t {
-    // TCP/UDP/SCTP source port in host byte order
-    u16 src_port;
-    // TCP/UDP/SCTP destination port in host byte order
-    u16 dst_port;
-    // ICMPv4/ICMPv6 type value
-    u8 icmp_type;
-    // ICMPv4/ICMPv6 code value
-    u8 icmp_code;
-    // TCP flags
-    u16 flags;
-};
+// packet info structure parsed around functions.
+typedef struct pkt_info_t {
+    flow_id *id;
+    u64 current_ts; // ts recorded when pkt came.
+    u16 flags; // TCP specific
+    void *l4_hdr;  // Stores the actual l4 header
+    u64 rtt;    // rtt calculated from the flow if possible. else zero
+} pkt_info;
 
 // Extract L4 info for the supported protocols
 static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
-                               struct l4_info_t *l4_info) {
-	switch (protocol) {
+                               pkt_info *pkt) {
+    flow_id *id = pkt->id;
+    id->transport_protocol = protocol;
+    switch (protocol) {
     case IPPROTO_TCP: {
         struct tcphdr *tcp = l4_hdr_start;
         if ((void *)tcp + sizeof(*tcp) <= data_end) {
-            l4_info->src_port = bpf_ntohs(tcp->source);
-            l4_info->dst_port = bpf_ntohs(tcp->dest);
-            set_flags(tcp, &l4_info->flags);
+            id->src_port = bpf_ntohs(tcp->source);
+            id->dst_port = bpf_ntohs(tcp->dest);
+            set_flags(tcp, &pkt->flags);
         }
     } break;
     case IPPROTO_UDP: {
         struct udphdr *udp = l4_hdr_start;
         if ((void *)udp + sizeof(*udp) <= data_end) {
-            l4_info->src_port = bpf_ntohs(udp->source);
-            l4_info->dst_port = bpf_ntohs(udp->dest);
+            id->src_port = bpf_ntohs(udp->source);
+            id->dst_port = bpf_ntohs(udp->dest);
+            pkt->l4_hdr = (void *) udp;
         }
     } break;
     case IPPROTO_SCTP: {
         struct sctphdr *sctph = l4_hdr_start;
         if ((void *)sctph + sizeof(*sctph) <= data_end) {
-            l4_info->src_port = bpf_ntohs(sctph->source);
-            l4_info->dst_port = bpf_ntohs(sctph->dest);
+            id->src_port = bpf_ntohs(sctph->source);
+            id->dst_port = bpf_ntohs(sctph->dest);
+            pkt->l4_hdr = (void *) sctph;
         }
     } break;
     case IPPROTO_ICMP: {
         struct icmphdr *icmph = l4_hdr_start;
         if ((void *)icmph + sizeof(*icmph) <= data_end) {
-            l4_info->icmp_type = icmph->type;
-            l4_info->icmp_code = icmph->code;
+            id->icmp_type = icmph->type;
+            id->icmp_code = icmph->code;
+            pkt->l4_hdr = (void *) icmph;
         }
     } break;
     case IPPROTO_ICMPV6: {
         struct icmp6hdr *icmp6h = l4_hdr_start;
          if ((void *)icmp6h + sizeof(*icmp6h) <= data_end) {
-            l4_info->icmp_type = icmp6h->icmp6_type;
-            l4_info->icmp_code = icmp6h->icmp6_code;
+            id->icmp_type = icmp6h->icmp6_type;
+            id->icmp_code = icmp6h->icmp6_code;
+            pkt->l4_hdr = (void *) icmp6h;
         }
     } break;
     default:
@@ -161,67 +180,59 @@ static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
 }
 
 // sets flow fields from IPv4 header information
-static inline int fill_iphdr(struct iphdr *ip, void *data_end, flow_id *id, u16 *flags) {
-    struct l4_info_t l4_info;
+static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     void *l4_hdr_start;
 
     l4_hdr_start = (void *)ip + sizeof(*ip);
     if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-    __builtin_memset(&l4_info, 0, sizeof(l4_info));
+    flow_id *id = pkt->id;
+    /* Save the IP Address to id directly. copy once. */
     __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
     __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
     __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
     __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
-    id->transport_protocol = ip->protocol;
-    fill_l4info(l4_hdr_start, data_end, ip->protocol, &l4_info);
-    id->src_port = l4_info.src_port;
-    id->dst_port = l4_info.dst_port;
-    id->icmp_type = l4_info.icmp_type;
-    id->icmp_code = l4_info.icmp_code;
-    *flags = l4_info.flags;
 
+    /* fill l4 header which will be added to id in flow_monitor function.*/
+    fill_l4info(l4_hdr_start, data_end, ip->protocol, pkt);
     return SUBMIT;
 }
 
 // sets flow fields from IPv6 header information
-static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, flow_id *id, u16 *flags) {
-    struct l4_info_t l4_info;
+static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt) {
     void *l4_hdr_start;
 
     l4_hdr_start = (void *)ip + sizeof(*ip);
     if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-    __builtin_memset(&l4_info, 0, sizeof(l4_info));
+    flow_id *id = pkt->id;
+    /* Save the IP Address to id directly. copy once. */
     __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, 16);
     __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, 16);
-    id->transport_protocol = ip->nexthdr;
-    fill_l4info(l4_hdr_start, data_end, ip->nexthdr, &l4_info);
-    id->src_port = l4_info.src_port;
-    id->dst_port = l4_info.dst_port;
-    id->icmp_type = l4_info.icmp_type;
-    id->icmp_code = l4_info.icmp_code;
-    *flags = l4_info.flags;
 
+    /* fill l4 header which will be added to id in flow_monitor function.*/
+    fill_l4info(l4_hdr_start, data_end, ip->nexthdr, pkt);
     return SUBMIT;
 }
+
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u16 *flags) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
+    flow_id *id = pkt->id;
     __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
     __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
     id->eth_protocol = bpf_ntohs(eth->h_proto);
 
     if (id->eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
-        return fill_iphdr(ip, data_end, id, flags);
+        return fill_iphdr(ip, data_end, pkt);
     } else if (id->eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
-        return fill_ip6hdr(ip6, data_end, id, flags);
+        return fill_ip6hdr(ip6, data_end, pkt);
     } else {
         // TODO : Need to implement other specific ethertypes if needed
         // For now other parts of flow id remain zero
@@ -234,22 +245,94 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, flow_id *id, u
     return SUBMIT;
 }
 
+static __always_inline void fill_flow_seq_id(pkt_info *pkt, flow_seq_id *seq_id, u32 seq, u8 reversed) {
+    flow_id *id = pkt->id;
+    __builtin_memset(seq_id, 0, sizeof(flow_seq_id));
+    if (reversed) {
+        __builtin_memcpy(seq_id->src_ip, id->dst_ip, 16);
+        __builtin_memcpy(seq_id->dst_ip, id->src_ip, 16);
+        seq_id->src_port = id->dst_port;
+        seq_id->dst_port = id->src_port;
+    } else {
+        __builtin_memcpy(seq_id->src_ip, id->src_ip, 16);
+        __builtin_memcpy(seq_id->dst_ip, id->dst_ip, 16);
+        seq_id->src_port = id->src_port;
+        seq_id->dst_port = id->dst_port;
+    }
+    seq_id->seq_id = seq;
+}
+
+static inline void calculate_rtt_metric(pkt_info *pkt, u8 direction) {
+    flow_seq_id seq_id;
+    u32 seq;
+    long ret;
+
+    switch (pkt->id->transport_protocol)
+    {
+    case IPPROTO_TCP: {
+            struct tcphdr *tcp = (struct tcphdr *) pkt->l4_hdr;
+            if ((direction == EGRESS) && IS_SYN_PACKET(pkt)) {
+                // Record the outgoing syn sequence number
+                seq = bpf_ntohl(tcp->seq);
+                fill_flow_seq_id(pkt, &seq_id, seq, 0);
+
+                ret = bpf_map_update_elem(&flow_sequences, &seq_id, &pkt->current_ts, BPF_ANY);
+                if (trace_messages && ret != 0) {
+                    bpf_printk("Error saving flow sequence record to the map %d", ret);
+                }
+            }
+            if ((direction == INGRESS) && IS_ACK_PACKET(pkt)) {
+                // Stored sequence should be ack_seq - 1
+                seq = bpf_ntohl(tcp->ack_seq) - 1;
+                // check reversed flow
+                fill_flow_seq_id(pkt, &seq_id, seq, 1); 
+    
+                u64 *prev_ts = bpf_map_lookup_elem(&flow_sequences, &seq_id);
+                if (prev_ts != NULL) {
+                    pkt->rtt = *prev_ts - pkt->current_ts;
+                    // Delete the flow from flow sequence map so if it
+                    // restarts we have a new RTT calculation.
+                    ret = bpf_map_delete_elem(&flow_sequences, &seq_id);
+                    if (trace_messages && ret != 0) {
+                        bpf_printk("Failed to evict the flow sequence after calculating RTT: %d", ret);
+                    }
+                }
+            }
+        } break;
+    default:
+        break;
+    }
+}
+
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
+
+    // Record the current time first.
+    u64 current_time = bpf_ktime_get_ns();
+
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
-    void *data_end = (void *)(long)skb->data_end;
-    void *data = (void *)(long)skb->data;
 
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
-    u64 current_time = bpf_ktime_get_ns();
+
+    pkt_info pkt;
+    __builtin_memset(&pkt, 0, sizeof(pkt));
+
+    pkt.id = &id;
+
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
     struct ethhdr *eth = data;
-    u16 flags = 0;
-    if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
+
+    if (fill_ethhdr(eth, data_end, &pkt) == DISCARD) {
         return TC_ACT_OK;
     }
+
+    calculate_rtt_metric(&pkt, direction);
+
+    //Set extra fields
     id.if_index = skb->ifindex;
     id.direction = direction;
 
@@ -265,7 +348,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (aggregate_flow->start_mono_time_ts == 0) {
             aggregate_flow->start_mono_time_ts = current_time;
         }
-        aggregate_flow->flags |= flags;
+        aggregate_flow->flags |= pkt.flags;
+        aggregate_flow->flow_rtt = pkt.rtt;
+
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -282,7 +367,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .bytes = skb->len,
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
-            .flags = flags, 
+            .flags = pkt.flags,
+            .flow_rtt = pkt.rtt
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
@@ -313,6 +399,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     return TC_ACT_OK;
 }
+
 SEC("tc_ingress")
 int ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
