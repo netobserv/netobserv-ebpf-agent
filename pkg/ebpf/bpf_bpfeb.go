@@ -37,6 +37,7 @@ type BpfFlowMetricsT struct {
 	Bytes           uint64
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
+	FlowRtt         uint64
 	Flags           uint16
 	Errno           uint8
 }
@@ -44,6 +45,14 @@ type BpfFlowMetricsT struct {
 type BpfFlowRecordT struct {
 	Id      BpfFlowId
 	Metrics BpfFlowMetrics
+}
+
+type BpfFlowSeqId struct {
+	SrcPort uint16
+	DstPort uint16
+	SrcIp   [16]uint8
+	DstIp   [16]uint8
+	SeqId   uint32
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -61,9 +70,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//     *BpfObjects
-//     *BpfPrograms
-//     *BpfMaps
+//	*BpfObjects
+//	*BpfPrograms
+//	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -97,6 +106,7 @@ type BpfProgramSpecs struct {
 type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
+	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -120,12 +130,14 @@ func (o *BpfObjects) Close() error {
 type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
+	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AggregatedFlows,
 		m.DirectFlows,
+		m.FlowSequences,
 	)
 }
 
