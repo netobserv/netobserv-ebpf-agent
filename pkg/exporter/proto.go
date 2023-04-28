@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -67,11 +68,12 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: string(fr.Interface),
+		Packets:     uint64(fr.Metrics.Packets),
+		Duplicate:   fr.Duplicate,
+		AgentIp:     agentIP(fr.AgentIP),
+		Flags:       uint32(fr.Metrics.Flags),
+		Interface:   string(fr.Interface),
+		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 	}
 }
 
@@ -105,11 +107,12 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: fr.Interface,
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
+		Packets:     uint64(fr.Metrics.Packets),
+		Flags:       uint32(fr.Metrics.Flags),
+		Interface:   fr.Interface,
+		Duplicate:   fr.Duplicate,
+		AgentIp:     agentIP(fr.AgentIP),
+		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 	}
 }
 
