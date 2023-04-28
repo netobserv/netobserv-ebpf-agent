@@ -78,6 +78,10 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
 		r.EndMonoTimeTs = src.EndMonoTimeTs
 	}
+	if r.FlowRtt == 0 && src.FlowRtt != 0 {
+		r.FlowRtt = src.FlowRtt
+	}
+
 	r.Bytes += src.Bytes
 	r.Packets += src.Packets
 	r.Flags |= src.Flags

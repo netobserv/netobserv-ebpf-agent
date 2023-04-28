@@ -245,9 +245,8 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt)
     return SUBMIT;
 }
 
-static __always_inline void fill_flow_seq_id(pkt_info *pkt, flow_seq_id *seq_id, u32 seq, u8 reversed) {
+static __always_inline void fill_flow_seq_id(flow_seq_id *seq_id, pkt_info *pkt, u32 seq, u8 reversed) {
     flow_id *id = pkt->id;
-    __builtin_memset(seq_id, 0, sizeof(flow_seq_id));
     if (reversed) {
         __builtin_memcpy(seq_id->src_ip, id->dst_ip, 16);
         __builtin_memcpy(seq_id->dst_ip, id->src_ip, 16);
@@ -262,37 +261,39 @@ static __always_inline void fill_flow_seq_id(pkt_info *pkt, flow_seq_id *seq_id,
     seq_id->seq_id = seq;
 }
 
-static inline void calculate_rtt_metric(pkt_info *pkt, u8 direction) {
+static __always_inline void calculate_rtt_metric(pkt_info *pkt, u8 direction, void *data_end) {
     flow_seq_id seq_id;
-    u32 seq;
-    long ret;
+    __builtin_memset(&seq_id, 0, sizeof(flow_seq_id));
 
     switch (pkt->id->transport_protocol)
     {
     case IPPROTO_TCP: {
             struct tcphdr *tcp = (struct tcphdr *) pkt->l4_hdr;
+            if ((tcp == NULL) || ((void *)tcp + sizeof(struct tcphdr) < data_end)) {
+                                return; // Make verifier happy.
+            }
             if ((direction == EGRESS) && IS_SYN_PACKET(pkt)) {
                 // Record the outgoing syn sequence number
-                seq = bpf_ntohl(tcp->seq);
-                fill_flow_seq_id(pkt, &seq_id, seq, 0);
+                u32 seq = bpf_ntohl(tcp->seq);
+                fill_flow_seq_id(&seq_id, pkt, seq, 0);
 
-                ret = bpf_map_update_elem(&flow_sequences, &seq_id, &pkt->current_ts, BPF_ANY);
+                long ret = bpf_map_update_elem(&flow_sequences, &seq_id, &pkt->current_ts, BPF_ANY);
                 if (trace_messages && ret != 0) {
                     bpf_printk("Error saving flow sequence record to the map %d", ret);
                 }
             }
             if ((direction == INGRESS) && IS_ACK_PACKET(pkt)) {
                 // Stored sequence should be ack_seq - 1
-                seq = bpf_ntohl(tcp->ack_seq) - 1;
+                u32 seq = bpf_ntohl(tcp->ack_seq) - 1;
                 // check reversed flow
-                fill_flow_seq_id(pkt, &seq_id, seq, 1); 
+                fill_flow_seq_id(&seq_id, pkt, seq, 1); 
     
                 u64 *prev_ts = bpf_map_lookup_elem(&flow_sequences, &seq_id);
                 if (prev_ts != NULL) {
                     pkt->rtt = *prev_ts - pkt->current_ts;
                     // Delete the flow from flow sequence map so if it
                     // restarts we have a new RTT calculation.
-                    ret = bpf_map_delete_elem(&flow_sequences, &seq_id);
+                    long ret = bpf_map_delete_elem(&flow_sequences, &seq_id);
                     if (trace_messages && ret != 0) {
                         bpf_printk("Failed to evict the flow sequence after calculating RTT: %d", ret);
                     }
@@ -330,7 +331,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    calculate_rtt_metric(&pkt, direction);
+    calculate_rtt_metric(&pkt, direction, data_end);
 
     //Set extra fields
     id.if_index = skb->ifindex;
@@ -410,3 +411,4 @@ int egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
 }
 char _license[] SEC("license") = "GPL";
+
