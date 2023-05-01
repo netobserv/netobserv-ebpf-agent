@@ -70,19 +70,6 @@ func NewRecord(
 	}
 }
 
-func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
-	// time == 0 if the value has not been yet set
-	if r.StartMonoTimeTs == 0 || r.StartMonoTimeTs > src.StartMonoTimeTs {
-		r.StartMonoTimeTs = src.StartMonoTimeTs
-	}
-	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
-		r.EndMonoTimeTs = src.EndMonoTimeTs
-	}
-	r.Bytes += src.Bytes
-	r.Packets += src.Packets
-	r.Flags |= src.Flags
-}
-
 // IP returns the net.IP equivalent object
 func IP(ia IPAddr) net.IP {
 	return ia[:]

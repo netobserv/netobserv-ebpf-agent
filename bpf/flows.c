@@ -58,11 +58,12 @@ struct {
 } direct_flows SEC(".maps");
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
-// The userspace will aggregate them into a single flow.
 struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
 } aggregated_flows SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
@@ -260,11 +261,6 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
-        // it might happen that start_mono_time hasn't been set due to
-        // the way percpu hashmap deal with concurrent map entries
-        if (aggregate_flow->start_mono_time_ts == 0) {
-            aggregate_flow->start_mono_time_ts = current_time;
-        }
         aggregate_flow->flags |= flags;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
