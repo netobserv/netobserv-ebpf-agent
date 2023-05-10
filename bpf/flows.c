@@ -63,6 +63,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
 } aggregated_flows SEC(".maps");
 
 // Constant definitions, to be overridden by the invoker
