@@ -33,7 +33,6 @@ func buildTLSConfig(cfg *Config) (*tls.Config, error) {
 			}
 			tlsConfig.Certificates = []tls.Certificate{pair}
 		}
-		return tlsConfig, nil
 	}
 	return tlsConfig, nil
 }

@@ -30,7 +30,7 @@ func buildSASLConfig(cfg *Config) (sasl.Mechanism, error) {
 	case "scramSHA512":
 		mechanism, err = scram.Mechanism(scram.SHA512, strID, strPwd)
 	default:
-		return nil, fmt.Errorf("unknown SASL type: %s", cfg.KafkaSASLType)
+		err = fmt.Errorf("unknown SASL type: %s", cfg.KafkaSASLType)
 	}
 	if err != nil {
 		return nil, err

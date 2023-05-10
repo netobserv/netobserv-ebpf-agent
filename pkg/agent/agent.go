@@ -188,86 +188,89 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 	switch cfg.Export {
 	case "grpc":
-		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
-			return nil, fmt.Errorf("missing target host or port: %s:%d",
-				cfg.TargetHost, cfg.TargetPort)
-		}
-		grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows)
-		if err != nil {
-			return nil, err
-		}
-		return grpcExporter.ExportFlows, nil
+		return buildGRPCExporter(cfg)
 	case "kafka":
-		if len(cfg.KafkaBrokers) == 0 {
-			return nil, errors.New("at least one Kafka broker is needed")
-		}
-		var compression compress.Compression
-		if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
-			return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
-				"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
-		}
-		transport := kafkago.Transport{}
-		if cfg.KafkaEnableTLS {
-			tlsConfig, err := buildTLSConfig(cfg)
-			if err != nil {
-				return nil, err
-			}
-			transport.TLS = tlsConfig
-		}
-		if cfg.KafkaEnableSASL {
-			mechanism, err := buildSASLConfig(cfg)
-			if err != nil {
-				return nil, err
-			}
-			transport.SASL = mechanism
-		}
-		return (&exporter.KafkaProto{
-			Writer: &kafkago.Writer{
-				Addr:      kafkago.TCP(cfg.KafkaBrokers...),
-				Topic:     cfg.KafkaTopic,
-				BatchSize: cfg.KafkaBatchMessages,
-				// Assigning KafkaBatchSize to BatchBytes instead of BatchSize might be confusing here.
-				// The reason is that the "standard" Kafka name for this variable is "batch.size",
-				// which specifies the size of messages in terms of bytes, and not in terms of entries.
-				// We have decided to hide this library implementation detail and expose to the
-				// customer the common, standard name and meaning for batch.size
-				BatchBytes: int64(cfg.KafkaBatchSize),
-				// Segmentio's Kafka-go does not behave as standard Kafka library, and would
-				// throttle any Write invocation until reaching the timeout.
-				// Since we invoke write once each CacheActiveTimeout, we can safely disable this
-				// timeout throttling
-				// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
-				BatchTimeout: time.Nanosecond,
-				Async:        cfg.KafkaAsync,
-				Compression:  compression,
-				Transport:    &transport,
-				Balancer:     &kafkago.RoundRobin{},
-			},
-		}).ExportFlows, nil
+		return buildKafkaExporter(cfg)
 	case "ipfix+udp":
-		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
-			return nil, fmt.Errorf("missing target host or port: %s:%d",
-				cfg.TargetHost, cfg.TargetPort)
-		}
-		ipfix, err := exporter.StartIPFIXExporter(cfg.TargetHost, cfg.TargetPort, "udp")
-		if err != nil {
-			return nil, err
-		}
-		return ipfix.ExportFlows, nil
+		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
-		if cfg.TargetHost == "" || cfg.TargetPort == 0 {
-			return nil, fmt.Errorf("missing target host or port: %s:%d",
-				cfg.TargetHost, cfg.TargetPort)
-		}
-		ipfix, err := exporter.StartIPFIXExporter(cfg.TargetHost, cfg.TargetPort, "tcp")
-		if err != nil {
-			return nil, err
-		}
-		return ipfix.ExportFlows, nil
+		return buildIPFIXExporter(cfg, "tcp")
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
+}
 
+func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+		return nil, fmt.Errorf("missing target host or port: %s:%d",
+			cfg.TargetHost, cfg.TargetPort)
+	}
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows)
+	if err != nil {
+		return nil, err
+	}
+	return grpcExporter.ExportFlows, nil
+}
+
+func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+	if len(cfg.KafkaBrokers) == 0 {
+		return nil, errors.New("at least one Kafka broker is needed")
+	}
+	var compression compress.Compression
+	if err := compression.UnmarshalText([]byte(cfg.KafkaCompression)); err != nil {
+		return nil, fmt.Errorf("wrong Kafka compression value %s. Admitted values are "+
+			"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
+	}
+	transport := kafkago.Transport{}
+	if cfg.KafkaEnableTLS {
+		tlsConfig, err := buildTLSConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		transport.TLS = tlsConfig
+	}
+	if cfg.KafkaEnableSASL {
+		mechanism, err := buildSASLConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		transport.SASL = mechanism
+	}
+	return (&exporter.KafkaProto{
+		Writer: &kafkago.Writer{
+			Addr:      kafkago.TCP(cfg.KafkaBrokers...),
+			Topic:     cfg.KafkaTopic,
+			BatchSize: cfg.KafkaBatchMessages,
+			// Assigning KafkaBatchSize to BatchBytes instead of BatchSize might be confusing here.
+			// The reason is that the "standard" Kafka name for this variable is "batch.size",
+			// which specifies the size of messages in terms of bytes, and not in terms of entries.
+			// We have decided to hide this library implementation detail and expose to the
+			// customer the common, standard name and meaning for batch.size
+			BatchBytes: int64(cfg.KafkaBatchSize),
+			// Segmentio's Kafka-go does not behave as standard Kafka library, and would
+			// throttle any Write invocation until reaching the timeout.
+			// Since we invoke write once each CacheActiveTimeout, we can safely disable this
+			// timeout throttling
+			// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
+			BatchTimeout: time.Nanosecond,
+			Async:        cfg.KafkaAsync,
+			Compression:  compression,
+			Transport:    &transport,
+			Balancer:     &kafkago.RoundRobin{},
+		},
+	}).ExportFlows, nil
+}
+
+func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*flow.Record], error) {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+		return nil, fmt.Errorf("missing target host or port: %s:%d",
+			cfg.TargetHost, cfg.TargetPort)
+	}
+	ipfix, err := exporter.StartIPFIXExporter(cfg.TargetHost, cfg.TargetPort, proto)
+	if err != nil {
+		return nil, err
+	}
+	return ipfix.ExportFlows, nil
 }
 
 // Run a Flows agent. The function will keep running in the same thread
