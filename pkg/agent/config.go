@@ -126,6 +126,14 @@ type Config struct {
 	KafkaTLSUserCertPath string `env:"KAFKA_TLS_USER_CERT_PATH"`
 	// KafkaTLSUserKeyPath is the path to the user (client) private key for mTLS connections
 	KafkaTLSUserKeyPath string `env:"KAFKA_TLS_USER_KEY_PATH"`
+	// KafkaEnableSASL set true to enable SASL auth
+	KafkaEnableSASL bool `env:"KAFKA_ENABLE_SASL" envDefault:"false"`
+	// KafkaSASLType type of SASL mechanism: plain or scramSHA512
+	KafkaSASLType string `env:"KAFKA_SASL_TYPE" envDefault:"plain"`
+	// KafkaSASLClientIDPath is the path to the client ID (username) for SASL auth
+	KafkaSASLClientIDPath string `env:"KAFKA_SASL_CLIENT_ID_PATH"`
+	// KafkaSASLClientSecretPath is the path to the client secret (password) for SASL auth
+	KafkaSASLClientSecretPath string `env:"KAFKA_SASL_CLIENT_SECRET_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
 }
