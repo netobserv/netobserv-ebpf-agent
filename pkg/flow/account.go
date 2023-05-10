@@ -74,6 +74,9 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
 					c.evict(evictingEntries, out)
+					// Since we will evict flows because we reached to cacheMaxFlows then reset
+					// evictTimer to avoid unnecessary another eviction when timer expires.
+					evictTick.Reset(c.evictTimeout)
 				}
 				c.entries[record.Id] = &record.Metrics
 			}
