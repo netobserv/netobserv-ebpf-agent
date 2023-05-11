@@ -5,7 +5,7 @@
 The Network Observability eBPF Agent allows collecting and aggregating all the ingress and
 egress flows on a Linux host (required a Kernel 4.18+ with eBPF enabled).
 
-* [How to compile](#how-to-compile)
+* [How to build](#how-to-build)
 * [How to configure](#how-to-configure)
 * [How to run](#how-to-run)
 * [Development receipts](#development-receipts)
@@ -13,16 +13,24 @@ egress flows on a Linux host (required a Kernel 4.18+ with eBPF enabled).
 * [Frequently-asked questions](#frequently-asked-questions)
 * [Troubleshooting](#troubleshooting)
 
-## How to compile
-
-```
-make build
-```
+## How to build
 
 To build the agent image and push it to your Docker / Quay repository, run:
-
 ```bash
-IMG=quay.io/myaccount/netobserv-ebpf-agent:dev make image-build image-push
+# compile project
+make build
+
+# build the default image (quay.io/netobserv/netobserv-ebpf-agent:main):
+make image-build
+
+# push the default image (quay.io/netobserv/netobserv-ebpf-agent:main):
+make image-push
+
+# build and push on your own quay.io account (quay.io/myuser/netobserv-ebpf-agent:dev):
+IMAGE_ORG=myuser VERSION=dev make images
+
+# build and push on a different registry
+IMAGE=dockerhub.io/myuser/plugin:tag make images
 ```
 
 ## How to configure
