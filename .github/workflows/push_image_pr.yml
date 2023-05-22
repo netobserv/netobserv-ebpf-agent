@@ -8,7 +8,6 @@ env:
   REGISTRY: quay.io/netobserv
   IMAGE: netobserv-ebpf-agent
   ORG: netobserv
-  VERSION: temp
 
 jobs:
   push-pr-image:
@@ -40,7 +39,7 @@ jobs:
       - name: build and push images
         run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }} make images
       - name: build and push manifest
-        run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.VERSION }} make ci-manifest
+        run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }} make ci-manifest
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
