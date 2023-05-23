@@ -21,6 +21,9 @@ type ipInterfaceFilter struct {
 	ipsFromIface func(ifaceName string) ([]netip.Prefix, error)
 }
 
+// initIPInterfaceFilter allows filtering network interfaces that are accepted/exlucded by the user,
+// according to the provided INTERFACE_IPS from the configuration. It allows interfaces where at least
+// one of the provided CIDRs are associated with it.
 func initIPInterfaceFilter(ips []string, ipsFromIface func(ifaceName string) ([]netip.Prefix, error)) (ipInterfaceFilter, error) {
 	ipIfaceFilter := ipInterfaceFilter{}
 	ipIfaceFilter.ipsFromIface = ipsFromIface
@@ -57,7 +60,7 @@ type regexpInterfaceFilter struct {
 	excludedMatches  []string
 }
 
-// initInterfaceFilter allows filtering network interfaces that are accepted/excluded by the user,
+// initRegexpInterfaceFilter allows filtering network interfaces that are accepted/excluded by the user,
 // according to the provided allowed and excluded interfaces from the configuration. It allows
 // matching by exact string or by regular expression
 func initRegexpInterfaceFilter(allowed, excluded []string) (regexpInterfaceFilter, error) {

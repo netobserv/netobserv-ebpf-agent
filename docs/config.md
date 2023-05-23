@@ -24,6 +24,10 @@ The following environment variables are available to configure the NetObserv eBF
   excluded from flow tracing. It takes priority over `INTERFACES` values.
   If an entry is enclosed by slashes (e.g. `/br-/`), it will match as regular expression,
   otherwise it will be matched as a case-sensitive string.
+* `INTERFACE_IPS` (optional) Comma-separated list of IPs in CIDR notation (i.e. 192.0.2.0/24) whose
+  interfaces should be listened on. This is an alternative to specifying `INTERFACES`, useful when
+  you know ahead of time what IPs an interface will have but not the OS-assigned interface name itself.
+  Exclusive with INTERFACES/EXCLUDE_INTERFACES.
 * `SAMPLING` (default: disabled). Rate at which packets should be sampled and sent to the target
   collector. E.g. if set to 10, one out of 10 packets, on average, will be sent to the target
   collector.
