@@ -4,10 +4,10 @@ on:
     types: [labeled]
 
 env:
-  REGISTRY_USER: netobserv+github_ci
-  REGISTRY: quay.io/netobserv
-  IMAGE: netobserv-ebpf-agent
-  ORG: netobserv
+  WF_REGISTRY_USER: netobserv+github_ci
+  WF_REGISTRY: quay.io/netobserv
+  WF_IMAGE: netobserv-ebpf-agent
+  WF_ORG: netobserv
 
 jobs:
   push-pr-image:
@@ -31,15 +31,13 @@ jobs:
       - name: docker login to quay.io
         uses: docker/login-action@v2
         with:
-          username: ${{ env.REGISTRY_USER }}
+          username: ${{ env.WF_REGISTRY_USER }}
           password: ${{ secrets.QUAY_SECRET }}
           registry: quay.io
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: build and push images
-        run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }} make images
-      - name: build and push manifest
-        run: IMAGE_ORG=${{ env.ORG }} IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }} make ci-manifest
+      - name: build and push manifest with images
+        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE_ORG=${{ env.WF_ORG }} IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }} make images
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
@@ -48,5 +46,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'New image: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.short_sha }}. It will expire after two weeks.'
+              body: 'New image: ${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }}. It will expire after two weeks.'
             })
