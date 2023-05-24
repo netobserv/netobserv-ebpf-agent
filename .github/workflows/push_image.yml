@@ -33,6 +33,6 @@ jobs:
           password: ${{ secrets.QUAY_SECRET }}
           registry: quay.io
       - name: build and push manifest with images
-        run: IMAGE_ORG=${{ env.ORG }} VERSION=${{ env.VERSION }} make ci
+        run: IMAGE_ORG=${{ env.ORG }} OCI_BIN=docker VERSION=${{ env.VERSION }} make ci
       - name: print image url
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
