@@ -172,6 +172,8 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 		TcpDropFlags:   1,
 		TcpDropState:   2,
 		TcpDropCause:   3,
+		TimeDnsReq:     timestamppb.Now(),
+		TimeDnsRsp:     timestamppb.Now(),
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
@@ -230,6 +232,10 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 		TcpDropFlags:   1,
 		TcpDropState:   2,
 		TcpDropCause:   3,
+		DnsId:          1,
+		DnsFlags:       100,
+		TimeDnsReq:     timestamppb.Now(),
+		TimeDnsRsp:     timestamppb.Now(),
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {

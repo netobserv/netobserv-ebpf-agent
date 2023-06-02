@@ -39,10 +39,17 @@ typedef struct flow_metrics_t {
         u8 state;
         u32 drop_cause;
     } __attribute__((packed)) tcp_drops;
+    struct dns_record_t {
+        u16 id;
+        u16 flags;
+        u64 req_mono_time_ts;
+        u64 rsp_mono_time_ts;
+    } __attribute__((packed)) dns_record;
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct tcp_drops into the ELF.
 const struct tcp_drops_t *unused0 __attribute__((unused));
+
 // Force emitting struct flow_metrics into the ELF.
 const struct flow_metrics_t *unused1 __attribute__((unused));
 
@@ -82,4 +89,8 @@ typedef struct flow_record_t {
 
 // Force emitting struct flow_record into the ELF.
 const struct flow_record_t *unused3 __attribute__((unused));
+
+// Force emitting struct dns_record into the ELF.
+const struct dns_record_t *unused4 __attribute__((unused));
+
 #endif

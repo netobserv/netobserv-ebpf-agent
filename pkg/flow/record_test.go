@@ -38,7 +38,11 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x1c, 0x1d, //flags
 		0x1e,          // state
 		0x11, 0, 0, 0, //case
-
+		// dns_record structure
+		01, 00, // id
+		0x80, 00, // flags
+		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, // req ts
+		0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, // rsp ts
 	}))
 	require.NoError(t, err)
 
@@ -70,6 +74,12 @@ func TestRecordBinaryEncoding(t *testing.T) {
 				Flags:     0x1d1c,
 				State:     0x1e,
 				DropCause: 0x11,
+			},
+			DnsRecord: ebpf.BpfDnsRecordT{
+				Id:            0x0001,
+				Flags:         0x0080,
+				ReqMonoTimeTs: 0x1817161514131211,
+				RspMonoTimeTs: 0x2827262524232221,
 			},
 		},
 	}, *fr)

@@ -140,4 +140,6 @@ type Config struct {
 	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`
 	// EnableTcpDrops enable TCP drops eBPF hook to account for tcp dropped flows
 	EnableTCPDrops bool `env:"ENABLE_TCP_DROPS" envDefault:"false"`
+	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
+	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
 }

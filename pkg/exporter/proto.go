@@ -38,7 +38,7 @@ func flowToPB(record *flow.Record) *pbflow.Record {
 }
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
-	return &pbflow.Record{
+	var pbflowRecord = pbflow.Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
@@ -77,11 +77,26 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		TcpDropFlags:   uint32(fr.Metrics.TcpDrops.Flags),
 		TcpDropState:   uint32(fr.Metrics.TcpDrops.State),
 		TcpDropCause:   uint32(fr.Metrics.TcpDrops.DropCause),
+		DnsId:          uint32(fr.Metrics.DnsRecord.Id),
+		DnsFlags:       uint32(fr.Metrics.DnsRecord.Flags),
 	}
+	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSRequest.Unix(),
+			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
+		}
+	}
+	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSResponse.Unix(),
+			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
+		}
+	}
+	return &pbflowRecord
 }
 
 func v6FlowToPB(fr *flow.Record) *pbflow.Record {
-	return &pbflow.Record{
+	var pbflowRecord = pbflow.Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
@@ -120,7 +135,22 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		TcpDropFlags:   uint32(fr.Metrics.TcpDrops.Flags),
 		TcpDropState:   uint32(fr.Metrics.TcpDrops.State),
 		TcpDropCause:   uint32(fr.Metrics.TcpDrops.DropCause),
+		DnsId:          uint32(fr.Metrics.DnsRecord.Id),
+		DnsFlags:       uint32(fr.Metrics.DnsRecord.Flags),
 	}
+	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSRequest.Unix(),
+			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
+		}
+	}
+	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSResponse.Unix(),
+			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
+		}
+	}
+	return &pbflowRecord
 }
 
 // Mac bytes are encoded in the same order as in the array. This is, a Mac

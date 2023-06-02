@@ -47,6 +47,10 @@ message Record {
   uint32 tcp_drop_flags = 17;
   uint32 tcp_drop_state = 18;
   uint32 tcp_drop_cause = 19;
+  uint32 dns_id = 20;
+  uint32 dns_flags = 21;
+  google.protobuf.Timestamp time_dns_req = 22;
+  google.protobuf.Timestamp time_dns_rsp = 23;
 }
 
 message DataLink {

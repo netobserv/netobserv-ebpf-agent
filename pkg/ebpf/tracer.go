@@ -18,7 +18,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type tcp_drops_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type tcp_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
@@ -35,21 +35,22 @@ var log = logrus.WithField("component", "ebpf.FlowFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects            *BpfObjects
-	qdiscs             map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters      map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters     map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader      *ringbuf.Reader
-	cacheMaxSize       int
-	enableIngress      bool
-	enableEgress       bool
-	tcpDropsTracePoint link.Link
+	objects              *BpfObjects
+	qdiscs               map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters        map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters       map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader        *ringbuf.Reader
+	cacheMaxSize         int
+	enableIngress        bool
+	enableEgress         bool
+	tcpDropsTracePoint   link.Link
+	dnsTrackerTracePoint link.Link
 }
 
 func NewFlowFetcher(
 	traceMessages bool,
 	sampling, cacheMaxSize int,
-	ingress, egress, tcpDrops bool,
+	ingress, egress, tcpDrops, dnsTracker bool,
 ) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
@@ -100,21 +101,30 @@ func NewFlowFetcher(
 		}
 	}
 
+	var dnsTrackerLink link.Link
+	if dnsTracker {
+		dnsTrackerLink, err = link.Tracepoint("net", "net_dev_queue", objects.TraceNetPackets, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to trace_net_packets: %w", err)
+		}
+	}
+
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 	return &FlowFetcher{
-		objects:            &objects,
-		ringbufReader:      flows,
-		egressFilters:      map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:     map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:             map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:       cacheMaxSize,
-		enableIngress:      ingress,
-		enableEgress:       egress,
-		tcpDropsTracePoint: tcpDropsLink,
+		objects:              &objects,
+		ringbufReader:        flows,
+		egressFilters:        map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:       map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:               map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:         cacheMaxSize,
+		enableIngress:        ingress,
+		enableEgress:         egress,
+		tcpDropsTracePoint:   tcpDropsLink,
+		dnsTrackerTracePoint: dnsTrackerLink,
 	}, nil
 }
 
@@ -233,6 +243,10 @@ func (m *FlowFetcher) Close() error {
 
 	if m.tcpDropsTracePoint != nil {
 		m.tcpDropsTracePoint.Close()
+	}
+
+	if m.dnsTrackerTracePoint != nil {
+		m.dnsTrackerTracePoint.Close()
 	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there

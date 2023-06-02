@@ -15,6 +15,7 @@
 */
 #include "utils.h"
 #include "tcp_drops.h"
+#include "dns_tracker.h"
 
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {

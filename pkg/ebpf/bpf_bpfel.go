@@ -13,6 +13,13 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfDnsRecordT struct {
+	Id            uint16
+	Flags         uint16
+	ReqMonoTimeTs uint64
+	RspMonoTimeTs uint64
+}
+
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
@@ -40,6 +47,7 @@ type BpfFlowMetricsT struct {
 	Flags           uint16
 	Errno           uint8
 	TcpDrops        BpfTcpDropsT
+	DnsRecord       BpfDnsRecordT
 }
 
 type BpfFlowRecordT struct {
@@ -99,6 +107,7 @@ type BpfProgramSpecs struct {
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -146,6 +155,7 @@ type BpfPrograms struct {
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
+	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 }
 
 func (p *BpfPrograms) Close() error {
@@ -153,6 +163,7 @@ func (p *BpfPrograms) Close() error {
 		p.EgressFlowParse,
 		p.IngressFlowParse,
 		p.KfreeSkb,
+		p.TraceNetPackets,
 	)
 }
 
