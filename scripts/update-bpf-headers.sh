@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Version of libbpf to fetch headers from
-LIBBPF_VERSION=1.0.1
+LIBBPF_VERSION=0.7.0
 
 cd $(dirname "$0")/../bpf/headers
 
