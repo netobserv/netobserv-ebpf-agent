@@ -9,15 +9,17 @@
    metadata:
      name: cluster
    spec:
-     ebpf:
-       env:
-         PROFILE_PORT: "6060"
-   ```
+     agent:
+       ebpf:
+         debug:
+           env:
+             PROFILE_PORT: "6060"
+    ```
 
 2. If you are running OpenShift/Kubernetes, port-forward the pod that you want to profile.
 
     ```
-    oc -n netobserv-privileged port-forward netobserv-ebpf-agent-4kt9d 6060
+    oc -n netobserv-privileged port-forward <netobserv-ebpf-agent pod name> 6060
     ```
    
 3. Download the required profiles:
