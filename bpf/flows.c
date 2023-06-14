@@ -13,11 +13,11 @@
             until an entry is available.
         4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
+#define BPF_NO_PRESERVE_ACCESS_INDEX
 #include <vmlinux.h>
 #include <bpf_helpers.h>
 
 #include "flow.h"
-
 #define DISCARD 1
 #define SUBMIT 0
 
