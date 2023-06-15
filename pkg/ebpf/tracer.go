@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -81,7 +82,12 @@ func NewFlowFetcher(
 		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
-
+	/*
+	 * since we load the program only when the we start we need to release
+	 * memory used by cached kernel BTF see https://github.com/cilium/ebpf/issues/1063
+	 * for more details.
+	 */
+	btf.FlushKernelSpec()
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -124,7 +130,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %T %w", iface.Index, iface.Name, err, err)
+			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
 		}
 	}
 	m.qdiscs[iface] = qdisc
@@ -133,11 +139,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		return err
 	}
 
-	if err := m.registerIngress(iface, ipvlan); err != nil {
-		return err
-	}
-
-	return nil
+	return m.registerIngress(iface, ipvlan)
 }
 
 func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
