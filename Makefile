@@ -31,7 +31,7 @@ IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
 OCI_BUILD_OPTS ?=
 
 # Image building tool (docker / podman) - docker is preferred in CI
-OCI_BIN_PATH := $(shell which docker || which podman)
+OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
@@ -176,13 +176,8 @@ image-push: ## Push MULTIARCH_TARGETS images
 .PHONY: manifest-build
 manifest-build: ## Build MULTIARCH_TARGETS manifest
 	echo 'building manifest $(IMAGE)'
-ifeq (${OCI_BIN}, docker)
+	DOCKER_BUILDKIT=1 $(OCI_BIN) rmi ${IMAGE} -f
 	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMAGE} $(foreach target,$(MULTIARCH_TARGETS), --amend ${IMAGE}-$(target));
-else
-	trap 'exit' INT; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMAGE} ||:
-	$(foreach target,$(MULTIARCH_TARGETS),$(call manifest_add_target,$(target)))
-endif
 
 .PHONY: manifest-push
 manifest-push: ## Push MULTIARCH_TARGETS manifest
