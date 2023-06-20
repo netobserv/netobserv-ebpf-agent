@@ -13,11 +13,11 @@
             until an entry is available.
         4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
+#define BPF_NO_PRESERVE_ACCESS_INDEX
 #include <vmlinux.h>
 #include <bpf_helpers.h>
 
 #include "flow.h"
-
 #define DISCARD 1
 #define SUBMIT 0
 
@@ -65,11 +65,12 @@ struct {
 } direct_flows SEC(".maps");
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
-// The userspace will aggregate them into a single flow.
 struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
 } aggregated_flows SEC(".maps");
 
 // Common hashmap to keep track of all flow sequences.
@@ -350,17 +351,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
-        // it might happen that start_mono_time hasn't been set due to
-        // the way percpu hashmap deal with concurrent map entries
-        if (aggregate_flow->start_mono_time_ts == 0) {
-            aggregate_flow->start_mono_time_ts = current_time;
-        }
         aggregate_flow->flags |= pkt.flags;
-
         if (pkt.rtt != 0) { // If it is non zero then
             aggregate_flow->flow_rtt = pkt.rtt;
         }
-
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.

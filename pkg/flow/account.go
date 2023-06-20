@@ -65,15 +65,16 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				alog.Debug("exiting account routine")
 				return
 			}
-			if stored, ok := c.entries[record.Id]; ok {
-				Accumulate(stored, &record.Metrics)
-			} else {
+			if _, ok := c.entries[record.Id]; !ok {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
 					c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
 					c.evict(evictingEntries, out)
+					// Since we will evict flows because we reached to cacheMaxFlows then reset
+					// evictTimer to avoid unnecessary another eviction when timer expires.
+					evictTick.Reset(c.evictTimeout)
 				}
 				c.entries[record.Id] = &record.Metrics
 			}
