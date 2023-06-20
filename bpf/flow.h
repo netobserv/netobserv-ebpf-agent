@@ -35,9 +35,9 @@ typedef struct flow_metrics_t {
     struct tcp_drops_t {
         u32 packets;
         u64 bytes;
-        u16 flags;
-        u8 state;
-        u32 drop_cause;
+        u16 latest_flags;
+        u8 latest_state;
+        u32 latest_drop_cause;
     } __attribute__((packed)) tcp_drops;
     struct dns_record_t {
         u16 id;

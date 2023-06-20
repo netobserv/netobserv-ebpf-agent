@@ -56,11 +56,11 @@ type BpfFlowRecordT struct {
 }
 
 type BpfTcpDropsT struct {
-	Packets   uint32
-	Bytes     uint64
-	Flags     uint16
-	State     uint8
-	DropCause uint32
+	Packets         uint32
+	Bytes           uint64
+	LatestFlags     uint16
+	LatestState     uint8
+	LatestDropCause uint32
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -78,9 +78,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//     *BpfObjects
-//     *BpfPrograms
-//     *BpfMaps
+//	*BpfObjects
+//	*BpfPrograms
+//	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -177,5 +177,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfel.o
 var _BpfBytes []byte

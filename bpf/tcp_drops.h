@@ -55,9 +55,9 @@ static inline int trace_tcp_drop(void *ctx, struct sock *sk,
         .flags = flags,
         .tcp_drops.packets = 1,
         .tcp_drops.bytes = skb->len,
-        .tcp_drops.state = state,
-        .tcp_drops.flags = flags,
-        .tcp_drops.drop_cause = reason,
+        .tcp_drops.latest_state = state,
+        .tcp_drops.latest_flags = flags,
+        .tcp_drops.latest_drop_cause = reason,
     };
     ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
     if (trace_messages && ret != 0) {

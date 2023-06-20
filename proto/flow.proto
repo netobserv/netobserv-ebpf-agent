@@ -41,16 +41,17 @@ message Record {
   // Agent IP address to help identifying the source of the flow
   IP agent_ip = 12;
   uint32 flags = 13;
-  Icmp   icmp = 14;
-  uint64 tcp_drop_bytes = 15;
-  uint64 tcp_drop_packets = 16;
-  uint32 tcp_drop_flags = 17;
-  uint32 tcp_drop_state = 18;
-  uint32 tcp_drop_cause = 19;
-  uint32 dns_id = 20;
-  uint32 dns_flags = 21;
-  google.protobuf.Timestamp time_dns_req = 22;
-  google.protobuf.Timestamp time_dns_rsp = 23;
+  uint32 icmp_type = 14;
+  uint32 icmp_code = 15;
+  uint64 tcp_drop_bytes = 16;
+  uint64 tcp_drop_packets = 17;
+  uint32 tcp_drop_latest_flags = 18;
+  uint32 tcp_drop_latest_state = 19;
+  uint32 tcp_drop_latest_drop_cause = 20;
+  uint32 dns_id = 21;
+  uint32 dns_flags = 22;
+  google.protobuf.Timestamp time_dns_req = 23;
+  google.protobuf.Timestamp time_dns_rsp = 24;
 }
 
 message DataLink {
@@ -76,11 +77,6 @@ message Transport {
   // protocol as defined by IPPROTO_* in linux/in.h
   // https://github.com/torvalds/linux/blob/master/include/uapi/linux/in.h
   uint32 protocol = 3;
-}
-
-message Icmp {
-  uint32 icmp_type = 1;
-  uint32 icmp_code = 2;
 }
 
 // as defined by field 61 in

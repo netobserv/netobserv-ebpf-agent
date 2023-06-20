@@ -69,11 +69,11 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			Flags:           0x1413,
 			Errno:           0x33,
 			TcpDrops: ebpf.BpfTcpDropsT{
-				Packets:   0x13121110,
-				Bytes:     0x1b1a191817161514,
-				Flags:     0x1d1c,
-				State:     0x1e,
-				DropCause: 0x11,
+				Packets:         0x13121110,
+				Bytes:           0x1b1a191817161514,
+				LatestFlags:     0x1d1c,
+				LatestState:     0x1e,
+				LatestDropCause: 0x11,
 			},
 			DnsRecord: ebpf.BpfDnsRecordT{
 				Id:            0x0001,

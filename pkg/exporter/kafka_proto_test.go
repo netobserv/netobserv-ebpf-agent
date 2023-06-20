@@ -65,7 +65,7 @@ func TestProtoConversion(t *testing.T) {
 	assert.EqualValues(t, 4321, r.Transport.SrcPort)
 	assert.EqualValues(t, 1234, r.Transport.DstPort)
 	assert.EqualValues(t, 210, r.Transport.Protocol)
-	assert.EqualValues(t, 8, r.Icmp.IcmpType)
+	assert.EqualValues(t, 8, r.IcmpType)
 	assert.Equal(t, record.TimeFlowStart.UnixMilli(), r.TimeFlowStart.AsTime().UnixMilli())
 	assert.Equal(t, record.TimeFlowEnd.UnixMilli(), r.TimeFlowEnd.AsTime().UnixMilli())
 	assert.EqualValues(t, 789, r.Bytes)

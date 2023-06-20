@@ -280,9 +280,9 @@ static inline long tcp_drop_lookup_and_update_flow(struct sk_buff *skb, flow_id 
      if (aggregate_flow != NULL) {
          aggregate_flow->tcp_drops.packets += 1;
          aggregate_flow->tcp_drops.bytes += skb->len;
-         aggregate_flow->tcp_drops.state = state;
-         aggregate_flow->tcp_drops.flags = flags;
-         aggregate_flow->tcp_drops.drop_cause = reason;
+         aggregate_flow->tcp_drops.latest_state = state;
+         aggregate_flow->tcp_drops.latest_flags = flags;
+         aggregate_flow->tcp_drops.latest_drop_cause = reason;
          long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_ANY);
          if (trace_messages && ret != 0) {
              bpf_printk("error tcp drop updating flow %d\n", ret);
