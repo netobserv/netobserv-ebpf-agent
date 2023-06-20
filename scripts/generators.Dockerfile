@@ -33,6 +33,7 @@ ENV PATH $GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
 WORKDIR /tmp
 # Copies some pre-required Go dependencies to avoid downloading them on each build
 COPY Makefile Makefile
+COPY .mk/ .mk/
 RUN make prereqs
 
 WORKDIR /src
