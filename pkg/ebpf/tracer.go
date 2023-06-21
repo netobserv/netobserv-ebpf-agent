@@ -23,6 +23,7 @@ const (
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
+	constEnableRtt     = "enable_rtt"
 	aggregatedFlowsMap = "aggregated_flows"
 )
 
@@ -45,8 +46,8 @@ type FlowFetcher struct {
 
 func NewFlowFetcher(
 	traceMessages bool,
-	sampling, cacheMaxSize int,
-	ingress, egress bool,
+	sampling int, enableRtt bool,
+	cacheMaxSize int, ingress, egress bool,
 ) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
@@ -66,9 +67,14 @@ func NewFlowFetcher(
 	if traceMessages {
 		traceMsgs = 1
 	}
+	enableRttCalculations := 0
+	if enableRtt {
+		enableRttCalculations = 1
+	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:      uint32(sampling),
 		constTraceMessages: uint8(traceMsgs),
+		constEnableRtt:     uint8(enableRttCalculations),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}

@@ -89,6 +89,7 @@ struct {
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
 volatile const u8 trace_messages = 0;
+volatile const u8 enable_rtt = 0;
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
@@ -338,7 +339,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    calculate_flow_rtt(&pkt, direction, data_end);
+    if (enable_rtt) {
+        // This is currently gated as its not to be enabled by default.
+        calculate_flow_rtt(&pkt, direction, data_end);
+    }
 
     //Set extra fields
     id.if_index = skb->ifindex;
@@ -352,9 +356,16 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
         aggregate_flow->flags |= pkt.flags;
-        if (pkt.rtt != 0) { // If it is non zero then
+
+        // Does not matter the gate. Will be zero if not enabled.
+        if (pkt.rtt > 0) {
+            /* Since RTT is calculated for few packets we need to check if it is non zero value then only we update
+             * the flow. If we remove this check a packet which fails to calculate RTT will override the previous valid
+             * RTT with 0.
+             */
             aggregate_flow->flow_rtt = pkt.rtt;
         }
+
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
