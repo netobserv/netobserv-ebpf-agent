@@ -78,7 +78,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap() map[ebpf.BpfFlowId]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 	ReadRingBuf() (ringbuf.Record, error)
 }
 
@@ -352,8 +352,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	}
 
 	alog.Debug("connecting flows' processing graph")
-	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx))
-	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
+	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.EnableGC))
+	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx, f.cfg.EnableGC))
 
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))

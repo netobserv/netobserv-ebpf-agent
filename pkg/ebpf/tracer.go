@@ -124,7 +124,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %T %w", iface.Index, iface.Name, err, err)
+			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
 		}
 	}
 	m.qdiscs[iface] = qdisc
@@ -133,11 +133,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		return err
 	}
 
-	if err := m.registerIngress(iface, ipvlan); err != nil {
-		return err
-	}
-
-	return nil
+	return m.registerIngress(iface, ipvlan)
 }
 
 func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
@@ -308,14 +304,14 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
-func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]BpfFlowMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]*BpfFlowMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	var flow = make(map[BpfFlowId]BpfFlowMetrics, m.cacheMaxSize)
-
-	id := BpfFlowId{}
+	var flow = make(map[BpfFlowId]*BpfFlowMetrics, m.cacheMaxSize)
+	var id BpfFlowId
 	var metric BpfFlowMetrics
+
 	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
 	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
 	for iterator.Next(&id, &metric) {
@@ -323,10 +319,9 @@ func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]BpfFlowMetrics {
 			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
 		}
-		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
-		// (probably due to race conditions) so we need to re-join metrics again at userspace
-		// TODO: instrument how many times the keys are is repeated in the same eviction
-		flow[id] = metric
+		metricPtr := new(BpfFlowMetrics)
+		*metricPtr = metric
+		flow[id] = metricPtr
 	}
 	return flow
 }
