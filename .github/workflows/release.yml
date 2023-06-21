@@ -6,7 +6,7 @@ on:
 env:
   WF_REGISTRY_USER: netobserv+github_ci
   WF_ORG: netobserv
-  WF_MULTIARCH_TARGETS: amd64 arm64 ppc64le
+  WF_MULTIARCH_TARGETS: amd64 arm64 ppc64le s390x
 
 jobs:
   push-image:
