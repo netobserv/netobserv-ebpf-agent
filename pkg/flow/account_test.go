@@ -64,18 +64,30 @@ func TestEvict_MaxEntries(t *testing.T) {
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 123, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 123,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	inputs <- &RawRecord{
 		Id: k2,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 456,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	inputs <- &RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 321, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 789,
+				RspMonoTimeTs: 789,
+			},
 		},
 	}
 	requireNoEviction(t, evictor)
@@ -85,6 +97,10 @@ func TestEvict_MaxEntries(t *testing.T) {
 		Id: k3,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 111, Packets: 1, StartMonoTimeTs: 888, EndMonoTimeTs: 888, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 888,
+				RspMonoTimeTs: 888,
+			},
 		},
 	}
 
@@ -105,20 +121,30 @@ func TestEvict_MaxEntries(t *testing.T) {
 				Id: k1,
 				Metrics: ebpf.BpfFlowMetrics{
 					Bytes: 123, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
+					DnsRecord: ebpf.BpfDnsRecordT{
+						ReqMonoTimeTs: 123,
+						RspMonoTimeTs: 0,
+					},
 				},
 			},
-			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
-			TimeFlowEnd:   now.Add(-(1000 - 123) * time.Nanosecond),
+			TimeFlowStart:  now.Add(-(1000 - 123) * time.Nanosecond),
+			TimeFlowEnd:    now.Add(-(1000 - 123) * time.Nanosecond),
+			TimeDNSRequest: now.Add(-(1000 - 123) * time.Nanosecond),
 		},
 		k2: {
 			RawRecord: RawRecord{
 				Id: k2,
 				Metrics: ebpf.BpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
+					DnsRecord: ebpf.BpfDnsRecordT{
+						ReqMonoTimeTs: 456,
+						RspMonoTimeTs: 0,
+					},
 				},
 			},
-			TimeFlowStart: now.Add(-(1000 - 456) * time.Nanosecond),
-			TimeFlowEnd:   now.Add(-(1000 - 456) * time.Nanosecond),
+			TimeFlowStart:  now.Add(-(1000 - 456) * time.Nanosecond),
+			TimeFlowEnd:    now.Add(-(1000 - 456) * time.Nanosecond),
+			TimeDNSRequest: now.Add(-(1000 - 456) * time.Nanosecond),
 		},
 	}, received)
 }
@@ -141,18 +167,30 @@ func TestEvict_Period(t *testing.T) {
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 123,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	inputs <- &RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 456,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	inputs <- &RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 789,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	// Forcing at least one eviction here
@@ -161,12 +199,20 @@ func TestEvict_Period(t *testing.T) {
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1123, EndMonoTimeTs: 1123, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 1123,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 	inputs <- &RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1456, EndMonoTimeTs: 1456, Flags: 1,
+			DnsRecord: ebpf.BpfDnsRecordT{
+				ReqMonoTimeTs: 1456,
+				RspMonoTimeTs: 0,
+			},
 		},
 	}
 
@@ -183,10 +229,15 @@ func TestEvict_Period(t *testing.T) {
 				StartMonoTimeTs: 123,
 				EndMonoTimeTs:   123,
 				Flags:           1,
+				DnsRecord: ebpf.BpfDnsRecordT{
+					ReqMonoTimeTs: 123,
+					RspMonoTimeTs: 0,
+				},
 			},
 		},
-		TimeFlowStart: now.Add(-1000 + 123),
-		TimeFlowEnd:   now.Add(-1000 + 123),
+		TimeFlowStart:  now.Add(-1000 + 123),
+		TimeFlowEnd:    now.Add(-1000 + 123),
+		TimeDNSRequest: now.Add(-1000 + 123),
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -199,10 +250,15 @@ func TestEvict_Period(t *testing.T) {
 				StartMonoTimeTs: 1123,
 				EndMonoTimeTs:   1123,
 				Flags:           1,
+				DnsRecord: ebpf.BpfDnsRecordT{
+					ReqMonoTimeTs: 1123,
+					RspMonoTimeTs: 0,
+				},
 			},
 		},
-		TimeFlowStart: now.Add(-1000 + 1123),
-		TimeFlowEnd:   now.Add(-1000 + 1123),
+		TimeFlowStart:  now.Add(-1000 + 1123),
+		TimeFlowEnd:    now.Add(-1000 + 1123),
+		TimeDNSRequest: now.Add(-1000 + 1123),
 	}, *records[0])
 
 	// no more flows are evicted

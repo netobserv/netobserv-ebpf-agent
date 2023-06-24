@@ -104,7 +104,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 		}
 		forwardingFlows = append(forwardingFlows, NewRecord(
 			flowKey,
-			*aggregatedMetrics,
+			aggregatedMetrics,
 			currentTime,
 			uint64(monotonicTimeNow),
 		))

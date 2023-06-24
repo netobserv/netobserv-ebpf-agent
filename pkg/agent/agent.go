@@ -122,7 +122,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		debug = true
 	}
 
-	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
+	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress, cfg.EnableTCPDrops, cfg.EnableDNSTracking)
 	if err != nil {
 		return nil, err
 	}

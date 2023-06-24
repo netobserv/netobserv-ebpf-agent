@@ -37,9 +37,11 @@ type RawRecord ebpf.BpfFlowRecordT
 type Record struct {
 	RawRecord
 	// TODO: redundant field from RecordMetrics. Reorganize structs
-	TimeFlowStart time.Time
-	TimeFlowEnd   time.Time
-	Interface     string
+	TimeFlowStart   time.Time
+	TimeFlowEnd     time.Time
+	TimeDNSRequest  time.Time
+	TimeDNSResponse time.Time
+	Interface       string
 	// Duplicate tells whether this flow has another duplicate so it has to be excluded from
 	// any metrics' aggregation (e.g. bytes/second rates between two pods).
 	// The reason for this field is that the same flow can be observed from multiple interfaces,
@@ -54,20 +56,30 @@ type Record struct {
 
 func NewRecord(
 	key ebpf.BpfFlowId,
-	metrics ebpf.BpfFlowMetrics,
+	metrics *ebpf.BpfFlowMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
-	return &Record{
+	var reqDNS, rspDNS time.Duration
+	var record = Record{
 		RawRecord: RawRecord{
 			Id:      key,
-			Metrics: metrics,
+			Metrics: *metrics,
 		},
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}
+	if metrics.DnsRecord.ReqMonoTimeTs != 0 {
+		reqDNS = time.Duration(monotonicCurrentTime - metrics.DnsRecord.ReqMonoTimeTs)
+		record.TimeDNSRequest = currentTime.Add(-reqDNS)
+	}
+	if metrics.DnsRecord.RspMonoTimeTs != 0 {
+		rspDNS = time.Duration(monotonicCurrentTime - metrics.DnsRecord.RspMonoTimeTs)
+		record.TimeDNSResponse = currentTime.Add(-rspDNS)
+	}
+	return &record
 }
 
 // IP returns the net.IP equivalent object

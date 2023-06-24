@@ -38,7 +38,7 @@ func flowToPB(record *flow.Record) *pbflow.Record {
 }
 
 func v4FlowToPB(fr *flow.Record) *pbflow.Record {
-	return &pbflow.Record{
+	var pbflowRecord = pbflow.Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
@@ -54,11 +54,9 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Id.SrcPort),
 			DstPort:  uint32(fr.Id.DstPort),
 		},
-		Icmp: &pbflow.Icmp{
-			IcmpType: uint32(fr.Id.IcmpType),
-			IcmpCode: uint32(fr.Id.IcmpCode),
-		},
-		Bytes: fr.Metrics.Bytes,
+		IcmpType: uint32(fr.Id.IcmpType),
+		IcmpCode: uint32(fr.Id.IcmpCode),
+		Bytes:    fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -67,16 +65,36 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: string(fr.Interface),
+		Packets:                uint64(fr.Metrics.Packets),
+		Duplicate:              fr.Duplicate,
+		AgentIp:                agentIP(fr.AgentIP),
+		Flags:                  uint32(fr.Metrics.Flags),
+		Interface:              string(fr.Interface),
+		TcpDropBytes:           fr.Metrics.TcpDrops.Bytes,
+		TcpDropPackets:         uint64(fr.Metrics.TcpDrops.Packets),
+		TcpDropLatestFlags:     uint32(fr.Metrics.TcpDrops.LatestFlags),
+		TcpDropLatestState:     uint32(fr.Metrics.TcpDrops.LatestState),
+		TcpDropLatestDropCause: fr.Metrics.TcpDrops.LatestDropCause,
+		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
+		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
 	}
+	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSRequest.Unix(),
+			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
+		}
+	}
+	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSResponse.Unix(),
+			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
+		}
+	}
+	return &pbflowRecord
 }
 
 func v6FlowToPB(fr *flow.Record) *pbflow.Record {
-	return &pbflow.Record{
+	var pbflowRecord = pbflow.Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   pbflow.Direction(fr.Id.Direction),
 		DataLink: &pbflow.DataLink{
@@ -92,11 +110,9 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			SrcPort:  uint32(fr.Id.SrcPort),
 			DstPort:  uint32(fr.Id.DstPort),
 		},
-		Icmp: &pbflow.Icmp{
-			IcmpType: uint32(fr.Id.IcmpType),
-			IcmpCode: uint32(fr.Id.IcmpCode),
-		},
-		Bytes: fr.Metrics.Bytes,
+		IcmpType: uint32(fr.Id.IcmpType),
+		IcmpCode: uint32(fr.Id.IcmpCode),
+		Bytes:    fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
 			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
@@ -105,12 +121,32 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:   uint64(fr.Metrics.Packets),
-		Flags:     uint32(fr.Metrics.Flags),
-		Interface: fr.Interface,
-		Duplicate: fr.Duplicate,
-		AgentIp:   agentIP(fr.AgentIP),
+		Packets:                uint64(fr.Metrics.Packets),
+		Flags:                  uint32(fr.Metrics.Flags),
+		Interface:              fr.Interface,
+		Duplicate:              fr.Duplicate,
+		AgentIp:                agentIP(fr.AgentIP),
+		TcpDropBytes:           fr.Metrics.TcpDrops.Bytes,
+		TcpDropPackets:         uint64(fr.Metrics.TcpDrops.Packets),
+		TcpDropLatestFlags:     uint32(fr.Metrics.TcpDrops.LatestFlags),
+		TcpDropLatestState:     uint32(fr.Metrics.TcpDrops.LatestState),
+		TcpDropLatestDropCause: fr.Metrics.TcpDrops.LatestDropCause,
+		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
+		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
 	}
+	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSRequest.Unix(),
+			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
+		}
+	}
+	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
+		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
+			Seconds: fr.TimeDNSResponse.Unix(),
+			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
+		}
+	}
+	return &pbflowRecord
 }
 
 // Mac bytes are encoded in the same order as in the array. This is, a Mac

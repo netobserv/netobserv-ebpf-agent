@@ -139,9 +139,10 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 	client := cc.Client()
 
 	f := &pbflow.Record{
-		EthProtocol:   2048,
-		Bytes:         456,
-		Flags:         1,
+		EthProtocol: 2048,
+		Bytes:       456,
+		Flags:       1,
+
 		Direction:     pbflow.Direction_EGRESS,
 		TimeFlowStart: timestamppb.Now(),
 		TimeFlowEnd:   timestamppb.Now(),
@@ -162,10 +163,15 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 			SrcPort:  23000,
 			DstPort:  443,
 		},
-		Icmp: &pbflow.Icmp{
-			IcmpType: 8,
-			IcmpCode: 10,
-		},
+		IcmpType:               8,
+		IcmpCode:               10,
+		TcpDropBytes:           100,
+		TcpDropPackets:         1,
+		TcpDropLatestFlags:     1,
+		TcpDropLatestState:     2,
+		TcpDropLatestDropCause: 3,
+		TimeDnsReq:             timestamppb.Now(),
+		TimeDnsRsp:             timestamppb.Now(),
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
@@ -215,10 +221,17 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 			SrcPort:  23000,
 			DstPort:  443,
 		},
-		Icmp: &pbflow.Icmp{
-			IcmpType: 8,
-			IcmpCode: 10,
-		},
+		IcmpType:               8,
+		IcmpCode:               10,
+		TcpDropBytes:           100,
+		TcpDropPackets:         1,
+		TcpDropLatestFlags:     1,
+		TcpDropLatestState:     2,
+		TcpDropLatestDropCause: 3,
+		DnsId:                  1,
+		DnsFlags:               100,
+		TimeDnsReq:             timestamppb.Now(),
+		TimeDnsRsp:             timestamppb.Now(),
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
