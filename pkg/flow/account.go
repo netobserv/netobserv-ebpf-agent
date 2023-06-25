@@ -87,7 +87,7 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, *metrics, now, monotonicNow))
+		records = append(records, NewRecord(key, metrics, now, monotonicNow))
 	}
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records

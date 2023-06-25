@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap() map[ebpf.BpfFlowId]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 }
 
 func NewMapTracer(fetcher mapFetcher, evictionTimeout time.Duration) *MapTracer {
@@ -43,10 +44,10 @@ func (m *MapTracer) Flush() {
 	m.evictionCond.Broadcast()
 }
 
-func (m *MapTracer) TraceLoop(ctx context.Context) node.StartFunc[[]*Record] {
+func (m *MapTracer) TraceLoop(ctx context.Context, enableGC bool) node.StartFunc[[]*Record] {
 	return func(out chan<- []*Record) {
 		evictionTicker := time.NewTicker(m.evictionTimeout)
-		go m.evictionSynchronization(ctx, out)
+		go m.evictionSynchronization(ctx, enableGC, out)
 		for {
 			select {
 			case <-ctx.Done():
@@ -64,7 +65,7 @@ func (m *MapTracer) TraceLoop(ctx context.Context) node.StartFunc[[]*Record] {
 // evictionSynchronization loop just waits for the evictionCond to happen
 // and triggers the actual eviction. It makes sure that only one eviction
 // is being triggered at the same time
-func (m *MapTracer) evictionSynchronization(ctx context.Context, out chan<- []*Record) {
+func (m *MapTracer) evictionSynchronization(ctx context.Context, enableGC bool, out chan<- []*Record) {
 	// flow eviction loop. It just keeps waiting for eviction until someone triggers the
 	// evictionCond.Broadcast signal
 	for {
@@ -77,14 +78,14 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, out chan<- []*R
 			return
 		default:
 			mtlog.Debug("evictionSynchronization signal received")
-			m.evictFlows(ctx, out)
+			m.evictFlows(ctx, enableGC, out)
 		}
 		m.evictionCond.L.Unlock()
 
 	}
 }
 
-func (m *MapTracer) evictFlows(ctx context.Context, forwardFlows chan<- []*Record) {
+func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows chan<- []*Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
@@ -114,6 +115,10 @@ func (m *MapTracer) evictFlows(ctx context.Context, forwardFlows chan<- []*Recor
 		mtlog.Debug("skipping flow eviction as agent is being stopped")
 	default:
 		forwardFlows <- forwardingFlows
+	}
+
+	if enableGC {
+		runtime.GC()
 	}
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }

@@ -327,7 +327,7 @@ func setEntities(record *flow.Record, elements *[]entities.InfoElementWithValue)
 		setIERecordValue(record, &ieVal)
 	}
 }
-func (ipf *IPFIX) sendDataRecord(log *logrus.Entry, record *flow.Record, v6 bool) error {
+func (ipf *IPFIX) sendDataRecord(_ *logrus.Entry, record *flow.Record, v6 bool) error {
 	dataSet := entities.NewSet(false)
 	var templateID uint16
 	if v6 {

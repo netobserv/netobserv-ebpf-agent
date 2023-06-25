@@ -185,8 +185,8 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	now := uint64(monotime.Now())
 	key1Metrics := ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000}
 
-	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId]ebpf.BpfFlowMetrics{
-		key1: key1Metrics,
+	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{
+		key1: &key1Metrics,
 	})
 	return export
 }
