@@ -7,8 +7,10 @@
 #include "utils.h"
 
 #define DNS_PORT        53
+#define DNS_TLS_PORT    853
 #define DNS_QR_FLAG     0x8000
 #define UDP_MAXMSG      512
+#define TLS_HEADER_SIZE	5
 
 struct dns_header {
     u16 id;
@@ -44,6 +46,15 @@ static inline void find_or_create_dns_flow(flow_id *id, struct dns_header *dns, 
     }
 }
 
+static inline void dns_trace_cmn(flow_id *id, struct dns_header *dns, struct sk_buff *skb, u16 flags) {
+    if ((bpf_ntohs(dns->flags) & DNS_QR_FLAG) == 0) { /* dns query */
+        id->direction = EGRESS;
+    } else { /* dns response */
+        id->direction = INGRESS;
+    } // end of dns response
+   find_or_create_dns_flow(id, dns, skb->len, id->direction, flags);
+}
+
 static inline int trace_dns(struct sk_buff *skb) {
     flow_id id;
     u8 protocol = 0;
@@ -76,18 +87,15 @@ static inline int trace_dns(struct sk_buff *skb) {
         return -1;
     }
 
-    // check for DNS packets
-    if (id.dst_port == DNS_PORT || id.src_port == DNS_PORT) {
-        struct dns_header dns;
+    struct dns_header dns;
+    if (id.dst_port == DNS_PORT || id.src_port == DNS_PORT) { // check for DNS unencrypted (53) packets.
         bpf_probe_read(&dns, sizeof(dns), (struct dns_header *)(skb->head + skb->transport_header + len));
-        if ((bpf_ntohs(dns.flags) & DNS_QR_FLAG) == 0) { /* dns query */
-            id.direction = EGRESS;
-        } else { /* dns response */
-            id.direction = INGRESS;
-        } // end of dns response
-        find_or_create_dns_flow(&id, &dns, skb->len, id.direction, flags);
-    } // end of dns port check
-
+        dns_trace_cmn(&id, &dns, skb, flags);
+    } else if ((protocol == IPPROTO_TCP) &&
+        (id.dst_port == DNS_TLS_PORT || id.src_port == DNS_TLS_PORT)) { // check for DNS TLS encrypted (853) packets
+        bpf_probe_read(&dns, sizeof(dns), (struct dns_header *)(skb->head + skb->transport_header + len + TLS_HEADER_SIZE));
+        dns_trace_cmn(&id, &dns, skb, flags);
+    }
     return 0;
 }
 
