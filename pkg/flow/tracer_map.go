@@ -26,7 +26,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(enableGC bool) map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 }
 
 func NewMapTracer(fetcher mapFetcher, evictionTimeout time.Duration) *MapTracer {
@@ -92,7 +92,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	for flowKey, flowMetrics := range m.mapFetcher.LookupAndDeleteMap() {
+	for flowKey, flowMetrics := range m.mapFetcher.LookupAndDeleteMap(enableGC) {
 		aggregatedMetrics := flowMetrics
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
 		if aggregatedMetrics.EndMonoTimeTs == 0 {
