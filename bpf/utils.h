@@ -116,8 +116,8 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt)
     }
     flow_id *id = pkt->id;
     /* Save the IP Address to id directly. copy once. */
-    __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, 16);
-    __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, 16);
+    __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, IP_MAX_LEN);
+    __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, IP_MAX_LEN);
 
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->nexthdr, pkt);

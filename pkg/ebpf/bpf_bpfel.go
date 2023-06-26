@@ -44,11 +44,11 @@ type BpfFlowMetricsT struct {
 	Bytes           uint64
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
-	FlowRtt         uint64
 	Flags           uint16
 	Errno           uint8
 	TcpDrops        BpfTcpDropsT
 	DnsRecord       BpfDnsRecordT
+	FlowRtt         uint64
 }
 
 type BpfFlowRecordT struct {

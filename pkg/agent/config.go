@@ -136,7 +136,7 @@ type Config struct {
 	KafkaSASLClientSecretPath string `env:"KAFKA_SASL_CLIENT_SECRET_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
-	// Enable RTT calculations for the flows, default is 0 (disabled), set to 1 to enable.
+	// Enable RTT calculations for the flows, default is false (disabled), set to true to enable.
 	EnableRTT bool `env:"ENABLE_RTT" envDefault:"false"`
 	// EnableGC enables golang garbage collection run at the end of every map eviction, default is true
 	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`

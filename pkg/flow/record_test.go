@@ -43,7 +43,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x80, 00, // flags
 		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, // req ts
 		0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, // rsp ts
-		0xad, 0xde, 0xef, 0xbe, 0xef, 0xbe, 0xad, 0xde, // u64 flow_rtt
+		// u64 flow_rtt
+		0xad, 0xde, 0xef, 0xbe, 0xef, 0xbe, 0xad, 0xde,
 	}))
 	require.NoError(t, err)
 
@@ -67,7 +68,6 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			Bytes:           0x1a19181716151413,
 			StartMonoTimeTs: 0x1a19181716151413,
 			EndMonoTimeTs:   0x1a19181716151413,
-			FlowRtt:         0xdeadbeefbeefdead,
 			Flags:           0x1413,
 			Errno:           0x33,
 			TcpDrops: ebpf.BpfTcpDropsT{
@@ -83,6 +83,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 				ReqMonoTimeTs: 0x1817161514131211,
 				RspMonoTimeTs: 0x2827262524232221,
 			},
+			FlowRtt: 0xdeadbeefbeefdead,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses

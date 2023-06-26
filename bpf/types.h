@@ -70,7 +70,6 @@ typedef struct flow_metrics_t {
     // as output from bpf_ktime_get_ns()
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
-    u64 flow_rtt;
     // TCP Flags from https://www.ietf.org/rfc/rfc793.txt
     u16 flags;
     // The positive errno of a failed map insertion that caused a flow
@@ -91,6 +90,7 @@ typedef struct flow_metrics_t {
         u64 req_mono_time_ts;
         u64 rsp_mono_time_ts;
     } __attribute__((packed)) dns_record;
+    u64 flow_rtt;
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct tcp_drops into the ELF.
@@ -130,8 +130,8 @@ const struct flow_id_t *unused2 __attribute__((unused));
 typedef struct flow_seq_id_t {
     u16 src_port;
     u16 dst_port;
-    u8 src_ip[16];
-    u8 dst_ip[16];
+    u8 src_ip[IP_MAX_LEN];
+    u8 dst_ip[IP_MAX_LEN];
     u32 seq_id;
 } __attribute__((packed)) flow_seq_id;
 
@@ -159,3 +159,4 @@ typedef struct pkt_info_t {
 } pkt_info;
 
 #endif /* __TYPES_H__ */
+

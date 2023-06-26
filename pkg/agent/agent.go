@@ -115,14 +115,24 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	ingress, egress := flowDirections(cfg)
-
+	ingres, egress := flowDirections(cfg)
 	debug := false
 	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
 		debug = true
 	}
 
-	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress, cfg.EnableTCPDrops, cfg.EnableDNSTracking, cfg.EnableRTT)
+	ebpfConfig := &ebpf.FlowFetcherConfig{
+		EnableIngress: ingres,
+		EnableEgress:  egress,
+		Debug:         debug,
+		Sampling:      cfg.Sampling,
+		CacheMaxSize:  cfg.CacheMaxFlows,
+		TCPDrops:      cfg.EnableTCPDrops,
+		DNSTracker:    cfg.EnableDNSTracking,
+		EnableRTT:     cfg.EnableRTT,
+	}
+
+	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)
 	if err != nil {
 		return nil, err
 	}
