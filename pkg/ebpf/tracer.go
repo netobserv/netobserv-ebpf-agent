@@ -74,6 +74,9 @@ func NewFlowFetcher(
 	enableRttCalculations := 0
 	if enableRtt {
 		enableRttCalculations = 1
+	} else {
+		// Cannot set the size of map to be 0 so set it to 1.
+		spec.Maps["flow_sequences"].MaxEntries = uint32(1)
 	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:      uint32(sampling),
@@ -82,7 +85,6 @@ func NewFlowFetcher(
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
-
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
 		var ve *ebpf.VerifierError
 		if errors.As(err, &ve) {
