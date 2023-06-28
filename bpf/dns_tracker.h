@@ -91,4 +91,13 @@ static inline int trace_dns(struct sk_buff *skb) {
     return 0;
 }
 
+SEC("tracepoint/net/net_dev_queue")
+int trace_net_packets(struct trace_event_raw_net_dev_template *args) {
+    struct sk_buff skb;
+
+    __builtin_memset(&skb, 0, sizeof(skb));
+    bpf_probe_read(&skb, sizeof(struct sk_buff), args->skbaddr);
+    return trace_dns(&skb);
+}
+
 #endif // __DNS_TRACKER_H__

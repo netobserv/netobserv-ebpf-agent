@@ -137,6 +137,8 @@ type Config struct {
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
 	// Enable RTT calculations for the flows, default is false (disabled), set to true to enable.
+	// This feature requires the flows agent to attach at both Ingress and Egress hookpoints.
+	// If both Ingress and Egress are not enabled then this feature will not be enabled even if set to true via env.
 	EnableRTT bool `env:"ENABLE_RTT" envDefault:"false"`
 	// EnableGC enables golang garbage collection run at the end of every map eviction, default is true
 	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`

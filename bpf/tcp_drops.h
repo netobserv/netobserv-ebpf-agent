@@ -67,4 +67,22 @@ static inline int trace_tcp_drop(void *ctx, struct sock *sk,
     return ret;
 }
 
+SEC("tracepoint/skb/kfree_skb")
+int kfree_skb(struct trace_event_raw_kfree_skb *args) {
+    struct sk_buff skb;
+    __builtin_memset(&skb, 0, sizeof(skb));
+
+    bpf_probe_read(&skb, sizeof(struct sk_buff), args->skbaddr);
+    struct sock *sk = skb.sk;
+    enum skb_drop_reason reason = args->reason;
+
+    // SKB_NOT_DROPPED_YET,
+    // SKB_CONSUMED,
+    // SKB_DROP_REASON_NOT_SPECIFIED,
+    if (reason > SKB_DROP_REASON_NOT_SPECIFIED) {
+        return trace_tcp_drop(args, sk, &skb, reason);
+    }
+    return 0;
+}
+
 #endif //__TCP_DROPS_H__

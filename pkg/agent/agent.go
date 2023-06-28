@@ -115,14 +115,14 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	ingres, egress := flowDirections(cfg)
+	ingress, egress := flowDirections(cfg)
 	debug := false
 	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
 		debug = true
 	}
 
 	ebpfConfig := &ebpf.FlowFetcherConfig{
-		EnableIngress: ingres,
+		EnableIngress: ingress,
 		EnableEgress:  egress,
 		Debug:         debug,
 		Sampling:      cfg.Sampling,

@@ -22,11 +22,13 @@ import (
 
 const (
 	qdiscType = "clsact"
+	// ebpf map names as defined in flows.c
+	aggregatedFlowsMap = "aggregated_flows"
+	flowSequencesMap   = "flow_sequences"
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
 	constEnableRtt     = "enable_rtt"
-	aggregatedFlowsMap = "aggregated_flows"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -71,19 +73,28 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
-	// Resize aggregated flows map according to user-provided configuration
+	// Resize maps according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
+	spec.Maps[flowSequencesMap].MaxEntries = uint32(cfg.CacheMaxSize)
 
 	traceMsgs := 0
 	if cfg.Debug {
 		traceMsgs = 1
 	}
+
 	enableRtt := 0
 	if cfg.EnableRTT {
-		enableRtt = 1
-	} else {
+		if !(cfg.EnableEgress && cfg.EnableIngress) {
+			log.Warnf("ENABLE_RTT is set to true. But both Ingress AND Egress are not enabled. Disabling ENABLE_RTT")
+			enableRtt = 0
+		} else {
+			enableRtt = 1
+		}
+	}
+
+	if enableRtt == 0 {
 		// Cannot set the size of map to be 0 so set it to 1.
-		spec.Maps["flow_sequences"].MaxEntries = uint32(1)
+		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
 	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{

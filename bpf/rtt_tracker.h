@@ -1,3 +1,9 @@
+/*
+    A simple RTT tracker implemented to be used at the ebpf layer inside the flow_monitor hookpoint.
+    This tracker currently tracks RTT for TCP flows by looking at the TCP start sequence and estimates
+    RTT by perform (timestamp of receiveing ack packet - timestamp of sending syn packet)
+ */
+
 #ifndef __RTT_TRACKER_H__
 #define __RTT_TRACKER_H__
 
