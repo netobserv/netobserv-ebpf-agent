@@ -48,11 +48,20 @@ type BpfFlowMetricsT struct {
 	Errno           uint8
 	TcpDrops        BpfTcpDropsT
 	DnsRecord       BpfDnsRecordT
+	FlowRtt         uint64
 }
 
 type BpfFlowRecordT struct {
 	Id      BpfFlowId
 	Metrics BpfFlowMetrics
+}
+
+type BpfFlowSeqId struct {
+	SrcPort uint16
+	DstPort uint16
+	SrcIp   [16]uint8
+	DstIp   [16]uint8
+	SeqId   uint32
 }
 
 type BpfTcpDropsT struct {
@@ -116,6 +125,7 @@ type BpfProgramSpecs struct {
 type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
+	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -139,12 +149,14 @@ func (o *BpfObjects) Close() error {
 type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
+	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AggregatedFlows,
 		m.DirectFlows,
+		m.FlowSequences,
 	)
 }
 
@@ -177,6 +189,5 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
-//
 //go:embed bpf_bpfeb.o
 var _BpfBytes []byte

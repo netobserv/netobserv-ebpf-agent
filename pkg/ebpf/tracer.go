@@ -22,10 +22,13 @@ import (
 
 const (
 	qdiscType = "clsact"
+	// ebpf map names as defined in flows.c
+	aggregatedFlowsMap = "aggregated_flows"
+	flowSequencesMap   = "flow_sequences"
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
-	aggregatedFlowsMap = "aggregated_flows"
+	constEnableRtt     = "enable_rtt"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -47,11 +50,18 @@ type FlowFetcher struct {
 	dnsTrackerTracePoint link.Link
 }
 
-func NewFlowFetcher(
-	traceMessages bool,
-	sampling, cacheMaxSize int,
-	ingress, egress, tcpDrops, dnsTracker bool,
-) (*FlowFetcher, error) {
+type FlowFetcherConfig struct {
+	EnableIngress bool
+	EnableEgress  bool
+	Debug         bool
+	Sampling      int
+	CacheMaxSize  int
+	TCPDrops      bool
+	DNSTracker    bool
+	EnableRTT     bool
+}
+
+func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
@@ -63,16 +73,34 @@ func NewFlowFetcher(
 		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
-	// Resize aggregated flows map according to user-provided configuration
-	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
+	// Resize maps according to user-provided configuration
+	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
+	spec.Maps[flowSequencesMap].MaxEntries = uint32(cfg.CacheMaxSize)
 
 	traceMsgs := 0
-	if traceMessages {
+	if cfg.Debug {
 		traceMsgs = 1
 	}
+
+	enableRtt := 0
+	if cfg.EnableRTT {
+		if !(cfg.EnableEgress && cfg.EnableIngress) {
+			log.Warnf("ENABLE_RTT is set to true. But both Ingress AND Egress are not enabled. Disabling ENABLE_RTT")
+			enableRtt = 0
+		} else {
+			enableRtt = 1
+		}
+	}
+
+	if enableRtt == 0 {
+		// Cannot set the size of map to be 0 so set it to 1.
+		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
+	}
+
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:      uint32(sampling),
+		constSampling:      uint32(cfg.Sampling),
 		constTraceMessages: uint8(traceMsgs),
+		constEnableRtt:     uint8(enableRtt),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -86,6 +114,7 @@ func NewFlowFetcher(
 		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
+
 	/*
 	 * since we load the program only when the we start we need to release
 	 * memory used by cached kernel BTF see https://github.com/cilium/ebpf/issues/1063
@@ -94,7 +123,7 @@ func NewFlowFetcher(
 	btf.FlushKernelSpec()
 
 	var tcpDropsLink link.Link
-	if tcpDrops {
+	if cfg.TCPDrops {
 		tcpDropsLink, err = link.Tracepoint("skb", "kfree_skb", objects.KfreeSkb, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
@@ -102,7 +131,7 @@ func NewFlowFetcher(
 	}
 
 	var dnsTrackerLink link.Link
-	if dnsTracker {
+	if cfg.DNSTracker {
 		dnsTrackerLink, err = link.Tracepoint("net", "net_dev_queue", objects.TraceNetPackets, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to trace_net_packets: %w", err)
@@ -120,9 +149,9 @@ func NewFlowFetcher(
 		egressFilters:        map[ifaces.Interface]*netlink.BpfFilter{},
 		ingressFilters:       map[ifaces.Interface]*netlink.BpfFilter{},
 		qdiscs:               map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:         cacheMaxSize,
-		enableIngress:        ingress,
-		enableEgress:         egress,
+		cacheMaxSize:         cfg.CacheMaxSize,
+		enableIngress:        cfg.EnableIngress,
+		enableEgress:         cfg.EnableEgress,
 		tcpDropsTracePoint:   tcpDropsLink,
 		dnsTrackerTracePoint: dnsTrackerLink,
 	}, nil

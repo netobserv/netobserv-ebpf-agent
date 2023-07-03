@@ -63,6 +63,8 @@ The following environment variables are available to configure the NetObserv eBF
   * `KAFKA_TLS_USER_KEY_PATH` (default: unset). Path to the user (client) private key for mutual TLS connections.
 * `PROFILE_PORT` (default: unset). Sets the listening port for [Go's Pprof tool](https://pkg.go.dev/net/http/pprof).
   If it is not set, profile is disabled.
+* `ENABLE_RTT` (default: `false` disabled). If `true` enables RTT calculations for the captured flows in the ebpf agent.
+  See [docs](./rtt_calculations.md) for more details on this feature.
 
 ## Development-only variables
 

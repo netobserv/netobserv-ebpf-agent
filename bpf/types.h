@@ -1,9 +1,45 @@
-#ifndef __FLOW_H__
-#define __FLOW_H__
+#ifndef __TYPES_H__
+#define __TYPES_H__
 
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
 #define IP_MAX_LEN 16
+
+#define DISCARD 1
+#define SUBMIT 0
+
+// Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
+#define FIN_FLAG 0x01
+#define SYN_FLAG 0x02
+#define RST_FLAG 0x04
+#define PSH_FLAG 0x08
+#define ACK_FLAG 0x10
+#define URG_FLAG 0x20
+#define ECE_FLAG 0x40
+#define CWR_FLAG 0x80
+// Custom flags exported
+#define SYN_ACK_FLAG 0x100
+#define FIN_ACK_FLAG 0x200
+#define RST_ACK_FLAG 0x400
+
+#define IS_SYN_PACKET(pkt)    ((pkt->flags & SYN_FLAG) || (pkt->flags & SYN_ACK_FLAG))
+#define IS_ACK_PACKET(pkt)    ((pkt->flags & ACK_FLAG) || (pkt->flags & SYN_ACK_FLAG))
+
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define bpf_ntohs(x)        __builtin_bswap16(x)
+#define bpf_htons(x)        __builtin_bswap16(x)
+#define bpf_ntohl(x)        __builtin_bswap32(x)
+#define bpf_htonl(x)        __builtin_bswap32(x)
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define bpf_ntohs(x)        (x)
+#define bpf_htons(x)        (x)
+#define bpf_ntohl(x)        (x)
+#define bpf_htonl(x)        (x)
+#else
+# error "Endianness detection needs to be set up for your compiler?!"
+#endif
 
 typedef __u8 u8;
 typedef __u16 u16;
@@ -17,6 +53,15 @@ typedef __u64 u64;
 #define ETH_P_IPV6 0x86DD
 #define ETH_P_ARP 0x0806
 #define IPPROTO_ICMPV6 58
+
+// according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
+typedef enum {
+    INGRESS         = 0,
+    EGRESS          = 1,
+    MAX_DIRECTION   = 2,
+} direction_t;
+
+const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 typedef struct flow_metrics_t {
     u32 packets;
@@ -45,6 +90,7 @@ typedef struct flow_metrics_t {
         u64 req_mono_time_ts;
         u64 rsp_mono_time_ts;
     } __attribute__((packed)) dns_record;
+    u64 flow_rtt;
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct tcp_drops into the ELF.
@@ -79,6 +125,16 @@ typedef struct flow_id_t {
 // Force emitting struct flow_id into the ELF.
 const struct flow_id_t *unused2 __attribute__((unused));
 
+// Standard 4 tuple and a sequence identifier.
+// No need to emit this struct. It's used only in kernel space
+typedef struct flow_seq_id_t {
+    u16 src_port;
+    u16 dst_port;
+    u8 src_ip[IP_MAX_LEN];
+    u8 dst_ip[IP_MAX_LEN];
+    u32 seq_id;
+} __attribute__((packed)) flow_seq_id;
+
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.
 // Contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
@@ -93,4 +149,14 @@ const struct flow_record_t *unused3 __attribute__((unused));
 // Force emitting struct dns_record into the ELF.
 const struct dns_record_t *unused4 __attribute__((unused));
 
-#endif
+// Internal structure: Packet info structure parsed around functions.
+typedef struct pkt_info_t {
+    flow_id *id;
+    u64 current_ts; // ts recorded when pkt came.
+    u16 flags;      // TCP specific
+    void *l4_hdr;   // Stores the actual l4 header
+    u64 rtt;        // rtt calculated from the flow if possible. else zero
+} pkt_info;
+
+#endif /* __TYPES_H__ */
+

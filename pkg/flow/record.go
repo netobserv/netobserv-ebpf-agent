@@ -52,6 +52,8 @@ type Record struct {
 
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
+	// Calculated RTT which is set when record is created by calling NewRecord
+	TimeFlowRtt time.Duration
 }
 
 func NewRecord(
@@ -62,7 +64,7 @@ func NewRecord(
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
-	var reqDNS, rspDNS time.Duration
+
 	var record = Record{
 		RawRecord: RawRecord{
 			Id:      key,
@@ -71,12 +73,16 @@ func NewRecord(
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}
+	if metrics.FlowRtt != 0 {
+		rttDelta := time.Duration(metrics.FlowRtt)
+		record.TimeFlowRtt = rttDelta
+	}
 	if metrics.DnsRecord.ReqMonoTimeTs != 0 {
-		reqDNS = time.Duration(monotonicCurrentTime - metrics.DnsRecord.ReqMonoTimeTs)
+		reqDNS := time.Duration(monotonicCurrentTime - metrics.DnsRecord.ReqMonoTimeTs)
 		record.TimeDNSRequest = currentTime.Add(-reqDNS)
 	}
 	if metrics.DnsRecord.RspMonoTimeTs != 0 {
-		rspDNS = time.Duration(monotonicCurrentTime - metrics.DnsRecord.RspMonoTimeTs)
+		rspDNS := time.Duration(monotonicCurrentTime - metrics.DnsRecord.RspMonoTimeTs)
 		record.TimeDNSResponse = currentTime.Add(-rspDNS)
 	}
 	return &record

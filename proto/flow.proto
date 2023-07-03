@@ -3,6 +3,7 @@ syntax = "proto3";
 package pbflow;
 
 import 'google/protobuf/timestamp.proto';
+import 'google/protobuf/duration.proto';
 
 option go_package = "./pbflow";
 
@@ -52,6 +53,7 @@ message Record {
   uint32 dns_flags = 22;
   google.protobuf.Timestamp time_dns_req = 23;
   google.protobuf.Timestamp time_dns_rsp = 24;
+  google.protobuf.Duration time_flow_rtt = 25;
 }
 
 message DataLink {

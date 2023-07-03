@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -77,6 +78,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		TcpDropLatestDropCause: fr.Metrics.TcpDrops.LatestDropCause,
 		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
+		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
 	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
 		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
@@ -133,6 +135,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		TcpDropLatestDropCause: fr.Metrics.TcpDrops.LatestDropCause,
 		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
+		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
 	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
 		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{

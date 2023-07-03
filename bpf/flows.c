@@ -1,5 +1,6 @@
 /*
-    Flows v2. A Flow-metric generator using TC.
+    Flows v2.
+    Flow monitor: A Flow-metric generator using TC.
 
     This program can be hooked on to TC ingress/egress hook to monitor packets
     to/from an interface.
@@ -13,38 +14,79 @@
             until an entry is available.
         4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
+#include <vmlinux.h>
+#include <bpf_helpers.h>
+#include "configs.h"
 #include "utils.h"
+
+/* Defines a tcp drops statistics tracker,
+   which attaches at kfree_skb hook. Is optional.
+*/
 #include "tcp_drops.h"
+
+/* Defines a dns tracker,
+   which attaches at net_dev_queue hook. Is optional.
+*/
 #include "dns_tracker.h"
 
+/* Defines an rtt tracker,
+   which runs inside flow_monitor. Is optional.
+*/
+#include "rtt_tracker.h"
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
-    void *data_end = (void *)(long)skb->data_end;
-    void *data = (void *)(long)skb->data;
+
+    // Record the current time first.
+    u64 current_time = bpf_ktime_get_ns();
 
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
-    u64 current_time = bpf_ktime_get_ns();
-    struct ethhdr *eth = data;
-    u16 flags = 0;
-    if (fill_ethhdr(eth, data_end, &id, &flags) == DISCARD) {
+
+    pkt_info pkt;
+    __builtin_memset(&pkt, 0, sizeof(pkt));
+
+    pkt.id = &id;
+    pkt.current_ts = current_time;
+
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
+    struct ethhdr *eth = (struct ethhdr *)data;
+
+    if (fill_ethhdr(eth, data_end, &pkt) == DISCARD) {
         return TC_ACT_OK;
     }
+
+    if (enable_rtt) {
+        // This is currently gated as its not to be enabled by default.
+        calculate_flow_rtt(&pkt, direction, data_end);
+    }
+
+    //Set extra fields
     id.if_index = skb->ifindex;
     id.direction = direction;
 
     // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
-    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
+    flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
-        aggregate_flow->flags |= flags;
+        aggregate_flow->flags |= pkt.flags;
+
+        // Does not matter the gate. Will be zero if not enabled.
+        if (pkt.rtt > 0) {
+            /* Since RTT is calculated for few packets we need to check if it is non zero value then only we update
+             * the flow. If we remove this check a packet which fails to calculate RTT will override the previous valid
+             * RTT with 0.
+             */
+            aggregate_flow->flow_rtt = pkt.rtt;
+        }
+
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -61,7 +103,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .bytes = skb->len,
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
-            .flags = flags, 
+            .flags = pkt.flags,
+            .flow_rtt = pkt.rtt
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
@@ -78,7 +121,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             }
 
             new_flow.errno = -ret;
-            flow_record *record = bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
+            flow_record *record = (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
             if (!record) {
                 if (trace_messages) {
                     bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
@@ -92,6 +135,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     return TC_ACT_OK;
 }
+
 SEC("tc_ingress")
 int ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
@@ -103,3 +147,4 @@ int egress_flow_parse(struct __sk_buff *skb) {
 }
 
 char _license[] SEC("license") = "GPL";
+
