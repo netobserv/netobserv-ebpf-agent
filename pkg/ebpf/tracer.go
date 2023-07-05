@@ -6,12 +6,14 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -29,6 +31,8 @@ const (
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
 	constEnableRtt     = "enable_rtt"
+	tcpDropHook        = "kfree_skb"
+	dnsTraceHook       = "net_dev_queue"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -105,14 +109,53 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 
-	if err := spec.LoadAndAssign(&objects, nil); err != nil {
-		var ve *ebpf.VerifierError
-		if errors.As(err, &ve) {
-			// Using %+v will print the whole verifier error, not just the last
-			// few lines.
-			log.Infof("Verifier error: %+v", ve)
+	oldKernel := utils.IskernelOlderthan514()
+
+	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
+	if oldKernel {
+		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
+		// Note: if new hooks are added in the future we need to update the following structures manually
+		type NewBpfPrograms struct {
+			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
+			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+			TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 		}
-		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		type NewBpfObjects struct {
+			NewBpfPrograms
+			BpfMaps
+		}
+		var newObjects NewBpfObjects
+		// remove tcpdrop hook from the spec
+		delete(spec.Programs, tcpDropHook)
+		newObjects.NewBpfPrograms = NewBpfPrograms{}
+		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+		// Manually assign maps and programs to the original objects variable
+		// Note for any future maps or programs make sure to copy them manually here
+		objects.DirectFlows = newObjects.DirectFlows
+		objects.AggregatedFlows = newObjects.AggregatedFlows
+		objects.FlowSequences = newObjects.FlowSequences
+		objects.EgressFlowParse = newObjects.EgressFlowParse
+		objects.IngressFlowParse = newObjects.IngressFlowParse
+		objects.TraceNetPackets = newObjects.TraceNetPackets
+		objects.KfreeSkb = nil
+	} else {
+		if err := spec.LoadAndAssign(&objects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
 	}
 
 	/*
@@ -123,8 +166,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	btf.FlushKernelSpec()
 
 	var tcpDropsLink link.Link
-	if cfg.TCPDrops {
-		tcpDropsLink, err = link.Tracepoint("skb", "kfree_skb", objects.KfreeSkb, nil)
+	if cfg.TCPDrops && !oldKernel {
+		tcpDropsLink, err = link.Tracepoint("skb", tcpDropHook, objects.KfreeSkb, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
 		}
@@ -132,7 +175,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	var dnsTrackerLink link.Link
 	if cfg.DNSTracker {
-		dnsTrackerLink, err = link.Tracepoint("net", "net_dev_queue", objects.TraceNetPackets, nil)
+		dnsTrackerLink, err = link.Tracepoint("net", dnsTraceHook, objects.TraceNetPackets, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to trace_net_packets: %w", err)
 		}
