@@ -86,6 +86,14 @@ static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol,
     }
 }
 
+static inline u8 ipv4_get_dscp(const struct iphdr *iph) {
+	return iph->tos >> DSCP_SHIFT;
+}
+
+static inline u8 ipv6_get_dscp(const struct ipv6hdr *ipv6h) {
+	return (bpf_ntohs(*(const __be16 *)ipv6h) >> 4) >> DSCP_SHIFT;
+}
+
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     void *l4_hdr_start;
@@ -100,6 +108,7 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
     __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
     __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    pkt->dscp = ipv4_get_dscp(ip);
 
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->protocol, pkt);
@@ -118,6 +127,7 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt)
     /* Save the IP Address to id directly. copy once. */
     __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, IP_MAX_LEN);
     __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, IP_MAX_LEN);
+    pkt->dscp = ipv6_get_dscp(ip);
 
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->nexthdr, pkt);

@@ -77,7 +77,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = current_time;
         aggregate_flow->flags |= pkt.flags;
-
+        aggregate_flow->dscp = pkt.dscp;
         // Does not matter the gate. Will be zero if not enabled.
         if (pkt.rtt > 0) {
             /* Since RTT is calculated for few packets we need to check if it is non zero value then only we update
@@ -104,7 +104,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .start_mono_time_ts = current_time,
             .end_mono_time_ts = current_time,
             .flags = pkt.flags,
-            .flow_rtt = pkt.rtt
+            .flow_rtt = pkt.rtt,
+            .dscp = pkt.dscp,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
