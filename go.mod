@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/caarlos0/env/v6 v6.9.1
-	github.com/cilium/ebpf v0.10.0
+	github.com/cilium/ebpf v0.11.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/netobserv/gopipes v0.3.0
@@ -15,7 +15,7 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vladimirvivien/gexe v0.1.1
 	github.com/vmware/go-ipfix v0.5.12
-	golang.org/x/sys v0.5.0
+	golang.org/x/sys v0.6.0
 	google.golang.org/grpc v1.53.0
 	google.golang.org/protobuf v1.28.1
 	k8s.io/api v0.24.0
@@ -60,6 +60,7 @@ require (
 	github.com/xdg/scram v1.0.5 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
+	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
 	golang.org/x/term v0.5.0 // indirect

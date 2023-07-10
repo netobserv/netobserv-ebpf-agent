@@ -35,7 +35,7 @@ OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
-CILIUM_EBPF_VERSION := v0.10.0
+CILIUM_EBPF_VERSION := v0.11.0
 GOLANGCI_LINT_VERSION = v1.50.1
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
