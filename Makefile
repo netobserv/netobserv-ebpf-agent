@@ -36,7 +36,7 @@ OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.11.0
-GOLANGCI_LINT_VERSION = v1.50.1
+GOLANGCI_LINT_VERSION = v1.53.3
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS ?= linux
@@ -89,7 +89,7 @@ vendors: ## Check go vendors
 .PHONY: prereqs
 prereqs: ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
-	test -f $(shell go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest

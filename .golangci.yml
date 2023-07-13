@@ -1,6 +1,5 @@
 linters:
   enable:
-    - deadcode
     - errcheck
     - errorlint
     - cyclop
@@ -8,20 +7,18 @@ linters:
     - exhaustive
     - exportloopref
     - gocritic
-    - goimports
+    - gofmt
     - gosimple
     - govet
     - ineffassign
     - revive
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unused
-    - varcheck
 linters-settings:
   stylecheck:
-    go: "1.19"
+    go: "1.20"
   gocritic:
     enabled-checks:
       - hugeParam
@@ -31,4 +28,3 @@ linters-settings:
       - deprecatedComment
   cyclop:
     max-complexity: 20
-
