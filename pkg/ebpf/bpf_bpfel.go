@@ -13,11 +13,20 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfDnsFlowId struct {
+	SrcPort  uint16
+	DstPort  uint16
+	SrcIp    [16]uint8
+	DstIp    [16]uint8
+	Id       uint16
+	IfIndex  uint32
+	Protocol uint8
+}
+
 type BpfDnsRecordT struct {
-	Id            uint16
-	Flags         uint16
-	ReqMonoTimeTs uint64
-	RspMonoTimeTs uint64
+	Id      uint16
+	Flags   uint16
+	Latency uint64
 }
 
 type BpfFlowId BpfFlowIdT
@@ -125,6 +134,7 @@ type BpfProgramSpecs struct {
 type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
+	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
 }
 
@@ -149,6 +159,7 @@ func (o *BpfObjects) Close() error {
 type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
+	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
 }
 
@@ -156,6 +167,7 @@ func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AggregatedFlows,
 		m.DirectFlows,
+		m.DnsFlows,
 		m.FlowSequences,
 	)
 }
@@ -189,5 +201,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfel.o
 var _BpfBytes []byte
