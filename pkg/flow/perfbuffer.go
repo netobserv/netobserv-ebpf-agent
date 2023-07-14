@@ -40,9 +40,6 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 		case packet, ok := <-in:
 			if !ok {
 				plog.Debug("input channel closed. Evicting entries")
-				// if the packets channel is closed, we evict the entries in the
-				// same goroutine to wait for all the entries to be sent before
-				// closing the channel
 				c.evict(c.entries, out)
 				plog.Debug("exiting perfbuffer routine")
 				return

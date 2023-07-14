@@ -203,14 +203,11 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}, nil
 }
 
-// Register and links the eBPF fetcher into the system. The program should invoke Unregister
-// before exiting.
-func (m *FlowFetcher) Register(iface ifaces.Interface) error {
-	ilog := log.WithField("iface", iface)
-	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
+func registerInterface(iface ifaces.Interface) (*netlink.GenericQdisc, netlink.Link, error) {
+	ilog := plog.WithField("iface", iface)
 	ipvlan, err := netlink.LinkByIndex(iface.Index)
 	if err != nil {
-		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
+		return nil, nil, fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
@@ -228,25 +225,29 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
+			return nil, nil, fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
 		}
+	}
+	return qdisc, ipvlan, nil
+}
+
+// Register and links the eBPF fetcher into the system. The program should invoke Unregister
+// before exiting.
+func (m *FlowFetcher) Register(iface ifaces.Interface) error {
+	qdisc, ipvlan, err := registerInterface(iface)
+	if err != nil {
+		return err
 	}
 	m.qdiscs[iface] = qdisc
 
 	if err := m.registerEgress(iface, ipvlan); err != nil {
 		return err
 	}
-
 	return m.registerIngress(iface, ipvlan)
 }
 
-func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ilog := log.WithField("iface", iface)
-	if !m.enableEgress {
-		ilog.Debug("ignoring egress traffic, according to user configuration")
-		return nil
-	}
-	// Fetch events on egress
+func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf.Program, name string) (*netlink.BpfFilter, error) {
+	ilog := plog.WithField("iface", iface)
 	egressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
 		Parent:    netlink.HANDLE_MIN_EGRESS,
@@ -256,54 +257,80 @@ func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link
 	}
 	egressFilter := &netlink.BpfFilter{
 		FilterAttrs:  egressAttrs,
-		Fd:           m.objects.EgressFlowParse.FD(),
-		Name:         "tc/egress_flow_parse",
+		Fd:           parser.FD(),
+		Name:         "tc/" + name,
 		DirectAction: true,
 	}
 	if err := netlink.FilterDel(egressFilter); err == nil {
 		ilog.Warn("egress filter already existed. Deleted it")
+		ilog.Warn("egress pano filter already existed. Deleted it")
 	}
 	if err := netlink.FilterAdd(egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create egress filter: %w", err)
+			return nil, fmt.Errorf("failed to create egress filter: %w", err)
 		}
 	}
-	m.egressFilters[iface] = egressFilter
+	return egressFilter, nil
+
+}
+
+func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.EgressPanoParse, "egress_pano_parse")
+	if err != nil {
+		return err
+	}
+
+	p.egressFilters[iface] = egressFilter
 	return nil
 }
 
-func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ilog := log.WithField("iface", iface)
-	if !m.enableIngress {
-		ilog.Debug("ignoring ingress traffic, according to user configuration")
-		return nil
-	}
-	// Fetch events on ingress
+func fetchIngressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf.Program, name string) (*netlink.BpfFilter, error) {
+	ilog := plog.WithField("iface", iface)
 	ingressAttrs := netlink.FilterAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
 		Parent:    netlink.HANDLE_MIN_INGRESS,
 		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  unix.ETH_P_ALL,
+		Protocol:  3,
 		Priority:  1,
 	}
 	ingressFilter := &netlink.BpfFilter{
 		FilterAttrs:  ingressAttrs,
-		Fd:           m.objects.IngressFlowParse.FD(),
-		Name:         "tc/ingress_flow_parse",
+		Fd:           parser.FD(),
+		Name:         "tc/" + name,
 		DirectAction: true,
 	}
 	if err := netlink.FilterDel(ingressFilter); err == nil {
-		ilog.Warn("ingress filter already existed. Deleted it")
+		ilog.Warn("egress filter already existed. Deleted it")
 	}
 	if err := netlink.FilterAdd(ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create ingress filter: %w", err)
+			return nil, fmt.Errorf("failed to create egress filter: %w", err)
 		}
 	}
+	return ingressFilter, nil
+
+}
+
+func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	egressFilter, err := fetchEgressEvents(iface, ipvlan, m.objects.EgressFlowParse, "egress_flow_parse")
+	if err != nil {
+		return err
+	}
+
+	m.egressFilters[iface] = egressFilter
+	return nil
+}
+
+func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ingressFilter, err := fetchIngressEvents(iface, ipvlan, m.objects.IngressFlowParse, "ingress_flow_parse")
+	if err != nil {
+		return err
+	}
+
 	m.ingressFilters[iface] = ingressFilter
 	return nil
 }
@@ -499,105 +526,25 @@ func NewPacketFetcher(
 
 func (p *PacketFetcher) Register(iface ifaces.Interface) error {
 
-	ilog := log.WithField("iface", iface)
-	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
-	ipvlan, err := netlink.LinkByIndex(iface.Index)
+	qdisc, ipvlan, err := registerInterface(iface)
 	if err != nil {
-		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
-	}
-	qdiscAttrs := netlink.QdiscAttrs{
-		LinkIndex: ipvlan.Attrs().Index,
-		Handle:    netlink.MakeHandle(0xffff, 0),
-		Parent:    netlink.HANDLE_CLSACT,
-	}
-	qdisc := &netlink.GenericQdisc{
-		QdiscAttrs: qdiscAttrs,
-		QdiscType:  qdiscType,
-	}
-	if err := netlink.QdiscDel(qdisc); err == nil {
-		ilog.Warn("qdisc clsact already existed. Deleted it")
-	}
-	if err := netlink.QdiscAdd(qdisc); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
-		} else {
-			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
-		}
+		return err
 	}
 	p.qdiscs[iface] = qdisc
 
 	if err := p.registerEgress(iface, ipvlan); err != nil {
 		return err
 	}
-
 	return p.registerIngress(iface, ipvlan)
 }
 
-func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ilog := plog.WithField("iface", iface)
-	if !p.enableEgress {
-		ilog.Debug("ignoring egress traffic, according to user configuration")
-		return nil
-	}
-	egressAttrs := netlink.FilterAttrs{
-		LinkIndex: ipvlan.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_EGRESS,
-		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  3,
-		Priority:  1,
-	}
-	egressFilter := &netlink.BpfFilter{
-		FilterAttrs:  egressAttrs,
-		Fd:           p.objects.EgressPanoParse.FD(),
-		Name:         "tc/egress_pano_parse",
-		DirectAction: true,
-	}
-	if err := netlink.FilterDel(egressFilter); err == nil {
-		ilog.Warn("egress pano filter already existed. Deleted it")
-	}
-	if err := netlink.FilterAdd(egressFilter); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
-		} else {
-			return fmt.Errorf("failed to create egress filter: %w", err)
-		}
-	}
-	p.egressFilters[iface] = egressFilter
-	return nil
-}
-
 func (p *PacketFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ilog := plog.WithField("iface", iface)
-	if !p.enableIngress {
-		ilog.Debug("ignoring ingress traffic, according to user configuration")
-		return nil
+	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.IngressPanoParse, "ingress_pano_parse")
+	if err != nil {
+		return err
 	}
 
-	ingressAttrs := netlink.FilterAttrs{
-		LinkIndex: ipvlan.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_INGRESS,
-		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  unix.ETH_P_ALL,
-		Priority:  1,
-	}
-	ingressFilter := &netlink.BpfFilter{
-		FilterAttrs:  ingressAttrs,
-		Fd:           p.objects.IngressPanoParse.FD(),
-		Name:         "tc/ingress_pano_parse",
-		DirectAction: true,
-	}
-	if err := netlink.FilterDel(ingressFilter); err == nil {
-		ilog.Warn("ingress pano filter already existed. Deleted it")
-	}
-	if err := netlink.FilterAdd(ingressFilter); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
-		} else {
-			return fmt.Errorf("failed to create ingress filter: %w", err)
-		}
-	}
 	p.ingressFilters[iface] = ingressFilter
-
 	return nil
 }
 
