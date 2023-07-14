@@ -146,4 +146,9 @@ type Config struct {
 	EnableTCPDrops bool `env:"ENABLE_TCP_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
+	// EnablePano sets Pano filtering to enable. By default Pano is off.
+	EnablePano bool `env:"ENABLE_PANO" envDefault:"false"`
+	// PanoFilters set the filters to determine packets to filter using PANO. It is a comma separated set.
+	// Example: PANO_FILTER = "udp and port 53"
+	PanoFilters string `env:"PANO_FILTER" envDefault:""`
 }

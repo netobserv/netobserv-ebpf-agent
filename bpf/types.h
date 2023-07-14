@@ -3,6 +3,7 @@
 
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
+#define TC_ACT_UNSPEC -1
 #define IP_MAX_LEN 16
 
 #define DISCARD 1
@@ -53,6 +54,7 @@ typedef __u64 u64;
 #define ETH_P_IPV6 0x86DD
 #define ETH_P_ARP 0x0806
 #define IPPROTO_ICMPV6 58
+#define MAX_CPUS 256
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum {
@@ -157,6 +159,12 @@ typedef struct pkt_info_t {
     void *l4_hdr;   // Stores the actual l4 header
     u64 rtt;        // rtt calculated from the flow if possible. else zero
 } pkt_info;
+
+// Structure for payload metadata
+typedef struct payload_meta_t {
+    u32 if_index;
+    u32 pkt_len;
+} __attribute__((packed)) payload_meta;
 
 #endif /* __TYPES_H__ */
 

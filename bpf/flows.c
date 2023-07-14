@@ -34,6 +34,11 @@
 */
 #include "rtt_tracker.h"
 
+/* Defines a PANO tracker, 
+    It is enabled by setting env var EnablePano = true. 
+*/
+#include "pano.h"
+
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
@@ -144,6 +149,16 @@ int ingress_flow_parse(struct __sk_buff *skb) {
 SEC("tc_egress")
 int egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
+}
+
+SEC("tc_pano_ingress")
+int ingress_pano_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
+SEC("tc_pano_egress")
+int egress_pano_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
 }
 
 char _license[] SEC("license") = "GPL";

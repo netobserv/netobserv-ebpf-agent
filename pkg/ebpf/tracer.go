@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -12,6 +13,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/sirupsen/logrus"
@@ -36,6 +38,7 @@ const (
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
+var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 
 // FlowFetcher reads and forwards the Flows from the Traffic Control hooks in the eBPF kernel space.
 // It provides access both to flows that are aggregated in the kernel space (via PerfCPU hashmap)
@@ -433,4 +436,244 @@ func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]*BpfFlowMetrics {
 		flow[id] = metricPtr
 	}
 	return flow
+}
+
+// It provides access to packets from  the kernel space (via PerfCPU hashmap)
+type PacketFetcher struct {
+	objects        *BpfObjects
+	qdiscs         map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters  map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters map[ifaces.Interface]*netlink.BpfFilter
+	perfReader     *perf.Reader
+	cacheMaxSize   int
+	enableIngress  bool
+	enableEgress   bool
+}
+
+func NewPacketFetcher(
+	cacheMaxSize int,
+	ingress, egress bool,
+) (*PacketFetcher, error) {
+	// Tracing and sampling disabled for PANO
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.WithError(err).
+			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
+	}
+
+	objects := BpfObjects{}
+	spec, err := LoadBpf()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := spec.LoadAndAssign(&objects, nil); err != nil {
+		var ve *ebpf.VerifierError
+		if errors.As(err, &ve) {
+			// Using %+v will print the whole verifier error, not just the last
+			// few lines.
+			plog.Infof("Verifier error: %+v", ve)
+		}
+		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	// read packets from igress+egress perf array
+	packets, err := perf.NewReader(objects.PacketRecord, os.Getpagesize())
+	if err != nil {
+		return nil, fmt.Errorf("accessing to perf: %w", err)
+	}
+
+	return &PacketFetcher{
+		objects:        &objects,
+		perfReader:     packets,
+		egressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters: map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:         map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:   cacheMaxSize,
+		enableIngress:  ingress,
+		enableEgress:   egress,
+	}, nil
+}
+
+func (p *PacketFetcher) Register(iface ifaces.Interface) error {
+
+	ilog := log.WithField("iface", iface)
+	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
+	ipvlan, err := netlink.LinkByIndex(iface.Index)
+	if err != nil {
+		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
+	}
+	qdiscAttrs := netlink.QdiscAttrs{
+		LinkIndex: ipvlan.Attrs().Index,
+		Handle:    netlink.MakeHandle(0xffff, 0),
+		Parent:    netlink.HANDLE_CLSACT,
+	}
+	qdisc := &netlink.GenericQdisc{
+		QdiscAttrs: qdiscAttrs,
+		QdiscType:  qdiscType,
+	}
+	if err := netlink.QdiscDel(qdisc); err == nil {
+		ilog.Warn("qdisc clsact already existed. Deleted it")
+	}
+	if err := netlink.QdiscAdd(qdisc); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
+		} else {
+			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
+		}
+	}
+	p.qdiscs[iface] = qdisc
+
+	if err := p.registerEgress(iface, ipvlan); err != nil {
+		return err
+	}
+
+	return p.registerIngress(iface, ipvlan)
+}
+
+func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ilog := plog.WithField("iface", iface)
+	if !p.enableEgress {
+		ilog.Debug("ignoring egress traffic, according to user configuration")
+		return nil
+	}
+	egressAttrs := netlink.FilterAttrs{
+		LinkIndex: ipvlan.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_EGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  3,
+		Priority:  1,
+	}
+	egressFilter := &netlink.BpfFilter{
+		FilterAttrs:  egressAttrs,
+		Fd:           p.objects.EgressPanoParse.FD(),
+		Name:         "tc/egress_pano_parse",
+		DirectAction: true,
+	}
+	if err := netlink.FilterDel(egressFilter); err == nil {
+		ilog.Warn("egress pano filter already existed. Deleted it")
+	}
+	if err := netlink.FilterAdd(egressFilter); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
+		} else {
+			return fmt.Errorf("failed to create egress filter: %w", err)
+		}
+	}
+	p.egressFilters[iface] = egressFilter
+	return nil
+}
+
+func (p *PacketFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+	ilog := plog.WithField("iface", iface)
+	if !p.enableIngress {
+		ilog.Debug("ignoring ingress traffic, according to user configuration")
+		return nil
+	}
+
+	ingressAttrs := netlink.FilterAttrs{
+		LinkIndex: ipvlan.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_INGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  unix.ETH_P_ALL,
+		Priority:  1,
+	}
+	ingressFilter := &netlink.BpfFilter{
+		FilterAttrs:  ingressAttrs,
+		Fd:           p.objects.IngressPanoParse.FD(),
+		Name:         "tc/ingress_pano_parse",
+		DirectAction: true,
+	}
+	if err := netlink.FilterDel(ingressFilter); err == nil {
+		ilog.Warn("ingress pano filter already existed. Deleted it")
+	}
+	if err := netlink.FilterAdd(ingressFilter); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
+		} else {
+			return fmt.Errorf("failed to create ingress filter: %w", err)
+		}
+	}
+	p.ingressFilters[iface] = ingressFilter
+
+	return nil
+}
+
+// Close the eBPF fetcher from the system.
+// We don't need an "Close(iface)" method because the filters and qdiscs
+// are automatically removed when the interface is down
+func (p *PacketFetcher) Close() error {
+	log.Debug("unregistering eBPF objects")
+
+	var errs []error
+	if p.perfReader != nil {
+		if err := p.perfReader.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if p.objects != nil {
+		if err := p.objects.EgressPanoParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.IngressPanoParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.PacketRecord.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		p.objects = nil
+	}
+	for iface, ef := range p.egressFilters {
+		log.WithField("interface", iface).Debug("deleting egress filter")
+		if err := netlink.FilterDel(ef); err != nil {
+			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
+		}
+	}
+	p.egressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	for iface, igf := range p.ingressFilters {
+		log.WithField("interface", iface).Debug("deleting ingress filter")
+		if err := netlink.FilterDel(igf); err != nil {
+			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
+		}
+	}
+	p.ingressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	for iface, qd := range p.qdiscs {
+		log.WithField("interface", iface).Debug("deleting Qdisc")
+		if err := netlink.QdiscDel(qd); err != nil {
+			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
+		}
+	}
+	p.qdiscs = map[ifaces.Interface]*netlink.GenericQdisc{}
+	if len(errs) == 0 {
+		return nil
+	}
+
+	var errStrings []string
+	for _, err := range errs {
+		errStrings = append(errStrings, err.Error())
+	}
+	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
+}
+
+func (p *PacketFetcher) ReadPerf() (perf.Record, error) {
+	return p.perfReader.Read()
+}
+
+func (p *PacketFetcher) LookupAndDeleteMap() map[int][]*byte {
+	packetMap := p.objects.PacketRecord
+	iterator := packetMap.Iterate()
+	packets := make(map[int][]*byte, p.cacheMaxSize)
+
+	var id int
+	var metrics []*byte
+	for iterator.Next(&id, &metrics) {
+		if err := packetMap.Delete(id); err != nil {
+			log.WithError(err).WithField("flowId", id).
+				Warnf("couldn't delete  entry")
+		}
+		packets[id] = append(packets[id], metrics...)
+	}
+	return packets
 }

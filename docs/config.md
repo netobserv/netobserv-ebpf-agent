@@ -65,6 +65,7 @@ The following environment variables are available to configure the NetObserv eBF
   If it is not set, profile is disabled.
 * `ENABLE_RTT` (default: `false` disabled). If `true` enables RTT calculations for the captured flows in the ebpf agent.
   See [docs](./rtt_calculations.md) for more details on this feature.
+* `ENABLE_PANO` (default: `false` disabled). If `true` enables Payload Aware Network Observability. 
 
 ## Development-only variables
 
