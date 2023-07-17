@@ -142,8 +142,8 @@ type Config struct {
 	EnableRTT bool `env:"ENABLE_RTT" envDefault:"false"`
 	// EnableGC enables golang garbage collection run at the end of every map eviction, default is true
 	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`
-	// EnableTcpDrops enable TCP drops eBPF hook to account for tcp dropped flows
-	EnableTCPDrops bool `env:"ENABLE_TCP_DROPS" envDefault:"false"`
+	// EnablePktDrops enable Packet drops eBPF hook to account for dropped flows
+	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
 }

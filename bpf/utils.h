@@ -206,7 +206,7 @@ static inline int set_key_with_udp_info(struct sk_buff *skb, flow_id *id, u8 pro
      struct udphdr udp;
 
      __builtin_memset(&udp, 0, sizeof(udp));
-     bpf_probe_read(&udp, sizeof(udp), (struct udp *)(skb->head + skb->transport_header));
+     bpf_probe_read(&udp, sizeof(udp), (struct udphdr *)(skb->head + skb->transport_header));
      sport = bpf_ntohs(udp.source);
      dport = bpf_ntohs(udp.dest);
      id->src_port = sport;
@@ -215,18 +215,52 @@ static inline int set_key_with_udp_info(struct sk_buff *skb, flow_id *id, u8 pro
      return bpf_ntohs(udp.len);
  }
 
-static inline long tcp_drop_lookup_and_update_flow(struct sk_buff *skb, flow_id *id, u8 state, u16 flags,
-                                            enum skb_drop_reason reason) {
+ static inline int set_key_with_sctp_info(struct sk_buff *skb, flow_id *id, u8 protocol) {
+     u16 sport = 0,dport = 0;
+     struct sctphdr sctp;
+
+     __builtin_memset(&sctp, 0, sizeof(sctp));
+     bpf_probe_read(&sctp, sizeof(sctp), (struct sctphdr *)(skb->head + skb->transport_header));
+     sport = bpf_ntohs(sctp.source);
+     dport = bpf_ntohs(sctp.dest);
+     id->src_port = sport;
+     id->dst_port = dport;
+     id->transport_protocol = protocol;
+     return 0;
+ }
+
+static inline int set_key_with_icmpv4_info(struct sk_buff *skb, flow_id *id, u8 protocol) {
+    struct icmphdr icmph;
+     __builtin_memset(&icmph, 0, sizeof(icmph));
+     bpf_probe_read(&icmph, sizeof(icmph), (struct icmphdr *)(skb->head + skb->transport_header));
+     id->icmp_type = icmph.type;
+     id->icmp_code = icmph.code;
+     id->transport_protocol = protocol;
+     return 0;
+}
+
+static inline int set_key_with_icmpv6_info(struct sk_buff *skb, flow_id *id, u8 protocol) {
+    struct icmp6hdr icmp6h;
+     __builtin_memset(&icmp6h, 0, sizeof(icmp6h));
+     bpf_probe_read(&icmp6h, sizeof(icmp6h), (struct icmp6hdr *)(skb->head + skb->transport_header));
+     id->icmp_type = icmp6h.icmp6_type;
+     id->icmp_code = icmp6h.icmp6_code;
+     id->transport_protocol = protocol;
+     return 0;
+}
+
+static inline long pkt_drop_lookup_and_update_flow(struct sk_buff *skb, flow_id *id, u8 state, u16 flags,
+                                                   enum skb_drop_reason reason) {
      flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
      if (aggregate_flow != NULL) {
-         aggregate_flow->tcp_drops.packets += 1;
-         aggregate_flow->tcp_drops.bytes += skb->len;
-         aggregate_flow->tcp_drops.latest_state = state;
-         aggregate_flow->tcp_drops.latest_flags = flags;
-         aggregate_flow->tcp_drops.latest_drop_cause = reason;
+         aggregate_flow->pkt_drops.packets += 1;
+         aggregate_flow->pkt_drops.bytes += skb->len;
+         aggregate_flow->pkt_drops.latest_state = state;
+         aggregate_flow->pkt_drops.latest_flags = flags;
+         aggregate_flow->pkt_drops.latest_drop_cause = reason;
          long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_ANY);
          if (trace_messages && ret != 0) {
-             bpf_printk("error tcp drop updating flow %d\n", ret);
+             bpf_printk("error packet drop updating flow %d\n", ret);
          }
          return 0;
       }

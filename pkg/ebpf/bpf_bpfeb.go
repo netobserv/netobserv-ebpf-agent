@@ -54,7 +54,7 @@ type BpfFlowMetricsT struct {
 	EndMonoTimeTs   uint64
 	Flags           uint16
 	Errno           uint8
-	TcpDrops        BpfTcpDropsT
+	PktDrops        BpfPktDropsT
 	DnsRecord       BpfDnsRecordT
 	FlowRtt         uint64
 }
@@ -72,7 +72,7 @@ type BpfFlowSeqId struct {
 	SeqId   uint32
 }
 
-type BpfTcpDropsT struct {
+type BpfPktDropsT struct {
 	Packets         uint32
 	Bytes           uint64
 	LatestFlags     uint16

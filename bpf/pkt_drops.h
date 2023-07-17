@@ -1,13 +1,13 @@
 /*
-    TCPDrops using trace points.
+    Packet Drops using trace points.
 */
 
-#ifndef __TCP_DROPS_H__
-#define __TCP_DROPS_H__
+#ifndef __PKT_DROPS_H__
+#define __PKT_DROPS_H__
 
 #include "utils.h"
 
-static inline int trace_tcp_drop(void *ctx, struct sock *sk,
+static inline int trace_pkt_drop(void *ctx, struct sock *sk,
                                  struct sk_buff *skb,
                                  enum skb_drop_reason reason) {
     if (sk == NULL)
@@ -30,18 +30,31 @@ static inline int trace_tcp_drop(void *ctx, struct sock *sk,
     // read L3 info
     set_key_with_l3_info(skb, family, &id, &protocol);
 
-    // We only support TCP drops for any other protocol just return w/o doing anything
-    if (protocol != IPPROTO_TCP) {
-        return 0;
-    }
-
     // read L4 info
-    set_key_with_tcp_info(skb, &id, protocol, &flags);
+    switch (protocol) {
+        case IPPROTO_TCP:
+            set_key_with_tcp_info(skb, &id, protocol, &flags);
+            break;
+        case IPPROTO_UDP:
+            set_key_with_udp_info(skb, &id, protocol);
+            break;
+        case IPPROTO_SCTP:
+            set_key_with_sctp_info(skb, &id, protocol);
+            break;
+        case IPPROTO_ICMP:
+            set_key_with_icmpv4_info(skb, &id, protocol);
+            break;
+        case IPPROTO_ICMPV6:
+            set_key_with_icmpv6_info(skb, &id, protocol);
+            break;
+        default:
+            return 0;
+    }
 
     long ret = 0;
     for (direction_t dir = INGRESS; dir < MAX_DIRECTION; dir++) {
         id.direction = dir;
-        ret = tcp_drop_lookup_and_update_flow(skb, &id, state, flags, reason);
+        ret = pkt_drop_lookup_and_update_flow(skb, &id, state, flags, reason);
         if (ret == 0) {
             return 0;
         }
@@ -53,15 +66,15 @@ static inline int trace_tcp_drop(void *ctx, struct sock *sk,
         .start_mono_time_ts = current_time,
         .end_mono_time_ts = current_time,
         .flags = flags,
-        .tcp_drops.packets = 1,
-        .tcp_drops.bytes = skb->len,
-        .tcp_drops.latest_state = state,
-        .tcp_drops.latest_flags = flags,
-        .tcp_drops.latest_drop_cause = reason,
+        .pkt_drops.packets = 1,
+        .pkt_drops.bytes = skb->len,
+        .pkt_drops.latest_state = state,
+        .pkt_drops.latest_flags = flags,
+        .pkt_drops.latest_drop_cause = reason,
     };
     ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
     if (trace_messages && ret != 0) {
-        bpf_printk("error tcp drop creating new flow %d\n", ret);
+        bpf_printk("error packet drop creating new flow %d\n", ret);
     }
 
     return ret;
@@ -80,9 +93,9 @@ int kfree_skb(struct trace_event_raw_kfree_skb *args) {
     // SKB_CONSUMED,
     // SKB_DROP_REASON_NOT_SPECIFIED,
     if (reason > SKB_DROP_REASON_NOT_SPECIFIED) {
-        return trace_tcp_drop(args, sk, &skb, reason);
+        return trace_pkt_drop(args, sk, &skb, reason);
     }
     return 0;
 }
 
-#endif //__TCP_DROPS_H__
+#endif //__PKT_DROPS_H__

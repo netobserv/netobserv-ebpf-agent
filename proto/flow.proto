@@ -44,11 +44,11 @@ message Record {
   uint32 flags = 13;
   uint32 icmp_type = 14;
   uint32 icmp_code = 15;
-  uint64 tcp_drop_bytes = 16;
-  uint64 tcp_drop_packets = 17;
-  uint32 tcp_drop_latest_flags = 18;
-  uint32 tcp_drop_latest_state = 19;
-  uint32 tcp_drop_latest_drop_cause = 20;
+  uint64 pkt_drop_bytes = 16;
+  uint64 pkt_drop_packets = 17;
+  uint32 pkt_drop_latest_flags = 18;
+  uint32 pkt_drop_latest_state = 19;
+  uint32 pkt_drop_latest_drop_cause = 20;
   uint32 dns_id = 21;
   uint32 dns_flags = 22;
   google.protobuf.Duration dns_latency = 23;

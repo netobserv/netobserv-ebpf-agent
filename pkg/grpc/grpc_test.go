@@ -165,11 +165,11 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 		},
 		IcmpType:               8,
 		IcmpCode:               10,
-		TcpDropBytes:           100,
-		TcpDropPackets:         1,
-		TcpDropLatestFlags:     1,
-		TcpDropLatestState:     2,
-		TcpDropLatestDropCause: 3,
+		PktDropBytes:           100,
+		PktDropPackets:         1,
+		PktDropLatestFlags:     1,
+		PktDropLatestState:     2,
+		PktDropLatestDropCause: 3,
 	}
 	records := &pbflow.Records{}
 	for i := 0; i < 100; i++ {
@@ -221,11 +221,11 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 		},
 		IcmpType:               8,
 		IcmpCode:               10,
-		TcpDropBytes:           100,
-		TcpDropPackets:         1,
-		TcpDropLatestFlags:     1,
-		TcpDropLatestState:     2,
-		TcpDropLatestDropCause: 3,
+		PktDropBytes:           100,
+		PktDropPackets:         1,
+		PktDropLatestFlags:     1,
+		PktDropLatestState:     2,
+		PktDropLatestDropCause: 3,
 		DnsId:                  1,
 		DnsFlags:               100,
 	}
