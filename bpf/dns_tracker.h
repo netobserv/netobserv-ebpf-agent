@@ -42,7 +42,6 @@ static inline void find_or_create_dns_flow(flow_id *id, struct dns_header *dns, 
 
 static inline void fill_dns_id (flow_id *id, dns_flow_id *dns_flow, u16 dns_id, bool reverse) {
     dns_flow->id = dns_id;
-    dns_flow->if_index = id->if_index;
     dns_flow->protocol = id->transport_protocol;
     if (reverse) {
         __builtin_memcpy(dns_flow->src_ip, id->dst_ip, IP_MAX_LEN);
