@@ -19,13 +19,13 @@ struct dns_header {
     u16 arcount;
 };
 
-static inline void find_or_create_dns_flow(flow_id *id, struct dns_header *dns, int len, int dir, u16 flags) {
+static inline void find_or_create_dns_flow(flow_id *id, struct dns_header *dns, int len, u16 flags, u64 latency) {
     flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
     u64 current_time = bpf_ktime_get_ns();
     // net_dev_queue trace point hook will run before TC hooks, so the flow shouldn't exists, if it does
     // that indicates we have a stale DNS query/response or in the middle of TCP flow so we will do nothing
     if (aggregate_flow == NULL) {
-        // there is no matching flows so lets create new one and add the drops
+        // there is no matching flows so lets create new one and dns info
          flow_metrics new_flow;
          __builtin_memset(&new_flow, 0, sizeof(new_flow));
          new_flow.start_mono_time_ts = current_time;
@@ -35,12 +35,25 @@ static inline void find_or_create_dns_flow(flow_id *id, struct dns_header *dns, 
          new_flow.flags = flags;
          new_flow.dns_record.id = bpf_ntohs(dns->id);
          new_flow.dns_record.flags = bpf_ntohs(dns->flags);
-        if (dir == EGRESS) {
-            new_flow.dns_record.req_mono_time_ts = current_time;
-        } else {
-            new_flow.dns_record.rsp_mono_time_ts = current_time;
-        }
+         new_flow.dns_record.latency = latency;
         bpf_map_update_elem(&aggregated_flows, id, &new_flow, BPF_ANY);
+    }
+}
+
+static inline void fill_dns_id (flow_id *id, dns_flow_id *dns_flow, u16 dns_id, bool reverse) {
+    dns_flow->id = dns_id;
+    dns_flow->if_index = id->if_index;
+    dns_flow->protocol = id->transport_protocol;
+    if (reverse) {
+        __builtin_memcpy(dns_flow->src_ip, id->dst_ip, IP_MAX_LEN);
+        __builtin_memcpy(dns_flow->dst_ip, id->src_ip, IP_MAX_LEN);
+        dns_flow->src_port = id->dst_port;
+        dns_flow->dst_port = id->src_port;
+    } else {
+        __builtin_memcpy(dns_flow->src_ip, id->src_ip, IP_MAX_LEN);
+        __builtin_memcpy(dns_flow->dst_ip, id->dst_ip, IP_MAX_LEN);
+        dns_flow->src_port = id->src_port;
+        dns_flow->dst_port = id->dst_port;
     }
 }
 
@@ -79,13 +92,26 @@ static inline int trace_dns(struct sk_buff *skb) {
     // check for DNS packets
     if (id.dst_port == DNS_PORT || id.src_port == DNS_PORT) {
         struct dns_header dns;
+        dns_flow_id dns_req;
+        u64 latency = 0;
         bpf_probe_read(&dns, sizeof(dns), (struct dns_header *)(skb->head + skb->transport_header + len));
         if ((bpf_ntohs(dns.flags) & DNS_QR_FLAG) == 0) { /* dns query */
+            fill_dns_id(&id, &dns_req, bpf_ntohs(dns.id), false);
+            if (bpf_map_lookup_elem(&dns_flows, &dns_req) == NULL) {
+               u64 ts = bpf_ktime_get_ns();
+                bpf_map_update_elem(&dns_flows, &dns_req, &ts, BPF_ANY);
+            }
             id.direction = EGRESS;
         } else { /* dns response */
             id.direction = INGRESS;
+            fill_dns_id(&id, &dns_req, bpf_ntohs(dns.id), true);
+            u64 *value = bpf_map_lookup_elem(&dns_flows, &dns_req);
+             if (value != NULL) {
+                latency = bpf_ktime_get_ns() - *value;
+                bpf_map_delete_elem(&dns_flows, &dns_req);
+                find_or_create_dns_flow(&id, &dns, skb->len, flags, latency);
+             }
         } // end of dns response
-        find_or_create_dns_flow(&id, &dns, skb->len, id.direction, flags);
     } // end of dns port check
 
     return 0;

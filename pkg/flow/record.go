@@ -37,11 +37,10 @@ type RawRecord ebpf.BpfFlowRecordT
 type Record struct {
 	RawRecord
 	// TODO: redundant field from RecordMetrics. Reorganize structs
-	TimeFlowStart   time.Time
-	TimeFlowEnd     time.Time
-	TimeDNSRequest  time.Time
-	TimeDNSResponse time.Time
-	Interface       string
+	TimeFlowStart time.Time
+	TimeFlowEnd   time.Time
+	DNSLatency    time.Duration
+	Interface     string
 	// Duplicate tells whether this flow has another duplicate so it has to be excluded from
 	// any metrics' aggregation (e.g. bytes/second rates between two pods).
 	// The reason for this field is that the same flow can be observed from multiple interfaces,
@@ -74,16 +73,10 @@ func NewRecord(
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}
 	if metrics.FlowRtt != 0 {
-		rttDelta := time.Duration(metrics.FlowRtt)
-		record.TimeFlowRtt = rttDelta
+		record.TimeFlowRtt = time.Duration(metrics.FlowRtt)
 	}
-	if metrics.DnsRecord.ReqMonoTimeTs != 0 {
-		reqDNS := time.Duration(monotonicCurrentTime - metrics.DnsRecord.ReqMonoTimeTs)
-		record.TimeDNSRequest = currentTime.Add(-reqDNS)
-	}
-	if metrics.DnsRecord.RspMonoTimeTs != 0 {
-		rspDNS := time.Duration(monotonicCurrentTime - metrics.DnsRecord.RspMonoTimeTs)
-		record.TimeDNSResponse = currentTime.Add(-rspDNS)
+	if metrics.DnsRecord.Latency != 0 {
+		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
 	return &record
 }

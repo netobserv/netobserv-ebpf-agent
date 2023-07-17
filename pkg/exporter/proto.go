@@ -80,17 +80,8 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
 		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
-	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
-		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
-			Seconds: fr.TimeDNSRequest.Unix(),
-			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
-		}
-	}
-	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
-		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
-			Seconds: fr.TimeDNSResponse.Unix(),
-			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
-		}
+	if fr.Metrics.DnsRecord.Latency != 0 {
+		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 	}
 	return &pbflowRecord
 }
@@ -137,17 +128,8 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
 		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
-	if fr.Metrics.DnsRecord.ReqMonoTimeTs != 0 {
-		pbflowRecord.TimeDnsReq = &timestamppb.Timestamp{
-			Seconds: fr.TimeDNSRequest.Unix(),
-			Nanos:   int32(fr.TimeDNSRequest.Nanosecond()),
-		}
-	}
-	if fr.Metrics.DnsRecord.RspMonoTimeTs != 0 {
-		pbflowRecord.TimeDnsRsp = &timestamppb.Timestamp{
-			Seconds: fr.TimeDNSResponse.Unix(),
-			Nanos:   int32(fr.TimeDNSResponse.Nanosecond()),
-		}
+	if fr.Metrics.DnsRecord.Latency != 0 {
+		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 	}
 	return &pbflowRecord
 }
