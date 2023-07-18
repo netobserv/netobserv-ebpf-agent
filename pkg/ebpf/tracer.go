@@ -263,7 +263,6 @@ func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf
 	}
 	if err := netlink.FilterDel(egressFilter); err == nil {
 		ilog.Warn("egress filter already existed. Deleted it")
-		ilog.Warn("egress pano filter already existed. Deleted it")
 	}
 	if err := netlink.FilterAdd(egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
@@ -277,7 +276,7 @@ func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf
 }
 
 func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.EgressPanoParse, "egress_pano_parse")
+	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.EgressPcaParse, "egress_pca_parse")
 	if err != nil {
 		return err
 	}
@@ -481,7 +480,6 @@ func NewPacketFetcher(
 	cacheMaxSize int,
 	ingress, egress bool,
 ) (*PacketFetcher, error) {
-	// Tracing and sampling disabled for PANO
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
@@ -539,7 +537,7 @@ func (p *PacketFetcher) Register(iface ifaces.Interface) error {
 }
 
 func (p *PacketFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.IngressPanoParse, "ingress_pano_parse")
+	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.IngressPcaParse, "ingress_pca_parse")
 	if err != nil {
 		return err
 	}
@@ -561,10 +559,10 @@ func (p *PacketFetcher) Close() error {
 		}
 	}
 	if p.objects != nil {
-		if err := p.objects.EgressPanoParse.Close(); err != nil {
+		if err := p.objects.EgressPcaParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
-		if err := p.objects.IngressPanoParse.Close(); err != nil {
+		if err := p.objects.IngressPcaParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if err := p.objects.PacketRecord.Close(); err != nil {

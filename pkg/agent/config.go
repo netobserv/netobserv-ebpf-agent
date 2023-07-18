@@ -146,9 +146,10 @@ type Config struct {
 	EnableTCPDrops bool `env:"ENABLE_TCP_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
-	// EnablePano sets Pano filtering to enable. By default Pano is off.
-	EnablePano bool `env:"ENABLE_PANO" envDefault:"false"`
-	// PanoFilters set the filters to determine packets to filter using PANO. It is a comma separated set.
-	// Example: PANO_FILTER = "udp and port 53"
-	PanoFilters string `env:"PANO_FILTER" envDefault:""`
+	// EnablePCA enables Packet Capture Agent (PCA). By default PCA is off.
+	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
+	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
+	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp, 80"
+	// Default is set to [udp, 53] for capturing DNS packets.
+	PCAFilters string `env:"PCA_FILTER" envDefault:"53"`
 }

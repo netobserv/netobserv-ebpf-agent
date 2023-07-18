@@ -53,15 +53,15 @@ func main() {
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
-	if config.EnablePano {
+	if config.EnablePCA {
 		packetsAgent, err := agent.PacketsAgent(&config)
 		if err != nil {
-			logrus.WithError(err).Fatal("[PANO] can't instantiate NetObserv eBPF Agent")
+			logrus.WithError(err).Fatal("[PCA] can't instantiate NetObserv eBPF Agent")
 		}
 
 		ctx := terminateAgent()
 		if err := packetsAgent.Run(ctx); err != nil {
-			logrus.WithError(err).Fatal("[PANO] can't start netobserv-ebpf-agent")
+			logrus.WithError(err).Fatal("[PCA] can't start netobserv-ebpf-agent")
 		}
 	} else {
 		flowsAgent, err := agent.FlowsAgent(&config)

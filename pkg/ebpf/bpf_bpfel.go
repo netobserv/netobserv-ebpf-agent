@@ -113,9 +113,9 @@ type BpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
-	EgressPanoParse  *ebpf.ProgramSpec `ebpf:"egress_pano_parse"`
+	EgressPcaParse   *ebpf.ProgramSpec `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
-	IngressPanoParse *ebpf.ProgramSpec `ebpf:"ingress_pano_parse"`
+	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
 }
@@ -169,9 +169,9 @@ func (m *BpfMaps) Close() error {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
-	EgressPanoParse  *ebpf.Program `ebpf:"egress_pano_parse"`
+	EgressPcaParse   *ebpf.Program `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-	IngressPanoParse *ebpf.Program `ebpf:"ingress_pano_parse"`
+	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
 	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 }
@@ -179,9 +179,9 @@ type BpfPrograms struct {
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.EgressFlowParse,
-		p.EgressPanoParse,
+		p.EgressPcaParse,
 		p.IngressFlowParse,
-		p.IngressPanoParse,
+		p.IngressPcaParse,
 		p.KfreeSkb,
 		p.TraceNetPackets,
 	)

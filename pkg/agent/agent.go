@@ -465,7 +465,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 	// configure informer for new interfaces
 	informer := configureInformer(cfg, plog)
 
-	plog.Info("[PANO]acquiring Agent IP")
+	plog.Info("[PCA]acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("acquiring Agent IP: %w", err)
@@ -623,12 +623,12 @@ func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	if !p.filter.Allowed(iface.Name) {
 		plog.WithField("interface", iface).
-			Debug("[PANO]interface does not match the allow/exclusion filters. Ignoring")
+			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	plog.WithField("[PANO]interface", iface).Info("interface detected. Registering packets ebpfFetcher")
+	plog.WithField("[PCA]interface", iface).Info("interface detected. Registering packets ebpfFetcher")
 	if err := p.ebpf.Register(iface); err != nil {
-		plog.WithField("[PANO]interface", iface).WithError(err).
+		plog.WithField("[PCA]interface", iface).WithError(err).
 			Warn("can't register packet ebpfFetcher. Ignoring")
 		return
 	}
