@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
@@ -35,6 +37,8 @@ const (
 	constEnableRtt     = "enable_rtt"
 	tcpDropHook        = "kfree_skb"
 	dnsTraceHook       = "net_dev_queue"
+	constPcaPort       = "pca_port"
+	constPcaProto      = "pca_proto"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -478,6 +482,7 @@ type PacketFetcher struct {
 
 func NewPacketFetcher(
 	cacheMaxSize int,
+	pcaFilters string,
 	ingress, egress bool,
 ) (*PacketFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -490,6 +495,24 @@ func NewPacketFetcher(
 	if err != nil {
 		return nil, err
 	}
+
+	pcaPort := 0
+	pcaProto := 0
+	filters := strings.Split(pcaFilters, ",")
+	if filters[0] == "tcp" {
+		pcaProto = syscall.IPPROTO_TCP
+	} else {
+		pcaProto = syscall.IPPROTO_UDP
+	}
+	pcaPort, _ = strconv.Atoi(filters[1])
+
+	if err := spec.RewriteConstants(map[string]interface{}{
+		constPcaPort:  uint32(pcaPort),
+		constPcaProto: uint8(pcaProto),
+	}); err != nil {
+		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
+	}
+	plog.Debugf("PCA Filters: %d, %d Incoming: %s", pcaProto, pcaPort, pcaFilters)
 
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
 		var ve *ebpf.VerifierError

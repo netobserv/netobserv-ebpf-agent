@@ -479,7 +479,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 
 	ingress, egress := flowDirections(cfg)
 
-	fetcher, err := ebpf.NewPacketFetcher(cfg.CacheMaxFlows, ingress, egress)
+	fetcher, err := ebpf.NewPacketFetcher(cfg.CacheMaxFlows, cfg.PCAFilters, ingress, egress)
 	if err != nil {
 		return nil, err
 	}

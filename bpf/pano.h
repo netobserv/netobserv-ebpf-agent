@@ -5,7 +5,6 @@
 #include <string.h>
 
 #define MAX_EVENT_DATA 256
-#define DNS_PORTS bpf_htons(53)
 
 static inline int export_packet_payload (struct __sk_buff *skb) {
     void *data_end = (void *)(long)skb->data_end;
@@ -13,7 +12,7 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     payload_meta meta;
     struct ethhdr *eth  = data;
     struct iphdr  *ip;
-    struct udphdr *udp_data;
+    struct udphdr *tproto_data;
     __u64 flags = BPF_F_CURRENT_CPU;
     __u16 headerSize;
     __u64 packet_len;
@@ -28,8 +27,8 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
        return TC_ACT_UNSPEC;
     }
 
-    udp_data = (void *)ip + sizeof(*ip);
-    if ((void *)udp_data + sizeof(*udp_data) > data_end) {
+    tproto_data = (void *)ip + sizeof(*ip);
+    if ((void *)tproto_data + sizeof(*tproto_data) > data_end) {
        return TC_ACT_UNSPEC;	
     }
 
@@ -37,15 +36,15 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
        return TC_ACT_UNSPEC;	
     }   
 
-    //Only analyze UDP packets
-    if (!(ip->protocol == IPPROTO_UDP || ip->protocol == IPPROTO_TCP)) {
+    //Only export packets with protocol set by ENV var
+    if (ip->protocol != pca_proto) {
        return TC_ACT_UNSPEC;	
     }
 
-    //TODO: Update port number/filters to be read from ENV variable
     packet_len = data_end - data;
     headerSize = packet_len < MAX_EVENT_DATA ? packet_len : MAX_EVENT_DATA;
-    if (udp_data->source == DNS_PORTS || udp_data->dest == DNS_PORTS) {
+    //Only export packets on port number set by ENV var
+    if (tproto_data->source == bpf_htons(pca_port) || tproto_data->dest == bpf_htons(pca_port)) {
         // enable the flag to add packet header
         // Packet payload follows immediately after the meta struct
         flags |= (__u64)headerSize << 32;
