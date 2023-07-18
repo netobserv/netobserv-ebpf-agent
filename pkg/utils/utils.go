@@ -81,7 +81,7 @@ func currentKernelVersion() (uint32, error) {
 	return kernelVersionFromReleaseString(releaseString)
 }
 
-func utsnameStr(in []int8) string {
+func utsnameStr[T int8 | uint8](in []T) string {
 	out := make([]byte, len(in))
 	for i := 0; i < len(in); i++ {
 		if in[i] == 0 {
