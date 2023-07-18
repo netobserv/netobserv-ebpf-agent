@@ -164,7 +164,6 @@ typedef struct dns_flow_id_t {
     u8 src_ip[IP_MAX_LEN];
     u8 dst_ip[IP_MAX_LEN];
     u16 id;
-    u32 if_index;
     u8 protocol;
 } __attribute__((packed)) dns_flow_id;
 

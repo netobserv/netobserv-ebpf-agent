@@ -19,7 +19,6 @@ type BpfDnsFlowId struct {
 	SrcIp    [16]uint8
 	DstIp    [16]uint8
 	Id       uint16
-	IfIndex  uint32
 	Protocol uint8
 }
 
