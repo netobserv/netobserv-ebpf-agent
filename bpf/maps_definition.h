@@ -39,4 +39,12 @@ struct {
 	__type(value, __u32);
 } packet_record SEC(".maps");
 
+// DNS tracking flow based hashmap used to correlate query and responses
+// to allow calculating latency in ebpf agent directly
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
+    __type(key, dns_flow_id);
+    __type(value, u64);
+} dns_flows SEC(".maps");
 #endif //__MAPS_DEFINITION_H__

@@ -89,8 +89,7 @@ typedef struct flow_metrics_t {
     struct dns_record_t {
         u16 id;
         u16 flags;
-        u64 req_mono_time_ts;
-        u64 rsp_mono_time_ts;
+        u64 latency;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
 } __attribute__((packed)) flow_metrics;
@@ -165,6 +164,17 @@ typedef struct payload_meta_t {
     u32 if_index;
     u32 pkt_len;
 } __attribute__((packed)) payload_meta;
+
+// DNS Flow record used as key to correlate DNS query and response
+typedef struct dns_flow_id_t {
+    u16 src_port;
+    u16 dst_port;
+    u8 src_ip[IP_MAX_LEN];
+    u8 dst_ip[IP_MAX_LEN];
+    u16 id;
+    u32 if_index;
+    u8 protocol;
+} __attribute__((packed)) dns_flow_id;
 
 #endif /* __TYPES_H__ */
 
