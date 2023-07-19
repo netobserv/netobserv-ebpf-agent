@@ -198,7 +198,7 @@ static inline int set_key_with_tcp_info(struct sk_buff *skb, flow_id *id, u8 pro
      id->src_port = sport;
      id->dst_port = dport;
      id->transport_protocol = protocol;
-     return tcp.doff * sizeof(u32);
+     return bpf_ntohs(tcp.doff) * sizeof(u32);
  }
 
 static inline int set_key_with_udp_info(struct sk_buff *skb, flow_id *id, u8 protocol) {
