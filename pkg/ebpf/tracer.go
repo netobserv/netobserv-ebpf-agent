@@ -20,7 +20,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type tcp_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
@@ -31,7 +31,7 @@ const (
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
 	constEnableRtt     = "enable_rtt"
-	tcpDropHook        = "kfree_skb"
+	pktDropHook        = "kfree_skb"
 	dnsTraceHook       = "net_dev_queue"
 )
 
@@ -50,7 +50,7 @@ type FlowFetcher struct {
 	cacheMaxSize         int
 	enableIngress        bool
 	enableEgress         bool
-	tcpDropsTracePoint   link.Link
+	pktDropsTracePoint   link.Link
 	dnsTrackerTracePoint link.Link
 }
 
@@ -60,7 +60,7 @@ type FlowFetcherConfig struct {
 	Debug         bool
 	Sampling      int
 	CacheMaxSize  int
-	TCPDrops      bool
+	PktDrops      bool
 	DNSTracker    bool
 	EnableRTT     bool
 }
@@ -125,8 +125,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 			BpfMaps
 		}
 		var newObjects NewBpfObjects
-		// remove tcpdrop hook from the spec
-		delete(spec.Programs, tcpDropHook)
+		// remove pktdrop hook from the spec
+		delete(spec.Programs, pktDropHook)
 		newObjects.NewBpfPrograms = NewBpfPrograms{}
 		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
 			var ve *ebpf.VerifierError
@@ -165,9 +165,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	 */
 	btf.FlushKernelSpec()
 
-	var tcpDropsLink link.Link
-	if cfg.TCPDrops && !oldKernel {
-		tcpDropsLink, err = link.Tracepoint("skb", tcpDropHook, objects.KfreeSkb, nil)
+	var pktDropsLink link.Link
+	if cfg.PktDrops && !oldKernel {
+		pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
 		}
@@ -195,7 +195,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		cacheMaxSize:         cfg.CacheMaxSize,
 		enableIngress:        cfg.EnableIngress,
 		enableEgress:         cfg.EnableEgress,
-		tcpDropsTracePoint:   tcpDropsLink,
+		pktDropsTracePoint:   pktDropsLink,
 		dnsTrackerTracePoint: dnsTrackerLink,
 	}, nil
 }
@@ -313,8 +313,8 @@ func (m *FlowFetcher) Close() error {
 
 	var errs []error
 
-	if m.tcpDropsTracePoint != nil {
-		m.tcpDropsTracePoint.Close()
+	if m.pktDropsTracePoint != nil {
+		m.pktDropsTracePoint.Close()
 	}
 
 	if m.dnsTrackerTracePoint != nil {

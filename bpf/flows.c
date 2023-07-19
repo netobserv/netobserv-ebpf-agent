@@ -19,10 +19,10 @@
 #include "configs.h"
 #include "utils.h"
 
-/* Defines a tcp drops statistics tracker,
+/* Defines a packet drops statistics tracker,
    which attaches at kfree_skb hook. Is optional.
 */
-#include "tcp_drops.h"
+#include "pkt_drops.h"
 
 /* Defines a dns tracker,
    which attaches at net_dev_queue hook. Is optional.

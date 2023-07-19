@@ -77,13 +77,13 @@ typedef struct flow_metrics_t {
     // 0 otherwise
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
-    struct tcp_drops_t {
+    struct pkt_drops_t {
         u32 packets;
         u64 bytes;
         u16 latest_flags;
         u8 latest_state;
         u32 latest_drop_cause;
-    } __attribute__((packed)) tcp_drops;
+    } __attribute__((packed)) pkt_drops;
     struct dns_record_t {
         u16 id;
         u16 flags;
@@ -92,8 +92,8 @@ typedef struct flow_metrics_t {
     u64 flow_rtt;
 } __attribute__((packed)) flow_metrics;
 
-// Force emitting struct tcp_drops into the ELF.
-const struct tcp_drops_t *unused0 __attribute__((unused));
+// Force emitting struct pkt_drops into the ELF.
+const struct pkt_drops_t *unused0 __attribute__((unused));
 
 // Force emitting struct flow_metrics into the ELF.
 const struct flow_metrics_t *unused1 __attribute__((unused));

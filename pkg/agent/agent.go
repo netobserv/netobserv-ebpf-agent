@@ -127,7 +127,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		Debug:         debug,
 		Sampling:      cfg.Sampling,
 		CacheMaxSize:  cfg.CacheMaxFlows,
-		TCPDrops:      cfg.EnableTCPDrops,
+		PktDrops:      cfg.EnablePktDrops,
 		DNSTracker:    cfg.EnableDNSTracking,
 		EnableRTT:     cfg.EnableRTT,
 	}
