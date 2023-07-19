@@ -7,13 +7,12 @@
 package pbflow
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	duration "github.com/golang/protobuf/ptypes/duration"
 	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -179,20 +178,19 @@ type Record struct {
 	// From all the duplicate flows, one will set this value to false and the rest will be true.
 	Duplicate bool `protobuf:"varint,11,opt,name=duplicate,proto3" json:"duplicate,omitempty"`
 	// Agent IP address to help identifying the source of the flow
-	AgentIp                *IP                  `protobuf:"bytes,12,opt,name=agent_ip,json=agentIp,proto3" json:"agent_ip,omitempty"`
-	Flags                  uint32               `protobuf:"varint,13,opt,name=flags,proto3" json:"flags,omitempty"`
-	IcmpType               uint32               `protobuf:"varint,14,opt,name=icmp_type,json=icmpType,proto3" json:"icmp_type,omitempty"`
-	IcmpCode               uint32               `protobuf:"varint,15,opt,name=icmp_code,json=icmpCode,proto3" json:"icmp_code,omitempty"`
-	TcpDropBytes           uint64               `protobuf:"varint,16,opt,name=tcp_drop_bytes,json=tcpDropBytes,proto3" json:"tcp_drop_bytes,omitempty"`
-	TcpDropPackets         uint64               `protobuf:"varint,17,opt,name=tcp_drop_packets,json=tcpDropPackets,proto3" json:"tcp_drop_packets,omitempty"`
-	TcpDropLatestFlags     uint32               `protobuf:"varint,18,opt,name=tcp_drop_latest_flags,json=tcpDropLatestFlags,proto3" json:"tcp_drop_latest_flags,omitempty"`
-	TcpDropLatestState     uint32               `protobuf:"varint,19,opt,name=tcp_drop_latest_state,json=tcpDropLatestState,proto3" json:"tcp_drop_latest_state,omitempty"`
-	TcpDropLatestDropCause uint32               `protobuf:"varint,20,opt,name=tcp_drop_latest_drop_cause,json=tcpDropLatestDropCause,proto3" json:"tcp_drop_latest_drop_cause,omitempty"`
-	DnsId                  uint32               `protobuf:"varint,21,opt,name=dns_id,json=dnsId,proto3" json:"dns_id,omitempty"`
-	DnsFlags               uint32               `protobuf:"varint,22,opt,name=dns_flags,json=dnsFlags,proto3" json:"dns_flags,omitempty"`
-	TimeDnsReq             *timestamp.Timestamp `protobuf:"bytes,23,opt,name=time_dns_req,json=timeDnsReq,proto3" json:"time_dns_req,omitempty"`
-	TimeDnsRsp             *timestamp.Timestamp `protobuf:"bytes,24,opt,name=time_dns_rsp,json=timeDnsRsp,proto3" json:"time_dns_rsp,omitempty"`
-	TimeFlowRtt            *duration.Duration   `protobuf:"bytes,25,opt,name=time_flow_rtt,json=timeFlowRtt,proto3" json:"time_flow_rtt,omitempty"`
+	AgentIp                *IP                `protobuf:"bytes,12,opt,name=agent_ip,json=agentIp,proto3" json:"agent_ip,omitempty"`
+	Flags                  uint32             `protobuf:"varint,13,opt,name=flags,proto3" json:"flags,omitempty"`
+	IcmpType               uint32             `protobuf:"varint,14,opt,name=icmp_type,json=icmpType,proto3" json:"icmp_type,omitempty"`
+	IcmpCode               uint32             `protobuf:"varint,15,opt,name=icmp_code,json=icmpCode,proto3" json:"icmp_code,omitempty"`
+	TcpDropBytes           uint64             `protobuf:"varint,16,opt,name=tcp_drop_bytes,json=tcpDropBytes,proto3" json:"tcp_drop_bytes,omitempty"`
+	TcpDropPackets         uint64             `protobuf:"varint,17,opt,name=tcp_drop_packets,json=tcpDropPackets,proto3" json:"tcp_drop_packets,omitempty"`
+	TcpDropLatestFlags     uint32             `protobuf:"varint,18,opt,name=tcp_drop_latest_flags,json=tcpDropLatestFlags,proto3" json:"tcp_drop_latest_flags,omitempty"`
+	TcpDropLatestState     uint32             `protobuf:"varint,19,opt,name=tcp_drop_latest_state,json=tcpDropLatestState,proto3" json:"tcp_drop_latest_state,omitempty"`
+	TcpDropLatestDropCause uint32             `protobuf:"varint,20,opt,name=tcp_drop_latest_drop_cause,json=tcpDropLatestDropCause,proto3" json:"tcp_drop_latest_drop_cause,omitempty"`
+	DnsId                  uint32             `protobuf:"varint,21,opt,name=dns_id,json=dnsId,proto3" json:"dns_id,omitempty"`
+	DnsFlags               uint32             `protobuf:"varint,22,opt,name=dns_flags,json=dnsFlags,proto3" json:"dns_flags,omitempty"`
+	DnsLatency             *duration.Duration `protobuf:"bytes,23,opt,name=dns_latency,json=dnsLatency,proto3" json:"dns_latency,omitempty"`
+	TimeFlowRtt            *duration.Duration `protobuf:"bytes,24,opt,name=time_flow_rtt,json=timeFlowRtt,proto3" json:"time_flow_rtt,omitempty"`
 }
 
 func (x *Record) Reset() {
@@ -381,16 +379,9 @@ func (x *Record) GetDnsFlags() uint32 {
 	return 0
 }
 
-func (x *Record) GetTimeDnsReq() *timestamp.Timestamp {
+func (x *Record) GetDnsLatency() *duration.Duration {
 	if x != nil {
-		return x.TimeDnsReq
-	}
-	return nil
-}
-
-func (x *Record) GetTimeDnsRsp() *timestamp.Timestamp {
-	if x != nil {
-		return x.TimeDnsRsp
+		return x.DnsLatency
 	}
 	return nil
 }

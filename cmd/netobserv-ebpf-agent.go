@@ -54,6 +54,9 @@ func main() {
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
 	if config.EnablePCA {
+		if config.PCAFilters == "" {
+			logrus.Fatal("[PCA] NetObserv eBPF Agent instantiated without filters to identify packets. Please set environment variable PCA_FILTER.")
+		}
 		packetsAgent, err := agent.PacketsAgent(&config)
 		if err != nil {
 			logrus.WithError(err).Fatal("[PCA] can't instantiate NetObserv eBPF Agent")

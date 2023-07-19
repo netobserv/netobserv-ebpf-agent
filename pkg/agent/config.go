@@ -150,6 +150,5 @@ type Config struct {
 	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
 	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
 	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80"
-	// Default is set to [udp,53] for capturing DNS packets.
-	PCAFilters string `env:"PCA_FILTER" envDefault:"udp,53"`
+	PCAFilters string `env:"PCA_FILTER"`
 }
