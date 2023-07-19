@@ -32,6 +32,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, // u64 flow_end_time
 		0x13, 0x14, //flags
 		0x33, // u8 errno
+		0x60, // u8 dscp
 		// pkt_drops structure
 		0x10, 0x11, 0x12, 0x13, // u32 packets
 		0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, // u64 bytes
@@ -69,6 +70,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			EndMonoTimeTs:   0x1a19181716151413,
 			Flags:           0x1413,
 			Errno:           0x33,
+			Dscp:            0x60,
 			PktDrops: ebpf.BpfPktDropsT{
 				Packets:         0x13121110,
 				Bytes:           0x1b1a191817161514,

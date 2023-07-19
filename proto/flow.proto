@@ -63,6 +63,7 @@ message DataLink {
 message Network {
   IP src_addr = 1;
   IP dst_addr = 2;
+  uint32 dscp = 3;
 }
 
 message IP {
