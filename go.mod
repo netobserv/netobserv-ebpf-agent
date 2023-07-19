@@ -1,10 +1,10 @@
 module github.com/netobserv/netobserv-ebpf-agent
 
-go 1.18
+go 1.19
 
 require (
 	github.com/caarlos0/env/v6 v6.9.1
-	github.com/cilium/ebpf v0.10.0
+	github.com/cilium/ebpf v0.11.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/netobserv/gopipes v0.3.0
@@ -15,9 +15,9 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vladimirvivien/gexe v0.1.1
 	github.com/vmware/go-ipfix v0.5.12
-	golang.org/x/sys v0.5.0
-	google.golang.org/grpc v1.45.0
-	google.golang.org/protobuf v1.28.0
+	golang.org/x/sys v0.6.0
+	google.golang.org/grpc v1.53.0
+	google.golang.org/protobuf v1.28.1
 	k8s.io/api v0.24.0
 	k8s.io/apimachinery v0.24.0
 	k8s.io/client-go v0.24.0
@@ -60,13 +60,14 @@ require (
 	github.com/xdg/scram v1.0.5 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
+	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
 	golang.org/x/net v0.7.0 // indirect
-	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
+	golang.org/x/oauth2 v0.4.0 // indirect
 	golang.org/x/term v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220407144326-9054f6ed7bac // indirect
+	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -51,7 +52,7 @@ func NewRingBufTracer(
 	}
 }
 
-func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord] {
+func (m *RingBufTracer) TraceLoop(ctx context.Context, enableGC bool) node.StartFunc[*RawRecord] {
 	return func(out chan<- *RawRecord) {
 		debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
 		for {
@@ -60,7 +61,7 @@ func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord
 				rtlog.Debug("exiting trace loop due to context cancellation")
 				return
 			default:
-				if err := m.listenAndForwardRingBuffer(debugging, out); err != nil {
+				if err := m.listenAndForwardRingBuffer(debugging, enableGC, out); err != nil {
 					if errors.Is(err, ringbuf.ErrClosed) {
 						rtlog.Debug("Received signal, exiting..")
 						return
@@ -73,7 +74,7 @@ func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord
 	}
 }
 
-func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh chan<- *RawRecord) error {
+func (m *RingBufTracer) listenAndForwardRingBuffer(debugging, enableGC bool, forwardCh chan<- *RawRecord) error {
 	event, err := m.ringBuffer.ReadRingBuf()
 	if err != nil {
 		return fmt.Errorf("reading from ring buffer: %w", err)
@@ -95,7 +96,9 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
-
+	if enableGC {
+		runtime.GC()
+	}
 	return nil
 }
 

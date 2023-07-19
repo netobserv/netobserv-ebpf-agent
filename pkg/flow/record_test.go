@@ -32,7 +32,18 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, // u64 flow_end_time
 		0x13, 0x14, //flags
 		0x33, // u8 errno
-
+		// pkt_drops structure
+		0x10, 0x11, 0x12, 0x13, // u32 packets
+		0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, // u64 bytes
+		0x1c, 0x1d, //flags
+		0x1e,          // state
+		0x11, 0, 0, 0, //case
+		// dns_record structure
+		01, 00, // id
+		0x80, 00, // flags
+		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, // latency
+		// u64 flow_rtt
+		0xad, 0xde, 0xef, 0xbe, 0xef, 0xbe, 0xad, 0xde,
 	}))
 	require.NoError(t, err)
 
@@ -58,6 +69,19 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			EndMonoTimeTs:   0x1a19181716151413,
 			Flags:           0x1413,
 			Errno:           0x33,
+			PktDrops: ebpf.BpfPktDropsT{
+				Packets:         0x13121110,
+				Bytes:           0x1b1a191817161514,
+				LatestFlags:     0x1d1c,
+				LatestState:     0x1e,
+				LatestDropCause: 0x11,
+			},
+			DnsRecord: ebpf.BpfDnsRecordT{
+				Id:      0x0001,
+				Flags:   0x0080,
+				Latency: 0x1817161514131211,
+			},
+			FlowRtt: 0xdeadbeefbeefdead,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses

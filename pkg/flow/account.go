@@ -65,9 +65,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				alog.Debug("exiting account routine")
 				return
 			}
-			if stored, ok := c.entries[record.Id]; ok {
-				Accumulate(stored, &record.Metrics)
-			} else {
+			if _, ok := c.entries[record.Id]; !ok {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
 					c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
@@ -89,7 +87,7 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, *metrics, now, monotonicNow))
+		records = append(records, NewRecord(key, metrics, now, monotonicNow))
 	}
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records

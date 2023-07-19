@@ -13,6 +13,21 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfDnsFlowId struct {
+	SrcPort  uint16
+	DstPort  uint16
+	SrcIp    [16]uint8
+	DstIp    [16]uint8
+	Id       uint16
+	Protocol uint8
+}
+
+type BpfDnsRecordT struct {
+	Id      uint16
+	Flags   uint16
+	Latency uint64
+}
+
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
@@ -39,11 +54,30 @@ type BpfFlowMetricsT struct {
 	EndMonoTimeTs   uint64
 	Flags           uint16
 	Errno           uint8
+	PktDrops        BpfPktDropsT
+	DnsRecord       BpfDnsRecordT
+	FlowRtt         uint64
 }
 
 type BpfFlowRecordT struct {
 	Id      BpfFlowId
 	Metrics BpfFlowMetrics
+}
+
+type BpfFlowSeqId struct {
+	SrcPort uint16
+	DstPort uint16
+	SrcIp   [16]uint8
+	DstIp   [16]uint8
+	SeqId   uint32
+}
+
+type BpfPktDropsT struct {
+	Packets         uint32
+	Bytes           uint64
+	LatestFlags     uint16
+	LatestState     uint8
+	LatestDropCause uint32
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -61,9 +95,9 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //
 // The following types are suitable as obj argument:
 //
-//     *BpfObjects
-//     *BpfPrograms
-//     *BpfMaps
+//	*BpfObjects
+//	*BpfPrograms
+//	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
 func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
@@ -89,6 +123,8 @@ type BpfSpecs struct {
 type BpfProgramSpecs struct {
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
+	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -97,6 +133,8 @@ type BpfProgramSpecs struct {
 type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
+	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
+	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -120,12 +158,16 @@ func (o *BpfObjects) Close() error {
 type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
+	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
+	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AggregatedFlows,
 		m.DirectFlows,
+		m.DnsFlows,
+		m.FlowSequences,
 	)
 }
 
@@ -135,12 +177,16 @@ func (m *BpfMaps) Close() error {
 type BpfPrograms struct {
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
+	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 }
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.EgressFlowParse,
 		p.IngressFlowParse,
+		p.KfreeSkb,
+		p.TraceNetPackets,
 	)
 }
 
@@ -154,5 +200,6 @@ func _BpfClose(closers ...io.Closer) error {
 }
 
 // Do not access this directly.
+//
 //go:embed bpf_bpfel.o
 var _BpfBytes []byte

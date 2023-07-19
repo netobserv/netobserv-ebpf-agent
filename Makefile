@@ -18,7 +18,7 @@ endif
 
 # Go architecture and targets images to build
 GOARCH ?= amd64
-MULTIARCH_TARGETS ?= amd64 arm64 ppc64le
+MULTIARCH_TARGETS ?= amd64
 
 # In CI, to be replaced by `netobserv`
 IMAGE_ORG ?= $(USER)
@@ -28,15 +28,15 @@ IMAGE_TAG_BASE ?= quay.io/$(IMAGE_ORG)/netobserv-ebpf-agent
 
 # Image URL to use all building/pushing image targets
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
-IMAGE_SHA = $(IMAGE_TAG_BASE):$(BUILD_SHA)
+OCI_BUILD_OPTS ?=
 
-# Image building tool (docker / podman)
-OCI_BIN_PATH := $(shell which podman  || which docker)
+# Image building tool (docker / podman) - docker is preferred in CI
+OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
-CILIUM_EBPF_VERSION := v0.10.0
-GOLANGCI_LINT_VERSION = v1.50.1
+CILIUM_EBPF_VERSION := v0.11.0
+GOLANGCI_LINT_VERSION = v1.53.3
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS ?= linux
@@ -49,7 +49,7 @@ EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 # build a single arch target provided as argument
 define build_target
 	echo 'building image for arch $(1)'; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$(1) --build-arg TARGETARCH=$(1) --build-arg BUILDPLATFORM=linux/amd64 -t ${IMAGE}-$(1) -f Dockerfile .;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$(1) --build-arg TARGETARCH=$(1) --build-arg BUILDPLATFORM=linux/amd64 ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
 endef
 
 # push a single arch target image
@@ -59,9 +59,9 @@ define push_target
 endef
 
 # manifest create a single arch target provided as argument
-define manifest_create_target
-	echo 'manifest create for arch $(1)'; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest add ${IMAGE} ${IMAGE}-$(target);
+define manifest_add_target
+	echo 'manifest add target $(1)'; \
+	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest add ${IMAGE} ${IMAGE}-$(1);
 endef
 
 ##@ General
@@ -89,7 +89,7 @@ vendors: ## Check go vendors
 .PHONY: prereqs
 prereqs: ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
-	test -f $(shell go env GOPATH)/bin/golangci-lint || GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
@@ -175,9 +175,9 @@ image-push: ## Push MULTIARCH_TARGETS images
 
 .PHONY: manifest-build
 manifest-build: ## Build MULTIARCH_TARGETS manifest
-	trap 'exit' INT; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMAGE}
-	$(foreach target,$(MULTIARCH_TARGETS),$(call manifest_create_target,$(target)))
+	echo 'building manifest $(IMAGE)'
+	DOCKER_BUILDKIT=1 $(OCI_BIN) rmi ${IMAGE} -f
+	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest create ${IMAGE} $(foreach target,$(MULTIARCH_TARGETS), --amend ${IMAGE}-$(target));
 
 .PHONY: manifest-push
 manifest-push: ## Push MULTIARCH_TARGETS manifest
@@ -186,23 +186,6 @@ ifeq (${OCI_BIN}, docker)
 	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMAGE};
 else
 	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMAGE} docker://${IMAGE};
-endif
-
-.PHONY: ci-manifest-build
-ci-manifest-build: manifest-build ## Build CI manifest
-	$(OCI_BIN) build --build-arg BASE_IMAGE=$(IMAGE) -t $(IMAGE_SHA) -f scripts/shortlived.Dockerfile .
-ifeq ($(VERSION), main)
-# Also tag "latest" only for branch "main"
-	$(OCI_BIN) build -t $(IMAGE) -t $(IMAGE_TAG_BASE):latest -f scripts/shortlived.Dockerfile .
-endif
-
-.PHONY: ci-manifest-push
-ci-manifest-push: ## Push CI manifest
-	$(OCI_BIN) push $(IMAGE_SHA)
-ifeq ($(VERSION), main)
-# Also tag "latest" only for branch "main"
-	$(OCI_BIN) push ${IMAGE}
-	$(OCI_BIN) push $(IMAGE_TAG_BASE):latest
 endif
 
 include .mk/shortcuts.mk

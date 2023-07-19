@@ -6,24 +6,33 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
+
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
+	// ebpf map names as defined in flows.c
+	aggregatedFlowsMap = "aggregated_flows"
+	flowSequencesMap   = "flow_sequences"
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
-	aggregatedFlowsMap = "aggregated_flows"
+	constEnableRtt     = "enable_rtt"
+	pktDropHook        = "kfree_skb"
+	dnsTraceHook       = "net_dev_queue"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -33,21 +42,30 @@ var log = logrus.WithField("component", "ebpf.FlowFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects        *BpfObjects
-	qdiscs         map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters  map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader  *ringbuf.Reader
-	cacheMaxSize   int
-	enableIngress  bool
-	enableEgress   bool
+	objects              *BpfObjects
+	qdiscs               map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters        map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters       map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader        *ringbuf.Reader
+	cacheMaxSize         int
+	enableIngress        bool
+	enableEgress         bool
+	pktDropsTracePoint   link.Link
+	dnsTrackerTracePoint link.Link
 }
 
-func NewFlowFetcher(
-	traceMessages bool,
-	sampling, cacheMaxSize int,
-	ingress, egress bool,
-) (*FlowFetcher, error) {
+type FlowFetcherConfig struct {
+	EnableIngress bool
+	EnableEgress  bool
+	Debug         bool
+	Sampling      int
+	CacheMaxSize  int
+	PktDrops      bool
+	DNSTracker    bool
+	EnableRTT     bool
+}
+
+func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
@@ -59,27 +77,108 @@ func NewFlowFetcher(
 		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
-	// Resize aggregated flows map according to user-provided configuration
-	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cacheMaxSize)
+	// Resize maps according to user-provided configuration
+	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
+	spec.Maps[flowSequencesMap].MaxEntries = uint32(cfg.CacheMaxSize)
 
 	traceMsgs := 0
-	if traceMessages {
+	if cfg.Debug {
 		traceMsgs = 1
 	}
+
+	enableRtt := 0
+	if cfg.EnableRTT {
+		if !(cfg.EnableEgress && cfg.EnableIngress) {
+			log.Warnf("ENABLE_RTT is set to true. But both Ingress AND Egress are not enabled. Disabling ENABLE_RTT")
+			enableRtt = 0
+		} else {
+			enableRtt = 1
+		}
+	}
+
+	if enableRtt == 0 {
+		// Cannot set the size of map to be 0 so set it to 1.
+		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
+	}
+
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:      uint32(sampling),
+		constSampling:      uint32(cfg.Sampling),
 		constTraceMessages: uint8(traceMsgs),
+		constEnableRtt:     uint8(enableRtt),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
-	if err := spec.LoadAndAssign(&objects, nil); err != nil {
-		var ve *ebpf.VerifierError
-		if errors.As(err, &ve) {
-			// Using %+v will print the whole verifier error, not just the last
-			// few lines.
-			log.Infof("Verifier error: %+v", ve)
+
+	oldKernel := utils.IskernelOlderthan514()
+
+	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
+	if oldKernel {
+		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
+		// Note: if new hooks are added in the future we need to update the following structures manually
+		type NewBpfPrograms struct {
+			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
+			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+			TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 		}
-		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		type NewBpfObjects struct {
+			NewBpfPrograms
+			BpfMaps
+		}
+		var newObjects NewBpfObjects
+		// remove pktdrop hook from the spec
+		delete(spec.Programs, pktDropHook)
+		newObjects.NewBpfPrograms = NewBpfPrograms{}
+		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+		// Manually assign maps and programs to the original objects variable
+		// Note for any future maps or programs make sure to copy them manually here
+		objects.DirectFlows = newObjects.DirectFlows
+		objects.AggregatedFlows = newObjects.AggregatedFlows
+		objects.FlowSequences = newObjects.FlowSequences
+		objects.EgressFlowParse = newObjects.EgressFlowParse
+		objects.IngressFlowParse = newObjects.IngressFlowParse
+		objects.TraceNetPackets = newObjects.TraceNetPackets
+		objects.KfreeSkb = nil
+	} else {
+		if err := spec.LoadAndAssign(&objects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+	}
+
+	/*
+	 * since we load the program only when the we start we need to release
+	 * memory used by cached kernel BTF see https://github.com/cilium/ebpf/issues/1063
+	 * for more details.
+	 */
+	btf.FlushKernelSpec()
+
+	var pktDropsLink link.Link
+	if cfg.PktDrops && !oldKernel {
+		pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
+		}
+	}
+
+	var dnsTrackerLink link.Link
+	if cfg.DNSTracker {
+		dnsTrackerLink, err = link.Tracepoint("net", dnsTraceHook, objects.TraceNetPackets, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to trace_net_packets: %w", err)
+		}
 	}
 
 	// read events from igress+egress ringbuffer
@@ -88,14 +187,16 @@ func NewFlowFetcher(
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 	return &FlowFetcher{
-		objects:        &objects,
-		ringbufReader:  flows,
-		egressFilters:  map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters: map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:         map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:   cacheMaxSize,
-		enableIngress:  ingress,
-		enableEgress:   egress,
+		objects:              &objects,
+		ringbufReader:        flows,
+		egressFilters:        map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:       map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:               map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:         cfg.CacheMaxSize,
+		enableIngress:        cfg.EnableIngress,
+		enableEgress:         cfg.EnableEgress,
+		pktDropsTracePoint:   pktDropsLink,
+		dnsTrackerTracePoint: dnsTrackerLink,
 	}, nil
 }
 
@@ -124,7 +225,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
-			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %T %w", iface.Index, iface.Name, err, err)
+			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
 		}
 	}
 	m.qdiscs[iface] = qdisc
@@ -133,11 +234,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		return err
 	}
 
-	if err := m.registerIngress(iface, ipvlan); err != nil {
-		return err
-	}
-
-	return nil
+	return m.registerIngress(iface, ipvlan)
 }
 
 func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
@@ -215,6 +312,14 @@ func (m *FlowFetcher) Close() error {
 	log.Debug("unregistering eBPF objects")
 
 	var errs []error
+
+	if m.pktDropsTracePoint != nil {
+		m.pktDropsTracePoint.Close()
+	}
+
+	if m.dnsTrackerTracePoint != nil {
+		m.dnsTrackerTracePoint.Close()
+	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -308,25 +413,24 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
-func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId][]BpfFlowMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]*BpfFlowMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	flows := make(map[BpfFlowId][]BpfFlowMetrics, m.cacheMaxSize)
+	var flow = make(map[BpfFlowId]*BpfFlowMetrics, m.cacheMaxSize)
+	var id BpfFlowId
+	var metric BpfFlowMetrics
 
-	id := BpfFlowId{}
-	var metrics []BpfFlowMetrics
 	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
 	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
-	for iterator.Next(&id, &metrics) {
+	for iterator.Next(&id, &metric) {
 		if err := flowMap.Delete(id); err != nil {
 			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
 		}
-		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
-		// (probably due to race conditions) so we need to re-join metrics again at userspace
-		// TODO: instrument how many times the keys are is repeated in the same eviction
-		flows[id] = append(flows[id], metrics...)
+		metricPtr := new(BpfFlowMetrics)
+		*metricPtr = metric
+		flow[id] = metricPtr
 	}
-	return flows
+	return flow
 }

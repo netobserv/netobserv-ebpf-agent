@@ -49,11 +49,6 @@ var (
 		DstPort: 456,
 		IfIndex: 3,
 	}
-	key1Dupe = ebpf.BpfFlowId{
-		SrcPort: 123,
-		DstPort: 456,
-		IfIndex: 4,
-	}
 
 	key2 = ebpf.BpfFlowId{
 		SrcPort: 333,
@@ -71,7 +66,7 @@ func TestFlowsAgent_Deduplication(t *testing.T) {
 	})
 
 	exported := export.Get(t, timeout)
-	assert.Len(t, exported, 2)
+	assert.Len(t, exported, 1)
 
 	receivedKeys := map[ebpf.BpfFlowId]struct{}{}
 
@@ -81,21 +76,11 @@ func TestFlowsAgent_Deduplication(t *testing.T) {
 		receivedKeys[f.Id] = struct{}{}
 		switch f.Id {
 		case key1:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
+			assert.EqualValues(t, 3, f.Metrics.Packets)
+			assert.EqualValues(t, 44, f.Metrics.Bytes)
 			assert.False(t, f.Duplicate)
 			assert.Equal(t, "foo", f.Interface)
 			key1Flows = append(key1Flows, f)
-		case key1Dupe:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
-			assert.False(t, f.Duplicate)
-			assert.Equal(t, "bar", f.Interface)
-			key1Flows = append(key1Flows, f)
-		case key2:
-			assert.EqualValues(t, 7, f.Metrics.Packets)
-			assert.EqualValues(t, 33, f.Metrics.Bytes)
-			assert.False(t, f.Duplicate)
 		}
 	}
 	assert.Lenf(t, key1Flows, 1, "only one flow should have been forwarded: %#v", key1Flows)
@@ -112,33 +97,22 @@ func TestFlowsAgent_DeduplicationJustMark(t *testing.T) {
 	exported := export.Get(t, timeout)
 	receivedKeys := map[ebpf.BpfFlowId]struct{}{}
 
-	assert.Len(t, exported, 3)
+	assert.Len(t, exported, 1)
 	duplicates := 0
 	for _, f := range exported {
 		require.NotContains(t, receivedKeys, f.Id)
 		receivedKeys[f.Id] = struct{}{}
 		switch f.Id {
 		case key1:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
+			assert.EqualValues(t, 3, f.Metrics.Packets)
+			assert.EqualValues(t, 44, f.Metrics.Bytes)
 			if f.Duplicate {
 				duplicates++
 			}
 			assert.Equal(t, "foo", f.Interface)
-		case key1Dupe:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
-			if f.Duplicate {
-				duplicates++
-			}
-			assert.Equal(t, "bar", f.Interface)
-		case key2:
-			assert.EqualValues(t, 7, f.Metrics.Packets)
-			assert.EqualValues(t, 33, f.Metrics.Bytes)
-			assert.False(t, f.Duplicate)
 		}
 	}
-	assert.Equalf(t, 1, duplicates, "exported flows should have only one duplicate: %#v", exported)
+	assert.Equalf(t, 0, duplicates, "exported flows should have only one duplicate: %#v", exported)
 }
 
 func TestFlowsAgent_Deduplication_None(t *testing.T) {
@@ -149,7 +123,7 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 	})
 
 	exported := export.Get(t, timeout)
-	assert.Len(t, exported, 3)
+	assert.Len(t, exported, 1)
 	receivedKeys := map[ebpf.BpfFlowId]struct{}{}
 
 	var key1Flows []*flow.Record
@@ -158,24 +132,14 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 		receivedKeys[f.Id] = struct{}{}
 		switch f.Id {
 		case key1:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
+			assert.EqualValues(t, 3, f.Metrics.Packets)
+			assert.EqualValues(t, 44, f.Metrics.Bytes)
 			assert.False(t, f.Duplicate)
 			assert.Equal(t, "foo", f.Interface)
 			key1Flows = append(key1Flows, f)
-		case key1Dupe:
-			assert.EqualValues(t, 4, f.Metrics.Packets)
-			assert.EqualValues(t, 66, f.Metrics.Bytes)
-			assert.False(t, f.Duplicate)
-			assert.Equal(t, "bar", f.Interface)
-			key1Flows = append(key1Flows, f)
-		case key2:
-			assert.EqualValues(t, 7, f.Metrics.Packets)
-			assert.EqualValues(t, 33, f.Metrics.Bytes)
-			assert.False(t, f.Duplicate)
 		}
 	}
-	assert.Lenf(t, key1Flows, 2, "both key1 flows should have been forwarded: %#v", key1Flows)
+	assert.Lenf(t, key1Flows, 1, "both key1 flows should have been forwarded: %#v", key1Flows)
 }
 
 func TestFlowsAgent_Decoration(t *testing.T) {
@@ -185,7 +149,7 @@ func TestFlowsAgent_Decoration(t *testing.T) {
 	})
 
 	exported := export.Get(t, timeout)
-	assert.Len(t, exported, 3)
+	assert.Len(t, exported, 1)
 
 	// Tests that the decoration stage has been properly executed. It should
 	// add the interface name and the agent IP
@@ -219,18 +183,10 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	})
 
 	now := uint64(monotime.Now())
-	key1Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
-		{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
-	}
-	key2Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
-	}
+	key1Metrics := ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000}
 
-	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics{
-		key1:     key1Metrics,
-		key1Dupe: key1Metrics,
-		key2:     key2Metrics,
+	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{
+		key1: &key1Metrics,
 	})
 	return export
 }

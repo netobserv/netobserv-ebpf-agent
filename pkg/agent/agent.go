@@ -78,7 +78,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 	ReadRingBuf() (ringbuf.Record, error)
 }
 
@@ -116,13 +116,23 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	ingress, egress := flowDirections(cfg)
-
 	debug := false
 	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
 		debug = true
 	}
 
-	fetcher, err := ebpf.NewFlowFetcher(debug, cfg.Sampling, cfg.CacheMaxFlows, ingress, egress)
+	ebpfConfig := &ebpf.FlowFetcherConfig{
+		EnableIngress: ingress,
+		EnableEgress:  egress,
+		Debug:         debug,
+		Sampling:      cfg.Sampling,
+		CacheMaxSize:  cfg.CacheMaxFlows,
+		PktDrops:      cfg.EnablePktDrops,
+		DNSTracker:    cfg.EnableDNSTracking,
+		EnableRTT:     cfg.EnableRTT,
+	}
+
+	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +362,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	}
 
 	alog.Debug("connecting flows' processing graph")
-	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx))
-	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
+	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.EnableGC))
+	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx, f.cfg.EnableGC))
 
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))

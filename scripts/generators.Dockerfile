@@ -1,6 +1,6 @@
 FROM fedora:35
 
-ARG GOVERSION="1.18.4"
+ARG GOVERSION="1.20.5"
 ARG PROTOCVERSION="3.19.4"
 
 # Installs dependencies that are required to compile eBPF programs
@@ -33,6 +33,7 @@ ENV PATH $GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
 WORKDIR /tmp
 # Copies some pre-required Go dependencies to avoid downloading them on each build
 COPY Makefile Makefile
+COPY .mk/ .mk/
 RUN make prereqs
 
 WORKDIR /src

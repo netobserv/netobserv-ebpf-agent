@@ -39,6 +39,7 @@ type Record struct {
 	// TODO: redundant field from RecordMetrics. Reorganize structs
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
+	DNSLatency    time.Duration
 	Interface     string
 	// Duplicate tells whether this flow has another duplicate so it has to be excluded from
 	// any metrics' aggregation (e.g. bytes/second rates between two pods).
@@ -50,37 +51,34 @@ type Record struct {
 
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
+	// Calculated RTT which is set when record is created by calling NewRecord
+	TimeFlowRtt time.Duration
 }
 
 func NewRecord(
 	key ebpf.BpfFlowId,
-	metrics ebpf.BpfFlowMetrics,
+	metrics *ebpf.BpfFlowMetrics,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
-	return &Record{
+
+	var record = Record{
 		RawRecord: RawRecord{
 			Id:      key,
-			Metrics: metrics,
+			Metrics: *metrics,
 		},
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 	}
-}
-
-func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
-	// time == 0 if the value has not been yet set
-	if r.StartMonoTimeTs == 0 || r.StartMonoTimeTs > src.StartMonoTimeTs {
-		r.StartMonoTimeTs = src.StartMonoTimeTs
+	if metrics.FlowRtt != 0 {
+		record.TimeFlowRtt = time.Duration(metrics.FlowRtt)
 	}
-	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
-		r.EndMonoTimeTs = src.EndMonoTimeTs
+	if metrics.DnsRecord.Latency != 0 {
+		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
-	r.Bytes += src.Bytes
-	r.Packets += src.Packets
-	r.Flags |= src.Flags
+	return &record
 }
 
 // IP returns the net.IP equivalent object
