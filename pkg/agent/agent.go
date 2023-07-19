@@ -78,7 +78,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(enbaleGC bool) map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
 	ReadRingBuf() (ringbuf.Record, error)
 }
 

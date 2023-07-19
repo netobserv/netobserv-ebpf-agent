@@ -14,24 +14,21 @@ func TestIskernelOlderthan514(t *testing.T) {
 		{
 			name: "Kernel version < 5.14.0",
 			mockKernelVersion: func() (uint32, error) {
-				ver, _ := kernelVersionFromReleaseString("5.13.0")
-				return ver, nil
+				return kernelVersionFromReleaseString("5.13.0")
 			},
 			want: true,
 		},
 		{
 			name: "Kernel version = 5.14.0",
 			mockKernelVersion: func() (uint32, error) {
-				ver, _ := kernelVersionFromReleaseString("5.14.0")
-				return ver, nil
+				return kernelVersionFromReleaseString("5.14.0")
 			},
 			want: false,
 		},
 		{
 			name: "Kernel version > 5.14.0",
 			mockKernelVersion: func() (uint32, error) {
-				ver, _ := kernelVersionFromReleaseString("5.15.0")
-				return ver, nil
+				return kernelVersionFromReleaseString("5.15.0")
 			},
 			want: false,
 		},
