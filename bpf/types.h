@@ -51,6 +51,8 @@ typedef __u64 u64;
 #define ETH_P_IPV6 0x86DD
 #define ETH_P_ARP 0x0806
 #define IPPROTO_ICMPV6 58
+#define DSCP_SHIFT 2
+#define DSCP_MASK 0x3F
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum {
@@ -75,6 +77,7 @@ typedef struct flow_metrics_t {
     // 0 otherwise
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
+    u8 dscp;
     struct pkt_drops_t {
         u32 packets;
         u64 bytes;
@@ -155,6 +158,7 @@ typedef struct pkt_info_t {
     u16 flags;      // TCP specific
     void *l4_hdr;   // Stores the actual l4 header
     u64 rtt;        // rtt calculated from the flow if possible. else zero
+    u8 dscp;        // IPv4/6 DSCP value
 } pkt_info;
 
 // Structure for payload metadata

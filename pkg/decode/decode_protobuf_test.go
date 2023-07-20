@@ -41,6 +41,7 @@ func TestDecodeProtobuf(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
 					},
+					Dscp: 64,
 				},
 				DataLink: &pbflow.DataLink{
 					DstMac: 0x112233445566,
@@ -61,6 +62,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"Bytes":           uint64(456),
 				"SrcAddr":         "1.2.3.4",
 				"DstAddr":         "5.6.7.8",
+				"Dscp":            uint32(64),
 				"DstMac":          "11:22:33:44:55:66",
 				"SrcMac":          "01:02:03:04:05:06",
 				"Duplicate":       false,
@@ -93,6 +95,7 @@ func TestDecodeProtobuf(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
 					},
+					Dscp: 64,
 				},
 				DataLink: &pbflow.DataLink{
 					DstMac: 0x112233445566,
@@ -112,6 +115,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"Bytes":           uint64(456),
 				"SrcAddr":         "1.2.3.4",
 				"DstAddr":         "5.6.7.8",
+				"Dscp":            uint32(64),
 				"DstMac":          "11:22:33:44:55:66",
 				"SrcMac":          "01:02:03:04:05:06",
 				"Duplicate":       false,
@@ -143,6 +147,7 @@ func TestDecodeProtobuf(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
 					},
+					Dscp: 64,
 				},
 				DataLink: &pbflow.DataLink{
 					DstMac: 0x112233445566,
@@ -162,6 +167,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"Bytes":           uint64(456),
 				"SrcAddr":         "1.2.3.4",
 				"DstAddr":         "5.6.7.8",
+				"Dscp":            uint32(64),
 				"DstMac":          "11:22:33:44:55:66",
 				"SrcMac":          "01:02:03:04:05:06",
 				"Duplicate":       false,
@@ -193,6 +199,7 @@ func TestDecodeProtobuf(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv6{Ipv6: []byte{11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}},
 					},
+					Dscp: 64,
 				},
 				DataLink: &pbflow.DataLink{
 					DstMac: 0x112233445566,
@@ -212,6 +219,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"Bytes":           uint64(456),
 				"SrcAddr":         "102:304:506:708:90a:b0c:d0e:f10",
 				"DstAddr":         "b0c:d0e:f10:1112:1314:1516:1718:191a",
+				"Dscp":            uint32(64),
 				"DstMac":          "11:22:33:44:55:66",
 				"SrcMac":          "01:02:03:04:05:06",
 				"Duplicate":       false,
@@ -288,6 +296,7 @@ func TestDecodeProtobuf(t *testing.T) {
 					DstAddr: &pbflow.IP{
 						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
 					},
+					Dscp: 64,
 				},
 				DataLink: &pbflow.DataLink{
 					DstMac: 0x112233445566,
@@ -317,6 +326,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"Bytes":                  uint64(456),
 				"SrcAddr":                "1.2.3.4",
 				"DstAddr":                "5.6.7.8",
+				"Dscp":                   uint32(64),
 				"DstMac":                 "11:22:33:44:55:66",
 				"SrcMac":                 "01:02:03:04:05:06",
 				"Duplicate":              false,
@@ -374,6 +384,7 @@ func TestPBFlowToMap(t *testing.T) {
 			DstAddr: &pbflow.IP{
 				IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
 			},
+			Dscp: 64,
 		},
 		DataLink: &pbflow.DataLink{
 			DstMac: 0x112233445566,
@@ -407,6 +418,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",
+		"Dscp":                   uint32(64),
 		"DstMac":                 "11:22:33:44:55:66",
 		"SrcMac":                 "01:02:03:04:05:06",
 		"SrcPort":                uint32(23000),

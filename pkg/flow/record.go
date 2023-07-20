@@ -111,6 +111,10 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if r.FlowRtt < src.FlowRtt {
 		r.FlowRtt = src.FlowRtt
 	}
+	// Accumulate DSCP
+	if src.Dscp != 0 {
+		r.Dscp = src.Dscp
+	}
 }
 
 // IP returns the net.IP equivalent object

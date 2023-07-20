@@ -49,6 +49,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		Network: &pbflow.Network{
 			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.SrcIp)}},
 			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.DstIp)}},
+			Dscp:    uint32(fr.Metrics.Dscp),
 		},
 		Transport: &pbflow.Transport{
 			Protocol: uint32(fr.Id.TransportProtocol),
@@ -97,6 +98,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		Network: &pbflow.Network{
 			SrcAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Id.SrcIp[:]}},
 			DstAddr: &pbflow.IP{IpFamily: &pbflow.IP_Ipv6{Ipv6: fr.Id.DstIp[:]}},
+			Dscp:    uint32(fr.Metrics.Dscp),
 		},
 		Transport: &pbflow.Transport{
 			Protocol: uint32(fr.Id.TransportProtocol),

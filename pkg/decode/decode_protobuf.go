@@ -71,6 +71,7 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 		out["SrcAddr"] = ipToStr(flow.Network.GetSrcAddr())
 		out["DstAddr"] = ipToStr(flow.Network.GetDstAddr())
 		out["Proto"] = flow.Transport.GetProtocol()
+		out["Dscp"] = flow.Network.GetDscp()
 		proto := flow.Transport.GetProtocol()
 		if proto == syscall.IPPROTO_ICMP || proto == syscall.IPPROTO_ICMPV6 {
 			out["IcmpType"] = flow.GetIcmpType()
