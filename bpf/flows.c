@@ -60,14 +60,16 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    if (enable_rtt) {
-        // This is currently gated as its not to be enabled by default.
-        calculate_flow_rtt(&pkt, direction, data_end);
-    }
-
     //Set extra fields
     id.if_index = skb->ifindex;
     id.direction = direction;
+
+    // We calculate the RTT before looking up aggregated_flows map because we want
+    // to keep the critical section between map lookup and update consume minimum time.
+    if (enable_rtt) {
+        // This is currently not to be enabled by default.
+        calculate_flow_rtt(&pkt, direction, data_end);
+    }
 
     // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
