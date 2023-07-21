@@ -30,6 +30,8 @@ const (
 )
 
 func main() {
+	fmt.Println("This example client for packet capture creates a file capture.pcap and writes packets to it.")
+	fmt.Println("To view captured packets 'tcpdump -r capture.pcap'.")
 	tcpServer, err := net.ResolveTCPAddr(TYPE, HOST+":"+PORT)
 
 	if err != nil {
