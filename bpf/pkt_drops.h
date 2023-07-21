@@ -7,20 +7,14 @@
 
 #include "utils.h"
 
-static inline int trace_pkt_drop(void *ctx, struct sock *sk,
+static inline int trace_pkt_drop(void *ctx, u8 state,
                                  struct sk_buff *skb,
                                  enum skb_drop_reason reason) {
-    if (sk == NULL)
-        return 0;
-
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
 
-    u8 state = 0, protocol = 0;
+    u8 protocol = 0;
     u16 family = 0,flags = 0;
-
-    // pull in details from the packet headers and the sock struct
-    bpf_probe_read(&state, sizeof(u8), (u8 *)&sk->__sk_common.skc_state);
 
     id.if_index = skb->skb_iif;
 
@@ -93,7 +87,12 @@ int kfree_skb(struct trace_event_raw_kfree_skb *args) {
     // SKB_CONSUMED,
     // SKB_DROP_REASON_NOT_SPECIFIED,
     if (reason > SKB_DROP_REASON_NOT_SPECIFIED) {
-        return trace_pkt_drop(args, sk, &skb, reason);
+        u8 state = 0;
+        if (sk) {
+         // pull in details from the packet headers and the sock struct
+            bpf_probe_read(&state, sizeof(u8), (u8 *)&sk->__sk_common.skc_state);
+        }
+        return trace_pkt_drop(args, state, &skb, reason);
     }
     return 0;
 }
