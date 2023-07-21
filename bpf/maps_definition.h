@@ -19,24 +19,24 @@ struct {
 } aggregated_flows SEC(".maps");
 
 // Common hashmap to keep track of all flow sequences.
-// LRU hashmap is used because if some syn packet is received but ack is not
-// then the hashmap entry will need to be evicted
 // Key is flow_seq_id which is standard 4 tuple and a sequence id
 //     sequence id is specific to the type of transport protocol
 // Value is u64 which represents the occurrence timestamp of the packet.
 struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
     __type(key, flow_seq_id);
     __type(value, u64);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
 } flow_sequences SEC(".maps");
 
 // DNS tracking flow based hashmap used to correlate query and responses
 // to allow calculating latency in ebpf agent directly
 struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
     __type(key, dns_flow_id);
     __type(value, u64);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
 } dns_flows SEC(".maps");
 #endif //__MAPS_DEFINITION_H__
