@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
@@ -14,6 +15,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/gavv/monotime"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -432,5 +434,50 @@ func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId]*BpfFlowMetrics {
 		*metricPtr = metric
 		flow[id] = metricPtr
 	}
+
 	return flow
+}
+
+// DeleteMapsStaleEntries Look for any stale entries in the features maps and delete them
+func (m *FlowFetcher) DeleteMapsStaleEntries(timeOut time.Duration) {
+	m.lookupAndDeleteDNSMap(timeOut)
+	m.lookupAndDeleteRTTMap(timeOut)
+}
+
+// lookupAndDeleteDNSMap iterate over DNS queries map and delete any stale DNS requests
+// entries which never get responses for.
+func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
+	monotonicTimeNow := monotime.Now()
+	dnsMap := m.objects.DnsFlows
+	var dnsKey BpfDnsFlowId
+	var dnsVal uint64
+
+	iterator := dnsMap.Iterate()
+	for iterator.Next(&dnsKey, &dnsVal) {
+		if time.Duration(uint64(monotonicTimeNow)-dnsVal) >= timeOut {
+			if err := dnsMap.Delete(dnsKey); err != nil {
+				log.WithError(err).WithField("dnsKey", dnsKey).
+					Warnf("couldn't delete DNS record entry")
+			}
+		}
+	}
+}
+
+// lookupAndDeleteRTTMap iterate over flows sequence map and delete any
+// stale flows that we never get responses for.
+func (m *FlowFetcher) lookupAndDeleteRTTMap(timeOut time.Duration) {
+	monotonicTimeNow := monotime.Now()
+	rttMap := m.objects.FlowSequences
+	var rttKey BpfFlowSeqId
+	var rttVal uint64
+
+	iterator := rttMap.Iterate()
+	for iterator.Next(&rttKey, &rttVal) {
+		if time.Duration(uint64(monotonicTimeNow)-rttVal) >= timeOut {
+			if err := rttMap.Delete(rttKey); err != nil {
+				log.WithError(err).WithField("rttKey", rttKey).
+					Warnf("couldn't delete RTT record entry")
+			}
+		}
+	}
 }

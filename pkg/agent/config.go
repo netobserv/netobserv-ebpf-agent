@@ -146,4 +146,7 @@ type Config struct {
 	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
+	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
+	// before being deleted, default is 5 seconds.
+	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
 }

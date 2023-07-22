@@ -18,8 +18,9 @@ var mtlog = logrus.WithField("component", "flow.MapTracer")
 // MapTracer accesses a mapped source of flows (the eBPF PerCPU HashMap), deserializes it into
 // a flow Record structure, and performs the accumulation of each perCPU-record into a single flow
 type MapTracer struct {
-	mapFetcher      mapFetcher
-	evictionTimeout time.Duration
+	mapFetcher               mapFetcher
+	evictionTimeout          time.Duration
+	staleEntriesEvictTimeout time.Duration
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond   *sync.Cond
 	lastEvictionNs uint64
@@ -27,14 +28,16 @@ type MapTracer struct {
 
 type mapFetcher interface {
 	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
-func NewMapTracer(fetcher mapFetcher, evictionTimeout time.Duration) *MapTracer {
+func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout time.Duration) *MapTracer {
 	return &MapTracer{
-		mapFetcher:      fetcher,
-		evictionTimeout: evictionTimeout,
-		lastEvictionNs:  uint64(monotime.Now()),
-		evictionCond:    sync.NewCond(&sync.Mutex{}),
+		mapFetcher:               fetcher,
+		evictionTimeout:          evictionTimeout,
+		lastEvictionNs:           uint64(monotime.Now()),
+		evictionCond:             sync.NewCond(&sync.Mutex{}),
+		staleEntriesEvictTimeout: staleEntriesEvictTimeout,
 	}
 }
 
@@ -109,6 +112,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 			uint64(monotonicTimeNow),
 		))
 	}
+	m.mapFetcher.DeleteMapsStaleEntries(m.staleEntriesEvictTimeout)
 	m.lastEvictionNs = laterFlowNs
 	select {
 	case <-ctx.Done():
