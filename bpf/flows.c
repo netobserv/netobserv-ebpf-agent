@@ -34,10 +34,10 @@
 */
 #include "rtt_tracker.h"
 
-/* Defines a PANO tracker, 
-    It is enabled by setting env var EnablePano = true. 
+/* Defines a Packet Capture Agent (PCA) tracker, 
+    It is enabled by setting env var ENABLE_PCA= true. Is Optional 
 */
-#include "pano.h"
+#include "pca.h"
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows

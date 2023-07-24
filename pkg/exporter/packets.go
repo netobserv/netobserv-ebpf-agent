@@ -69,7 +69,7 @@ func WritePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 	if ci.CaptureLength > ci.Length {
 		return fmt.Errorf("invalid capture info %+v:  capture length > length", ci)
 	}
-	plog.Debugf("Sending Packet to Zeek. Length: %d", len(data))
+	plog.Debugf("Sending Packet to client. Length: %d", len(data))
 	//Write 16 byte packet header
 	if err := writePacketHeader(ci, conn); err != nil {
 		return fmt.Errorf("error writing packet header: %w", err)
@@ -82,7 +82,7 @@ func WritePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 	return err
 }
 
-// Only after zeek connects to it, the agent starts collecting and sending packets .
+// Only after client connects to it, the agent starts collecting and sending packets .
 // This behavior needs to be fixed.
 func StartPCAPSend(hostPort string, maxPacketsPerMessage int) (*PCAPStream, error) {
 	PORT := ":" + hostPort
