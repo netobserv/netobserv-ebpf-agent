@@ -16,6 +16,8 @@ ifneq ($(shell git status --porcelain),)
 	BUILD_VERSION := $(BUILD_VERSION)-dirty
 endif
 
+SHELL := /bin/bash
+
 # Go architecture and targets images to build
 GOARCH ?= amd64
 MULTIARCH_TARGETS ?= amd64
@@ -34,6 +36,7 @@ OCI_BUILD_OPTS ?=
 OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
+MIN_GO_VERSION=1.20.0
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.11.0
 GOLANGCI_LINT_VERSION = v1.53.3
@@ -86,8 +89,23 @@ vendors: ## Check go vendors
 	@echo "### Checking vendors"
 	go mod tidy && go mod vendor
 
+.PHONY: validate_go
+validate_go:
+	@go_ver=$$(go version | { read -r _ _ v _; echo "$${v#go}"; }); \
+	major_ver=$$(echo "$$go_ver" | cut -d'.' -f1);\
+	minor_ver=$$(echo "$$go_ver" | cut -d'.' -f2);\
+	second_minor_ver=$$(echo "$$go_ver" | cut -d'.' -f3); \
+	req_major_ver=$$(echo "${MIN_GO_VERSION}" | cut -d'.' -f1);\
+	req_minor_ver=$$(echo "${MIN_GO_VERSION}" | cut -d'.' -f2);\
+	req_second_minor_ver=$$(echo "${MIN_GO_VERSION}" | cut -d'.' -f3);\
+	err_msg="\n!!!golang version current $$go_ver < ${MIN_GO_VERSION} required!!!\n";\
+	if [ $$major_ver -lt $$req_major_ver ]; then echo -e "$$err_msg"; exit 1;\
+	elif [ $$minor_ver -lt $$req_minor_ver ]; then echo -e "$$err_msg"; exit 1;\
+	elif [ $$second_minor_ver -lt $$req_second_minor_ver ]; then echo -e "$$err_msg"; exit 1;\
+	else echo "golang version $$go_ver validated!"; fi
+
 .PHONY: prereqs
-prereqs: ## Check if prerequisites are met, and install missing dependencies
+prereqs: validate_go ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
 	GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
@@ -127,7 +145,7 @@ docker-generate: ## Create the container that generates the eBPF binaries
 	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
-compile: ## Compile ebpf agent project
+compile: validate_go ## Compile ebpf agent project
 	@echo "### Compiling project"
 	GOARCH=${GOARCH} GOOS=$(GOOS) go build -ldflags "-X main.version=${VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
