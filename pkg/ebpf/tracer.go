@@ -117,6 +117,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	oldKernel := utils.IskernelOlderthan514()
+	objects.EgressPcaParse = nil
+	onjects.IngressPcaParse = nil
+	
 
 	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
 	if oldKernel {
@@ -134,6 +137,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		var newObjects NewBpfObjects
 		// remove tcpdrop hook from the spec
 		delete(spec.Programs, tcpDropHook)
+		delete(spec.Programs, )
 		newObjects.NewBpfPrograms = NewBpfPrograms{}
 		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
 			var ve *ebpf.VerifierError
@@ -153,6 +157,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		objects.IngressFlowParse = newObjects.IngressFlowParse
 		objects.TraceNetPackets = newObjects.TraceNetPackets
 		objects.KfreeSkb = nil
+
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
 			var ve *ebpf.VerifierError
