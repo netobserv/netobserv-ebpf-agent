@@ -34,7 +34,6 @@ struct {
 //PerfEvent Array for Payloads
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(max_entries, MAX_CPUS);
 	__type(key, __u32);
 	__type(value, __u32);
 } packet_record SEC(".maps");
