@@ -21,16 +21,18 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 )
 
 const (
 	HOST = "localhost"
-	PORT = "9999"
+	PORT = "9990"
 	TYPE = "tcp"
 )
 
 func main() {
-	fmt.Println("This example client for packet capture creates a file capture.pcap and writes packets to it.")
+	fmt.Println("Starting Packet Capture Client.")
+	fmt.Println("This creates a file capture.pcap and writes packets to it.")
 	fmt.Println("To view captured packets 'tcpdump -r capture.pcap'.")
 	tcpServer, err := net.ResolveTCPAddr(TYPE, HOST+":"+PORT)
 
@@ -50,14 +52,15 @@ func main() {
 	}
 	defer f.Close()
 	for {
-		received := make([]byte, 1500)
+		received := make([]byte, 65535)
 		n, err := conn.Read(received)
 		if err != nil {
 			println("Read data failed:", err.Error())
 			os.Exit(1)
 		}
 		f.Write(received[:n])
-		fmt.Println("Received Packet of length ", n)
+		dt := time.Now()
+		fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", n)
 
 	}
 	conn.Close()
