@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"encoding/binary"
+	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -40,6 +41,9 @@ func (m *TracerFake) LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetric
 	default:
 		return map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 	}
+}
+
+func (m *TracerFake) DeleteMapsStaleEntries(_ time.Duration) {
 }
 
 func (m *TracerFake) ReadRingBuf() (ringbuf.Record, error) {
