@@ -40,17 +40,14 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    // Record the current time first.
-    u64 current_time = bpf_ktime_get_ns();
+    pkt_info pkt;
+    __builtin_memset(&pkt, 0, sizeof(pkt));
 
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
 
-    pkt_info pkt;
-    __builtin_memset(&pkt, 0, sizeof(pkt));
-
+    pkt.current_ts = bpf_ktime_get_ns(); // Record the current time first.
     pkt.id = &id;
-    pkt.current_ts = current_time;
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
@@ -77,15 +74,11 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     if (aggregate_flow != NULL) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
-        aggregate_flow->end_mono_time_ts = current_time;
+        aggregate_flow->end_mono_time_ts = pkt.current_ts;
         aggregate_flow->flags |= pkt.flags;
 
         // Does not matter the gate. Will be zero if not enabled.
-        if (pkt.rtt > 0) {
-            /* Since RTT is calculated for few packets we need to check if it is non zero value then only we update
-             * the flow. If we remove this check a packet which fails to calculate RTT will override the previous valid
-             * RTT with 0.
-             */
+        if (pkt.rtt > aggregate_flow->flow_rtt) {
             aggregate_flow->flow_rtt = pkt.rtt;
         }
 
@@ -103,8 +96,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         flow_metrics new_flow = {
             .packets = 1,
             .bytes = skb->len,
-            .start_mono_time_ts = current_time,
-            .end_mono_time_ts = current_time,
+            .start_mono_time_ts = pkt.current_ts,
+            .end_mono_time_ts = pkt.current_ts,
             .flags = pkt.flags,
             .flow_rtt = pkt.rtt
         };

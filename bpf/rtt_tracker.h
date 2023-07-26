@@ -10,9 +10,11 @@
 #include "utils.h"
 #include "maps_definition.h"
 
-static __always_inline void fill_flow_seq_id(flow_seq_id *seq_id, pkt_info *pkt, u32 seq, u8 reversed) {
+const u64 MIN_RTT = 50000; //50 micro seconds
+
+static __always_inline void fill_flow_seq_id(flow_seq_id *seq_id, pkt_info *pkt, u32 seq, bool reverse) {
     flow_id *id = pkt->id;
-    if (reversed) {
+    if (reverse) {
         __builtin_memcpy(seq_id->src_ip, id->dst_ip, IP_MAX_LEN);
         __builtin_memcpy(seq_id->dst_ip, id->src_ip, IP_MAX_LEN);
         seq_id->src_port = id->dst_port;
@@ -23,42 +25,86 @@ static __always_inline void fill_flow_seq_id(flow_seq_id *seq_id, pkt_info *pkt,
         seq_id->src_port = id->src_port;
         seq_id->dst_port = id->dst_port;
     }
+    seq_id->transport_protocol = id->transport_protocol;
     seq_id->seq_id = seq;
+    seq_id->if_index = id->if_index;
 }
 
-static __always_inline void reverse_flow_id(flow_id *o, flow_id *r) {
-    /* eth_protocol, transport_protocol and if_index remains same */
-    r->eth_protocol = o->eth_protocol;
-    r->transport_protocol = o->transport_protocol;
-    r->if_index = o->if_index;
-    /* reverse the direction */
-    r->direction = (o->direction == INGRESS) ? EGRESS : INGRESS;
-    /* src mac and dst mac gets reversed */
-    __builtin_memcpy(r->src_mac, o->dst_mac, ETH_ALEN);
-    __builtin_memcpy(r->dst_mac, o->src_mac, ETH_ALEN);
-    /* src ip and dst ip gets reversed */
-    __builtin_memcpy(r->src_ip, o->dst_ip, IP_MAX_LEN);
-    __builtin_memcpy(r->dst_ip, o->src_ip, IP_MAX_LEN);
-    /* src port and dst port gets reversed */
-    r->src_port = o->dst_port;
-    r->dst_port = o->src_port;
+static __always_inline void reverse_flow_id_struct(flow_id *src, flow_id *dst) {
+    // Fields which remain same
+    dst->eth_protocol = src->eth_protocol;
+    dst->transport_protocol = src->transport_protocol;
+    dst->if_index = src->if_index;
+
+    // Fields which should be reversed
+    dst->direction = (src->direction == INGRESS) ? EGRESS : INGRESS;
+    __builtin_memcpy(dst->src_mac, src->dst_mac, ETH_ALEN);
+    __builtin_memcpy(dst->dst_mac, src->src_mac, ETH_ALEN);
+    __builtin_memcpy(dst->src_ip, src->dst_ip, IP_MAX_LEN);
+    __builtin_memcpy(dst->dst_ip, src->src_ip, IP_MAX_LEN);
+    dst->src_port = src->dst_port;
+    dst->dst_port = src->src_port;
     /* ICMP type can be ignore for now. We only deal with TCP packets for now.*/
 }
 
-static __always_inline void update_reverse_flow_rtt(pkt_info *pkt) {
+static __always_inline void update_reverse_flow_rtt(pkt_info *pkt, u32 seq) {
     flow_id rev_flow_id;
     __builtin_memset(&rev_flow_id, 0, sizeof(rev_flow_id));
-
-    reverse_flow_id(pkt->id, &rev_flow_id);
+    reverse_flow_id_struct(pkt->id, &rev_flow_id);
 
     flow_metrics *reverse_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &rev_flow_id);
     if (reverse_flow != NULL) {
-        reverse_flow->flow_rtt = pkt->rtt;
-        long ret = bpf_map_update_elem(&aggregated_flows, &rev_flow_id, reverse_flow, BPF_ANY);
-        if (trace_messages && ret != 0) {
-            bpf_printk("error updating rtt value in flow %d\n", ret);
+        if (pkt->rtt > reverse_flow->flow_rtt) {
+            reverse_flow->flow_rtt = pkt->rtt;
+            long ret = bpf_map_update_elem(&aggregated_flows, &rev_flow_id, reverse_flow, BPF_EXIST);
+            if (trace_messages && ret != 0) {
+                bpf_printk("error updating rtt value in flow %d\n", ret);
+            }
         }
     }
+}
+
+static __always_inline void __calculate_tcp_rtt(pkt_info *pkt, struct tcphdr *tcp, flow_seq_id *seq_id) {
+    // Stored sequence should be ack_seq - 1
+    u32 seq = bpf_ntohl(tcp->ack_seq) - 1;
+    // check reversed flow
+    fill_flow_seq_id(seq_id, pkt, seq, true);
+
+    u64 *prev_ts = (u64 *)bpf_map_lookup_elem(&flow_sequences, seq_id);
+    if (prev_ts != NULL) {
+        u64 rtt = pkt->current_ts - *prev_ts;
+        /**
+         * FIXME: Because of SAMPLING the way it is done if we miss one of SYN/SYN+ACK/ACK
+         * then we can get RTT values which are the process response time rather than actual RTT.
+         * This check below clears them out but needs to be modified with a better solution or change
+         * the algorithm for calculating RTT so it doesn't interact with SAMPLING like this.
+         */
+        if (rtt < MIN_RTT) {
+            return;
+        }
+        pkt->rtt = rtt;
+        // Delete the flow from flow sequence map so if it
+        // restarts we have a new RTT calculation.
+        long ret = bpf_map_delete_elem(&flow_sequences, seq_id);
+        if (trace_messages && ret != 0) {
+            bpf_printk("error evicting flow sequence: %d", ret);
+        }
+        // This is an ACK packet with valid sequence id so a SYN must
+        // have been sent. We can safely update the reverse flow RTT here.
+        update_reverse_flow_rtt(pkt, seq);
+    }
+    return;
+}
+
+static __always_inline void __store_tcp_ts(pkt_info *pkt, struct tcphdr *tcp, flow_seq_id *seq_id) {
+    // store timestamp of syn packets.
+    u32 seq = bpf_ntohl(tcp->seq);
+    fill_flow_seq_id(seq_id, pkt, seq, false);
+    long ret = bpf_map_update_elem(&flow_sequences, seq_id, &pkt->current_ts, BPF_NOEXIST);
+    if (trace_messages && ret != 0) {
+        bpf_printk("err saving flow sequence record %d", ret);
+    }
+    return;
 }
 
 static __always_inline void calculate_flow_rtt_tcp(pkt_info *pkt, u8 direction, void *data_end, flow_seq_id *seq_id) {
@@ -67,43 +113,16 @@ static __always_inline void calculate_flow_rtt_tcp(pkt_info *pkt, u8 direction, 
         return;
     }
 
-    switch (direction) {
-    case EGRESS: {
-        if (IS_SYN_PACKET(pkt)) {
-            // Record the outgoing syn sequence number
-            u32 seq = bpf_ntohl(tcp->seq);
-            fill_flow_seq_id(seq_id, pkt, seq, 0);
-
-            long ret = bpf_map_update_elem(&flow_sequences, seq_id, &pkt->current_ts, BPF_ANY);
-            if (trace_messages && ret != 0) {
-                bpf_printk("err saving flow sequence record %d", ret);
-            }
-        }
-        break;
+    /* We calculate RTT for both SYN/SYN+ACK and SYN+ACK/ACK and take the maximum of both.*/
+    if (tcp->syn && tcp->ack) { // SYN ACK Packet
+        __calculate_tcp_rtt(pkt, tcp, seq_id);
+        __store_tcp_ts(pkt, tcp, seq_id);
     }
-    case INGRESS: {
-        if (IS_ACK_PACKET(pkt)) {
-            // Stored sequence should be ack_seq - 1
-            u32 seq = bpf_ntohl(tcp->ack_seq) - 1;
-            // check reversed flow
-            fill_flow_seq_id(seq_id, pkt, seq, 1);
-
-            u64 *prev_ts = (u64 *)bpf_map_lookup_elem(&flow_sequences, seq_id);
-            if (prev_ts != NULL) {
-                pkt->rtt = pkt->current_ts - *prev_ts;
-                // Delete the flow from flow sequence map so if it
-                // restarts we have a new RTT calculation.
-                long ret = bpf_map_delete_elem(&flow_sequences, seq_id);
-                if (trace_messages && ret != 0) {
-                    bpf_printk("error evicting flow sequence: %d", ret);
-                }
-                // This is an ACK packet with valid sequence id so a SYN must
-                // have been sent. We can safely update the reverse flow RTT here.
-                update_reverse_flow_rtt(pkt);
-            }
-        }
-        break;
+    else if (tcp->ack) {
+        __calculate_tcp_rtt(pkt, tcp, seq_id);
     }
+    else if (tcp->syn) {
+        __store_tcp_ts(pkt, tcp, seq_id);
     }
 }
 
@@ -122,4 +141,3 @@ static __always_inline void calculate_flow_rtt(pkt_info *pkt, u8 direction, void
 }
 
 #endif /* __RTT_TRACKER_H__ */
-

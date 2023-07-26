@@ -22,9 +22,6 @@
 #define FIN_ACK_FLAG 0x200
 #define RST_ACK_FLAG 0x400
 
-#define IS_SYN_PACKET(pkt)    ((pkt->flags & SYN_FLAG) || (pkt->flags & SYN_ACK_FLAG))
-#define IS_ACK_PACKET(pkt)    ((pkt->flags & ACK_FLAG) || (pkt->flags & SYN_ACK_FLAG))
-
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define bpf_ntohs(x)        __builtin_bswap16(x)
@@ -124,7 +121,7 @@ typedef struct flow_id_t {
 // Force emitting struct flow_id into the ELF.
 const struct flow_id_t *unused2 __attribute__((unused));
 
-// Standard 4 tuple and a sequence identifier.
+// Standard 4 tuple, transport protocol and a sequence identifier.
 // No need to emit this struct. It's used only in kernel space
 typedef struct flow_seq_id_t {
     u16 src_port;
@@ -132,6 +129,8 @@ typedef struct flow_seq_id_t {
     u8 src_ip[IP_MAX_LEN];
     u8 dst_ip[IP_MAX_LEN];
     u32 seq_id;
+    u8 transport_protocol;
+    u32 if_index; // OS interface index
 } __attribute__((packed)) flow_seq_id;
 
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send

@@ -72,7 +72,7 @@ func main() {
 	for records := range receivedRecords {
 		for _, record := range records.Entries {
 			if record.EthProtocol == ipv6 {
-				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v dnsId: %d dnsFlags: 0x%04x dnsLatency(ms): %v rtt %v\n",
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v dnsId: %d dnsFlags: 0x%04x dnsLatency(ms): %v rtt(ns) %v\n",
 					ipProto[record.EthProtocol],
 					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
 					record.Interface,
@@ -91,10 +91,10 @@ func main() {
 					record.GetDnsId(),
 					record.GetDnsFlags(),
 					record.DnsLatency.AsDuration().Milliseconds(),
-					record.TimeFlowRtt.AsDuration().Microseconds(),
+					record.TimeFlowRtt.AsDuration().Nanoseconds(),
 				)
 			} else {
-				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v dnsId: %d dnsFlags: 0x%04x dnsLatency(ms): %v rtt %v\n",
+				log.Printf("%s: %v %s IP %s:%d > %s:%d: protocol:%s type: %d code: %d dir:%d bytes:%d packets:%d flags:%d ends: %v dnsId: %d dnsFlags: 0x%04x dnsLatency(ms): %v rtt(ns) %v\n",
 					ipProto[record.EthProtocol],
 					record.TimeFlowStart.AsTime().Local().Format("15:04:05.000000"),
 					record.Interface,
@@ -113,7 +113,7 @@ func main() {
 					record.GetDnsId(),
 					record.GetDnsFlags(),
 					record.DnsLatency.AsDuration().Milliseconds(),
-					record.TimeFlowRtt.AsDuration().Microseconds(),
+					record.TimeFlowRtt.AsDuration().Nanoseconds(),
 				)
 			}
 		}
