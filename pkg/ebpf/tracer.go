@@ -512,7 +512,10 @@ func NewPacketFetcher(
 	} else {
 		pcaProto = syscall.IPPROTO_UDP
 	}
-	pcaPort, _ = strconv.Atoi(filters[1])
+	pcaPort, err = strconv.Atoi(filters[1])
+	if err != nil {
+		return nil, err
+	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constPcaPort:  uint32(pcaPort),
@@ -520,7 +523,7 @@ func NewPacketFetcher(
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
-	plog.Debugf("PCA Filters: %d, %d Incoming: %s", pcaProto, pcaPort, pcaFilters)
+	plog.Infof("PCA Filter- Protocol: %d, Port: %d", pcaProto, pcaPort)
 
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
 		var ve *ebpf.VerifierError

@@ -4,5 +4,4 @@
 bin/
 e2e-logs
 ebpf-agent.tar
-*.o
 *.pcap
