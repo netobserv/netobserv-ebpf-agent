@@ -14,9 +14,8 @@ import (
 )
 
 type PCAPStream struct {
-	hostPort             string
-	clientConn           net.Conn
-	maxPacketsPerMessage int
+	hostPort   string
+	clientConn net.Conn
 }
 
 const magicMicroseconds = 0xA1B2C3D4
@@ -26,7 +25,8 @@ const nanosPerMicro = 1000
 
 var plog = logrus.WithField("component", "packet/Packets")
 
-var snapshotlen int32 = 65535
+// Setting Snapshot length to 0 sets it to maximum packet size
+var snapshotlen int32
 
 func WriteFileHeader(snaplen uint32, linktype layers.LinkType, conn net.Conn) error {
 	var buf [24]byte
@@ -84,7 +84,7 @@ func WritePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 
 // Only after client connects to it, the agent starts collecting and sending packets .
 // This behavior needs to be fixed.
-func StartPCAPSend(hostPort string, maxPacketsPerMessage int) (*PCAPStream, error) {
+func StartPCAPSend(hostPort string) (*PCAPStream, error) {
 	PORT := ":" + hostPort
 	l, err := net.Listen("tcp", PORT)
 	if err != nil {
@@ -98,9 +98,8 @@ func StartPCAPSend(hostPort string, maxPacketsPerMessage int) (*PCAPStream, erro
 	}
 
 	return &PCAPStream{
-		hostPort:             hostPort,
-		clientConn:           clientConn,
-		maxPacketsPerMessage: maxPacketsPerMessage,
+		hostPort:   hostPort,
+		clientConn: clientConn,
 	}, nil
 
 }

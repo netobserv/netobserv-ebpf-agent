@@ -31,10 +31,10 @@ struct {
     __type(value, u64);
 } flow_sequences SEC(".maps");
 
-//PerfEvent Array for Payloads
+//PerfEvent Array for Packet Payloads
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-	__type(key, __u32);
+	__type(key, int);
 	__type(value, __u32);
 } packet_record SEC(".maps");
 

@@ -4,7 +4,7 @@
 #include "utils.h"
 #include <string.h>
 
-#define MAX_EVENT_DATA 256
+#define MAX_EVENT_DATA 1024ul
 
 static inline int export_packet_payload (struct __sk_buff *skb) {
     void *data_end = (void *)(long)skb->data_end;
@@ -16,7 +16,6 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     __u64 flags = BPF_F_CURRENT_CPU;
     __u16 headerSize;
     __u64 packet_len;
-
 
     if ((void *)eth + sizeof(*eth) > data_end) {
        return TC_ACT_UNSPEC;
@@ -41,7 +40,7 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
        return TC_ACT_UNSPEC;	
     }
 
-    packet_len = data_end - data;
+    packet_len = (__u16)(data_end - data);
     headerSize = packet_len < MAX_EVENT_DATA ? packet_len : MAX_EVENT_DATA;
     //Only export packets on port number set by ENV var
     if (tproto_data->source == bpf_htons(pca_port) || tproto_data->dest == bpf_htons(pca_port)) {
@@ -50,14 +49,14 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
         flags |= (__u64)headerSize << 32;
 
         meta.if_index = skb->ifindex;
-        meta.pkt_len = data_end - data;
+        meta.pkt_len = headerSize;
         if (bpf_perf_event_output(skb, &packet_record, flags, &meta, sizeof(meta))){
             return TC_ACT_UNSPEC;
         }
 
     }
 
-    return TC_ACT_OK;   
+    return TC_ACT_OK;    
 }
 
 #endif /* __PCA_H__ */

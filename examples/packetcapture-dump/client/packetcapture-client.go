@@ -30,6 +30,11 @@ const (
 	TYPE = "tcp"
 )
 
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
 func main() {
 	fmt.Println("Starting Packet Capture Client.")
 	fmt.Println("This creates a file capture.pcap and writes packets to it.")
@@ -58,10 +63,10 @@ func main() {
 			println("Read data failed:", err.Error())
 			os.Exit(1)
 		}
-		f.Write(received[:n])
+		_, err = f.Write(received[:n])
+		check(err)
 		dt := time.Now()
 		fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", n)
-
 	}
 	conn.Close()
 }

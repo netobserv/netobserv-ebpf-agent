@@ -532,8 +532,7 @@ func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], 
 		return nil, fmt.Errorf("missing target port: %d",
 			cfg.TargetPort)
 	}
-	//Add HOST PORT(for streaming server) info as function arguments.
-	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.TargetPort), cfg.GRPCMessageMaxFlows)
+	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.TargetPort))
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +548,7 @@ func (p *Packets) Run(ctx context.Context) error {
 	plog.Info("Starting Packets agent")
 	graph, err := p.buildAndStartPipeline(ctx)
 	if err != nil {
-		return fmt.Errorf("starting processing graph: %w", err)
+		return fmt.Errorf("error starting processing graph: %w", err)
 	}
 
 	p.status = StatusStarted

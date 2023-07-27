@@ -117,9 +117,12 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	oldKernel := utils.IskernelOlderthan514()
+
+	fmt.Println("Deleteing specs for PCA")
 	objects.EgressPcaParse = nil
-	onjects.IngressPcaParse = nil
-	
+	objects.IngressPcaParse = nil
+	delete(spec.Programs, constPcaPort)
+	delete(spec.Programs, constPcaProto)
 
 	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
 	if oldKernel {
@@ -137,7 +140,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		var newObjects NewBpfObjects
 		// remove tcpdrop hook from the spec
 		delete(spec.Programs, tcpDropHook)
-		delete(spec.Programs, )
+
 		newObjects.NewBpfPrograms = NewBpfPrograms{}
 		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
 			var ve *ebpf.VerifierError

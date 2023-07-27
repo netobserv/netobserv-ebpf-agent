@@ -161,8 +161,8 @@ typedef struct pkt_info_t {
 
 // Structure for payload metadata
 typedef struct payload_meta_t {
-    u32 if_index;
-    u32 pkt_len;
+    u16 if_index;
+    u16 pkt_len;
 } __attribute__((packed)) payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response
