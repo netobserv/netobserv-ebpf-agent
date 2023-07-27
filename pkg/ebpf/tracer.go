@@ -26,9 +26,10 @@ import (
 
 const (
 	qdiscType = "clsact"
-	// ebpf map names as defined in flows.c
+	// ebpf map names as defined in bpf/maps_definition.h
 	aggregatedFlowsMap = "aggregated_flows"
 	flowSequencesMap   = "flow_sequences"
+	dnsLatencyMap      = "dns_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling      = "sampling"
 	constTraceMessages = "trace_messages"
@@ -73,7 +74,6 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
 	}
 
-	objects := BpfObjects{}
 	spec, err := LoadBpf()
 	if err != nil {
 		return nil, fmt.Errorf("loading BPF data: %w", err)
@@ -103,6 +103,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
 	}
 
+	if !cfg.DNSTracker {
+		spec.Maps[dnsLatencyMap].MaxEntries = 1
+	}
+
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:      uint32(cfg.Sampling),
 		constTraceMessages: uint8(traceMsgs),
@@ -112,60 +116,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	oldKernel := utils.IskernelOlderthan514()
-
-	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
-	if oldKernel {
-		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
-		// Note: if new hooks are added in the future we need to update the following structures manually
-		type NewBpfPrograms struct {
-			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
-			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-			TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
-		}
-		type NewBpfObjects struct {
-			NewBpfPrograms
-			BpfMaps
-		}
-		var newObjects NewBpfObjects
-		// remove pktdrop hook from the spec
-		delete(spec.Programs, pktDropHook)
-		newObjects.NewBpfPrograms = NewBpfPrograms{}
-		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
-			var ve *ebpf.VerifierError
-			if errors.As(err, &ve) {
-				// Using %+v will print the whole verifier error, not just the last
-				// few lines.
-				log.Infof("Verifier error: %+v", ve)
-			}
-			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
-		}
-		// Manually assign maps and programs to the original objects variable
-		// Note for any future maps or programs make sure to copy them manually here
-		objects.DirectFlows = newObjects.DirectFlows
-		objects.AggregatedFlows = newObjects.AggregatedFlows
-		objects.FlowSequences = newObjects.FlowSequences
-		objects.EgressFlowParse = newObjects.EgressFlowParse
-		objects.IngressFlowParse = newObjects.IngressFlowParse
-		objects.TraceNetPackets = newObjects.TraceNetPackets
-		objects.KfreeSkb = nil
-	} else {
-		if err := spec.LoadAndAssign(&objects, nil); err != nil {
-			var ve *ebpf.VerifierError
-			if errors.As(err, &ve) {
-				// Using %+v will print the whole verifier error, not just the last
-				// few lines.
-				log.Infof("Verifier error: %+v", ve)
-			}
-			return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
-		}
+	objects, err := kernelSpecificLoadAndAssign(oldKernel, spec)
+	if err != nil {
+		return nil, err
 	}
-
-	/*
-	 * since we load the program only when the we start we need to release
-	 * memory used by cached kernel BTF see https://github.com/cilium/ebpf/issues/1063
-	 * for more details.
-	 */
-	btf.FlushKernelSpec()
 
 	var pktDropsLink link.Link
 	if cfg.PktDrops && !oldKernel {
@@ -480,4 +434,65 @@ func (m *FlowFetcher) lookupAndDeleteRTTMap(timeOut time.Duration) {
 			}
 		}
 	}
+
+}
+
+// kernelSpecificLoadAndAssign based on kernel version it will load only the supported ebPF hooks
+func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (BpfObjects, error) {
+	objects := BpfObjects{}
+
+	// For older kernel (< 5.14) kfree_sbk drop hook doesn't exists
+	if oldKernel {
+		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
+		// Note: if new hooks are added in the future we need to update the following structures manually
+		type NewBpfPrograms struct {
+			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
+			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+			TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
+		}
+		type NewBpfObjects struct {
+			NewBpfPrograms
+			BpfMaps
+		}
+		var newObjects NewBpfObjects
+		// remove pktdrop hook from the spec
+		delete(spec.Programs, pktDropHook)
+		newObjects.NewBpfPrograms = NewBpfPrograms{}
+		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return objects, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+		// Manually assign maps and programs to the original objects variable
+		// Note for any future maps or programs make sure to copy them manually here
+		objects.DirectFlows = newObjects.DirectFlows
+		objects.AggregatedFlows = newObjects.AggregatedFlows
+		objects.FlowSequences = newObjects.FlowSequences
+		objects.EgressFlowParse = newObjects.EgressFlowParse
+		objects.IngressFlowParse = newObjects.IngressFlowParse
+		objects.TraceNetPackets = newObjects.TraceNetPackets
+		objects.KfreeSkb = nil
+	} else {
+		if err := spec.LoadAndAssign(&objects, nil); err != nil {
+			var ve *ebpf.VerifierError
+			if errors.As(err, &ve) {
+				// Using %+v will print the whole verifier error, not just the last
+				// few lines.
+				log.Infof("Verifier error: %+v", ve)
+			}
+			return objects, fmt.Errorf("loading and assigning BPF objects: %w", err)
+		}
+	}
+	/*
+	 * since we load the program only when the we start we need to release
+	 * memory used by cached kernel BTF see https://github.com/cilium/ebpf/issues/1063
+	 * for more details.
+	 */
+	btf.FlushKernelSpec()
+
+	return objects, nil
 }
