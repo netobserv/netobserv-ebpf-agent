@@ -36,7 +36,7 @@ OCI_BUILD_OPTS ?=
 OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
-MIN_GO_VERSION=1.20.0
+MIN_GO_VERSION=1.19.0
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.11.0
 GOLANGCI_LINT_VERSION = v1.53.3
