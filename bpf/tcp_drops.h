@@ -10,7 +10,7 @@
 static inline int trace_tcp_drop(void *ctx, struct sock *sk,
                                  struct sk_buff *skb,
                                  enum skb_drop_reason reason) {
-    if (sk == NULL)
+    if (sk == NULL) 
         return 0;
 
     flow_id id;

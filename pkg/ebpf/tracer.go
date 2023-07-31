@@ -118,7 +118,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	oldKernel := utils.IskernelOlderthan514()
 
-	fmt.Println("Deleteing specs for PCA")
+	fmt.Println("Deleting specs for PCA")
 	objects.EgressPcaParse = nil
 	objects.IngressPcaParse = nil
 	delete(spec.Programs, constPcaPort)
