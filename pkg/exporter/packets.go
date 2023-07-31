@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -47,7 +46,7 @@ func writePacketHeader(ci gopacket.CaptureInfo, conn net.Conn) error {
 	var buf [16]byte
 	t := ci.Timestamp
 	if t.IsZero() {
-		t = time.Now()
+		return fmt.Errorf("Incoming packet does not have a timestamp. Ignoring packet")
 	}
 	secs := t.Unix()
 	usecs := t.Nanosecond() / nanosPerMicro
@@ -118,6 +117,7 @@ func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 			for _, packet := range packetRecord {
 				packetStream := packet.Stream
 				packetTimestamp := packet.Time
+				plog.Debugf("TS from packet: %s", packetTimestamp)
 				captureInfo := gopacket.CaptureInfo{
 					Timestamp:     packetTimestamp,
 					CaptureLength: len(packetStream),

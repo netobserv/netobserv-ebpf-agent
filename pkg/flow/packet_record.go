@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/gavv/monotime"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,6 +34,8 @@ func NewPacketRecord(
 // ReadRawPacket reads a PacketRecord from a binary source, in LittleEndian order
 func ReadRawPacket(reader io.Reader) (*PacketRecord, error) {
 	var pr PacketRecord
+	currentTime := time.Now()
+	monotonicTimeNow := monotime.Now()
 	getLen := make([]byte, 2)
 	packetTimestamp := make([]byte, 8)
 	// Read IfIndex and discard it: To be used in other usecases
@@ -43,7 +46,11 @@ func ReadRawPacket(reader io.Reader) (*PacketRecord, error) {
 	pr.Stream = make([]byte, binary.LittleEndian.Uint16(getLen))
 	// Read TimeStamp of packet
 	_ = binary.Read(reader, binary.LittleEndian, packetTimestamp)
-	pr.Time = time.UnixMicro(int64(binary.LittleEndian.Uint64(packetTimestamp)))
+	// The assumption is monotonic time should be as close to time recorded by ebpf.
+	// The difference is considered the delta time from current time.
+	tsDelta := time.Duration(uint64(monotonicTimeNow) - binary.LittleEndian.Uint64(packetTimestamp))
+	pr.Time = currentTime.Add(-tsDelta)
+
 	err := binary.Read(reader, binary.LittleEndian, &pr.Stream)
 	return &pr, err
 }
