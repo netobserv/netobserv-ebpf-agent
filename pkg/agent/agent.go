@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -216,7 +217,14 @@ func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows)
+	var tlsConfig *tls.Config
+	if cfg.TargetEnableTLS {
+		var err error
+		if tlsConfig, err = buildTargetTLSConfig(cfg); err != nil {
+			return nil, err
+		}
+	}
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +242,7 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 	}
 	transport := kafkago.Transport{}
 	if cfg.KafkaEnableTLS {
-		tlsConfig, err := buildTLSConfig(cfg)
+		tlsConfig, err := buildKafkaTLSConfig(cfg)
 		if err != nil {
 			return nil, err
 		}

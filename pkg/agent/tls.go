@@ -6,24 +6,42 @@ import (
 	"os"
 )
 
-func buildTLSConfig(cfg *Config) (*tls.Config, error) {
+func buildTargetTLSConfig(cfg *Config) (*tls.Config, error) {
+	return buildTLSConfig(
+		cfg.TargetTLSCACertPath,
+		cfg.TargetTLSUserCertPath,
+		cfg.TargetTLSUserKeyPath,
+		cfg.TargetTLSInsecureSkipVerify,
+	)
+}
+
+func buildKafkaTLSConfig(cfg *Config) (*tls.Config, error) {
+	return buildTLSConfig(
+		cfg.KafkaTLSCACertPath,
+		cfg.KafkaTLSUserCertPath,
+		cfg.KafkaTLSUserKeyPath,
+		cfg.KafkaTLSInsecureSkipVerify,
+	)
+}
+
+func buildTLSConfig(caPath, userCertPath, userKeyPath string, insecure bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: cfg.KafkaTLSInsecureSkipVerify,
+		InsecureSkipVerify: insecure,
 	}
-	if cfg.KafkaTLSCACertPath != "" {
-		caCert, err := os.ReadFile(cfg.KafkaTLSCACertPath)
+	if caPath != "" {
+		caCert, err := os.ReadFile(caPath)
 		if err != nil {
 			return nil, err
 		}
 		tlsConfig.RootCAs = x509.NewCertPool()
 		tlsConfig.RootCAs.AppendCertsFromPEM(caCert)
 
-		if cfg.KafkaTLSUserCertPath != "" && cfg.KafkaTLSUserKeyPath != "" {
-			userCert, err := os.ReadFile(cfg.KafkaTLSUserCertPath)
+		if userCertPath != "" && userKeyPath != "" {
+			userCert, err := os.ReadFile(userCertPath)
 			if err != nil {
 				return nil, err
 			}
-			userKey, err := os.ReadFile(cfg.KafkaTLSUserKeyPath)
+			userKey, err := os.ReadFile(userKeyPath)
 			if err != nil {
 				return nil, err
 			}

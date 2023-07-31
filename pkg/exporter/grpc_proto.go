@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
@@ -24,8 +25,8 @@ type GRPCProto struct {
 	maxFlowsPerMessage int
 }
 
-func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int) (*GRPCProto, error) {
-	clientConn, err := grpc.ConnectClient(hostIP, hostPort)
+func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int, tlsConfig *tls.Config) (*GRPCProto, error) {
+	clientConn, err := grpc.ConnectClient(hostIP, hostPort, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
