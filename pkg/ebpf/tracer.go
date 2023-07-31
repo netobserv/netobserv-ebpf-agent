@@ -452,12 +452,14 @@ func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
 	var dnsKey BpfDnsFlowId
 	var dnsVal uint64
 
-	iterator := dnsMap.Iterate()
-	for iterator.Next(&dnsKey, &dnsVal) {
-		if time.Duration(uint64(monotonicTimeNow)-dnsVal) >= timeOut {
-			if err := dnsMap.Delete(dnsKey); err != nil {
-				log.WithError(err).WithField("dnsKey", dnsKey).
-					Warnf("couldn't delete DNS record entry")
+	if dnsMap != nil {
+		iterator := dnsMap.Iterate()
+		for iterator.Next(&dnsKey, &dnsVal) {
+			if time.Duration(uint64(monotonicTimeNow)-dnsVal) >= timeOut {
+				if err := dnsMap.Delete(dnsKey); err != nil {
+					log.WithError(err).WithField("dnsKey", dnsKey).
+						Warnf("couldn't delete DNS record entry")
+				}
 			}
 		}
 	}
@@ -471,12 +473,14 @@ func (m *FlowFetcher) lookupAndDeleteRTTMap(timeOut time.Duration) {
 	var rttKey BpfFlowSeqId
 	var rttVal uint64
 
-	iterator := rttMap.Iterate()
-	for iterator.Next(&rttKey, &rttVal) {
-		if time.Duration(uint64(monotonicTimeNow)-rttVal) >= timeOut {
-			if err := rttMap.Delete(rttKey); err != nil {
-				log.WithError(err).WithField("rttKey", rttKey).
-					Warnf("couldn't delete RTT record entry")
+	if rttMap != nil {
+		iterator := rttMap.Iterate()
+		for iterator.Next(&rttKey, &rttVal) {
+			if time.Duration(uint64(monotonicTimeNow)-rttVal) >= timeOut {
+				if err := rttMap.Delete(rttKey); err != nil {
+					log.WithError(err).WithField("rttKey", rttKey).
+						Warnf("couldn't delete RTT record entry")
+				}
 			}
 		}
 	}
