@@ -33,20 +33,17 @@ func NewPacketRecord(
 // ReadRawPacket reads a PacketRecord from a binary source, in LittleEndian order
 func ReadRawPacket(reader io.Reader) (*PacketRecord, error) {
 	var pr PacketRecord
-	var tm time.Time
 	getLen := make([]byte, 2)
+	packetTimestamp := make([]byte, 8)
 	// Read IfIndex and discard it: To be used in other usecases
 	_ = binary.Read(reader, binary.LittleEndian, make([]byte, 2))
 	// Read Length of packet
 	_ = binary.Read(reader, binary.LittleEndian, getLen)
 	plog.Debugf("Reading packet of length: %d", binary.LittleEndian.Uint16(getLen))
 	pr.Stream = make([]byte, binary.LittleEndian.Uint16(getLen))
-	plog.Infof("Reading packet of length: %d", binary.LittleEndian.Uint16(getLen))
 	// Read TimeStamp of packet
-	packetTimestamp := make([]byte, 8)
 	_ = binary.Read(reader, binary.LittleEndian, packetTimestamp)
-	_ = tm.UnmarshalBinary(packetTimestamp)
-	pr.Time = tm
+	pr.Time = time.UnixMicro(int64(binary.LittleEndian.Uint64(packetTimestamp)))
 	err := binary.Read(reader, binary.LittleEndian, &pr.Stream)
 	return &pr, err
 }
