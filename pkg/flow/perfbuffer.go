@@ -9,7 +9,7 @@ import (
 type PerfBuffer struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      map[uint16][]byte
+	entries      map[uint16](*PacketRecord)
 }
 
 func NewPerfBuffer(
@@ -18,7 +18,7 @@ func NewPerfBuffer(
 	return &PerfBuffer{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      map[uint16][]byte{},
+		entries:      map[uint16]*PacketRecord{},
 	}
 }
 
@@ -33,7 +33,7 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = map[uint16][]byte{}
+			c.entries = map[uint16]*PacketRecord{}
 			logrus.WithField("packets", len(evictingEntries)).
 				Debug("evicting packets from userspace  on timeout")
 			c.evict(evictingEntries, out)
@@ -46,21 +46,21 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 			}
 			if len(c.entries) >= c.maxEntries {
 				evictingEntries := c.entries
-				c.entries = map[uint16][]byte{}
+				c.entries = map[uint16]*PacketRecord{}
 				logrus.WithField("packets", len(evictingEntries)).
 					Debug("evicting packets from userspace accounter after reaching cache max length")
 				c.evict(evictingEntries, out)
 			}
-			c.entries[uint16(ind)] = packet.Stream
+			c.entries[uint16(ind)] = NewPacketRecord(packet.Stream, (uint16)(len(packet.Stream)), packet.Time)
 			ind++
 		}
 	}
 }
 
-func (c *PerfBuffer) evict(entries map[uint16]([]byte), evictor chan<- []*PacketRecord) {
+func (c *PerfBuffer) evict(entries map[uint16](*PacketRecord), evictor chan<- []*PacketRecord) {
 	packets := make([]*PacketRecord, 0, len(entries))
 	for _, payload := range entries {
-		packets = append(packets, NewPacketRecord(payload, (uint16)(len(payload))))
+		packets = append(packets, NewPacketRecord(payload.Stream, (uint16)(len(payload.Stream)), payload.Time))
 	}
 	alog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace accounter")
 	evictor <- packets

@@ -163,6 +163,7 @@ typedef struct pkt_info_t {
 typedef struct payload_meta_t {
     u16 if_index;
     u16 pkt_len;
+    u64 timestamp;  // timestamp when packet received by ebpf
 } __attribute__((packed)) payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response

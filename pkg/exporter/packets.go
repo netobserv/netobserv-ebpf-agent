@@ -10,6 +10,7 @@ import (
 	"github.com/google/gopacket/layers"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -116,8 +117,9 @@ func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 		if len(packetRecord) > 0 {
 			for _, packet := range packetRecord {
 				packetStream := packet.Stream
+				packetTimestamp := packet.Time
 				captureInfo := gopacket.CaptureInfo{
-					Timestamp:     time.Time{},
+					Timestamp:     packetTimestamp,
 					CaptureLength: len(packetStream),
 					Length:        len(packetStream),
 				}

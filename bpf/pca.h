@@ -17,6 +17,9 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     __u16 headerSize;
     __u64 packet_len;
 
+    // Record the current time.
+    u64 current_time = bpf_ktime_get_ns();
+    
     if ((void *)eth + sizeof(*eth) > data_end) {
        return TC_ACT_UNSPEC;
     }
@@ -50,6 +53,7 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
 
         meta.if_index = skb->ifindex;
         meta.pkt_len = headerSize;
+        meta.timestamp = current_time;
         if (bpf_perf_event_output(skb, &packet_record, flags, &meta, sizeof(meta))){
             return TC_ACT_UNSPEC;
         }
