@@ -68,6 +68,7 @@ The following environment variables are available to configure the NetObserv eBF
 * `ENABLE_PCA` (default: `false` disabled). If `true` enables Packet Capture Agent. 
 * `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
   `PCA_FILTER=tcp,22`.
+* `PCA_SERVER_PORT` (default: 0). Works only when `ENABLE_PCA` is set. Agent opens PCA Server at this port. A collector can connect to it and recieve filtered packets as pcap stream. The filter is set using `PCA_FILTER`.
 ## Development-only variables
 
 The following configuration variables are mostly used for development and fine-grained debugging,

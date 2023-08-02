@@ -528,11 +528,11 @@ func packetsAgent(cfg *Config,
 }
 
 func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.TargetPort == 0 {
-		return nil, fmt.Errorf("missing target port: %d",
-			cfg.TargetPort)
+	if cfg.PCAServerPort == 0 {
+		return nil, fmt.Errorf("missing PCA Server port: %d",
+			cfg.PCAServerPort)
 	}
-	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.TargetPort))
+	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.PCAServerPort))
 	if err != nil {
 		return nil, err
 	}
