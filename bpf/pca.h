@@ -14,8 +14,7 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     struct iphdr  *ip;
     struct udphdr *tproto_data;
     __u64 flags = BPF_F_CURRENT_CPU;
-    __u16 headerSize;
-    __u64 packet_len;
+    __u16 packetSize;
 
     // Record the current time.
     u64 current_time = bpf_ktime_get_ns();
@@ -42,17 +41,16 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     if (ip->protocol != pca_proto) {
        return TC_ACT_UNSPEC;	
     }
-
-    packet_len = (__u16)(data_end - data);
-    headerSize = packet_len < MAX_EVENT_DATA ? packet_len : MAX_EVENT_DATA;
+    
     //Only export packets on port number set by ENV var
     if (tproto_data->source == bpf_htons(pca_port) || tproto_data->dest == bpf_htons(pca_port)) {
         // enable the flag to add packet header
         // Packet payload follows immediately after the meta struct
-        flags |= (__u64)headerSize << 32;
+        packetSize = skb->len; 
+        flags |= (__u64)packetSize << 32;
 
         meta.if_index = skb->ifindex;
-        meta.pkt_len = headerSize;
+        meta.pkt_len = packetSize;
         meta.timestamp = current_time;
         if (bpf_perf_event_output(skb, &packet_record, flags, &meta, sizeof(meta))){
             return TC_ACT_UNSPEC;

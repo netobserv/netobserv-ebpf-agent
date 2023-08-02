@@ -46,7 +46,7 @@ func writePacketHeader(ci gopacket.CaptureInfo, conn net.Conn) error {
 	var buf [16]byte
 	t := ci.Timestamp
 	if t.IsZero() {
-		return fmt.Errorf("Incoming packet does not have a timestamp. Ignoring packet")
+		return fmt.Errorf("incoming packet does not have a timestamp. Ignoring packet")
 	}
 	secs := t.Unix()
 	usecs := t.Nanosecond() / nanosPerMicro
@@ -117,15 +117,17 @@ func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 			for _, packet := range packetRecord {
 				packetStream := packet.Stream
 				packetTimestamp := packet.Time
-				plog.Debugf("TS from packet: %s", packetTimestamp)
-				captureInfo := gopacket.CaptureInfo{
-					Timestamp:     packetTimestamp,
-					CaptureLength: len(packetStream),
-					Length:        len(packetStream),
-				}
-				err = WritePacket(captureInfo, packetStream, p.clientConn)
-				if err != nil {
-					plog.Fatal(err)
+				if len(packetStream) != 0 {
+					plog.Debugf("TS from packet: %s", packetTimestamp)
+					captureInfo := gopacket.CaptureInfo{
+						Timestamp:     packetTimestamp,
+						CaptureLength: len(packetStream),
+						Length:        len(packetStream),
+					}
+					err = WritePacket(captureInfo, packetStream, p.clientConn)
+					if err != nil {
+						plog.Fatal(err)
+					}
 				}
 			}
 		}
