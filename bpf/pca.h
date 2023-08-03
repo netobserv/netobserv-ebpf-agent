@@ -47,8 +47,8 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
         // enable the flag to add packet header
         // Packet payload follows immediately after the meta struct
         packetSize = (__u16)(data_end-data);
+        // For non-linear skbuff payloads 
         if (packetSize < skb->len){
-            bpf_printk("Packets with extended skb %d, %d", packetSize, skb->len);
             packetSize = skb->len;
             bpf_skb_pull_data(skb, skb->len);
         }
