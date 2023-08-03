@@ -54,7 +54,6 @@ typedef __u64 u64;
 #define ETH_P_IPV6 0x86DD
 #define ETH_P_ARP 0x0806
 #define IPPROTO_ICMPV6 58
-#define MAX_CPUS 256
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum {
