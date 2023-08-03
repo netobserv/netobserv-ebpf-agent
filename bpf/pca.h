@@ -46,7 +46,12 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     if (tproto_data->source == bpf_htons(pca_port) || tproto_data->dest == bpf_htons(pca_port)) {
         // enable the flag to add packet header
         // Packet payload follows immediately after the meta struct
-        packetSize = skb->len; 
+        packetSize = (__u16)(data_end-data);
+        if (packetSize < skb->len){
+            bpf_printk("Packets with extended skb %d, %d", packetSize, skb->len);
+            packetSize = skb->len;
+            bpf_skb_pull_data(skb, skb->len);
+        }
         flags |= (__u64)packetSize << 32;
 
         meta.if_index = skb->ifindex;
