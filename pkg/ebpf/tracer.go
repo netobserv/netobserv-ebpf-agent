@@ -101,6 +101,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if enableRtt == 0 {
 		// Cannot set the size of map to be 0 so set it to 1.
 		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
+	} else {
+		log.Debugf("RTT calculations are enabled")
 	}
 
 	if !cfg.DNSTracker {

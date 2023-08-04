@@ -97,7 +97,7 @@ static inline int trace_dns(struct sk_buff *skb) {
         if ((bpf_ntohs(dns.flags) & DNS_QR_FLAG) == 0) { /* dns query */
             fill_dns_id(&id, &dns_req, bpf_ntohs(dns.id), false);
             if (bpf_map_lookup_elem(&dns_flows, &dns_req) == NULL) {
-               u64 ts = bpf_ktime_get_ns();
+                u64 ts = bpf_ktime_get_ns();
                 bpf_map_update_elem(&dns_flows, &dns_req, &ts, BPF_ANY);
             }
             id.direction = EGRESS;

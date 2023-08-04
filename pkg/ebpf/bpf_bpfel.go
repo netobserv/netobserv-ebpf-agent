@@ -64,11 +64,13 @@ type BpfFlowRecordT struct {
 }
 
 type BpfFlowSeqId struct {
-	SrcPort uint16
-	DstPort uint16
-	SrcIp   [16]uint8
-	DstIp   [16]uint8
-	SeqId   uint32
+	SrcPort           uint16
+	DstPort           uint16
+	SrcIp             [16]uint8
+	DstIp             [16]uint8
+	SeqId             uint32
+	TransportProtocol uint8
+	IfIndex           uint32
 }
 
 type BpfPktDropsT struct {
