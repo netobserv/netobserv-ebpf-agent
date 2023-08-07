@@ -518,7 +518,7 @@ func NewPacketFetcher(
 	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constPcaPort:  uint32(pcaPort),
+		constPcaPort:  uint16(pcaPort),
 		constPcaProto: uint8(pcaProto),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
