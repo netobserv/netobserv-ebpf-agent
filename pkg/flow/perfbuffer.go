@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"sort"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -58,10 +59,18 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 }
 
 func (c *PerfBuffer) evict(entries map[uint16](*PacketRecord), evictor chan<- []*PacketRecord) {
+	plog.Debugf("PCA Eviction map size: %d", len(entries))
 	packets := make([]*PacketRecord, 0, len(entries))
-	for _, payload := range entries {
+	// This is to reorder packets according to their sequence of arrival.
+	packetIndices := make([]int, 0, len(entries))
+	for k := range entries {
+		packetIndices = append(packetIndices, int(k))
+	}
+	sort.Ints(packetIndices)
+	for k := range packetIndices {
+		payload := entries[uint16(k)]
 		packets = append(packets, NewPacketRecord(payload.Stream, (uint16)(len(payload.Stream)), payload.Time))
 	}
-	alog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace accounter")
+	plog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace")
 	evictor <- packets
 }
