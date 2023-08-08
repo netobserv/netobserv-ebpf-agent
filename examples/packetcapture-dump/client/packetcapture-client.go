@@ -18,16 +18,16 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
 	"time"
 )
 
-const (
-	HOST = "localhost"
-	PORT = "9990"
-	TYPE = "tcp"
+var (
+	PORT = flag.String("connect_port", "9990", "TCP port to connect to for packet stream")
+	HOST = flag.String("connect_host", "localhost", "Packet Capture Agent IP")
 )
 
 func check(e error) {
@@ -39,14 +39,14 @@ func main() {
 	fmt.Println("Starting Packet Capture Client.")
 	fmt.Println("This creates a file capture.pcap and writes packets to it.")
 	fmt.Println("To view captured packets 'tcpdump -r capture.pcap'.")
-	tcpServer, err := net.ResolveTCPAddr(TYPE, HOST+":"+PORT)
+	tcpServer, err := net.ResolveTCPAddr("tcp", *HOST+":"+*PORT)
 
 	if err != nil {
 		println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
 	}
 
-	conn, err := net.DialTCP(TYPE, nil, tcpServer)
+	conn, err := net.DialTCP("tcp", nil, tcpServer)
 	if err != nil {
 		println("Dial failed:", err.Error())
 		os.Exit(1)

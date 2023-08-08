@@ -152,5 +152,5 @@ type Config struct {
 	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80".
 	PCAFilters string `env:"PCA_FILTER"`
 	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
-	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"0"`
+	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
 }
