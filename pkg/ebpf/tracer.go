@@ -118,7 +118,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	oldKernel := utils.IskernelOlderthan514()
 
-	log.Debugf("Deleting specs for PCA")
+	//Deleting specs for PCA
 	objects.EgressPcaParse = nil
 	objects.IngressPcaParse = nil
 	delete(spec.Programs, constPcaPort)
@@ -503,6 +503,20 @@ func NewPacketFetcher(
 	if err != nil {
 		return nil, err
 	}
+
+	// Removing Specs for flows agent
+	objects.EgressFlowParse = nil
+	objects.IngressFlowParse = nil
+	objects.DirectFlows = nil
+	objects.AggregatedFlows = nil
+	objects.FlowSequences = nil
+	objects.TraceNetPackets = nil
+	delete(spec.Programs, aggregatedFlowsMap)
+	delete(spec.Programs, flowSequencesMap)
+	delete(spec.Programs, constSampling)
+	delete(spec.Programs, constTraceMessages)
+	delete(spec.Programs, constEnableRtt)
+	delete(spec.Programs, dnsTraceHook)
 
 	pcaPort := 0
 	pcaProto := 0

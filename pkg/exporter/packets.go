@@ -19,7 +19,7 @@ type PCAPStream struct {
 }
 
 // PCAP Magic number is fixed for each endianness.
-const pcap_magic_number = 0xA1B2C3D4
+const pcapMagicNumber = 0xA1B2C3D4
 const versionMajor = 2
 const versionMinor = 4
 const nanosPerMicro = 1000
@@ -31,7 +31,7 @@ var snapshotlen uint32
 
 func writePCAPFileHeader(snaplen uint32, linktype layers.LinkType, conn net.Conn) error {
 	var buf [24]byte
-	binary.LittleEndian.PutUint32(buf[0:4], pcap_magic_number)
+	binary.LittleEndian.PutUint32(buf[0:4], pcapMagicNumber)
 	binary.LittleEndian.PutUint16(buf[4:6], versionMajor)
 	binary.LittleEndian.PutUint16(buf[6:8], versionMinor)
 	binary.LittleEndian.PutUint32(buf[16:20], snaplen)
