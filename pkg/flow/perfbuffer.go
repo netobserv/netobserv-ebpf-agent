@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"sort"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -10,7 +9,7 @@ import (
 type PerfBuffer struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      map[uint16](*PacketRecord)
+	entries      [](*PacketRecord)
 }
 
 func NewPerfBuffer(
@@ -19,7 +18,7 @@ func NewPerfBuffer(
 	return &PerfBuffer{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      map[uint16]*PacketRecord{},
+		entries:      []*PacketRecord{},
 	}
 }
 
@@ -34,7 +33,7 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = map[uint16]*PacketRecord{}
+			c.entries = []*PacketRecord{}
 			logrus.WithField("packets", len(evictingEntries)).
 				Debug("evicting packets from userspace  on timeout")
 			c.evict(evictingEntries, out)
@@ -47,30 +46,22 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 			}
 			if len(c.entries) >= c.maxEntries {
 				evictingEntries := c.entries
-				c.entries = map[uint16]*PacketRecord{}
+				c.entries = []*PacketRecord{}
 				logrus.WithField("packets", len(evictingEntries)).
 					Debug("evicting packets from userspace accounter after reaching cache max length")
 				c.evict(evictingEntries, out)
 			}
-			c.entries[uint16(ind)] = NewPacketRecord(packet.Stream, (uint16)(len(packet.Stream)), packet.Time)
+			c.entries = append(c.entries, NewPacketRecord(packet.Stream, (uint16)(len(packet.Stream)), packet.Time))
 			ind++
 		}
 	}
 }
 
-func (c *PerfBuffer) evict(entries map[uint16](*PacketRecord), evictor chan<- []*PacketRecord) {
-	plog.Debugf("PCA Eviction map size: %d", len(entries))
+func (c *PerfBuffer) evict(entries [](*PacketRecord), evictor chan<- []*PacketRecord) {
 	packets := make([]*PacketRecord, 0, len(entries))
-	// This is to reorder packets according to their sequence of arrival.
-	packetIndices := make([]int, 0, len(entries))
-	for k := range entries {
-		packetIndices = append(packetIndices, int(k))
-	}
-	sort.Ints(packetIndices)
-	for k := range packetIndices {
-		payload := entries[uint16(k)]
+	for _, payload := range entries {
 		packets = append(packets, NewPacketRecord(payload.Stream, (uint16)(len(payload.Stream)), payload.Time))
 	}
-	plog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace")
+	alog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace accounter")
 	evictor <- packets
 }

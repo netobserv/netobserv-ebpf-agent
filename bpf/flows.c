@@ -151,15 +151,5 @@ int egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
 }
 
-SEC("tc_pca_ingress")
-int ingress_pca_parse (struct __sk_buff *skb) {
-    return export_packet_payload(skb);
-}
-
-SEC("tc_pca_egress")
-int egress_pca_parse (struct __sk_buff *skb) {
-    return export_packet_payload(skb);
-}
-
 char _license[] SEC("license") = "GPL";
 

@@ -4,7 +4,6 @@
 #include "utils.h"
 #include <string.h>
 
-#define MAX_EVENT_DATA 1024ul
 
 static inline int export_packet_payload (struct __sk_buff *skb) {
     void *data_end = (void *)(long)skb->data_end;
@@ -64,6 +63,16 @@ static inline int export_packet_payload (struct __sk_buff *skb) {
     }
 
     return TC_ACT_OK;    
+}
+
+SEC("tc_pca_ingress")
+int ingress_pca_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
+SEC("tc_pca_egress")
+int egress_pca_parse (struct __sk_buff *skb) {
+    return export_packet_payload(skb);
 }
 
 #endif /* __PCA_H__ */

@@ -39,7 +39,7 @@ func ReadRawPacket(reader io.Reader) (*PacketRecord, error) {
 	getLen := make([]byte, 2)
 	packetTimestamp := make([]byte, 8)
 	// Read IfIndex and discard it: To be used in other usecases
-	_ = binary.Read(reader, binary.LittleEndian, make([]byte, 2))
+	_ = binary.Read(reader, binary.LittleEndian, make([]byte, 4))
 	// Read Length of packet
 	_ = binary.Read(reader, binary.LittleEndian, getLen)
 	plog.Debugf("Reading packet of length: %d", binary.LittleEndian.Uint16(getLen))
