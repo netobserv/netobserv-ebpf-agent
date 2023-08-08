@@ -26,7 +26,7 @@ const nanosPerMicro = 1000
 var plog = logrus.WithField("component", "packet/Packets")
 
 // Setting Snapshot length to 0 sets it to maximum packet size
-var snapshotlen int32
+var snapshotlen uint32
 
 func WriteFileHeader(snaplen uint32, linktype layers.LinkType, conn net.Conn) error {
 	var buf [24]byte
@@ -107,7 +107,7 @@ func StartPCAPSend(hostPort string) (*PCAPStream, error) {
 func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 
 	//Create handler by opening PCAP stream - Write 24 byte size File Header
-	err := WriteFileHeader(uint32(snapshotlen), layers.LinkTypeEthernet, p.clientConn)
+	err := WriteFileHeader(snapshotlen, layers.LinkTypeEthernet, p.clientConn)
 	if err != nil {
 		plog.Fatal(err)
 	}
@@ -118,7 +118,6 @@ func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 				packetStream := packet.Stream
 				packetTimestamp := packet.Time
 				if len(packetStream) != 0 {
-					plog.Debugf("TS from packet: %s", packetTimestamp)
 					captureInfo := gopacket.CaptureInfo{
 						Timestamp:     packetTimestamp,
 						CaptureLength: len(packetStream),

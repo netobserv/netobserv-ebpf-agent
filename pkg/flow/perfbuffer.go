@@ -51,7 +51,7 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 					Debug("evicting packets from userspace accounter after reaching cache max length")
 				c.evict(evictingEntries, out)
 			}
-			c.entries = append(c.entries, NewPacketRecord(packet.Stream, (uint16)(len(packet.Stream)), packet.Time))
+			c.entries = append(c.entries, NewPacketRecord(packet.Stream, (uint32)(len(packet.Stream)), packet.Time))
 			ind++
 		}
 	}
@@ -60,7 +60,7 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 func (c *PerfBuffer) evict(entries [](*PacketRecord), evictor chan<- []*PacketRecord) {
 	packets := make([]*PacketRecord, 0, len(entries))
 	for _, payload := range entries {
-		packets = append(packets, NewPacketRecord(payload.Stream, (uint16)(len(payload.Stream)), payload.Time))
+		packets = append(packets, NewPacketRecord(payload.Stream, (uint32)(len(payload.Stream)), payload.Time))
 	}
 	alog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace accounter")
 	evictor <- packets

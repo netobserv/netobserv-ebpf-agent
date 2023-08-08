@@ -21,7 +21,7 @@ type PacketRecord struct {
 // NewPacketRecord contains packet bytes
 func NewPacketRecord(
 	stream []byte,
-	len uint16,
+	len uint32,
 	ts time.Time,
 ) *PacketRecord {
 	pr := PacketRecord{}
@@ -42,8 +42,7 @@ func ReadRawPacket(reader io.Reader) (*PacketRecord, error) {
 	_ = binary.Read(reader, binary.LittleEndian, make([]byte, 4))
 	// Read Length of packet
 	_ = binary.Read(reader, binary.LittleEndian, getLen)
-	plog.Debugf("Reading packet of length: %d", binary.LittleEndian.Uint32(getLen))
-	pr.Stream = make([]byte, binary.LittleEndian.Uint16(getLen))
+	pr.Stream = make([]byte, binary.LittleEndian.Uint32(getLen))
 	// Read TimeStamp of packet
 	_ = binary.Read(reader, binary.LittleEndian, packetTimestamp)
 	// The assumption is monotonic time should be as close to time recorded by ebpf.
