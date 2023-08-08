@@ -37,14 +37,13 @@ func NewPerfTracer(
 
 func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*PacketRecord] {
 	return func(out chan<- *PacketRecord) {
-		debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
 		for {
 			select {
 			case <-ctx.Done():
 				pblog.Debug("exiting trace loop due to context cancellation")
 				return
 			default:
-				if err := m.listenAndForwardPerf(debugging, out); err != nil {
+				if err := m.listenAndForwardPerf(out); err != nil {
 
 					if errors.Is(err, perf.ErrClosed) {
 						pblog.Debug("Received signal, exiting..")
@@ -58,7 +57,7 @@ func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*PacketRecord
 	}
 }
 
-func (m *PerfTracer) listenAndForwardPerf(debugging bool, forwardCh chan<- *PacketRecord) error {
+func (m *PerfTracer) listenAndForwardPerf(forwardCh chan<- *PacketRecord) error {
 	event, err := m.perfArray.ReadPerf()
 	if err != nil {
 		return fmt.Errorf("reading from perf event array: %w", err)
@@ -68,10 +67,6 @@ func (m *PerfTracer) listenAndForwardPerf(debugging bool, forwardCh chan<- *Pack
 	if err != nil {
 		return fmt.Errorf("parsing data received from the perf event array: %w", err)
 	}
-	if debugging {
-		m.stats.logRingBufferFlows(false)
-	}
-
 	forwardCh <- readFlow
 	return nil
 }

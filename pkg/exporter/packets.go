@@ -18,7 +18,8 @@ type PCAPStream struct {
 	clientConn net.Conn
 }
 
-const magicMicroseconds = 0xA1B2C3D4
+// PCAP Magic number is fixed for each endianness.
+const pcap_magic_number = 0xA1B2C3D4
 const versionMajor = 2
 const versionMinor = 4
 const nanosPerMicro = 1000
@@ -28,9 +29,9 @@ var plog = logrus.WithField("component", "packet/Packets")
 // Setting Snapshot length to 0 sets it to maximum packet size
 var snapshotlen uint32
 
-func WriteFileHeader(snaplen uint32, linktype layers.LinkType, conn net.Conn) error {
+func writePCAPFileHeader(snaplen uint32, linktype layers.LinkType, conn net.Conn) error {
 	var buf [24]byte
-	binary.LittleEndian.PutUint32(buf[0:4], magicMicroseconds)
+	binary.LittleEndian.PutUint32(buf[0:4], pcap_magic_number)
 	binary.LittleEndian.PutUint16(buf[4:6], versionMajor)
 	binary.LittleEndian.PutUint16(buf[6:8], versionMinor)
 	binary.LittleEndian.PutUint32(buf[16:20], snaplen)
@@ -62,7 +63,7 @@ func writePacketHeader(ci gopacket.CaptureInfo, conn net.Conn) error {
 }
 
 // WritePacket writes the given packet data out to the file.
-func WritePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
+func writePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 	if ci.CaptureLength != len(data) {
 		return fmt.Errorf("capture length %d does not match data length %d", ci.CaptureLength, len(data))
 	}
@@ -82,7 +83,7 @@ func WritePacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 	return err
 }
 
-// Only after client connects to it, the agent starts collecting and sending packets .
+// FIXME: Only after client connects to it, the agent starts collecting and sending packets.
 // This behavior needs to be fixed.
 func StartPCAPSend(hostPort string) (*PCAPStream, error) {
 	PORT := ":" + hostPort
@@ -106,12 +107,11 @@ func StartPCAPSend(hostPort string) (*PCAPStream, error) {
 
 func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 
-	//Create handler by opening PCAP stream - Write 24 byte size File Header
-	err := WriteFileHeader(snapshotlen, layers.LinkTypeEthernet, p.clientConn)
+	//Create handler by opening PCAP stream - Write 24 byte size PCAP File Header
+	err := writePCAPFileHeader(snapshotlen, layers.LinkTypeEthernet, p.clientConn)
 	if err != nil {
 		plog.Fatal(err)
 	}
-	plog.Debugf("Writing File Header")
 	for packetRecord := range in {
 		if len(packetRecord) > 0 {
 			for _, packet := range packetRecord {
@@ -123,7 +123,7 @@ func (p *PCAPStream) ExportFlows(in <-chan []*flow.PacketRecord) {
 						CaptureLength: len(packetStream),
 						Length:        len(packetStream),
 					}
-					err = WritePacket(captureInfo, packetStream, p.clientConn)
+					err = writePacket(captureInfo, packetStream, p.clientConn)
 					if err != nil {
 						plog.Fatal(err)
 					}

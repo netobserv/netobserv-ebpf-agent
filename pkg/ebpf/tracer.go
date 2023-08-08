@@ -506,11 +506,13 @@ func NewPacketFetcher(
 
 	pcaPort := 0
 	pcaProto := 0
-	filters := strings.Split(pcaFilters, ",")
+	filters := strings.Split(strings.ToLower(pcaFilters), ",")
 	if filters[0] == "tcp" {
 		pcaProto = syscall.IPPROTO_TCP
-	} else {
+	} else if filters[0] == "udp" {
 		pcaProto = syscall.IPPROTO_UDP
+	} else {
+		return nil, fmt.Errorf("pca protocol %s not supported. Please use tcp or udp", filters[0])
 	}
 	pcaPort, err = strconv.Atoi(filters[1])
 	if err != nil {
@@ -646,13 +648,13 @@ func (p *PacketFetcher) LookupAndDeleteMap() map[int][]*byte {
 	packets := make(map[int][]*byte, p.cacheMaxSize)
 
 	var id int
-	var metrics []*byte
-	for iterator.Next(&id, &metrics) {
+	var packet []*byte
+	for iterator.Next(&id, &packet) {
 		if err := packetMap.Delete(id); err != nil {
-			log.WithError(err).WithField("flowId", id).
+			log.WithError(err).WithField("packetID ", id).
 				Warnf("couldn't delete  entry")
 		}
-		packets[id] = append(packets[id], metrics...)
+		packets[id] = append(packets[id], packet...)
 	}
 	return packets
 }
