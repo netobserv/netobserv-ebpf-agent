@@ -19,14 +19,17 @@ sudo PCA_SERVER_PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf
 
 Start the packetcapture-client using: (in a secondary shell)
 ```bash
-./bin/packetcapture-client
+./bin/packetcapture-client -outfile=capture.pcap
 ```
 
 You should see output such as:
 ```bash
 Starting Packet Capture Client.
-This creates a file capture.pcap and writes packets to it.
-To view captured packets 'tcpdump -r capture.pcap'.
+By default, the read packets are printed on stdout.
+To write to a pcap file use flag '-outfile=[filename]'
+This creates a file [filename] and writes packets to it.
+To view captured packets 'tcpdump -r [filename]'.
+
 07-24-2023 07:58:59.264323 : Received Packet of length  24
 07-24-2023 07:59:04.268965 : Received Packet of length  410
 07-24-2023 07:59:04.269048 : Received Packet of length  644

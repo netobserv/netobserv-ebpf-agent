@@ -26,8 +26,9 @@ import (
 )
 
 var (
-	PORT = flag.String("connect_port", "9990", "TCP port to connect to for packet stream")
-	HOST = flag.String("connect_host", "localhost", "Packet Capture Agent IP")
+	PORT     = flag.String("connect_port", "9990", "TCP port to connect to for packet stream")
+	HOST     = flag.String("connect_host", "localhost", "Packet Capture Agent IP")
+	FILENAME = flag.String("outfile", "", "Create and write to Filename.pcap")
 )
 
 func check(e error) {
@@ -37,36 +38,54 @@ func check(e error) {
 }
 func main() {
 	fmt.Println("Starting Packet Capture Client.")
-	fmt.Println("This creates a file capture.pcap and writes packets to it.")
-	fmt.Println("To view captured packets 'tcpdump -r capture.pcap'.")
+	fmt.Println("By default, the read packets are printed on stdout.")
+	fmt.Println("To write to a pcap file use flag '-outfile=[filename]'")
+	fmt.Println("This creates a file [filename] and writes packets to it.")
+
+	fmt.Println("To view captured packets 'tcpdump -r [filename]'.")
+	flag.Parse()
+
 	tcpServer, err := net.ResolveTCPAddr("tcp", *HOST+":"+*PORT)
 
 	if err != nil {
 		println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
 	}
-
 	conn, err := net.DialTCP("tcp", nil, tcpServer)
 	if err != nil {
 		println("Dial failed:", err.Error())
 		os.Exit(1)
 	}
-	f, err := os.Create("capture.pcap")
-	if err != nil {
-		os.Exit(1)
-	}
-	defer f.Close()
-	for {
-		received := make([]byte, 65535)
-		n, err := conn.Read(received)
+	var f *os.File
+	if *FILENAME != "" {
+		f, err = os.Create(*FILENAME)
 		if err != nil {
-			println("Read data failed:", err.Error())
 			os.Exit(1)
 		}
-		_, err = f.Write(received[:n])
-		check(err)
-		dt := time.Now()
-		fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", n)
+		defer f.Close()
+		for {
+			received := make([]byte, 65535)
+			n, err := conn.Read(received)
+			if err != nil {
+				println("Read data failed:", err.Error())
+				os.Exit(1)
+			}
+			_, err = f.Write(received[:n])
+			check(err)
+			dt := time.Now()
+			fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", n)
+		}
+	} else {
+		fmt.Println("into else")
+		for {
+			received := make([]byte, 65535)
+			n, err := conn.Read(received)
+			if err != nil {
+				println("Read data failed:", err.Error())
+				os.Exit(1)
+			}
+			fmt.Println(received[:n])
+		}
 	}
 	conn.Close()
 }
