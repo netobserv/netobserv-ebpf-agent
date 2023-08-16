@@ -52,6 +52,7 @@ func main() {
 	}
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
+	fmt.Println("PCA agent:  ", config.EnablePCA)
 
 	if config.EnablePCA {
 		if config.PCAFilters == "" {
