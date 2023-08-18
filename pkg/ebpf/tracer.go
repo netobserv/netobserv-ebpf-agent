@@ -39,6 +39,7 @@ const (
 	dnsTraceHook       = "net_dev_queue"
 	constPcaPort       = "pca_port"
 	constPcaProto      = "pca_proto"
+	packetRecord       = "packet_record"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -84,6 +85,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		return nil, fmt.Errorf("loading BPF data: %w", err)
 	}
 
+	fmt.Println("AddFlows: ", spec.Maps[aggregatedFlowsMap].MaxEntries)
+
 	// Resize maps according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
 	spec.Maps[flowSequencesMap].MaxEntries = uint32(cfg.CacheMaxSize)
@@ -117,6 +120,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	oldKernel := utils.IskernelOlderthan514()
+
+	fmt.Println("======1======")
+	fmt.Println(spec.Maps[packetRecord].MaxEntries)
+	fmt.Println("============")
 
 	//Deleting specs for PCA
 	objects.EgressPcaParse = nil
@@ -503,6 +510,11 @@ func NewPacketFetcher(
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("======2======")
+	fmt.Println(spec.Maps[packetRecord].MaxEntries)
+	fmt.Println("AggFlows: ", spec.Maps[aggregatedFlowsMap].MaxEntries)
+	fmt.Println("============")
 
 	// Removing Specs for flows agent
 	objects.EgressFlowParse = nil

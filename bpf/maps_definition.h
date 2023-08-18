@@ -36,6 +36,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__type(key, int);
 	__type(value, u32);
+    __uint(max_entries, 256);
 } packet_record SEC(".maps");
 
 // DNS tracking flow based hashmap used to correlate query and responses
