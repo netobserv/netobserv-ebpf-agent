@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/caarlos0/env/v6 v6.9.1
 	github.com/cilium/ebpf v0.11.0
+	github.com/fsnotify/fsnotify v1.5.1
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/netobserv/gopipes v0.3.0
@@ -13,6 +14,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.8.1
 	github.com/vishvananda/netlink v1.1.0
+	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
 	github.com/vladimirvivien/gexe v0.1.1
 	github.com/vmware/go-ipfix v0.5.12
 	golang.org/x/sys v0.6.0
@@ -56,7 +58,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df // indirect
 	github.com/xdg/scram v1.0.5 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	golang.org/x/crypto v0.5.0 // indirect

@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishvananda/netns"
 )
 
 const timeout = 5 * time.Second
@@ -21,9 +22,9 @@ func TestPoller(t *testing.T) {
 	var fakeInterfaces = func() ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
-			return []Interface{{"foo", 1}, {"bar", 2}}, nil
+			return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}}, nil
 		}
-		return []Interface{{"foo", 1}, {"bae", 3}}, nil
+		return []Interface{{"foo", 1, netns.None()}, {"bae", 3, netns.None()}}, nil
 	}
 	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
@@ -32,17 +33,17 @@ func TestPoller(t *testing.T) {
 	require.NoError(t, err)
 	// first poll: two interfaces are added
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1}},
+		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None()}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2}},
+		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None()}},
 		getEvent(t, updates, timeout))
 	// second poll: one interface is added and another is removed
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 3}},
+		Event{Type: EventAdded, Interface: Interface{"bae", 3, netns.None()}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2}},
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None()}},
 		getEvent(t, updates, timeout))
 	// successive polls: no more events are forwarded
 	select {

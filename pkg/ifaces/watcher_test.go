@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,10 +20,10 @@ func TestWatcher(t *testing.T) {
 	watcher := NewWatcher(10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func() ([]Interface, error) {
-		return []Interface{{"foo", 1}, {"bar", 2}, {"baz", 3}}, nil
+		return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}, {"baz", 3, netns.None()}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
-	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
+	watcher.linkSubscriberAt = func(ns netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
 		go func() {
 			for link := range inputLinks {
 				ch <- link
@@ -36,31 +37,31 @@ func TestWatcher(t *testing.T) {
 
 	// initial set of fetched elements
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1}},
+		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None()}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2}},
+		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None()}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"baz", 3}},
+		Event{Type: EventAdded, Interface: Interface{"baz", 3, netns.None()}},
 		getEvent(t, outputEvents, timeout))
 
 	// updates
-	inputLinks <- upAndRunning("bae", 4)
-	inputLinks <- down("bar", 2)
+	inputLinks <- upAndRunning("bae", 4, netns.None())
+	inputLinks <- down("bar", 2, netns.None())
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 4}},
+		Event{Type: EventAdded, Interface: Interface{"bae", 4, netns.None()}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2}},
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None()}},
 		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces
 	// will be ignored
-	inputLinks <- upAndRunning("bae", 4)
-	inputLinks <- upAndRunning("foo", 1)
-	inputLinks <- down("bar", 2)
-	inputLinks <- down("eth0", 3)
+	inputLinks <- upAndRunning("bae", 4, netns.None())
+	inputLinks <- upAndRunning("foo", 1, netns.None())
+	inputLinks <- down("bar", 2, netns.None())
+	inputLinks <- down("eth0", 3, netns.None())
 
 	select {
 	case ev := <-outputEvents:
@@ -70,15 +71,15 @@ func TestWatcher(t *testing.T) {
 	}
 }
 
-func upAndRunning(name string, index int) netlink.LinkUpdate {
+func upAndRunning(name string, index int, netNS netns.NsHandle) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
 		IfInfomsg: nl.IfInfomsg{IfInfomsg: unix.IfInfomsg{Flags: syscall.IFF_UP | syscall.IFF_RUNNING}},
-		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index}},
+		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS, OperState: netlink.OperUp}},
 	}
 }
 
-func down(name string, index int) netlink.LinkUpdate {
+func down(name string, index int, netNS netns.NsHandle) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
-		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index}},
+		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS}},
 	}
 }
