@@ -104,11 +104,11 @@ func TestEvict_MaxEntries(t *testing.T) {
 			RawRecord: RawRecord{
 				Id: k1,
 				Metrics: ebpf.BpfFlowMetrics{
-					Bytes: 123, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
+					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
 				},
 			},
 			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
-			TimeFlowEnd:   now.Add(-(1000 - 123) * time.Nanosecond),
+			TimeFlowEnd:   now.Add(-(1000 - 789) * time.Nanosecond),
 		},
 		k2: {
 			RawRecord: RawRecord{
@@ -178,15 +178,15 @@ func TestEvict_Period(t *testing.T) {
 		RawRecord: RawRecord{
 			Id: k1,
 			Metrics: ebpf.BpfFlowMetrics{
-				Bytes:           10,
-				Packets:         1,
+				Bytes:           30,
+				Packets:         3,
 				StartMonoTimeTs: 123,
-				EndMonoTimeTs:   123,
+				EndMonoTimeTs:   789,
 				Flags:           1,
 			},
 		},
 		TimeFlowStart: now.Add(-1000 + 123),
-		TimeFlowEnd:   now.Add(-1000 + 123),
+		TimeFlowEnd:   now.Add(-1000 + 789),
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -194,15 +194,15 @@ func TestEvict_Period(t *testing.T) {
 		RawRecord: RawRecord{
 			Id: k1,
 			Metrics: ebpf.BpfFlowMetrics{
-				Bytes:           10,
-				Packets:         1,
+				Bytes:           20,
+				Packets:         2,
 				StartMonoTimeTs: 1123,
-				EndMonoTimeTs:   1123,
+				EndMonoTimeTs:   1456,
 				Flags:           1,
 			},
 		},
 		TimeFlowStart: now.Add(-1000 + 1123),
-		TimeFlowEnd:   now.Add(-1000 + 1123),
+		TimeFlowEnd:   now.Add(-1000 + 1456),
 	}, *records[0])
 
 	// no more flows are evicted

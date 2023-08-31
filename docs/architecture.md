@@ -11,7 +11,7 @@ flowchart TD
     E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
     style E fill:#990
 
-    E --> |"polls<br/>HashMap"| M(flow.MapTracer)
+    E --> |"polls<br/>PerCPUHashMap"| M(flow.MapTracer)
     RB --> |chan *flow.Record| ACC(flow.Accounter)
     RB -.-> |flushes| M
     ACC --> |"chan []*flow.Record"| DD(flow.Deduper)

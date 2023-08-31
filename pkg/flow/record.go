@@ -81,6 +81,38 @@ func NewRecord(
 	return &record
 }
 
+func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
+	// time == 0 if the value has not been yet set
+	if r.StartMonoTimeTs == 0 || r.StartMonoTimeTs > src.StartMonoTimeTs {
+		r.StartMonoTimeTs = src.StartMonoTimeTs
+	}
+	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
+		r.EndMonoTimeTs = src.EndMonoTimeTs
+	}
+	r.Bytes += src.Bytes
+	r.Packets += src.Packets
+	r.Flags |= src.Flags
+	// Accumulate Drop statistics
+	r.PktDrops.Bytes += src.PktDrops.Bytes
+	r.PktDrops.Packets += src.PktDrops.Packets
+	r.PktDrops.LatestFlags |= src.PktDrops.LatestFlags
+	if src.PktDrops.LatestDropCause != 0 {
+		r.PktDrops.LatestDropCause = src.PktDrops.LatestDropCause
+	}
+	// Accumulate DNS
+	r.DnsRecord.Flags |= src.DnsRecord.Flags
+	if src.DnsRecord.Id != 0 {
+		r.DnsRecord.Id = src.DnsRecord.Id
+	}
+	if r.DnsRecord.Latency < src.DnsRecord.Latency {
+		r.DnsRecord.Latency = src.DnsRecord.Latency
+	}
+	// Accumulate RTT
+	if r.FlowRtt < src.FlowRtt {
+		r.FlowRtt = src.FlowRtt
+	}
+}
+
 // IP returns the net.IP equivalent object
 func IP(ia IPAddr) net.IP {
 	return ia[:]
