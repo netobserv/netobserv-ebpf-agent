@@ -162,8 +162,14 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 // before exiting.
 func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
+	handle, err := netlink.NewHandleAt(iface.NetNS)
+	if err != nil {
+		return fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
+	}
+	defer handle.Delete()
+
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
-	ipvlan, err := netlink.LinkByIndex(iface.Index)
+	ipvlan, err := handle.LinkByIndex(iface.Index)
 	if err != nil {
 		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
@@ -176,10 +182,10 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 		QdiscAttrs: qdiscAttrs,
 		QdiscType:  qdiscType,
 	}
-	if err := netlink.QdiscDel(qdisc); err == nil {
+	if err := handle.QdiscDel(qdisc); err == nil {
 		ilog.Warn("qdisc clsact already existed. Deleted it")
 	}
-	if err := netlink.QdiscAdd(qdisc); err != nil {
+	if err := handle.QdiscAdd(qdisc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
@@ -188,14 +194,14 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 	}
 	m.qdiscs[iface] = qdisc
 
-	if err := m.registerEgress(iface, ipvlan); err != nil {
+	if err := m.registerEgress(iface, ipvlan, handle); err != nil {
 		return err
 	}
 
-	return m.registerIngress(iface, ipvlan)
+	return m.registerIngress(iface, ipvlan, handle)
 }
 
-func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
+func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link, handle *netlink.Handle) error {
 	ilog := log.WithField("iface", iface)
 	if !m.enableEgress {
 		ilog.Debug("ignoring egress traffic, according to user configuration")
@@ -215,10 +221,10 @@ func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link
 		Name:         "tc/egress_flow_parse",
 		DirectAction: true,
 	}
-	if err := netlink.FilterDel(egressFilter); err == nil {
+	if err := handle.FilterDel(egressFilter); err == nil {
 		ilog.Warn("egress filter already existed. Deleted it")
 	}
-	if err := netlink.FilterAdd(egressFilter); err != nil {
+	if err := handle.FilterAdd(egressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("egress filter already exists. Ignoring")
 		} else {
@@ -229,7 +235,7 @@ func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link
 	return nil
 }
 
-func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
+func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link, handle *netlink.Handle) error {
 	ilog := log.WithField("iface", iface)
 	if !m.enableIngress {
 		ilog.Debug("ignoring ingress traffic, according to user configuration")
@@ -249,10 +255,10 @@ func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Lin
 		Name:         "tc/ingress_flow_parse",
 		DirectAction: true,
 	}
-	if err := netlink.FilterDel(ingressFilter); err == nil {
+	if err := handle.FilterDel(ingressFilter); err == nil {
 		ilog.Warn("ingress filter already existed. Deleted it")
 	}
-	if err := netlink.FilterAdd(ingressFilter); err != nil {
+	if err := handle.FilterAdd(ingressFilter); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("ingress filter already exists. Ignoring")
 		} else {
