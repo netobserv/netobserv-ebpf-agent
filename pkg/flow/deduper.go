@@ -35,6 +35,7 @@ type entry struct {
 // (no activity for it during the expiration time)
 // The justMark argument tells that the deduper should not drop the duplicate flows but
 // set their Duplicate field.
+// An exception is made for flows created by DNS tracker since these are unique
 func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, out chan<- []*Record) {
 	cache := &deduperCache{
 		expire:  expireTime,
@@ -46,7 +47,7 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 			cache.removeExpired()
 			fwd := make([]*Record, 0, len(records))
 			for _, record := range records {
-				if cache.isDupe((*ebpf.BpfFlowId)(&record.Id)) {
+				if record.Metrics.DnsRecord.Id == 0 && cache.isDupe((*ebpf.BpfFlowId)(&record.Id)) {
 					if justMark {
 						record.Duplicate = true
 					} else {

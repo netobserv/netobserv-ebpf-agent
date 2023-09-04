@@ -36,6 +36,12 @@ var (
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "123456789"}
+	twoIf2DNS = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 0, SrcPort: 333, DstPort: 456,
+		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+	}, Metrics: ebpf.BpfFlowMetrics{
+		Packets: 2, Bytes: 456, Flags: 1, DnsRecord: ebpf.BpfDnsRecordT{Id: 1},
+	}}, Interface: "123456789"}
 )
 
 func TestDedupe(t *testing.T) {
@@ -45,15 +51,16 @@ func TestDedupe(t *testing.T) {
 	go Dedupe(time.Minute, false)(input, output)
 
 	input <- []*Record{
-		oneIf2, // record 1 at interface 2: should be accepted
-		twoIf1, // record 2 at interface 1: should be accepted
-		oneIf1, // record 1 duplicate at interface 1: should NOT be accepted
-		oneIf1, //                                        (same record key, different interface)
-		twoIf2, // record 2 duplicate at interface 2: should NOT be accepted
-		oneIf2, // record 1 at interface 1: should be accepted (same record key, same interface)
+		oneIf2,    // record 1 at interface 2: should be accepted
+		twoIf1,    // record 2 at interface 1: should be accepted
+		oneIf1,    // record 1 duplicate at interface 1: should NOT be accepted
+		oneIf1,    //                                        (same record key, different interface)
+		twoIf2,    // record 2 duplicate at interface 2: should NOT be accepted
+		oneIf2,    // record 1 at interface 1: should be accepted (same record key, same interface)
+		twoIf2DNS, // record 2 duplicate is accepted because it contains DNS info
 	}
 	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2}, deduped)
+	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, twoIf2DNS}, deduped)
 
 	// should still accept records with same key, same interface,
 	// and discard these with same key, different interface
