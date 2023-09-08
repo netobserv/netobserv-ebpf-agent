@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netns"
 )
 
 // EventType for an interface: added, deleted
@@ -38,6 +39,7 @@ type Event struct {
 type Interface struct {
 	Name  string
 	Index int
+	NetNS netns.NsHandle
 }
 
 // Informer provides notifications about each network interface that is added or removed
@@ -54,7 +56,7 @@ func netInterfaces() ([]Interface, error) {
 	}
 	names := make([]Interface, len(ifs))
 	for i, ifc := range ifs {
-		names[i] = Interface{Name: ifc.Name, Index: ifc.Index}
+		names[i] = Interface{Name: ifc.Name, Index: ifc.Index, NetNS: netns.None()}
 	}
 	return names, nil
 }

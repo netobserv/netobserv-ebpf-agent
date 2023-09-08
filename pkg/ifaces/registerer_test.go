@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 )
 
 func TestRegisterer(t *testing.T) {
@@ -17,10 +18,10 @@ func TestRegisterer(t *testing.T) {
 	registry := NewRegisterer(watcher, 10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func() ([]Interface, error) {
-		return []Interface{{"foo", 1}, {"bar", 2}, {"baz", 3}}, nil
+		return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}, {"baz", 3, netns.None()}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
-	watcher.linkSubscriber = func(ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
+	watcher.linkSubscriberAt = func(nsHandle netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
 		go func() {
 			for link := range inputLinks {
 				ch <- link
@@ -41,8 +42,8 @@ func TestRegisterer(t *testing.T) {
 	assert.Equal(t, "baz", registry.ifaces[3])
 
 	// updates
-	inputLinks <- upAndRunning("bae", 4)
-	inputLinks <- down("bar", 2)
+	inputLinks <- upAndRunning("bae", 4, netns.None())
+	inputLinks <- down("bar", 2, netns.None())
 	for i := 0; i < 2; i++ {
 		getEvent(t, outputEvents, timeout)
 	}
@@ -54,8 +55,8 @@ func TestRegisterer(t *testing.T) {
 
 	// repeated updates that do not involve a change in the current track of interfaces
 	// will be ignored
-	inputLinks <- upAndRunning("fiu", 1)
-	inputLinks <- down("foo", 1)
+	inputLinks <- upAndRunning("fiu", 1, netns.None())
+	inputLinks <- down("foo", 1, netns.None())
 	for i := 0; i < 2; i++ {
 		getEvent(t, outputEvents, timeout)
 	}
