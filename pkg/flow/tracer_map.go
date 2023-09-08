@@ -27,7 +27,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap() map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
@@ -96,7 +96,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
 	for flowKey, flowMetrics := range m.mapFetcher.LookupAndDeleteMap() {
-		aggregatedMetrics := flowMetrics
+		aggregatedMetrics := m.aggregate(flowMetrics)
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
 		if aggregatedMetrics.EndMonoTimeTs == 0 {
 			continue
@@ -125,4 +125,22 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 		runtime.GC()
 	}
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
+}
+
+func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetrics {
+	if len(metrics) == 0 {
+		mtlog.Warn("invoked aggregate with no values")
+		return &ebpf.BpfFlowMetrics{}
+	}
+	aggr := &ebpf.BpfFlowMetrics{}
+	for _, mt := range metrics {
+		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
+		// might receive entries from previous collect-eviction timeslots.
+		// We need to check the flow time and discard old flows.
+		if mt.StartMonoTimeTs <= m.lastEvictionNs || mt.EndMonoTimeTs <= m.lastEvictionNs {
+			continue
+		}
+		Accumulate(aggr, &mt)
+	}
+	return aggr
 }

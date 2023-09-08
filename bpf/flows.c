@@ -75,6 +75,11 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += skb->len;
         aggregate_flow->end_mono_time_ts = pkt.current_ts;
+        // it might happen that start_mono_time hasn't been set due to
+        // the way percpu hashmap deal with concurrent map entries
+        if (aggregate_flow->start_mono_time_ts == 0) {
+            aggregate_flow->start_mono_time_ts = pkt.current_ts;
+        }
         aggregate_flow->flags |= pkt.flags;
 
         // Does not matter the gate. Will be zero if not enabled.

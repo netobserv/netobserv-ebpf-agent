@@ -11,7 +11,7 @@ struct {
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
     __uint(max_entries, 1 << 24);

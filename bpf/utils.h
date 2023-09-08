@@ -253,12 +253,13 @@ static inline long pkt_drop_lookup_and_update_flow(struct sk_buff *skb, flow_id 
                                                    enum skb_drop_reason reason) {
      flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
      if (aggregate_flow != NULL) {
+         aggregate_flow->end_mono_time_ts = bpf_ktime_get_ns();
          aggregate_flow->pkt_drops.packets += 1;
          aggregate_flow->pkt_drops.bytes += skb->len;
          aggregate_flow->pkt_drops.latest_state = state;
          aggregate_flow->pkt_drops.latest_flags = flags;
          aggregate_flow->pkt_drops.latest_drop_cause = reason;
-         long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_ANY);
+         long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_EXIST);
          if (trace_messages && ret != 0) {
              bpf_printk("error packet drop updating flow %d\n", ret);
          }
