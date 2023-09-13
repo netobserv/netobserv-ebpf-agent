@@ -26,6 +26,7 @@ type deduperCache struct {
 
 type entry struct {
 	key        *ebpf.BpfFlowId
+	dnsRecord  *ebpf.BpfDnsRecordT
 	ifIndex    uint32
 	expiryTime time.Time
 }
@@ -46,14 +47,7 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 			cache.removeExpired()
 			fwd := make([]*Record, 0, len(records))
 			for _, record := range records {
-				if cache.isDupe((*ebpf.BpfFlowId)(&record.Id)) {
-					if justMark {
-						record.Duplicate = true
-					} else {
-						continue
-					}
-				}
-				fwd = append(fwd, record)
+				cache.checkDupe(record, justMark, &fwd)
 			}
 			if len(fwd) > 0 {
 				out <- fwd
@@ -62,10 +56,9 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 	}
 }
 
-// isDupe returns whether the passed record has been already checked for duplicate for
-// another interface
-func (c *deduperCache) isDupe(key *ebpf.BpfFlowId) bool {
-	rk := *key
+// checkDupe check current record if its already available nad if not added to fwd records list
+func (c *deduperCache) checkDupe(r *Record, justMark bool, fwd *[]*Record) {
+	rk := r.Id
 	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IfIndex = 0
 	rk.SrcMac = [MacLen]uint8{0, 0, 0, 0, 0, 0}
@@ -79,17 +72,35 @@ func (c *deduperCache) isDupe(key *ebpf.BpfFlowId) bool {
 		c.entries.MoveToFront(ele)
 		// The input flow is duplicate if its interface is different to the interface
 		// of the non-duplicate flow that was first registered in the cache
-		return fEntry.ifIndex != key.IfIndex
+		// except if the new flow has DNS enrichment in this case will enrich the flow in the cache
+		// with DNS info and mark the current flow as duplicate
+		if r.Metrics.DnsRecord.Latency != 0 && fEntry.dnsRecord.Latency == 0 {
+			// copy DNS record to the cached entry and mark it as duplicate
+			fEntry.dnsRecord.Flags = r.Metrics.DnsRecord.Flags
+			fEntry.dnsRecord.Id = r.Metrics.DnsRecord.Id
+			fEntry.dnsRecord.Latency = r.Metrics.DnsRecord.Latency
+			// fall through to do interface check
+		}
+		if fEntry.ifIndex != r.Id.IfIndex {
+			if justMark {
+				r.Duplicate = true
+				*fwd = append(*fwd, r)
+			}
+			return
+		}
+		*fwd = append(*fwd, r)
+		return
 	}
 	// The flow has not been accounted previously (or was forgotten after expiration)
 	// so we register it for that concrete interface
 	e := entry{
 		key:        &rk,
-		ifIndex:    key.IfIndex,
+		dnsRecord:  &r.Metrics.DnsRecord,
+		ifIndex:    r.Id.IfIndex,
 		expiryTime: timeNow().Add(c.expire),
 	}
 	c.ifaces[rk] = c.entries.PushFront(&e)
-	return false
+	*fwd = append(*fwd, r)
 }
 
 func (c *deduperCache) removeExpired() {
