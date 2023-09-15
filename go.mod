@@ -11,7 +11,7 @@ require (
 	github.com/netobserv/gopipes v0.3.0
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/segmentio/kafka-go v0.4.35
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.1
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
