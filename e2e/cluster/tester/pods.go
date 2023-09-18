@@ -70,7 +70,7 @@ func (p *Pods) Execute(ctx context.Context, namespace, name string, command ...s
 	if err != nil {
 		return "", "", fmt.Errorf("instantiating executor: %w", err)
 	}
-	if err := exec.Stream(remotecommand.StreamOptions{
+	if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: buf,
 		Stderr: errBuf,
 	}); err != nil {
