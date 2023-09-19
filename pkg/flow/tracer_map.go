@@ -47,10 +47,10 @@ func (m *MapTracer) Flush() {
 	m.evictionCond.Broadcast()
 }
 
-func (m *MapTracer) TraceLoop(ctx context.Context, enableGC bool) node.StartFunc[[]*Record] {
+func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*Record] {
 	return func(out chan<- []*Record) {
 		evictionTicker := time.NewTicker(m.evictionTimeout)
-		go m.evictionSynchronization(ctx, enableGC, out)
+		go m.evictionSynchronization(ctx, forceGC, out)
 		for {
 			select {
 			case <-ctx.Done():
@@ -68,7 +68,7 @@ func (m *MapTracer) TraceLoop(ctx context.Context, enableGC bool) node.StartFunc
 // evictionSynchronization loop just waits for the evictionCond to happen
 // and triggers the actual eviction. It makes sure that only one eviction
 // is being triggered at the same time
-func (m *MapTracer) evictionSynchronization(ctx context.Context, enableGC bool, out chan<- []*Record) {
+func (m *MapTracer) evictionSynchronization(ctx context.Context, forceGC bool, out chan<- []*Record) {
 	// flow eviction loop. It just keeps waiting for eviction until someone triggers the
 	// evictionCond.Broadcast signal
 	for {
@@ -81,14 +81,14 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, enableGC bool, 
 			return
 		default:
 			mtlog.Debug("evictionSynchronization signal received")
-			m.evictFlows(ctx, enableGC, out)
+			m.evictFlows(ctx, forceGC, out)
 		}
 		m.evictionCond.L.Unlock()
 
 	}
 }
 
-func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows chan<- []*Record) {
+func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows chan<- []*Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
@@ -121,7 +121,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, enableGC bool, forwardFlows 
 		forwardFlows <- forwardingFlows
 	}
 
-	if enableGC {
+	if forceGC {
 		runtime.GC()
 	}
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))

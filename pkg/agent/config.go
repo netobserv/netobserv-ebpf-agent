@@ -140,8 +140,8 @@ type Config struct {
 	// This feature requires the flows agent to attach at both Ingress and Egress hookpoints.
 	// If both Ingress and Egress are not enabled then this feature will not be enabled even if set to true via env.
 	EnableRTT bool `env:"ENABLE_RTT" envDefault:"false"`
-	// EnableGC enables golang garbage collection run at the end of every map eviction, default is true
-	EnableGC bool `env:"ENABLE_GARBAGE_COLLECTION" envDefault:"true"`
+	// ForceGC enables forcing golang garbage collection run at the end of every map eviction, default is false.
+	ForceGC bool `env:"FORCE_GARBAGE_COLLECTION" envDefault:"false"`
 	// EnablePktDrops enable Packet drops eBPF hook to account for dropped flows
 	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
