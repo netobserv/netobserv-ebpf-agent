@@ -123,7 +123,7 @@ func getNetNSHandles() ([]netns.NsHandle, error) {
 	log := logrus.WithField("component", "ifaces.Watcher")
 	files, err := os.ReadDir(netnsVolume)
 	if err != nil {
-		log.WithError(err).Error("can't detect any network-namespaces")
+		log.Warningf("can't detect any network-namespaces err: %v [Ignore if the agent privileged flag is not set]", err)
 		return nil, fmt.Errorf("failed to list network-namespaces: %w", err)
 	}
 
@@ -188,6 +188,6 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 
 	err = w.netnsWatcher.Add(netnsVolume)
 	if err != nil {
-		log.WithError(err).Error("failed to add watcher to netns directory")
+		log.Warningf("failed to add watcher to netns directory err: %v [Ignore if the agent privileged flag is not set]", err)
 	}
 }
