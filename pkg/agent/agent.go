@@ -363,8 +363,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	}
 
 	alog.Debug("connecting flows' processing graph")
-	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.EnableGC))
-	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx, f.cfg.EnableGC))
+	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.ForceGC))
+	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
 
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
