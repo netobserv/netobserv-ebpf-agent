@@ -18,6 +18,20 @@ import (
 	_ "net/http/pprof"
 )
 
+func terminateAgent() (ctx context.Context) {
+
+	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")
+	ctx, canceler := context.WithCancel(context.Background())
+	// Subscribe to signals for terminating the program.
+	go func() {
+		stopper := make(chan os.Signal, 1)
+		signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
+		<-stopper
+		canceler()
+	}()
+	return ctx
+}
+
 func main() {
 	logrus.Infof("starting NetObserv eBPF Agent")
 	config := agent.Config{}
@@ -39,22 +53,30 @@ func main() {
 
 	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
 
-	flowsAgent, err := agent.FlowsAgent(&config)
-	if err != nil {
-		logrus.WithError(err).Fatal("can't instantiate NetObserv eBPF Agent")
-	}
+	if config.EnablePCA {
+		if config.PCAFilters == "" {
+			logrus.Info("[PCA] NetObserv eBPF Agent instantiated without filters to identify packets. All packets will be captured. This might cause reduced performance.")
+		}
+		packetsAgent, err := agent.PacketsAgent(&config)
+		if err != nil {
+			logrus.WithError(err).Fatal("[PCA] can't instantiate NetObserv eBPF Agent")
+		}
 
-	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")
-	ctx, canceler := context.WithCancel(context.Background())
-	// Subscribe to signals for terminating the program.
-	go func() {
-		stopper := make(chan os.Signal, 1)
-		signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-		<-stopper
-		canceler()
-	}()
-	if err := flowsAgent.Run(ctx); err != nil {
-		logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
+		ctx := terminateAgent()
+		if err := packetsAgent.Run(ctx); err != nil {
+			logrus.WithError(err).Fatal("[PCA] can't start netobserv-ebpf-agent")
+		}
+	} else {
+		flowsAgent, err := agent.FlowsAgent(&config)
+
+		if err != nil {
+			logrus.WithError(err).Fatal("can't instantiate NetObserv eBPF Agent")
+		}
+
+		ctx := terminateAgent()
+		if err := flowsAgent.Run(ctx); err != nil {
+			logrus.WithError(err).Fatal("can't start netobserv-ebpf-agent")
+		}
 	}
 }
 

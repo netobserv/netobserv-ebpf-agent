@@ -21,6 +21,7 @@ import (
 )
 
 var alog = logrus.WithField("component", "agent.Flows")
+var plog = logrus.WithField("component", "agent.Packets")
 
 // Status of the agent service. Helps on the health report as well as making some asynchronous
 // tests waiting for the agent to accept flows.
@@ -48,6 +49,46 @@ func (s Status) String() string {
 		return "StatusStopped"
 	default:
 		return "invalid"
+	}
+}
+
+func configureInformer(cfg *Config, log *logrus.Entry) ifaces.Informer {
+	var informer ifaces.Informer
+	switch cfg.ListenInterfaces {
+	case ListenPoll:
+		log.WithField("period", cfg.ListenPollPeriod).
+			Debug("listening for new interfaces: use polling")
+		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
+	case ListenWatch:
+		log.Debug("listening for new interfaces: use watching")
+		informer = ifaces.NewWatcher(cfg.BuffersLength)
+	default:
+		log.WithField("providedValue", cfg.ListenInterfaces).
+			Warn("wrong interface listen method. Using file watcher as default")
+		informer = ifaces.NewWatcher(cfg.BuffersLength)
+	}
+	return informer
+
+}
+
+func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, eventAdded func(iface ifaces.Interface)) {
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Debug("stopping interfaces' listener")
+			return
+		case event := <-ifaceEvents:
+			slog.WithField("event", event).Debug("received event")
+			switch event.Type {
+			case ifaces.EventAdded:
+				eventAdded(event.Interface)
+			case ifaces.EventDeleted:
+				// qdiscs, ingress and egress filters are automatically deleted so we don't need to
+				// specifically detach them from the ebpfFetcher
+			default:
+				slog.WithField("event", event).Warn("unknown event type")
+			}
+		}
 	}
 }
 
@@ -88,20 +129,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
 
 	// configure informer for new interfaces
-	var informer ifaces.Informer
-	switch cfg.ListenInterfaces {
-	case ListenPoll:
-		alog.WithField("period", cfg.ListenPollPeriod).
-			Debug("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
-	case ListenWatch:
-		alog.Debug("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	default:
-		alog.WithField("providedValue", cfg.ListenInterfaces).
-			Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	}
+	var informer = configureInformer(cfg, alog)
 
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
@@ -328,26 +356,7 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 		return fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				slog.Debug("stopping interfaces' listener")
-				return
-			case event := <-ifaceEvents:
-				slog.WithField("event", event).Debug("received event")
-				switch event.Type {
-				case ifaces.EventAdded:
-					f.onInterfaceAdded(event.Interface)
-				case ifaces.EventDeleted:
-					// qdiscs, ingress and egress filters are automatically deleted so we don't need to
-					// specifically detach them from the ebpfFetcher
-				default:
-					slog.WithField("event", event).Warn("unknown event type")
-				}
-			}
-		}
-	}()
+	go interfaceListener(ctx, ifaceEvents, slog, f.onInterfaceAdded)
 
 	return nil
 }

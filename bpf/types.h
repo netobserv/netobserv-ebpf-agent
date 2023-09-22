@@ -3,6 +3,7 @@
 
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
+#define TC_ACT_UNSPEC -1
 #define IP_MAX_LEN 16
 
 #define DISCARD 1
@@ -155,6 +156,13 @@ typedef struct pkt_info_t {
     void *l4_hdr;   // Stores the actual l4 header
     u64 rtt;        // rtt calculated from the flow if possible. else zero
 } pkt_info;
+
+// Structure for payload metadata
+typedef struct payload_meta_t {
+    u32 if_index;
+    u32 pkt_len;
+    u64 timestamp;  // timestamp when packet received by ebpf
+} __attribute__((packed)) payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response
 typedef struct dns_flow_id_t {

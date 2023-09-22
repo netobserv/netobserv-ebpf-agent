@@ -30,6 +30,14 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } flow_sequences SEC(".maps");
 
+//PerfEvent Array for Packet Payloads
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+	__type(key, u32);
+	__type(value, u32);
+    __uint(max_entries, 256);
+} packet_record SEC(".maps");
+
 // DNS tracking flow based hashmap used to correlate query and responses
 // to allow calculating latency in ebpf agent directly
 struct {
@@ -39,4 +47,5 @@ struct {
     __type(value, u64);
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } dns_flows SEC(".maps");
+
 #endif //__MAPS_DEFINITION_H__

@@ -65,6 +65,10 @@ The following environment variables are available to configure the NetObserv eBF
   If it is not set, profile is disabled.
 * `ENABLE_RTT` (default: `false` disabled). If `true` enables RTT calculations for the captured flows in the ebpf agent.
   See [docs](./rtt_calculations.md) for more details on this feature.
+* `ENABLE_PCA` (default: `false` disabled). If `true` enables Packet Capture Agent. 
+* `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
+  `PCA_FILTER=tcp,22`.
+* `PCA_SERVER_PORT` (default: 0). Works only when `ENABLE_PCA` is set. Agent opens PCA Server at this port. A collector can connect to it and recieve filtered packets as pcap stream. The filter is set using `PCA_FILTER`.
 
 ## Development-only variables
 

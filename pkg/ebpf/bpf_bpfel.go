@@ -123,7 +123,9 @@ type BpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
+	EgressPcaParse   *ebpf.ProgramSpec `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
+	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
 }
@@ -136,6 +138,7 @@ type BpfMapSpecs struct {
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
+	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -161,6 +164,7 @@ type BpfMaps struct {
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
+	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -169,6 +173,7 @@ func (m *BpfMaps) Close() error {
 		m.DirectFlows,
 		m.DnsFlows,
 		m.FlowSequences,
+		m.PacketRecord,
 	)
 }
 
@@ -177,7 +182,9 @@ func (m *BpfMaps) Close() error {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
+	EgressPcaParse   *ebpf.Program `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
 	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 }
@@ -185,7 +192,9 @@ type BpfPrograms struct {
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.EgressFlowParse,
+		p.EgressPcaParse,
 		p.IngressFlowParse,
+		p.IngressPcaParse,
 		p.KfreeSkb,
 		p.TraceNetPackets,
 	)

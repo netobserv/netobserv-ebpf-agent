@@ -7,6 +7,8 @@ require (
 	github.com/cilium/ebpf v0.11.0
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
+	github.com/golang/protobuf v1.5.3
+	github.com/google/gopacket v1.1.19
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/netobserv/gopipes v0.3.0
 	github.com/paulbellamy/ratecounter v0.2.0
@@ -35,7 +37,6 @@ require (
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
