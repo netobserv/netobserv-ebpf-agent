@@ -277,7 +277,7 @@ func (r *Reader) commitLoop(ctx context.Context, gen *Generation) {
 		l.Printf("stopped commit for group %s\n", r.config.GroupID)
 	})
 
-	if r.config.CommitInterval == 0 {
+	if r.useSyncCommits() {
 		r.commitLoopImmediate(ctx, gen)
 	} else {
 		r.commitLoopInterval(ctx, gen)
@@ -397,6 +397,11 @@ type ReaderConfig struct {
 	//
 	// Default: 10s
 	MaxWait time.Duration
+
+	// ReadBatchTimeout amount of time to wait to fetch message from kafka messages batch.
+	//
+	// Default: 10s
+	ReadBatchTimeout time.Duration
 
 	// ReadLagInterval sets the frequency at which the reader lag is updated.
 	// Setting this field to a negative value disables lag reporting.
@@ -647,6 +652,10 @@ func NewReader(config ReaderConfig) *Reader {
 
 	if config.MaxWait == 0 {
 		config.MaxWait = 10 * time.Second
+	}
+
+	if config.ReadBatchTimeout == 0 {
+		config.ReadBatchTimeout = 10 * time.Second
 	}
 
 	if config.ReadLagInterval == 0 {
@@ -1052,12 +1061,16 @@ func (r *Reader) SetOffsetAt(ctx context.Context, t time.Time) error {
 	}
 	r.mutex.Unlock()
 
+	if len(r.config.Brokers) < 1 {
+		return errors.New("no brokers in config")
+	}
+	var conn *Conn
+	var err error
 	for _, broker := range r.config.Brokers {
-		conn, err := r.config.Dialer.DialLeader(ctx, "tcp", broker, r.config.Topic, r.config.Partition)
+		conn, err = r.config.Dialer.DialLeader(ctx, "tcp", broker, r.config.Topic, r.config.Partition)
 		if err != nil {
 			continue
 		}
-
 		deadline, _ := ctx.Deadline()
 		conn.SetDeadline(deadline)
 		offset, err := conn.ReadOffset(t)
@@ -1068,7 +1081,7 @@ func (r *Reader) SetOffsetAt(ctx context.Context, t time.Time) error {
 
 		return r.SetOffset(offset)
 	}
-	return fmt.Errorf("error setting offset for timestamp %+v", t)
+	return fmt.Errorf("error dialing all brokers, one of the errors: %w", err)
 }
 
 // Stats returns a snapshot of the reader stats since the last time the method
@@ -1181,22 +1194,23 @@ func (r *Reader) start(offsetsByPartition map[topicPartition]int64) {
 			defer join.Done()
 
 			(&reader{
-				dialer:          r.config.Dialer,
-				logger:          r.config.Logger,
-				errorLogger:     r.config.ErrorLogger,
-				brokers:         r.config.Brokers,
-				topic:           key.topic,
-				partition:       int(key.partition),
-				minBytes:        r.config.MinBytes,
-				maxBytes:        r.config.MaxBytes,
-				maxWait:         r.config.MaxWait,
-				backoffDelayMin: r.config.ReadBackoffMin,
-				backoffDelayMax: r.config.ReadBackoffMax,
-				version:         r.version,
-				msgs:            r.msgs,
-				stats:           r.stats,
-				isolationLevel:  r.config.IsolationLevel,
-				maxAttempts:     r.config.MaxAttempts,
+				dialer:           r.config.Dialer,
+				logger:           r.config.Logger,
+				errorLogger:      r.config.ErrorLogger,
+				brokers:          r.config.Brokers,
+				topic:            key.topic,
+				partition:        int(key.partition),
+				minBytes:         r.config.MinBytes,
+				maxBytes:         r.config.MaxBytes,
+				maxWait:          r.config.MaxWait,
+				readBatchTimeout: r.config.ReadBatchTimeout,
+				backoffDelayMin:  r.config.ReadBackoffMin,
+				backoffDelayMax:  r.config.ReadBackoffMax,
+				version:          r.version,
+				msgs:             r.msgs,
+				stats:            r.stats,
+				isolationLevel:   r.config.IsolationLevel,
+				maxAttempts:      r.config.MaxAttempts,
 
 				// backwards-compatibility flags
 				offsetOutOfRangeError: r.config.OffsetOutOfRangeError,
@@ -1209,22 +1223,23 @@ func (r *Reader) start(offsetsByPartition map[topicPartition]int64) {
 // used as an way to asynchronously fetch messages while the main program reads
 // them using the high level reader API.
 type reader struct {
-	dialer          *Dialer
-	logger          Logger
-	errorLogger     Logger
-	brokers         []string
-	topic           string
-	partition       int
-	minBytes        int
-	maxBytes        int
-	maxWait         time.Duration
-	backoffDelayMin time.Duration
-	backoffDelayMax time.Duration
-	version         int64
-	msgs            chan<- readerMessage
-	stats           *readerStats
-	isolationLevel  IsolationLevel
-	maxAttempts     int
+	dialer           *Dialer
+	logger           Logger
+	errorLogger      Logger
+	brokers          []string
+	topic            string
+	partition        int
+	minBytes         int
+	maxBytes         int
+	maxWait          time.Duration
+	readBatchTimeout time.Duration
+	backoffDelayMin  time.Duration
+	backoffDelayMax  time.Duration
+	version          int64
+	msgs             chan<- readerMessage
+	stats            *readerStats
+	isolationLevel   IsolationLevel
+	maxAttempts      int
 
 	offsetOutOfRangeError bool
 }
@@ -1492,15 +1507,8 @@ func (r *reader) read(ctx context.Context, offset int64, conn *Conn) (int64, err
 	var size int64
 	var bytes int64
 
-	const safetyTimeout = 10 * time.Second
-	deadline := time.Now().Add(safetyTimeout)
-	conn.SetReadDeadline(deadline)
-
 	for {
-		if now := time.Now(); deadline.Sub(now) < (safetyTimeout / 2) {
-			deadline = now.Add(safetyTimeout)
-			conn.SetReadDeadline(deadline)
-		}
+		conn.SetReadDeadline(time.Now().Add(r.readBatchTimeout))
 
 		if msg, err = batch.ReadMessage(); err != nil {
 			batch.Close()

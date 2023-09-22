@@ -73,6 +73,26 @@ var (
 	globalRegistryByName map[uint32]map[string]*entities.InfoElement
 )
 
+func InitNewRegistry(customEnterpriseID uint32) error {
+	if globalRegistryByID == nil {
+		return fmt.Errorf("Please use LoadRegistry before registering custom registry")
+	}
+	globalRegistryByID[customEnterpriseID] = make(map[uint16]*entities.InfoElement)
+	globalRegistryByName[customEnterpriseID] = make(map[string]*entities.InfoElement)
+	return nil
+}
+
+func PutInfoElement(ie entities.InfoElement, enterpriseID uint32) error {
+	if _, exist := globalRegistryByName[enterpriseID]; !exist {
+		return fmt.Errorf("Registry with EnterpriseID %d is not Initialized, Please use InitNewRegistry", ie.EnterpriseId)
+	} else if _, exist = globalRegistryByName[enterpriseID][ie.Name]; exist {
+		return fmt.Errorf("Information element %s in registry with EnterpriseID %d has already been registered", ie.Name, ie.EnterpriseId)
+	}
+	globalRegistryByID[ie.EnterpriseId][ie.ElementId] = &ie
+	globalRegistryByName[ie.EnterpriseId][ie.Name] = &ie
+	return nil
+}
+
 func LoadRegistry() {
 	globalRegistryByID = make(map[uint32]map[uint16]*entities.InfoElement)
 	globalRegistryByID[AntreaEnterpriseID] = make(map[uint16]*entities.InfoElement)
