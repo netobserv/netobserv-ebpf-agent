@@ -149,4 +149,11 @@ type Config struct {
 	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
 	// before being deleted, default is 5 seconds.
 	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
+	// EnablePCA enables Packet Capture Agent (PCA). By default PCA is off.
+	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
+	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
+	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80". Currently, we support 'tcp','udp','sctp' for protocol.
+	PCAFilters string `env:"PCA_FILTER"`
+	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
+	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
 }
