@@ -57,6 +57,7 @@ type BpfFlowMetricsT struct {
 	PktDrops        BpfPktDropsT
 	DnsRecord       BpfDnsRecordT
 	FlowRtt         uint64
+	TcpRetrans      uint32
 }
 
 type BpfFlowRecordT struct {
@@ -123,12 +124,13 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
-	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
-	EgressPcaParse   *ebpf.ProgramSpec `ebpf:"egress_pca_parse"`
-	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
-	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
-	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
-	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
+	EgressFlowParse        *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
+	EgressPcaParse         *ebpf.ProgramSpec `ebpf:"egress_pca_parse"`
+	IngressFlowParse       *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
+	IngressPcaParse        *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
+	KfreeSkb               *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	TraceNetPackets        *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
+	TraceTcpRetransPackets *ebpf.ProgramSpec `ebpf:"trace_tcp_retrans_packets"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -182,12 +184,13 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
-	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
-	EgressPcaParse   *ebpf.Program `ebpf:"egress_pca_parse"`
-	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
-	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
-	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
+	EgressFlowParse        *ebpf.Program `ebpf:"egress_flow_parse"`
+	EgressPcaParse         *ebpf.Program `ebpf:"egress_pca_parse"`
+	IngressFlowParse       *ebpf.Program `ebpf:"ingress_flow_parse"`
+	IngressPcaParse        *ebpf.Program `ebpf:"ingress_pca_parse"`
+	KfreeSkb               *ebpf.Program `ebpf:"kfree_skb"`
+	TraceNetPackets        *ebpf.Program `ebpf:"trace_net_packets"`
+	TraceTcpRetransPackets *ebpf.Program `ebpf:"trace_tcp_retrans_packets"`
 }
 
 func (p *BpfPrograms) Close() error {
@@ -198,6 +201,7 @@ func (p *BpfPrograms) Close() error {
 		p.IngressPcaParse,
 		p.KfreeSkb,
 		p.TraceNetPackets,
+		p.TraceTcpRetransPackets,
 	)
 }
 

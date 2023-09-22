@@ -115,6 +115,8 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if src.Dscp != 0 {
 		r.Dscp = src.Dscp
 	}
+	// Accumulate TCP retransmission
+	r.TcpRetrans += src.TcpRetrans
 }
 
 // IP returns the net.IP equivalent object

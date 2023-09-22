@@ -43,6 +43,7 @@ const (
 	constPcaPort       = "pca_port"
 	constPcaProto      = "pca_proto"
 	pcaRecordsMap      = "packet_record"
+	tcpRetransHook     = "tcp_retransmit_skb"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -63,17 +64,19 @@ type FlowFetcher struct {
 	enableEgress         bool
 	pktDropsTracePoint   link.Link
 	dnsTrackerTracePoint link.Link
+	tcpRetransTracePoint link.Link
 }
 
 type FlowFetcherConfig struct {
-	EnableIngress bool
-	EnableEgress  bool
-	Debug         bool
-	Sampling      int
-	CacheMaxSize  int
-	PktDrops      bool
-	DNSTracker    bool
-	EnableRTT     bool
+	EnableIngress    bool
+	EnableEgress     bool
+	Debug            bool
+	Sampling         int
+	CacheMaxSize     int
+	PktDrops         bool
+	DNSTracker       bool
+	EnableRTT        bool
+	EnableTCPRetrans bool
 }
 
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
@@ -157,6 +160,13 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
+	var tcpRetransLink link.Link
+	if cfg.EnableTCPRetrans {
+		tcpRetransLink, err = link.Tracepoint("tcp", tcpRetransHook, objects.TraceTcpRetransPackets, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to tcp_retransmit_skb: %w", err)
+		}
+	}
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -173,6 +183,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		enableEgress:         cfg.EnableEgress,
 		pktDropsTracePoint:   pktDropsLink,
 		dnsTrackerTracePoint: dnsTrackerLink,
+		tcpRetransTracePoint: tcpRetransLink,
 	}, nil
 }
 
@@ -305,6 +316,10 @@ func (m *FlowFetcher) Close() error {
 		if err := m.dnsTrackerTracePoint.Close(); err != nil {
 			errs = append(errs, err)
 		}
+	}
+
+	if m.tcpRetransTracePoint != nil {
+		m.tcpRetransTracePoint.Close()
 	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there

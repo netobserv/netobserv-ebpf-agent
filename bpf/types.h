@@ -91,6 +91,7 @@ typedef struct flow_metrics_t {
         u64 latency;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
+    u32 tcp_retrans;
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct pkt_drops into the ELF.

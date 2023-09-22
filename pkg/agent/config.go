@@ -156,4 +156,6 @@ type Config struct {
 	PCAFilters string `env:"PCA_FILTER"`
 	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
 	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
+	// EnableTCPRetrans enable TCP retransmit tracking eBPF hook to track tcp flows with retransmission
+	EnableTCPRetrans bool `env:"ENABLE_TCP_RETRANS" envDefault:"false"`
 }
