@@ -74,4 +74,6 @@ func loadAntreaRegistry() {
 	registerInfoElement(*entities.NewInfoElement("reverseThroughputFromDestinationNode", 150, 4, 56506, 8), 56506)
 	registerInfoElement(*entities.NewInfoElement("flowEndSecondsFromSourceNode", 151, 14, 56506, 4), 56506)
 	registerInfoElement(*entities.NewInfoElement("flowEndSecondsFromDestinationNode", 152, 14, 56506, 4), 56506)
+	registerInfoElement(*entities.NewInfoElement("egressName", 153, 13, 56506, 65535), 56506)
+	registerInfoElement(*entities.NewInfoElement("egressIP", 154, 13, 56506, 65535), 56506)
 }

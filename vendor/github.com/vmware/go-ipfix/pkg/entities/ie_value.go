@@ -530,8 +530,7 @@ func (mac *MacAddressInfoElement) ResetValue() {
 
 type StringInfoElement struct {
 	baseInfoElement
-	value  string
-	length int
+	value string
 }
 
 func NewStringInfoElement(element *InfoElement, val string) *StringInfoElement {
