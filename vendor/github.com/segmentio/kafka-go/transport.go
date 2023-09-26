@@ -60,7 +60,7 @@ type Transport struct {
 
 	// Time limit set for establishing connections to the kafka cluster. This
 	// limit includes all round trips done to establish the connections (TLS
-	// hadbhaske, SASL negotiation, etc...).
+	// handshake, SASL negotiation, etc...).
 	//
 	// Defaults to 5s.
 	DialTimeout time.Duration
@@ -80,6 +80,10 @@ type Transport struct {
 	//
 	// Default to 6s.
 	MetadataTTL time.Duration
+
+	// Topic names for the metadata cached by this transport. If this field is left blank,
+	// metadata information of all topics in the cluster will be retrieved.
+	MetadataTopics []string
 
 	// Unique identifier that the transport communicates to the brokers when it
 	// sends requests.
@@ -150,7 +154,7 @@ func (t *Transport) CloseIdleConnections() {
 // package.
 //
 // The type of the response message will match the type of the request. For
-// exmple, if RoundTrip was called with a *fetch.Request as argument, the value
+// example, if RoundTrip was called with a *fetch.Request as argument, the value
 // returned will be of type *fetch.Response. It is safe for the program to do a
 // type assertion after checking that no error was returned.
 //
@@ -235,14 +239,15 @@ func (t *Transport) grabPool(addr net.Addr) *connPool {
 	p = &connPool{
 		refc: 2,
 
-		dial:        t.dial(),
-		dialTimeout: t.dialTimeout(),
-		idleTimeout: t.idleTimeout(),
-		metadataTTL: t.metadataTTL(),
-		clientID:    t.ClientID,
-		tls:         t.TLS,
-		sasl:        t.SASL,
-		resolver:    t.Resolver,
+		dial:           t.dial(),
+		dialTimeout:    t.dialTimeout(),
+		idleTimeout:    t.idleTimeout(),
+		metadataTTL:    t.metadataTTL(),
+		metadataTopics: t.MetadataTopics,
+		clientID:       t.ClientID,
+		tls:            t.TLS,
+		sasl:           t.SASL,
+		resolver:       t.Resolver,
 
 		ready:  make(event),
 		wake:   make(chan event),
@@ -276,14 +281,15 @@ type connPool struct {
 	// Immutable fields of the connection pool. Connections access these field
 	// on their parent pool in a ready-only fashion, so no synchronization is
 	// required.
-	dial        func(context.Context, string, string) (net.Conn, error)
-	dialTimeout time.Duration
-	idleTimeout time.Duration
-	metadataTTL time.Duration
-	clientID    string
-	tls         *tls.Config
-	sasl        sasl.Mechanism
-	resolver    BrokerResolver
+	dial           func(context.Context, string, string) (net.Conn, error)
+	dialTimeout    time.Duration
+	idleTimeout    time.Duration
+	metadataTTL    time.Duration
+	metadataTopics []string
+	clientID       string
+	tls            *tls.Config
+	sasl           sasl.Mechanism
+	resolver       BrokerResolver
 	// Signaling mechanisms to orchestrate communications between the pool and
 	// the rest of the program.
 	once   sync.Once  // ensure that `ready` is triggered only once
@@ -413,14 +419,16 @@ func (p *connPool) roundTrip(ctx context.Context, req Request) (Response, error)
 	case *meta.Response:
 		m := req.(*meta.Request)
 		// If we get here with allow auto topic creation then
-		// we didn't have that topic in our cache so we should update
+		// we didn't have that topic in our cache, so we should update
 		// the cache.
 		if m.AllowAutoTopicCreation {
 			topicsToRefresh := make([]string, 0, len(resp.Topics))
 			for _, topic := range resp.Topics {
-				// fixes issue 806: don't refresh topics that failed to create,
-				// it may means kafka doesn't enable auto topic creation.
-				// This causes the library to hang indefinitely, same as createtopics process.
+				// Don't refresh topics that failed to create, since that may
+				// mean that enable automatic topic creation is not enabled.
+				// That causes the library to hang indefinitely, same as
+				// don't refresh topics that failed to create,
+				// createtopics process. Fixes issue 806.
 				if topic.ErrorCode != 0 {
 					continue
 				}
@@ -590,13 +598,16 @@ func (p *connPool) discover(ctx context.Context, wake <-chan event) {
 	var notify event
 	done := ctx.Done()
 
+	req := &meta.Request{
+		TopicNames: p.metadataTopics,
+	}
+
 	for {
 		c, err := p.grabClusterConn(ctx)
 		if err != nil {
 			p.update(ctx, nil, err)
 		} else {
 			res := make(async, 1)
-			req := &meta.Request{}
 			deadline, cancel := context.WithTimeout(ctx, p.metadataTTL)
 			c.reqs <- connRequest{
 				ctx: deadline,
