@@ -20,6 +20,11 @@ type Message struct {
 	Value         []byte
 	Headers       []Header
 
+	// This field is used to hold arbitrary data you wish to include, so it
+	// will be available when handle it on the Writer's `Completion` method,
+	// this support the application can do any post operation on each message.
+	WriterData interface{}
+
 	// If not set at the creation, Time will be automatically set when
 	// writing the message.
 	Time time.Time
@@ -42,6 +47,17 @@ const timestampSize = 8
 
 func (msg *Message) size() int32 {
 	return 4 + 1 + 1 + sizeofBytes(msg.Key) + sizeofBytes(msg.Value) + timestampSize
+}
+
+func (msg *Message) headerSize() int {
+	return varArrayLen(len(msg.Headers), func(i int) int {
+		h := &msg.Headers[i]
+		return varStringLen(h.Key) + varBytesLen(h.Value)
+	})
+}
+
+func (msg *Message) totalSize() int32 {
+	return int32(msg.headerSize()) + msg.size()
 }
 
 type message struct {
