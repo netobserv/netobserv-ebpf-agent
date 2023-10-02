@@ -14,6 +14,7 @@ import (
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,11 +27,11 @@ import (
 const (
 	clusterNamePrefix = "basic-test-cluster"
 	testTimeout       = 10 * time.Minute
-	namespace         = "default"
 )
 
 var (
 	testCluster *cluster.Kind
+	namespace   = envconf.RandomName("kind-ns", 16)
 )
 
 func TestMain(m *testing.M) {
@@ -40,6 +41,7 @@ func TestMain(m *testing.M) {
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
+		namespace,
 		cluster.Deploy(cluster.Deployment{
 			Order: cluster.AfterAgent, ManifestFile: "manifests/pods.yml"}),
 	)

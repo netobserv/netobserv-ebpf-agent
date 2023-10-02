@@ -10,6 +10,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/basic"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
+
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,11 +25,11 @@ import (
 const (
 	clusterNamePrefix = "kafka-test-cluster"
 	testTimeout       = 20 * time.Minute
-	namespace         = "default"
 )
 
 var (
 	testCluster *cluster.Kind
+	namespace   = envconf.RandomName("kind-ns", 16)
 )
 
 func TestMain(m *testing.M) {
@@ -42,6 +43,7 @@ func TestMain(m *testing.M) {
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
+		namespace,
 		cluster.Timeout(testTimeout),
 		cluster.Deploy(cluster.Deployment{
 			Order: cluster.Preconditions, ManifestFile: path.Join("manifests", "10-kafka-crd.yml"),

@@ -10,16 +10,17 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/basic"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
 	"github.com/sirupsen/logrus"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 const (
 	clusterNamePrefix = "ipfix-test-cluster"
 	testTimeout       = 20 * time.Minute
-	namespace         = "default"
 )
 
 var (
 	testCluster *cluster.Kind
+	namespace   = envconf.RandomName("kind-ns", 16)
 )
 
 func TestMain(m *testing.M) {
@@ -28,6 +29,7 @@ func TestMain(m *testing.M) {
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
 		path.Join("..", ".."),
+		namespace,
 		cluster.Timeout(testTimeout),
 		cluster.Override(cluster.FlowLogsPipeline, cluster.Deployment{
 			Order: cluster.NetObservServices, ManifestFile: path.Join("manifests", "20-flp-transformer.yml"),

@@ -13,7 +13,7 @@ func TestOrderManifests(t *testing.T) {
 	if os.Getenv("ACTIONS_RUNNER_DEBUG") == "true" {
 		logrus.StandardLogger().SetLevel(logrus.DebugLevel)
 	}
-	tc := NewKind("foo", ".",
+	tc := NewKind("foo", ".", "default",
 		Deploy(Deployment{ManifestFile: "pods.yml"}),
 		Deploy(Deployment{Order: ExternalServices, ManifestFile: "sql"}),
 		Override(Loki, Deployment{Order: ExternalServices, ManifestFile: "loki"}))
