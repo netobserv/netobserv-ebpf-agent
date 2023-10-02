@@ -29,12 +29,16 @@ type FeatureBuilder struct {
 }
 
 func New(name string) *FeatureBuilder {
-	return &FeatureBuilder{feat: newDefaultFeature(name)}
+	return &FeatureBuilder{feat: newDefaultFeature(name, "")}
+}
+
+func NewWithDescription(name, description string) *FeatureBuilder {
+	return &FeatureBuilder{feat: newDefaultFeature(name, description)}
 }
 
 // WithLabel adds a test label key/value pair
 func (b *FeatureBuilder) WithLabel(key, value string) *FeatureBuilder {
-	b.feat.labels[key] = value
+	b.feat.labels[key] = append(b.feat.labels[key], value)
 	return b
 }
 
@@ -44,22 +48,40 @@ func (b *FeatureBuilder) WithStep(name string, level Level, fn Func) *FeatureBui
 	return b
 }
 
+func (b *FeatureBuilder) WithStepDescription(name, description string, level Level, fn Func) *FeatureBuilder {
+	b.feat.steps = append(b.feat.steps, newStepWithDescription(name, description, level, fn))
+	return b
+}
+
 // Setup adds a new setup step that will be applied prior to feature test.
 func (b *FeatureBuilder) Setup(fn Func) *FeatureBuilder {
-	b.feat.steps = append(b.feat.steps, newStep(fmt.Sprintf("%s-setup", b.feat.name), types.LevelSetup, fn))
-	return b
+	return b.WithSetup(fmt.Sprintf("%s-setup", b.feat.name), fn)
+}
+
+// WithSetup adds a new setup step with a pre-defined setup name instead of automating
+// the setup name generation. This can make tests more readable.
+func (b *FeatureBuilder) WithSetup(name string, fn Func) *FeatureBuilder {
+	return b.WithStep(name, types.LevelSetup, fn)
 }
 
 // Teardown adds a new teardown step that will be applied after feature test.
 func (b *FeatureBuilder) Teardown(fn Func) *FeatureBuilder {
-	b.feat.steps = append(b.feat.steps, newStep(fmt.Sprintf("%s-teardown", b.feat.name), types.LevelTeardown, fn))
-	return b
+	return b.WithTeardown(fmt.Sprintf("%s-teardown", b.feat.name), fn)
+}
+
+// WithTeardown adds a new teardown step with a pre-defined name instead of an
+// auto-generated one
+func (b *FeatureBuilder) WithTeardown(name string, fn Func) *FeatureBuilder {
+	return b.WithStep(name, types.LevelTeardown, fn)
 }
 
 // Assess adds an assessment step to the feature test.
 func (b *FeatureBuilder) Assess(desc string, fn Func) *FeatureBuilder {
-	b.feat.steps = append(b.feat.steps, newStep(desc, types.LevelAssess, fn))
-	return b
+	return b.WithStep(desc, types.LevelAssess, fn)
+}
+
+func (b *FeatureBuilder) AssessWithDescription(name, description string, fn Func) *FeatureBuilder {
+	return b.WithStepDescription(name, description, types.LevelAssess, fn)
 }
 
 // Feature returns a feature configured by builder.

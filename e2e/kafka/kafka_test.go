@@ -10,6 +10,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/basic"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
+
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ const (
 )
 
 var (
+	klog        = logrus.WithField("component", "Kafka")
 	testCluster *cluster.Kind
 )
 
@@ -57,12 +59,14 @@ func TestMain(m *testing.M) {
 				kfk := Kafka{ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespace, Name: "kafka-cluster",
 				}}
-				if err := wait.For(conditions.New(client.Resources(namespace)).
+				if err := wait.For(conditions.New(client.Resources()).
 					ResourceMatch(&kfk, func(object k8s.Object) bool {
-						return object.(*Kafka).Status.Ready()
-					}),
-					wait.WithTimeout(testTimeout),
-				); err != nil {
+						kafka, ok := object.(*Kafka)
+						if !ok {
+							return false
+						}
+						return kafka.Status.Ready()
+					}), wait.WithTimeout(time.Second*10)); err != nil {
 					return fmt.Errorf("waiting for kafka cluster to be ready: %w", err)
 				}
 				return nil
@@ -95,8 +99,6 @@ func TestBasicFlowCapture(t *testing.T) {
 
 const conditionReady = "Ready"
 
-var klog = logrus.WithField("component", "Kafka")
-
 // Kafka meta object for its usage within the API
 type Kafka struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -116,6 +118,7 @@ func (ks *KafkaStatus) Ready() bool {
 	if ks == nil {
 		return false
 	}
+	klog.Debugf("Kafka len of conditions: %d", len(ks.Conditions))
 	for _, cond := range ks.Conditions {
 		klog.WithFields(logrus.Fields{
 			"reason": cond.Reason,

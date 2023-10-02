@@ -737,18 +737,22 @@ k8s.io/utils/clock/testing
 k8s.io/utils/integer
 k8s.io/utils/internal/third_party/forked/golang/net
 k8s.io/utils/net
+k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 # sigs.k8s.io/controller-runtime v0.15.1
 ## explicit; go 1.20
 sigs.k8s.io/controller-runtime/pkg/client
 sigs.k8s.io/controller-runtime/pkg/client/apiutil
+sigs.k8s.io/controller-runtime/pkg/controller/controllerutil
 sigs.k8s.io/controller-runtime/pkg/log
-# sigs.k8s.io/e2e-framework v0.0.6
-## explicit; go 1.17
+# sigs.k8s.io/e2e-framework v0.3.0
+## explicit; go 1.19
 sigs.k8s.io/e2e-framework/klient
 sigs.k8s.io/e2e-framework/klient/conf
+sigs.k8s.io/e2e-framework/klient/decoder
 sigs.k8s.io/e2e-framework/klient/k8s
 sigs.k8s.io/e2e-framework/klient/k8s/resources
+sigs.k8s.io/e2e-framework/klient/k8s/watcher
 sigs.k8s.io/e2e-framework/klient/wait
 sigs.k8s.io/e2e-framework/klient/wait/conditions
 sigs.k8s.io/e2e-framework/pkg/env
@@ -757,7 +761,9 @@ sigs.k8s.io/e2e-framework/pkg/envfuncs
 sigs.k8s.io/e2e-framework/pkg/features
 sigs.k8s.io/e2e-framework/pkg/flags
 sigs.k8s.io/e2e-framework/pkg/internal/types
+sigs.k8s.io/e2e-framework/support
 sigs.k8s.io/e2e-framework/support/kind
+sigs.k8s.io/e2e-framework/support/utils
 # sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd
 ## explicit; go 1.18
 sigs.k8s.io/json

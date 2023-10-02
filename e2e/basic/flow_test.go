@@ -14,6 +14,7 @@ import (
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
