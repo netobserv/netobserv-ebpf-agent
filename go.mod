@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/caarlos0/env/v6 v6.10.1
 	github.com/cilium/ebpf v0.11.0
-	github.com/fsnotify/fsnotify v1.5.1
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/golang/protobuf v1.5.3
 	github.com/google/gopacket v1.1.19
