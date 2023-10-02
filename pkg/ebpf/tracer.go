@@ -288,19 +288,23 @@ func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Lin
 }
 
 // Close the eBPF fetcher from the system.
-// We don't need an "Close(iface)" method because the filters and qdiscs
+// We don't need a "Close(iface)" method because the filters and qdiscs
 // are automatically removed when the interface is down
+// nolint:cyclop
 func (m *FlowFetcher) Close() error {
 	log.Debug("unregistering eBPF objects")
 
 	var errs []error
 
 	if m.pktDropsTracePoint != nil {
-		m.pktDropsTracePoint.Close()
+		if err := m.pktDropsTracePoint.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
-
 	if m.dnsTrackerTracePoint != nil {
-		m.dnsTrackerTracePoint.Close()
+		if err := m.dnsTrackerTracePoint.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
@@ -323,7 +327,15 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.DirectFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
-		m.objects = nil
+		if err := m.objects.DnsFlows.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.FlowSequences.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if len(errs) == 0 {
+			m.objects = nil
+		}
 	}
 	for iface, ef := range m.egressFilters {
 		log := log.WithField("interface", iface)
