@@ -31,16 +31,20 @@ import (
 
 // Config represents and environment configuration
 type Config struct {
-	client              klient.Client
-	kubeconfig          string
-	namespace           string
-	assessmentRegex     *regexp.Regexp
-	featureRegex        *regexp.Regexp
-	labels              map[string]string
-	skipFeatureRegex    *regexp.Regexp
-	skipLabels          map[string]string
-	skipAssessmentRegex *regexp.Regexp
-	parallelTests       bool
+	client                  klient.Client
+	kubeconfig              string
+	namespace               string
+	assessmentRegex         *regexp.Regexp
+	featureRegex            *regexp.Regexp
+	labels                  flags.LabelsMap
+	skipFeatureRegex        *regexp.Regexp
+	skipLabels              flags.LabelsMap
+	skipAssessmentRegex     *regexp.Regexp
+	parallelTests           bool
+	dryRun                  bool
+	failFast                bool
+	disableGracefulTeardown bool
+	kubeContext             string
 }
 
 // New creates and initializes an empty environment configuration
@@ -79,6 +83,10 @@ func NewFromFlags() (*Config, error) {
 	}
 	e.skipLabels = envFlags.SkipLabels()
 	e.parallelTests = envFlags.Parallel()
+	e.dryRun = envFlags.DryRun()
+	e.failFast = envFlags.FailFast()
+	e.disableGracefulTeardown = envFlags.DisableGracefulTeardown()
+	e.kubeContext = envFlags.KubeContext()
 
 	return e, nil
 }
@@ -112,12 +120,13 @@ func (c *Config) NewClient() (klient.Client, error) {
 		return nil, fmt.Errorf("envconfig: client failed: %w", err)
 	}
 	c.client = client
+
 	return c.client, nil
 }
 
 // Client is a constructor function that returns a previously
-// created klient.Client or create a new one based on configuration
-// previously set. Willpanic on any error so it recommended that you
+// created klient.Client or creates a new one based on configuration
+// previously set. Will panic on any error so it is recommended that you
 // are confident in the configuration or call NewClient() to ensure its
 // safe creation.
 func (c *Config) Client() klient.Client {
@@ -196,34 +205,86 @@ func (c *Config) SkipFeatureRegex() *regexp.Regexp {
 }
 
 // WithLabels sets the environment label filters
-func (c *Config) WithLabels(lbls map[string]string) *Config {
+func (c *Config) WithLabels(lbls map[string][]string) *Config {
 	c.labels = lbls
 	return c
 }
 
 // Labels returns the environment's label filters
-func (c *Config) Labels() map[string]string {
+func (c *Config) Labels() map[string][]string {
 	return c.labels
 }
 
 // WithSkipLabels sets the environment label filters
-func (c *Config) WithSkipLabels(lbls map[string]string) *Config {
+func (c *Config) WithSkipLabels(lbls map[string][]string) *Config {
 	c.skipLabels = lbls
 	return c
 }
 
 // SkipLabels returns the environment's label filters
-func (c *Config) SkipLabels() map[string]string {
+func (c *Config) SkipLabels() map[string][]string {
 	return c.skipLabels
 }
 
+// WithParallelTestEnabled can be used to enable parallel run of the test
+// features
 func (c *Config) WithParallelTestEnabled() *Config {
 	c.parallelTests = true
 	return c
 }
 
+// ParallelTestEnabled indicates if the test features are being run in
+// parallel or not
 func (c *Config) ParallelTestEnabled() bool {
 	return c.parallelTests
+}
+
+func (c *Config) WithDryRunMode() *Config {
+	c.dryRun = true
+	return c
+}
+
+func (c *Config) DryRunMode() bool {
+	return c.dryRun
+}
+
+// WithFailFast can be used to enable framework specific fail fast mode
+// that controls the test execution of the features and assessments under
+// test
+func (c *Config) WithFailFast() *Config {
+	c.failFast = true
+	return c
+}
+
+// FailFast indicate if the framework is running in fail fast mode. This
+// controls the behavior of how the assessments and features are handled
+// if a test encounters a failure result
+func (c *Config) FailFast() bool {
+	return c.failFast
+}
+
+// WithDisableGracefulTeardown can be used to programmatically disabled the panic
+// recovery enablement on test startup. This will prevent test Finish steps
+// from being executed on panic
+func (c *Config) WithDisableGracefulTeardown() *Config {
+	c.disableGracefulTeardown = true
+	return c
+}
+
+// DisableGracefulTeardown is used to check the panic recovery handler should be enabled
+func (c *Config) DisableGracefulTeardown() bool {
+	return c.disableGracefulTeardown
+}
+
+// WithKubeContext is used to set the kubeconfig context
+func (c *Config) WithKubeContext(kubeContext string) *Config {
+	c.kubeContext = kubeContext
+	return c
+}
+
+// WithKubeContext is used to get the kubeconfig context
+func (c *Config) KubeContext() string {
+	return c.kubeContext
 }
 
 func randNS() string {

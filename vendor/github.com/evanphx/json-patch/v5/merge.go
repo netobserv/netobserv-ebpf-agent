@@ -27,24 +27,33 @@ func merge(cur, patch *lazyNode, mergeMerge bool) *lazyNode {
 }
 
 func mergeDocs(doc, patch *partialDoc, mergeMerge bool) {
-	for k, v := range *patch {
+	for k, v := range patch.obj {
 		if v == nil {
 			if mergeMerge {
-				(*doc)[k] = nil
+				idx := -1
+				for i, key := range doc.keys {
+					if key == k {
+						idx = i
+						break
+					}
+				}
+				if idx == -1 {
+					doc.keys = append(doc.keys, k)
+				}
+				doc.obj[k] = nil
 			} else {
-				delete(*doc, k)
+				_ = doc.remove(k, &ApplyOptions{})
 			}
 		} else {
-			cur, ok := (*doc)[k]
+			cur, ok := doc.obj[k]
 
 			if !ok || cur == nil {
 				if !mergeMerge {
 					pruneNulls(v)
 				}
-
-				(*doc)[k] = v
+				_ = doc.set(k, v, &ApplyOptions{})
 			} else {
-				(*doc)[k] = merge(cur, v, mergeMerge)
+				_ = doc.set(k, merge(cur, v, mergeMerge), &ApplyOptions{})
 			}
 		}
 	}
@@ -65,9 +74,9 @@ func pruneNulls(n *lazyNode) {
 }
 
 func pruneDocNulls(doc *partialDoc) *partialDoc {
-	for k, v := range *doc {
+	for k, v := range doc.obj {
 		if v == nil {
-			delete(*doc, k)
+			_ = doc.remove(k, &ApplyOptions{})
 		} else {
 			pruneNulls(v)
 		}
@@ -91,8 +100,8 @@ func pruneAryNulls(ary *partialArray) *partialArray {
 	return ary
 }
 
-var ErrBadJSONDoc = fmt.Errorf("Invalid JSON Document")
-var ErrBadJSONPatch = fmt.Errorf("Invalid JSON Patch")
+var errBadJSONDoc = fmt.Errorf("Invalid JSON Document")
+var errBadJSONPatch = fmt.Errorf("Invalid JSON Patch")
 var errBadMergeTypes = fmt.Errorf("Mismatched JSON Documents")
 
 // MergeMergePatches merges two merge patches together, such that
@@ -116,20 +125,20 @@ func doMergePatch(docData, patchData []byte, mergeMerge bool) ([]byte, error) {
 
 	patchErr := json.Unmarshal(patchData, patch)
 
-	if _, ok := docErr.(*json.SyntaxError); ok {
-		return nil, ErrBadJSONDoc
+	if isSyntaxError(docErr) {
+		return nil, errBadJSONDoc
 	}
 
-	if _, ok := patchErr.(*json.SyntaxError); ok {
-		return nil, ErrBadJSONPatch
+	if isSyntaxError(patchErr) {
+		return nil, errBadJSONPatch
 	}
 
-	if docErr == nil && *doc == nil {
-		return nil, ErrBadJSONDoc
+	if docErr == nil && doc.obj == nil {
+		return nil, errBadJSONDoc
 	}
 
-	if patchErr == nil && *patch == nil {
-		return nil, ErrBadJSONPatch
+	if patchErr == nil && patch.obj == nil {
+		return nil, errBadJSONPatch
 	}
 
 	if docErr != nil || patchErr != nil {
@@ -145,7 +154,7 @@ func doMergePatch(docData, patchData []byte, mergeMerge bool) ([]byte, error) {
 			patchErr = json.Unmarshal(patchData, patchAry)
 
 			if patchErr != nil {
-				return nil, ErrBadJSONPatch
+				return nil, errBadJSONPatch
 			}
 
 			pruneAryNulls(patchAry)
@@ -153,7 +162,7 @@ func doMergePatch(docData, patchData []byte, mergeMerge bool) ([]byte, error) {
 			out, patchErr := json.Marshal(patchAry)
 
 			if patchErr != nil {
-				return nil, ErrBadJSONPatch
+				return nil, errBadJSONPatch
 			}
 
 			return out, nil
@@ -163,6 +172,16 @@ func doMergePatch(docData, patchData []byte, mergeMerge bool) ([]byte, error) {
 	}
 
 	return json.Marshal(doc)
+}
+
+func isSyntaxError(err error) bool {
+	if _, ok := err.(*json.SyntaxError); ok {
+		return true
+	}
+	if _, ok := err.(*syntaxError); ok {
+		return true
+	}
+	return false
 }
 
 // resemblesJSONArray indicates whether the byte-slice "appears" to be
@@ -210,12 +229,12 @@ func createObjectMergePatch(originalJSON, modifiedJSON []byte) ([]byte, error) {
 
 	err := json.Unmarshal(originalJSON, &originalDoc)
 	if err != nil {
-		return nil, ErrBadJSONDoc
+		return nil, errBadJSONDoc
 	}
 
 	err = json.Unmarshal(modifiedJSON, &modifiedDoc)
 	if err != nil {
-		return nil, ErrBadJSONDoc
+		return nil, errBadJSONDoc
 	}
 
 	dest, err := getDiff(originalDoc, modifiedDoc)
@@ -236,17 +255,17 @@ func createArrayMergePatch(originalJSON, modifiedJSON []byte) ([]byte, error) {
 
 	err := json.Unmarshal(originalJSON, &originalDocs)
 	if err != nil {
-		return nil, ErrBadJSONDoc
+		return nil, errBadJSONDoc
 	}
 
 	err = json.Unmarshal(modifiedJSON, &modifiedDocs)
 	if err != nil {
-		return nil, ErrBadJSONDoc
+		return nil, errBadJSONDoc
 	}
 
 	total := len(originalDocs)
 	if len(modifiedDocs) != total {
-		return nil, ErrBadJSONDoc
+		return nil, errBadJSONDoc
 	}
 
 	result := []json.RawMessage{}
