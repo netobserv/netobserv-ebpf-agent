@@ -179,7 +179,11 @@ func flowsAgent(cfg *Config,
 ) (*Flows, error) {
 	var filter InterfaceFilter
 
-	if len(cfg.InterfaceIPs) > 0 {
+	switch {
+	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
+		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
+
+	case len(cfg.InterfaceIPs) > 0:
 		// configure ip interface filter
 		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Addr, error) {
 			iface, err := net.InterfaceByName(ifaceName)
@@ -206,7 +210,8 @@ func flowsAgent(cfg *Config,
 			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
 		}
 		filter = &f
-	} else {
+
+	default:
 		// configure allow/deny regexp interfaces filter
 		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
 		if err != nil {
