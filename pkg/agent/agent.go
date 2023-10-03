@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/netip"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -185,27 +184,7 @@ func flowsAgent(cfg *Config,
 
 	case len(cfg.InterfaceIPs) > 0:
 		// configure ip interface filter
-		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Addr, error) {
-			iface, err := net.InterfaceByName(ifaceName)
-			if err != nil {
-				return []netip.Addr{}, fmt.Errorf("error retrieving interface by name: %w", err)
-			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				return []netip.Addr{}, fmt.Errorf("error retrieving addresses from interface: %w", err)
-			}
-
-			interfaceAddrs := []netip.Addr{}
-			for _, addr := range addrs {
-				prefix, err := netip.ParsePrefix(addr.String())
-				if err != nil {
-					return []netip.Addr{}, fmt.Errorf("parsing given ip to netip.Addr: %w", err)
-				}
-				interfaceAddrs = append(interfaceAddrs, prefix.Addr())
-			}
-			return interfaceAddrs, nil
-
-		})
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
 		if err != nil {
 			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
 		}
