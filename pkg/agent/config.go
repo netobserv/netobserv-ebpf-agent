@@ -58,8 +58,9 @@ type Config struct {
 	// BuffersLength establishes the length of communication channels between the different processing
 	// stages
 	BuffersLength int `env:"BUFFERS_LENGTH" envDefault:"50"`
-	// InterfaceIPs is a list of IPs whose interfaces should be listened on. This allows users to specify
-	// interfaces without knowing the OS-assigned interface names. Exclusive with Interfaces/ExcludeInterfaces.
+	// InterfaceIPs is a list of CIDR-notation IPs/Subnets where any interface containing an IP in the given ranges
+	// should be listened on. This allows users to specify interfaces without knowing the OS-assigned interface names.
+	// Exclusive with Interfaces/ExcludeInterfaces.
 	InterfaceIPs []string `env:"INTERFACE_IPS" envSeparator:","`
 	// ExporterBufferLength establishes the length of the buffer of flow batches (not individual flows)
 	// that can be accumulated before the Kafka or GRPC exporter. When this buffer is full (e.g.

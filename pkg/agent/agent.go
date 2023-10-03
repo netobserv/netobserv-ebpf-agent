@@ -181,25 +181,25 @@ func flowsAgent(cfg *Config,
 
 	if len(cfg.InterfaceIPs) > 0 {
 		// configure ip interface filter
-		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Prefix, error) {
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Addr, error) {
 			iface, err := net.InterfaceByName(ifaceName)
 			if err != nil {
-				return []netip.Prefix{}, fmt.Errorf("error retrieving interface by name: %w", err)
+				return []netip.Addr{}, fmt.Errorf("error retrieving interface by name: %w", err)
 			}
 			addrs, err := iface.Addrs()
 			if err != nil {
-				return []netip.Prefix{}, fmt.Errorf("error retrieving addresses from interface: %w", err)
+				return []netip.Addr{}, fmt.Errorf("error retrieving addresses from interface: %w", err)
 			}
 
-			prefixes := []netip.Prefix{}
+			interfaceAddrs := []netip.Addr{}
 			for _, addr := range addrs {
 				prefix, err := netip.ParsePrefix(addr.String())
 				if err != nil {
-					return []netip.Prefix{}, fmt.Errorf("parsing given ip to netip.Prefix: %w", err)
+					return []netip.Addr{}, fmt.Errorf("parsing given ip to netip.Addr: %w", err)
 				}
-				prefixes = append(prefixes, prefix)
+				interfaceAddrs = append(interfaceAddrs, prefix.Addr())
 			}
-			return prefixes, nil
+			return interfaceAddrs, nil
 
 		})
 		if err != nil {

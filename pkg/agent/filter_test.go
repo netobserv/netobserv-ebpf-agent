@@ -67,30 +67,33 @@ func TestInterfaceFilter_ExclusionTakesPriority(t *testing.T) {
 }
 
 func TestInterfaceFilter_InterfaceIPs(t *testing.T) {
-	mockIPByIface := func(iface string) ([]netip.Prefix, error) {
+	mockIPByIface := func(iface string) ([]netip.Addr, error) {
 		switch iface {
 		case "eth0":
-			return []netip.Prefix{netip.MustParsePrefix("198.51.100.1/24")}, nil
+			return []netip.Addr{netip.MustParsePrefix("198.51.100.1/24").Addr()}, nil
 
 		case "eth1":
-			return []netip.Prefix{netip.MustParsePrefix("198.51.100.2/24")}, nil
+			return []netip.Addr{netip.MustParsePrefix("198.51.100.2/24").Addr()}, nil
 
 		case "eth2":
-			return []netip.Prefix{netip.MustParsePrefix("2001:db8::1/32"), netip.MustParsePrefix("198.51.100.3/24")}, nil
+			return []netip.Addr{netip.MustParsePrefix("2001:db8::1/32").Addr(), netip.MustParsePrefix("198.51.100.3/24").Addr()}, nil
 
 		case "eth3":
-			return []netip.Prefix{netip.MustParsePrefix("2001:db8::2/32")}, nil
+			return []netip.Addr{netip.MustParsePrefix("2001:db8::2/32").Addr()}, nil
+
+		case "eth4":
+			return []netip.Addr{netip.MustParsePrefix("192.0.2.120/24").Addr()}, nil
 
 		default:
 			panic("unexpected interface name")
 		}
 	}
 
-	ifaces, err := initIPInterfaceFilter([]string{"198.51.100.1/24", "2001:db8::1/32"}, mockIPByIface)
+	ifaces, err := initIPInterfaceFilter([]string{"198.51.100.1/32", "2001:db8::1/128", "192.0.2.0/24"}, mockIPByIface)
 	require.NoError(t, err)
 
 	// Allowed
-	for _, iface := range []string{"eth0", "eth2"} {
+	for _, iface := range []string{"eth0", "eth2", "eth4"} {
 		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)

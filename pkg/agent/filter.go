@@ -5,8 +5,6 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 type InterfaceFilter interface {
@@ -18,13 +16,13 @@ type ipInterfaceFilter struct {
 	// Almost always going to be a wrapper around getting
 	// the interface from net.InterfaceByName and then calling
 	// .Addrs() on the interface
-	ipsFromIface func(ifaceName string) ([]netip.Prefix, error)
+	ipsFromIface func(ifaceName string) ([]netip.Addr, error)
 }
 
-// initIPInterfaceFilter allows filtering network interfaces that are accepted/exlucded by the user,
+// initIPInterfaceFilter allows filtering network interfaces that are accepted/excluded by the user,
 // according to the provided INTERFACE_IPS from the configuration. It allows interfaces where at least
 // one of the provided CIDRs are associated with it.
-func initIPInterfaceFilter(ips []string, ipsFromIface func(ifaceName string) ([]netip.Prefix, error)) (ipInterfaceFilter, error) {
+func initIPInterfaceFilter(ips []string, ipsFromIface func(ifaceName string) ([]netip.Addr, error)) (ipInterfaceFilter, error) {
 	ipIfaceFilter := ipInterfaceFilter{}
 	ipIfaceFilter.ipsFromIface = ipsFromIface
 
@@ -40,14 +38,16 @@ func initIPInterfaceFilter(ips []string, ipsFromIface func(ifaceName string) ([]
 }
 
 func (f *ipInterfaceFilter) Allowed(iface string) (bool, error) {
-	prefixes, err := f.ipsFromIface(iface)
+	ifaceAddrs, err := f.ipsFromIface(iface)
 	if err != nil {
 		return false, fmt.Errorf("error calling ipsFromIface(): %w", err)
 	}
 
-	for _, prefix := range prefixes {
-		if slices.Contains(f.allowedIPs, prefix) {
-			return true, nil
+	for _, ifaceAddr := range ifaceAddrs {
+		for _, allowedPrefix := range f.allowedIPs {
+			if allowedPrefix.Contains(ifaceAddr) {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
