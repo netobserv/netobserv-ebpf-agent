@@ -451,6 +451,7 @@ func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 	allowed, err := f.filter.Allowed(iface.Name)
 	if err != nil {
 		alog.WithField("interface", iface).Errorf("encountered error determining if interface is allowed: %v", err)
+		return
 	}
 	if !allowed {
 		alog.WithField("interface", iface).

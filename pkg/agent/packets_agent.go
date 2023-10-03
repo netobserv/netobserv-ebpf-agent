@@ -20,7 +20,7 @@ type Packets struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     interfaceFilter
+	filter     InterfaceFilter
 	ebpf       ebpfPacketFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -80,7 +80,7 @@ func packetsAgent(cfg *Config,
 	agentIP net.IP,
 ) (*Packets, error) {
 	// configure allow/deny interfaces filter
-	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+	filter, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
 	if err != nil {
 		return nil, fmt.Errorf("configuring interface filters: %w", err)
 	}
@@ -102,7 +102,7 @@ func packetsAgent(cfg *Config,
 	return &Packets{
 		ebpf:           fetcher,
 		interfaces:     registerer,
-		filter:         filter,
+		filter:         &filter,
 		cfg:            cfg,
 		packetbuffer:   packetbuffer,
 		perfTracer:     perfTracer,
@@ -205,7 +205,12 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 
 func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	if !p.filter.Allowed(iface.Name) {
+	allowed, err := p.filter.Allowed(iface.Name)
+	if err != nil {
+		plog.WithField("[PCA]interface", iface).WithError(err).
+			Warn("couldn't determine if interface is allowed. Ignoring")
+	}
+	if !allowed {
 		plog.WithField("interface", iface).
 			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
 		return
