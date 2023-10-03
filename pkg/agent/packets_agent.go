@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/netobserv/gopipes/pkg/node"
@@ -79,10 +80,47 @@ func packetsAgent(cfg *Config,
 	packetexporter node.TerminalFunc[[]*flow.PacketRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
-	// configure allow/deny interfaces filter
-	filter, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-	if err != nil {
-		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	var filter InterfaceFilter
+
+	switch {
+	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
+		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
+
+	case len(cfg.InterfaceIPs) > 0:
+		// configure ip interface filter
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, func(ifaceName string) ([]netip.Addr, error) {
+			iface, err := net.InterfaceByName(ifaceName)
+			if err != nil {
+				return []netip.Addr{}, fmt.Errorf("error retrieving interface by name: %w", err)
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				return []netip.Addr{}, fmt.Errorf("error retrieving addresses from interface: %w", err)
+			}
+
+			interfaceAddrs := []netip.Addr{}
+			for _, addr := range addrs {
+				prefix, err := netip.ParsePrefix(addr.String())
+				if err != nil {
+					return []netip.Addr{}, fmt.Errorf("parsing given ip to netip.Addr: %w", err)
+				}
+				interfaceAddrs = append(interfaceAddrs, prefix.Addr())
+			}
+			return interfaceAddrs, nil
+
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
+		}
+		filter = &f
+
+	default:
+		// configure allow/deny regexp interfaces filter
+		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface filters: %w", err)
+		}
+		filter = &f
 	}
 
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
@@ -102,7 +140,7 @@ func packetsAgent(cfg *Config,
 	return &Packets{
 		ebpf:           fetcher,
 		interfaces:     registerer,
-		filter:         &filter,
+		filter:         filter,
 		cfg:            cfg,
 		packetbuffer:   packetbuffer,
 		perfTracer:     perfTracer,
