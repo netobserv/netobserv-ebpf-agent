@@ -86,7 +86,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             aggregate_flow->start_mono_time_ts = pkt.current_ts;
         }
         aggregate_flow->flags |= pkt.flags;
-
+        aggregate_flow->dscp = pkt.dscp;
         // Does not matter the gate. Will be zero if not enabled.
         if (pkt.rtt > aggregate_flow->flow_rtt) {
             aggregate_flow->flow_rtt = pkt.rtt;
@@ -109,7 +109,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .start_mono_time_ts = pkt.current_ts,
             .end_mono_time_ts = pkt.current_ts,
             .flags = pkt.flags,
-            .flow_rtt = pkt.rtt
+            .flow_rtt = pkt.rtt,
+            .dscp = pkt.dscp,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
