@@ -485,16 +485,14 @@ func EncodeToIEDataType(dataType IEDataType, val interface{}) ([]byte, error) {
 		if len(v) < 255 {
 			encodedBytes = make([]byte, len(v)+1)
 			encodedBytes[0] = uint8(len(v))
-			for i, b := range v {
-				encodedBytes[i+1] = byte(b)
-			}
-		} else if len(v) < 65535 {
+			copy(encodedBytes[1:], v)
+		} else if len(v) <= math.MaxUint16 {
 			encodedBytes = make([]byte, len(v)+3)
 			encodedBytes[0] = byte(255)
 			binary.BigEndian.PutUint16(encodedBytes[1:3], uint16(len(v)))
-			for i, b := range v {
-				encodedBytes[i+3] = byte(b)
-			}
+			copy(encodedBytes[3:], v)
+		} else {
+			return nil, fmt.Errorf("provided String value is too long and cannot be encoded: len=%d, maxlen=%d", len(v), math.MaxUint16)
 		}
 		return encodedBytes, nil
 	}
@@ -560,15 +558,15 @@ func encodeInfoElementValueToBuff(element InfoElementWithValue, buffer []byte, i
 		v := element.GetStringValue()
 		if len(v) < 255 {
 			buffer[index] = uint8(len(v))
-			for i, b := range v {
-				buffer[i+index+1] = byte(b)
-			}
-		} else if len(v) < 65535 {
-			buffer[index] = byte(255)
+			// See https://pkg.go.dev/builtin#copy
+			// As a special case, it also will copy bytes from a string to a slice of bytes.
+			copy(buffer[index+1:], v)
+		} else if len(v) <= math.MaxUint16 {
+			buffer[index] = byte(255) // marker byte for long strings
 			binary.BigEndian.PutUint16(buffer[index+1:index+3], uint16(len(v)))
-			for i, b := range v {
-				buffer[i+index+3] = byte(b)
-			}
+			copy(buffer[index+3:], v)
+		} else {
+			return fmt.Errorf("provided String value is too long and cannot be encoded: len=%d, maxlen=%d", len(v), math.MaxUint16)
 		}
 	default:
 		return fmt.Errorf("API supports only valid information elements with datatypes given in RFC7011")

@@ -285,37 +285,12 @@ func (ep *ExportingProcess) NewTemplateID() uint16 {
 // createAndSendIPFIXMsg takes in a set as input, creates the IPFIX message, and sends it out.
 // TODO: This method will change when we support sending multiple sets.
 func (ep *ExportingProcess) createAndSendIPFIXMsg(set entities.Set) (int, error) {
-	// Create a new message and use it to send the set.
-	msg := entities.NewMessage(false)
-
-	// Check if message is exceeding the limit after adding the set. Include message
-	// header length too.
-	msgLen := entities.MsgHeaderLength + set.GetSetLength()
-	if msgLen > entities.MaxSocketMsgSize {
-		// This is applicable for both TCP and UDP sockets.
-		return 0, fmt.Errorf("message size exceeds max socket buffer size")
-	}
-
-	// Set the fields in the message header.
-	// IPFIX version number is 10.
-	// https://www.iana.org/assignments/ipfix/ipfix.xhtml#ipfix-version-numbers
-	msg.SetVersion(10)
-	msg.SetObsDomainID(ep.obsDomainID)
-	msg.SetMessageLen(uint16(msgLen))
-	msg.SetExportTime(uint32(time.Now().Unix()))
 	if set.GetSetType() == entities.Data {
 		ep.seqNumber = ep.seqNumber + set.GetNumberOfRecords()
 	}
-	msg.SetSequenceNum(ep.seqNumber)
-
-	bytesSlice := make([]byte, msgLen)
-	copy(bytesSlice[:entities.MsgHeaderLength], msg.GetMsgHeader())
-	copy(bytesSlice[entities.MsgHeaderLength:entities.MsgHeaderLength+entities.SetHeaderLen], set.GetHeaderBuffer())
-	index := entities.MsgHeaderLength + entities.SetHeaderLen
-	for _, record := range set.GetRecords() {
-		len := record.GetRecordLength()
-		copy(bytesSlice[index:index+len], record.GetBuffer())
-		index += len
+	bytesSlice, err := CreateIPFIXMsg(set, ep.obsDomainID, ep.seqNumber, time.Now())
+	if err != nil {
+		return 0, err
 	}
 
 	// Send the message on the exporter connection.
@@ -323,7 +298,7 @@ func (ep *ExportingProcess) createAndSendIPFIXMsg(set entities.Set) (int, error)
 
 	if err != nil {
 		return bytesSent, fmt.Errorf("error when sending message on the connection: %v", err)
-	} else if bytesSent != msgLen {
+	} else if bytesSent != len(bytesSlice) {
 		return bytesSent, fmt.Errorf("could not send the complete message on the connection")
 	}
 

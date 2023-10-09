@@ -383,7 +383,7 @@ func getMessageLength(reader *bufio.Reader) (int, error) {
 	var msgLen uint16
 	err = util.Decode(bytes.NewBuffer(partialHeader[2:]), binary.BigEndian, &msgLen)
 	if err != nil {
-		return 0, fmt.Errorf("cannot decode message: %v", err)
+		return 0, fmt.Errorf("cannot decode message: %w", err)
 	}
 	return int(msgLen), nil
 }
