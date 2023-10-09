@@ -20,7 +20,7 @@ type Packets struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     interfaceFilter
+	filter     InterfaceFilter
 	ebpf       ebpfPacketFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -79,10 +79,27 @@ func packetsAgent(cfg *Config,
 	packetexporter node.TerminalFunc[[]*flow.PacketRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
-	// configure allow/deny interfaces filter
-	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-	if err != nil {
-		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	var filter InterfaceFilter
+
+	switch {
+	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
+		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
+
+	case len(cfg.InterfaceIPs) > 0:
+		// configure ip interface filter
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
+		}
+		filter = &f
+
+	default:
+		// configure allow/deny regexp interfaces filter
+		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface filters: %w", err)
+		}
+		filter = &f
 	}
 
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
@@ -205,7 +222,12 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 
 func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	if !p.filter.Allowed(iface.Name) {
+	allowed, err := p.filter.Allowed(iface.Name)
+	if err != nil {
+		plog.WithField("[PCA]interface", iface).WithError(err).
+			Warn("couldn't determine if interface is allowed. Ignoring")
+	}
+	if !allowed {
 		plog.WithField("interface", iface).
 			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
 		return

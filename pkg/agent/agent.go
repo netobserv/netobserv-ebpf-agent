@@ -98,7 +98,7 @@ type Flows struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     interfaceFilter
+	filter     InterfaceFilter
 	ebpf       ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -176,10 +176,27 @@ func flowsAgent(cfg *Config,
 	exporter node.TerminalFunc[[]*flow.Record],
 	agentIP net.IP,
 ) (*Flows, error) {
-	// configure allow/deny interfaces filter
-	filter, err := initInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-	if err != nil {
-		return nil, fmt.Errorf("configuring interface filters: %w", err)
+	var filter InterfaceFilter
+
+	switch {
+	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
+		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
+
+	case len(cfg.InterfaceIPs) > 0:
+		// configure ip interface filter
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
+		}
+		filter = &f
+
+	default:
+		// configure allow/deny regexp interfaces filter
+		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface filters: %w", err)
+		}
+		filter = &f
 	}
 
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
@@ -415,7 +432,12 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 
 func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	if !f.filter.Allowed(iface.Name) {
+	allowed, err := f.filter.Allowed(iface.Name)
+	if err != nil {
+		alog.WithField("interface", iface).Errorf("encountered error determining if interface is allowed: %v", err)
+		return
+	}
+	if !allowed {
 		alog.WithField("interface", iface).
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
