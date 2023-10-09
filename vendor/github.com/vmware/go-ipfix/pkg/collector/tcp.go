@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -70,25 +71,29 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 		reader := bufio.NewReader(conn)
 		for {
 			length, err := getMessageLength(reader)
+			if errors.Is(err, io.EOF) {
+				klog.V(2).InfoS("Connection was closed by client")
+				return
+			}
 			if err != nil {
-				klog.Errorf("error when retrieving message length: %v", err)
+				klog.ErrorS(err, "Error when retrieving message length")
 				cp.deleteClient(address)
 				return
 			}
 			buff := make([]byte, length)
 			_, err = io.ReadFull(reader, buff)
 			if err != nil {
-				klog.Errorf("error when reading the message: %v", err)
+				klog.ErrorS(err, "Error when reading the message")
 				cp.deleteClient(address)
 				return
 			}
 			message, err := cp.decodePacket(bytes.NewBuffer(buff), address)
 			if err != nil {
-				klog.Error(err)
+				klog.ErrorS(err, "Error when decoding packet")
 				continue
 			}
-			klog.V(4).Infof("Processed message from exporter with observation domain ID: %v ser type: %v number of records: %v",
-				message.GetObsDomainID(), message.GetSet().GetSetType(), message.GetSet().GetNumberOfRecords())
+			klog.V(4).InfoS("Processed message from exporter",
+				"observationDomainID", message.GetObsDomainID(), "setType", message.GetSet().GetSetType(), "numRecords", message.GetSet().GetNumberOfRecords())
 		}
 	}()
 	<-cp.stopChan
