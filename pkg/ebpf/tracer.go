@@ -35,14 +35,14 @@ const (
 	flowSequencesMap   = "flow_sequences"
 	dnsLatencyMap      = "dns_flows"
 	// constants defined in flows.c as "volatile const"
-	constSampling      = "sampling"
-	constTraceMessages = "trace_messages"
-	constEnableRtt     = "enable_rtt"
-	pktDropHook        = "kfree_skb"
-	dnsTraceHook       = "net_dev_queue"
-	constPcaPort       = "pca_port"
-	constPcaProto      = "pca_proto"
-	pcaRecordsMap      = "packet_record"
+	constSampling          = "sampling"
+	constTraceMessages     = "trace_messages"
+	constEnableRtt         = "enable_rtt"
+	constEnableDNSTracking = "enable_dns_tracking"
+	pktDropHook            = "kfree_skb"
+	constPcaPort           = "pca_port"
+	constPcaProto          = "pca_proto"
+	pcaRecordsMap          = "packet_record"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -53,16 +53,15 @@ var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects              *BpfObjects
-	qdiscs               map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters        map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters       map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader        *ringbuf.Reader
-	cacheMaxSize         int
-	enableIngress        bool
-	enableEgress         bool
-	pktDropsTracePoint   link.Link
-	dnsTrackerTracePoint link.Link
+	objects            *BpfObjects
+	qdiscs             map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters      map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters     map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader      *ringbuf.Reader
+	cacheMaxSize       int
+	enableIngress      bool
+	enableEgress       bool
+	pktDropsTracePoint link.Link
 }
 
 type FlowFetcherConfig struct {
@@ -113,14 +112,20 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		log.Debugf("RTT calculations are enabled")
 	}
 
-	if !cfg.DNSTracker {
+	enableDNSTracking := 0
+	if cfg.DNSTracker {
+		enableDNSTracking = 1
+	}
+
+	if enableDNSTracking == 0 {
 		spec.Maps[dnsLatencyMap].MaxEntries = 1
 	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:      uint32(cfg.Sampling),
-		constTraceMessages: uint8(traceMsgs),
-		constEnableRtt:     uint8(enableRtt),
+		constSampling:          uint32(cfg.Sampling),
+		constTraceMessages:     uint8(traceMsgs),
+		constEnableRtt:         uint8(enableRtt),
+		constEnableDNSTracking: uint8(enableDNSTracking),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -149,30 +154,21 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
-	var dnsTrackerLink link.Link
-	if cfg.DNSTracker {
-		dnsTrackerLink, err = link.Tracepoint("net", dnsTraceHook, objects.TraceNetPackets, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach the BPF program to trace_net_packets: %w", err)
-		}
-	}
-
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 	return &FlowFetcher{
-		objects:              &objects,
-		ringbufReader:        flows,
-		egressFilters:        map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:       map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:               map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:         cfg.CacheMaxSize,
-		enableIngress:        cfg.EnableIngress,
-		enableEgress:         cfg.EnableEgress,
-		pktDropsTracePoint:   pktDropsLink,
-		dnsTrackerTracePoint: dnsTrackerLink,
+		objects:            &objects,
+		ringbufReader:      flows,
+		egressFilters:      map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:     map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:             map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:       cfg.CacheMaxSize,
+		enableIngress:      cfg.EnableIngress,
+		enableEgress:       cfg.EnableEgress,
+		pktDropsTracePoint: pktDropsLink,
 	}, nil
 }
 
@@ -298,11 +294,6 @@ func (m *FlowFetcher) Close() error {
 
 	if m.pktDropsTracePoint != nil {
 		if err := m.pktDropsTracePoint.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if m.dnsTrackerTracePoint != nil {
-		if err := m.dnsTrackerTracePoint.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -491,7 +482,6 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		type NewBpfPrograms struct {
 			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-			TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 		}
 		type NewBpfObjects struct {
 			NewBpfPrograms
@@ -517,7 +507,6 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.FlowSequences = newObjects.FlowSequences
 		objects.EgressFlowParse = newObjects.EgressFlowParse
 		objects.IngressFlowParse = newObjects.IngressFlowParse
-		objects.TraceNetPackets = newObjects.TraceNetPackets
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
@@ -574,13 +563,12 @@ func NewPacketFetcher(
 	objects.DirectFlows = nil
 	objects.AggregatedFlows = nil
 	objects.FlowSequences = nil
-	objects.TraceNetPackets = nil
 	delete(spec.Programs, aggregatedFlowsMap)
 	delete(spec.Programs, flowSequencesMap)
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableRtt)
-	delete(spec.Programs, dnsTraceHook)
+	delete(spec.Programs, constEnableDNSTracking)
 
 	pcaPort := 0
 	pcaProto := 0

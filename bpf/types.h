@@ -159,6 +159,9 @@ typedef struct pkt_info_t {
     void *l4_hdr;   // Stores the actual l4 header
     u64 rtt;        // rtt calculated from the flow if possible. else zero
     u8 dscp;        // IPv4/6 DSCP value
+    u16 dns_id;
+    u16 dns_flags;
+    u64 dns_latency;
 } pkt_info;
 
 // Structure for payload metadata

@@ -41,7 +41,7 @@
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
-    if (sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
+    if (!enable_dns_tracking && sampling != 0 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
     }
 
@@ -73,6 +73,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         calculate_flow_rtt(&pkt, direction, data_end);
     }
 
+    if (enable_dns_tracking) {
+        track_dns_packet(&pkt, data_end);
+    }
     // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
@@ -91,7 +94,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (pkt.rtt > aggregate_flow->flow_rtt) {
             aggregate_flow->flow_rtt = pkt.rtt;
         }
-
+        aggregate_flow->dns_record.id = pkt.dns_id;
+        aggregate_flow->dns_record.flags = pkt.dns_flags;
+        aggregate_flow->dns_record.latency = pkt.dns_latency;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -111,6 +116,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .flags = pkt.flags,
             .flow_rtt = pkt.rtt,
             .dscp = pkt.dscp,
+            .dns_record.id = pkt.dns_id,
+            .dns_record.flags = pkt.dns_flags,
+            .dns_record.latency = pkt.dns_latency,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow

@@ -128,7 +128,6 @@ type BpfProgramSpecs struct {
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
 	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
-	TraceNetPackets  *ebpf.ProgramSpec `ebpf:"trace_net_packets"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -187,7 +186,6 @@ type BpfPrograms struct {
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
 	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
-	TraceNetPackets  *ebpf.Program `ebpf:"trace_net_packets"`
 }
 
 func (p *BpfPrograms) Close() error {
@@ -197,7 +195,6 @@ func (p *BpfPrograms) Close() error {
 		p.IngressFlowParse,
 		p.IngressPcaParse,
 		p.KfreeSkb,
-		p.TraceNetPackets,
 	)
 }
 
