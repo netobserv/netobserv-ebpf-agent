@@ -267,7 +267,7 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			Async:        cfg.KafkaAsync,
 			Compression:  compression,
 			Transport:    &transport,
-			Balancer:     &kafkago.RoundRobin{},
+			Balancer:     &kafkago.Hash{},
 		},
 	}).ExportFlows, nil
 }
