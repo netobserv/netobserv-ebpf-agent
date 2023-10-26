@@ -53,6 +53,7 @@ message Record {
   uint32 dns_flags = 22;
   google.protobuf.Duration dns_latency = 23;
   google.protobuf.Duration time_flow_rtt = 24;
+  uint32 dns_errno = 25;
 }
 
 message DataLink {

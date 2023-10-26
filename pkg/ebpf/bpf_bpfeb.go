@@ -25,6 +25,7 @@ type BpfDnsRecordT struct {
 	Id      uint16
 	Flags   uint16
 	Latency uint64
+	Errno   uint8
 }
 
 type BpfFlowId BpfFlowIdT

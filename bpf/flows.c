@@ -72,9 +72,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         // This is currently not to be enabled by default.
         calculate_flow_rtt(&pkt, direction, data_end);
     }
-
+    int dns_errno = 0;
     if (enable_dns_tracking) {
-        track_dns_packet(skb, &pkt);
+        dns_errno = track_dns_packet(skb, &pkt);
     }
     // TODO: we need to add spinlock here when we deprecate versions prior to 5.1, or provide
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
@@ -97,6 +97,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->dns_record.id = pkt.dns_id;
         aggregate_flow->dns_record.flags = pkt.dns_flags;
         aggregate_flow->dns_record.latency = pkt.dns_latency;
+        aggregate_flow->dns_record.errno = dns_errno;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
         if (trace_messages && ret != 0) {
             // usually error -16 (-EBUSY) is printed here.
@@ -119,6 +120,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .dns_record.id = pkt.dns_id,
             .dns_record.flags = pkt.dns_flags,
             .dns_record.latency = pkt.dns_latency,
+            .dns_record.errno = dns_errno,
         };
 
         // even if we know that the entry is new, another CPU might be concurrently inserting a flow
