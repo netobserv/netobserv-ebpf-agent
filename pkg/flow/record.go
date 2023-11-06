@@ -115,6 +115,10 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if src.Dscp != 0 {
 		r.Dscp = src.Dscp
 	}
+	// Accumulate DNSErrno
+	if src.DnsRecord.Errno != 0 {
+		r.DnsRecord.Errno = src.DnsRecord.Errno
+	}
 }
 
 // IP returns the net.IP equivalent object

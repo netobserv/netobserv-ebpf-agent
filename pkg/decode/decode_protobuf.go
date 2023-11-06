@@ -90,11 +90,13 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 		}
 	}
 
+	out["DnsErrno"] = flow.GetDnsErrno()
 	if flow.GetDnsId() != 0 {
 		out["DnsLatencyMs"] = flow.DnsLatency.AsDuration().Milliseconds()
 		out["DnsId"] = flow.GetDnsId()
 		out["DnsFlags"] = flow.GetDnsFlags()
 		out["DnsFlagsResponseCode"] = dnsRcodeToStr(flow.GetDnsFlags() & 0xF)
+		out["DnsErrno"] = uint32(0)
 	}
 
 	if flow.GetPktDropLatestDropCause() != 0 {

@@ -55,7 +55,8 @@ func TestDecodeProtobuf(t *testing.T) {
 				AgentIp: &pbflow.IP{
 					IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x0a090807},
 				},
-				Flags: 0x100,
+				Flags:    0x100,
+				DnsErrno: 0,
 			},
 			expected: &config.GenericMap{
 				"FlowDirection":   1,
@@ -76,6 +77,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interface":       "eth0",
 				"AgentIP":         "10.9.8.7",
+				"DnsErrno":        uint32(0),
 			},
 		},
 		{
@@ -109,6 +111,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				AgentIp: &pbflow.IP{
 					IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x0a090807},
 				},
+				DnsErrno: 0,
 			},
 			expected: &config.GenericMap{
 				"FlowDirection":   1,
@@ -128,6 +131,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interface":       "eth0",
 				"AgentIP":         "10.9.8.7",
+				"DnsErrno":        uint32(0),
 			},
 		},
 		{
@@ -161,6 +165,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				},
 				IcmpType: 8,
 				IcmpCode: 0,
+				DnsErrno: 0,
 			},
 			expected: &config.GenericMap{
 				"FlowDirection":   1,
@@ -180,6 +185,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"AgentIP":         "10.9.8.7",
 				"IcmpType":        uint32(8),
 				"IcmpCode":        uint32(0),
+				"DnsErrno":        uint32(0),
 			},
 		},
 		{
@@ -213,6 +219,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				},
 				IcmpType: 128,
 				IcmpCode: 0,
+				DnsErrno: 0,
 			},
 			expected: &config.GenericMap{
 				"FlowDirection":   1,
@@ -232,6 +239,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"AgentIP":         "101:101:101:101:101:101:101:101",
 				"IcmpType":        uint32(128),
 				"IcmpCode":        uint32(0),
+				"DnsErrno":        uint32(0),
 			},
 		},
 		{
@@ -264,6 +272,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				AgentIp: &pbflow.IP{
 					IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x0a090807},
 				},
+				DnsErrno: 0,
 			},
 			expected: &config.GenericMap{
 				"FlowDirection":   1,
@@ -277,6 +286,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interface":       "eth0",
 				"AgentIP":         "10.9.8.7",
+				"DnsErrno":        uint32(0),
 			},
 		},
 		{
@@ -319,6 +329,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				DnsLatency:             durationpb.New(someDuration),
 				DnsId:                  1,
 				DnsFlags:               0x8001,
+				DnsErrno:               0,
 				TimeFlowRtt:            durationpb.New(someDuration),
 			},
 			expected: &config.GenericMap{
@@ -349,6 +360,7 @@ func TestDecodeProtobuf(t *testing.T) {
 				"DnsId":                  uint32(1),
 				"DnsFlags":               uint32(0x8001),
 				"DnsFlagsResponseCode":   "FormErr",
+				"DnsErrno":               uint32(0),
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
 			},
 		},
@@ -407,6 +419,7 @@ func TestPBFlowToMap(t *testing.T) {
 		DnsLatency:             durationpb.New(someDuration),
 		DnsId:                  1,
 		DnsFlags:               0x80,
+		DnsErrno:               0,
 		TimeFlowRtt:            durationpb.New(someDuration),
 	}
 
@@ -441,6 +454,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"DnsId":                  uint32(1),
 		"DnsFlags":               uint32(0x80),
 		"DnsFlagsResponseCode":   "NoError",
+		"DnsErrno":               uint32(0),
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
 	}, out)
 

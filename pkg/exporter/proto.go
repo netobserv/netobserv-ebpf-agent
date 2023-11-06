@@ -79,6 +79,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		PktDropLatestDropCause: fr.Metrics.PktDrops.LatestDropCause,
 		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
+		DnsErrno:               uint32(fr.Metrics.DnsRecord.Errno),
 		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
 	if fr.Metrics.DnsRecord.Latency != 0 {
@@ -128,6 +129,7 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 		PktDropLatestDropCause: fr.Metrics.PktDrops.LatestDropCause,
 		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
+		DnsErrno:               uint32(fr.Metrics.DnsRecord.Errno),
 		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
 	}
 	if fr.Metrics.DnsRecord.Latency != 0 {

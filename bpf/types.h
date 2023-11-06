@@ -89,6 +89,7 @@ typedef struct flow_metrics_t {
         u16 id;
         u16 flags;
         u64 latency;
+        u8 errno;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
 } __attribute__((packed)) flow_metrics;

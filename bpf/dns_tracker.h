@@ -9,6 +9,7 @@
 #define DNS_PORT        53
 #define DNS_QR_FLAG     0x8000
 #define UDP_MAXMSG      512
+#define EINVAL          22
 
 struct dns_header {
     u16 id;
@@ -64,21 +65,22 @@ static __always_inline u8 calc_dns_header_offset(pkt_info *pkt, void *data_end) 
     return len;
 }
 
-static __always_inline void track_dns_packet(struct __sk_buff *skb, pkt_info *pkt) {
+static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt) {
     void *data_end = (void *)(long)skb->data_end;
     if (pkt->id->dst_port == DNS_PORT || pkt->id->src_port == DNS_PORT) {
         dns_flow_id dns_req;
 
         u8 len = calc_dns_header_offset(pkt, data_end);
         if (!len) {
-            return;
+            return EINVAL;
         }
 
         struct dns_header dns;
+        int ret;
         u32 dns_offset = (long)pkt->l4_hdr - (long)skb->data + len;
 
-        if (bpf_skb_load_bytes(skb, dns_offset, &dns, sizeof(dns)) < 0) {
-            return;
+        if ((ret = bpf_skb_load_bytes(skb, dns_offset, &dns, sizeof(dns))) < 0) {
+            return -ret;
         }
 
         u16 dns_id = bpf_ntohs(dns.id);
@@ -101,6 +103,7 @@ static __always_inline void track_dns_packet(struct __sk_buff *skb, pkt_info *pk
              }
         } // end of dns response
     } // end of dns port check
+    return 0;
 }
 
 #endif // __DNS_TRACKER_H__
