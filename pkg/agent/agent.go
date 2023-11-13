@@ -159,6 +159,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		PktDrops:      cfg.EnablePktDrops,
 		DNSTracker:    cfg.EnableDNSTracking,
 		EnableRTT:     cfg.EnableRTT,
+		EnableKTLS:    cfg.EnableKTLSTracking,
 	}
 
 	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -43,6 +44,7 @@ const (
 	constPcaPort           = "pca_port"
 	constPcaProto          = "pca_proto"
 	pcaRecordsMap          = "packet_record"
+	cgroupPath             = "/sys/fs/cgroup"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -62,6 +64,7 @@ type FlowFetcher struct {
 	enableIngress      bool
 	enableEgress       bool
 	pktDropsTracePoint link.Link
+	tlsLink            link.Link
 }
 
 type FlowFetcherConfig struct {
@@ -73,6 +76,7 @@ type FlowFetcherConfig struct {
 	PktDrops      bool
 	DNSTracker    bool
 	EnableRTT     bool
+	EnableKTLS    bool
 }
 
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
@@ -135,6 +139,29 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err != nil {
 		return nil, err
 	}
+	var cgPath string
+	var tlsLink link.Link
+	if cfg.EnableKTLS {
+		cgPath, err = findCgroupPath()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find cgroup path: %w", err)
+		}
+		tlsLink, err = link.AttachCgroup(link.CgroupOptions{
+			Path:    cgPath,
+			Program: objects.BpfSockops,
+			Attach:  ebpf.AttachCGroupSockOps,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach cgroup: %w", err)
+		}
+		if err := link.RawAttachProgram(link.RawAttachProgramOptions{
+			Target:  objects.SockHash.FD(),
+			Program: objects.BpfKtlsRedir,
+			Attach:  ebpf.AttachSkMsgVerdict,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to attach sk_msg: %w", err)
+		}
+	}
 
 	log.Debugf("Deleting specs for PCA")
 	// Deleting specs for PCA
@@ -169,6 +196,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		enableIngress:      cfg.EnableIngress,
 		enableEgress:       cfg.EnableEgress,
 		pktDropsTracePoint: pktDropsLink,
+		tlsLink:            tlsLink,
 	}, nil
 }
 
@@ -297,6 +325,11 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if m.tlsLink != nil {
+		if err := m.tlsLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -322,6 +355,15 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.FlowSequences.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.BpfKtlsRedir.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.SockHash.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.BpfSockops.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if len(errs) == 0 {
@@ -819,4 +861,18 @@ func (p *PacketFetcher) LookupAndDeleteMap() map[int][]*byte {
 		packets[id] = append(packets[id], packet...)
 	}
 	return packets
+}
+
+func findCgroupPath() (string, error) {
+	var st syscall.Statfs_t
+	var path string
+	err := syscall.Statfs(cgroupPath, &st)
+	if err != nil {
+		return "", fmt.Errorf("failed to find cgroup fs: %w", err)
+	}
+	isCgroupV2Enabled := st.Type == unix.CGROUP2_SUPER_MAGIC
+	if !isCgroupV2Enabled {
+		path = filepath.Join(cgroupPath, "unified")
+	}
+	return path, nil
 }

@@ -160,4 +160,6 @@ type Config struct {
 	PCAFilters string `env:"PCA_FILTER"`
 	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
 	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
+	// EnableKTLSTracking enable tracking kernel encrypted packets
+	EnableKTLSTracking bool `env:"ENABLE_KTLS_TRACKING" envDefault:"false"`
 }
