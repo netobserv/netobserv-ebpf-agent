@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/cilium/ebpf v0.12.2
+	github.com/cilium/ebpf v0.12.3
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/google/gopacket v1.1.19
@@ -20,7 +20,7 @@ require (
 	github.com/vishvananda/netns v0.0.4
 	github.com/vladimirvivien/gexe v0.1.1
 	github.com/vmware/go-ipfix v0.8.0
-	golang.org/x/sys v0.13.0
+	golang.org/x/sys v0.14.1-0.20231108175955-e4099bfacb8c
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0
 	k8s.io/api v0.28.3
