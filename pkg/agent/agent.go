@@ -253,6 +253,8 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 		return buildIPFIXExporter(cfg, "tcp")
 	case "direct-flp":
 		return buildDirectFLPExporter(cfg)
+	case "tcp":
+		return buildFlowStreamExporter(cfg)
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
@@ -337,6 +339,18 @@ func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*flow.Re
 		return nil, err
 	}
 	return ipfix.ExportFlows, nil
+}
+
+func buildFlowStreamExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+	if cfg.TargetPort == 0 {
+		return nil, fmt.Errorf("missing port: %d", cfg.TargetPort)
+	}
+	flowStreamer, err := exporter.StartFlowSend(fmt.Sprintf("%d", cfg.TargetPort))
+	if err != nil {
+		return nil, err
+	}
+
+	return flowStreamer.ExportFlows, err
 }
 
 // Run a Flows agent. The function will keep running in the same thread

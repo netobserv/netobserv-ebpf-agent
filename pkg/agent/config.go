@@ -35,7 +35,7 @@ type Config struct {
 	// If the AgentIP configuration property is set, this property has no effect.
 	AgentIPType string `env:"AGENT_IP_TYPE" envDefault:"any"`
 	// Export selects the flows' exporter protocol. Accepted values are: grpc (default), kafka,
-	// ipfix+udp, ipfix+tcp or direct-flp.
+	// ipfix+udp, ipfix+tcp, tcp or direct-flp.
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
