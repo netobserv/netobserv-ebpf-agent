@@ -86,6 +86,8 @@ type Config struct {
 	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY"`
 	// DeduperJustMark will just mark duplicates (boolean field) instead of dropping them.
 	DeduperJustMark bool `env:"DEDUPER_JUST_MARK"`
+	// DeduperMerge will merge duplicated flows and generate list of interfaces and direction pairs
+	DeduperMerge bool `env:"DEDUPER_MERGE" envDefault:"false"`
 	// Direction allows selecting which flows to trace according to its direction. Accepted values
 	// are "ingress", "egress" or "both" (default).
 	Direction string `env:"DIRECTION" envDefault:"both"`

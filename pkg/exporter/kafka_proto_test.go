@@ -57,7 +57,10 @@ func TestProtoConversion(t *testing.T) {
 	var r pbflow.Record
 	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &r))
 	assert.EqualValues(t, 3, r.EthProtocol)
-	assert.EqualValues(t, 1, r.Direction)
+	for _, e := range r.DupList {
+		assert.EqualValues(t, 1, e.Direction)
+		assert.Equal(t, "veth0", e.Interface)
+	}
 	assert.EqualValues(t, uint64(0xaabbccddeeff), r.DataLink.SrcMac)
 	assert.EqualValues(t, uint64(0x112233445566), r.DataLink.DstMac)
 	assert.EqualValues(t, uint64(0xC0010203) /* 192.1.2.3 */, r.Network.SrcAddr.GetIpv4())
@@ -71,7 +74,6 @@ func TestProtoConversion(t *testing.T) {
 	assert.EqualValues(t, 789, r.Bytes)
 	assert.EqualValues(t, 987, r.Packets)
 	assert.EqualValues(t, uint16(1), r.Flags)
-	assert.Equal(t, "veth0", r.Interface)
 	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("127.3.2.1")), wc.messages[0].Key[0:16])
 	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("192.1.2.3")), wc.messages[0].Key[16:])
 }

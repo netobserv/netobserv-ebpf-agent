@@ -17,7 +17,13 @@ func TestPBFlowToMap(t *testing.T) {
 	someTime := time.Now()
 	var someDuration time.Duration = 10000000 // 10ms
 	flow := &pbflow.Record{
-		Interface:     "eth0",
+		Interface: "eth0",
+		DupList: []*pbflow.DupMapEntry{
+			{
+				Interface: "eth0",
+				Direction: pbflow.Direction_EGRESS,
+			},
+		},
 		EthProtocol:   2048,
 		Bytes:         456,
 		Packets:       123,
@@ -64,6 +70,7 @@ func TestPBFlowToMap(t *testing.T) {
 	delete(out, "TimeReceived")
 	assert.Equal(t, config.GenericMap{
 		"FlowDirection":          1,
+		"FlowDirections":         []interface{}{1},
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",
@@ -78,6 +85,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"Proto":                  uint32(6),
 		"TimeFlowStartMs":        someTime.UnixMilli(),
 		"TimeFlowEndMs":          someTime.UnixMilli(),
+		"Interfaces":             []interface{}{"eth0"},
 		"Interface":              "eth0",
 		"AgentIP":                "10.9.8.7",
 		"Flags":                  uint32(0x100),

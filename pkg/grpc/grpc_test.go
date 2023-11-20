@@ -142,8 +142,12 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 		EthProtocol: 2048,
 		Bytes:       456,
 		Flags:       1,
-
-		Direction:     pbflow.Direction_EGRESS,
+		DupList: []*pbflow.DupMapEntry{
+			{
+				Interface: "eth0",
+				Direction: pbflow.Direction_EGRESS,
+			},
+		},
 		TimeFlowStart: timestamppb.Now(),
 		TimeFlowEnd:   timestamppb.Now(),
 		Network: &pbflow.Network{
@@ -196,10 +200,15 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 	client := cc.Client()
 
 	f := &pbflow.Record{
-		EthProtocol:   2048,
-		Bytes:         456,
-		Flags:         1,
-		Direction:     pbflow.Direction_EGRESS,
+		EthProtocol: 2048,
+		Bytes:       456,
+		Flags:       1,
+		DupList: []*pbflow.DupMapEntry{
+			{
+				Interface: "eth0",
+				Direction: pbflow.Direction_EGRESS,
+			},
+		},
 		TimeFlowStart: timestamppb.Now(),
 		TimeFlowEnd:   timestamppb.Now(),
 		Network: &pbflow.Network{

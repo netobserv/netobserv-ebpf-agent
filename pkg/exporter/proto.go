@@ -71,7 +71,7 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 		Duplicate:              fr.Duplicate,
 		AgentIp:                agentIP(fr.AgentIP),
 		Flags:                  uint32(fr.Metrics.Flags),
-		Interface:              string(fr.Interface),
+		Interface:              fr.Interface,
 		PktDropBytes:           fr.Metrics.PktDrops.Bytes,
 		PktDropPackets:         uint64(fr.Metrics.PktDrops.Packets),
 		PktDropLatestFlags:     uint32(fr.Metrics.PktDrops.LatestFlags),
@@ -84,6 +84,13 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 	}
 	if fr.Metrics.DnsRecord.Latency != 0 {
 		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
+	}
+	pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
+	for _, m := range fr.DupList {
+		pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
+			Interface: fr.Interface,
+			Direction: pbflow.Direction(m[fr.Interface]),
+		})
 	}
 	return &pbflowRecord
 }
@@ -134,6 +141,13 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 	}
 	if fr.Metrics.DnsRecord.Latency != 0 {
 		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
+	}
+	pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
+	for _, m := range fr.DupList {
+		pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
+			Interface: fr.Interface,
+			Direction: pbflow.Direction(m[fr.Interface]),
+		})
 	}
 	return &pbflowRecord
 }
