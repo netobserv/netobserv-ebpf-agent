@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
+	"sigs.k8s.io/e2e-framework/support/kind"
 )
 
 // DeployOrder specifies the order in which a Deployment must be executed, from lower to higher
@@ -170,9 +171,12 @@ func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
 // Run the Kind cluster for the later execution of tests.
 func (k *Kind) Run(m *testing.M) {
 	envFuncs := []env.Func{
-		envfuncs.CreateKindClusterWithConfig(k.clusterName,
-			kindImage,
-			path.Join(packageDir(), "base", "00-kind.yml")),
+		envfuncs.CreateClusterWithConfig(
+			kind.NewProvider(),
+			k.clusterName,
+			path.Join(packageDir(), "base", "00-kind.yml"),
+			kind.WithImage(kindImage),
+		),
 		k.loadLocalImage(),
 	}
 	// Deploy base cluster dependencies and wait for readiness (if needed)
@@ -195,7 +199,7 @@ func (k *Kind) Run(m *testing.M) {
 	code := k.testEnv.Setup(envFuncs...).
 		Finish(
 			k.exportLogs(),
-			envfuncs.DestroyKindCluster(k.clusterName),
+			envfuncs.DestroyCluster(k.clusterName),
 		).Run(m)
 	log.WithField("returnCode", code).Info("tests finished run")
 }

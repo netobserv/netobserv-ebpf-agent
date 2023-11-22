@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/flags"
 )
 
 // EnvFunc represents a user-defined operation that
@@ -67,12 +68,12 @@ type Environment interface {
 
 	// Test executes a test feature defined in a TestXXX function
 	// This method surfaces context for further updates.
-	Test(*testing.T, ...Feature)
+	Test(*testing.T, ...Feature) context.Context
 
 	// TestInParallel executes a series of test features defined in a
 	// TestXXX function in parallel. This works the same way Test method
 	// does with the caveat that the features will all be run in parallel
-	TestInParallel(*testing.T, ...Feature)
+	TestInParallel(*testing.T, ...Feature) context.Context
 
 	// AfterEachTest registers environment funcs that are executed
 	// after each Env.Test(...).
@@ -86,7 +87,7 @@ type Environment interface {
 	Run(*testing.M) int
 }
 
-type Labels map[string]string
+type Labels = flags.LabelsMap
 
 type Feature interface {
 	// Name is a descriptive text for the feature
@@ -117,4 +118,20 @@ type Step interface {
 	Level() Level
 	// Func is the operation for the step
 	Func() StepFunc
+}
+
+type DescribableStep interface {
+	Step
+	// Description is the Readable test description indicating the purpose behind the test that
+	// can add more context to the test under question
+	Description() string
+}
+
+type DescribableFeature interface {
+	Feature
+
+	// Description is used to provide a readable context for the test feature. This can be used
+	// to provide more context for the test being performed and the assessment under each of the
+	// feature.
+	Description() string
 }

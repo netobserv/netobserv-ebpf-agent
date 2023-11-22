@@ -158,7 +158,7 @@ tests-e2e: prereqs ## Run e2e tests
 	# environments: (1) as image tagged in the local repository (2) as image archive.
 	$(OCI_BIN) build . -t localhost/ebpf-agent:test
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
-	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...
+	GOOS=$(GOOS) go test -timeout 30m -v -mod vendor -tags e2e ./e2e/...
 
 ##@ Images
 
