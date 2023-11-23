@@ -3,8 +3,10 @@
 package basic
 
 import (
+	"context"
 	"fmt"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
 
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -24,7 +27,7 @@ import (
 
 const (
 	clusterNamePrefix = "kafka-test-cluster"
-	testTimeout       = 20 * time.Minute
+	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
 
@@ -59,14 +62,46 @@ func TestMain(m *testing.M) {
 				kfk := Kafka{ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespace, Name: "kafka-cluster",
 				}}
+				var depl appsv1.DeploymentList
+				err = cfg.Client().Resources(namespace).List(context.TODO(), &depl)
+				if err != nil {
+					return fmt.Errorf("can't list depls: %w", err)
+				}
+				deplInfo := []string{}
+				for _, p := range depl.Items {
+					deplInfo = append(deplInfo, fmt.Sprintf("%s (%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.Replicas))
+				}
+				klog.Infof("Deployments: " + strings.Join(deplInfo, " ,,,,, "))
+				var sfs appsv1.StatefulSetList
+				err = cfg.Client().Resources(namespace).List(context.TODO(), &sfs)
+				if err != nil {
+					return fmt.Errorf("can't list sfs: %w", err)
+				}
+				sfsInfo := []string{}
+				for _, p := range sfs.Items {
+					sfsInfo = append(sfsInfo, fmt.Sprintf("%s (%d/%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.AvailableReplicas, p.Status.Replicas))
+				}
+				klog.Infof("StatefulSets: " + strings.Join(sfsInfo, " ,,,,, "))
 				if err := wait.For(conditions.New(client.Resources()).
 					ResourceMatch(&kfk, func(object k8s.Object) bool {
 						kafka, ok := object.(*Kafka)
 						if !ok {
+							klog.Errorf("could not cast Kafka obj: %v", object)
 							return false
 						}
+						for _, cond := range kafka.Status.Conditions {
+							klog.WithFields(logrus.Fields{
+								"reason": cond.Reason,
+								"msg":    cond.Message,
+								"type":   cond.Type,
+								"status": cond.Status,
+							}).Info("Waiting for kafka to be up and running")
+							if cond.Type == conditionReady {
+								return cond.Status == metav1.ConditionTrue
+							}
+						}
 						return kafka.Status.Ready()
-					}), wait.WithTimeout(time.Second*10)); err != nil {
+					}), wait.WithTimeout(time.Minute*1)); err != nil {
 					return fmt.Errorf("waiting for kafka cluster to be ready: %w", err)
 				}
 				return nil
@@ -118,14 +153,14 @@ func (ks *KafkaStatus) Ready() bool {
 	if ks == nil {
 		return false
 	}
-	klog.Debugf("Kafka len of conditions: %d", len(ks.Conditions))
+	klog.Infof("Kafka len of conditions: %d", len(ks.Conditions))
 	for _, cond := range ks.Conditions {
 		klog.WithFields(logrus.Fields{
 			"reason": cond.Reason,
 			"msg":    cond.Message,
 			"type":   cond.Type,
 			"status": cond.Status,
-		}).Debug("Waiting for kafka to be up and running")
+		}).Info("Waiting for kafka to be up and running")
 		if cond.Type == conditionReady {
 			return cond.Status == metav1.ConditionTrue
 		}

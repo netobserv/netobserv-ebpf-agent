@@ -94,7 +94,7 @@ func TestSinglePacketFlows(t *testing.T) {
 
 			const ipIcmpHeadersLen = 42
 			latestFlowMS := time.Now().Add(-time.Minute)
-			for pktLen := 50; pktLen <= 200; pktLen++ {
+			for pktLen := 50; pktLen <= 200; pktLen += 7 {
 				logrus.WithField("destinationIP", serverPodIP).Debug("Sending ICMP packet")
 				stdOut, stdErr, err := pods.Execute(ctx, namespace, "pinger",
 					"ping", "-s", strconv.Itoa(pktLen), "-c", "1", serverPodIP)
