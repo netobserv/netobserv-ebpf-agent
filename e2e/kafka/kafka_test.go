@@ -3,8 +3,10 @@
 package basic
 
 import (
+	"context"
 	"fmt"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
 
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -59,6 +62,16 @@ func TestMain(m *testing.M) {
 				kfk := Kafka{ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespace, Name: "kafka-cluster",
 				}}
+				var pods corev1.PodList
+				err = cfg.Client().Resources().List(context.TODO(), &pods)
+				if err != nil {
+					return fmt.Errorf("can't list pods: %w", err)
+				}
+				podsInfo := []string{}
+				for _, p := range pods.Items {
+					podsInfo = append(podsInfo, p.Name+"/"+string(p.Status.Phase)+"/"+p.Status.Message)
+				}
+				klog.Infof("Debug Info: " + strings.Join(podsInfo, " ,,,,, "))
 				if err := wait.For(conditions.New(client.Resources()).
 					ResourceMatch(&kfk, func(object k8s.Object) bool {
 						kafka, ok := object.(*Kafka)
@@ -66,7 +79,7 @@ func TestMain(m *testing.M) {
 							return false
 						}
 						return kafka.Status.Ready()
-					}), wait.WithTimeout(time.Second*10)); err != nil {
+					}), wait.WithTimeout(time.Minute*1)); err != nil {
 					return fmt.Errorf("waiting for kafka cluster to be ready: %w", err)
 				}
 				return nil
@@ -118,14 +131,14 @@ func (ks *KafkaStatus) Ready() bool {
 	if ks == nil {
 		return false
 	}
-	klog.Debugf("Kafka len of conditions: %d", len(ks.Conditions))
+	klog.Infof("Kafka len of conditions: %d", len(ks.Conditions))
 	for _, cond := range ks.Conditions {
 		klog.WithFields(logrus.Fields{
 			"reason": cond.Reason,
 			"msg":    cond.Message,
 			"type":   cond.Type,
 			"status": cond.Status,
-		}).Debug("Waiting for kafka to be up and running")
+		}).Info("Waiting for kafka to be up and running")
 		if cond.Type == conditionReady {
 			return cond.Status == metav1.ConditionTrue
 		}
