@@ -5,6 +5,11 @@ The following environment variables are available to configure the NetObserv eBF
 * `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka` or `ipfix+tcp` or `ipfix+udp`.
 * `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the target Flow collector.
 * `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow collector.
+* `TARGET_ENABLE_TLS` (default: false). If `true`, enable TLS encryption for GRPC messages. The following settings are used only when TLS is enabled:
+  * `TARGET_TLS_INSECURE_SKIP_VERIFY` (default: false). Skips server certificate verification in TLS connections.
+  * `TARGET_TLS_CA_CERT_PATH` (default: unset). Path to the GRPC server certificate for TLS connections.
+  * `TARGET_TLS_USER_CERT_PATH` (default: unset). Path to the user (client) certificate for mutual TLS connections.
+  * `TARGET_TLS_USER_KEY_PATH` (default: unset). Path to the user (client) private key for mutual TLS connections.
 * `GRPC_MESSAGE_MAX_FLOWS` (default: `10000`). Specifies the limit, in number of flows, of each GRPC
   message. Messages larger than that number will be split and submitted sequentially.
 * `AGENT_IP` (optional). Allows overriding the reported Agent IP address on each flow.

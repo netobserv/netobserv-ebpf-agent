@@ -42,6 +42,16 @@ type Config struct {
 	TargetHost string `env:"FLOWS_TARGET_HOST"`
 	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
 	TargetPort int `env:"FLOWS_TARGET_PORT"`
+	// TargetEnableTLS set true to enable TLS
+	TargetEnableTLS bool `env:"TARGET_ENABLE_TLS" envDefault:"false"`
+	// TargetTLSInsecureSkipVerify skips server certificate verification in TLS connections
+	TargetTLSInsecureSkipVerify bool `env:"TARGET_TLS_INSECURE_SKIP_VERIFY" envDefault:"false"`
+	// TargetTLSCACertPath is the path to the target server certificate for TLS connections
+	TargetTLSCACertPath string `env:"TARGET_TLS_CA_CERT_PATH"`
+	// TargetTLSUserCertPath is the path to the user (client) certificate for mTLS connections
+	TargetTLSUserCertPath string `env:"TARGET_TLS_USER_CERT_PATH"`
+	// TargetTLSUserKeyPath is the path to the user (client) private key for mTLS connections
+	TargetTLSUserKeyPath string `env:"TARGET_TLS_USER_KEY_PATH"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
