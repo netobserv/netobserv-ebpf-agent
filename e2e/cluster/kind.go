@@ -356,8 +356,8 @@ func withTimeout(f env.Func, timeout time.Duration) env.Func {
 			if time.Since(start) > timeout {
 				return ctx, fmt.Errorf("timeout (%s) trying to execute function: %w", timeout, err)
 			}
-			tlog.WithError(err).Debug("function did not succeed. Retrying after 1s")
-			time.Sleep(time.Second)
+			tlog.WithError(err).Debug("function did not succeed. Retrying after 5s")
+			time.Sleep(5 * time.Second)
 		}
 	}
 }
