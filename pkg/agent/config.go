@@ -34,8 +34,8 @@ type Config struct {
 	// in the AgentID field of each flow. Accepted values are: any (default), ipv4, ipv6.
 	// If the AgentIP configuration property is set, this property has no effect.
 	AgentIPType string `env:"AGENT_IP_TYPE" envDefault:"any"`
-	// Export selects the flows' exporter protocol. Accepted values are: grpc (default) or kafka
-	// or ipfix+udp or ipfix+tcp.
+	// Export selects the flows' exporter protocol. Accepted values are: grpc (default), kafka,
+	// ipfix+udp, ipfix+tcp or direct-flp.
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
@@ -140,6 +140,9 @@ type Config struct {
 	KafkaSASLClientSecretPath string `env:"KAFKA_SASL_CLIENT_SECRET_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
+	// Flowlogs-pipeline configuration, used when export is "direct-flp". Cf https://github.com/netobserv/flowlogs-pipeline
+	// The "ingest" stage must be omitted from this configuration, since it is handled internally by the agent.
+	FLPConfig string `env:"FLP_CONFIG"`
 	// Enable RTT calculations for the flows, default is false (disabled), set to true to enable.
 	// This feature requires the flows agent to attach at both Ingress and Egress hookpoints.
 	// If both Ingress and Egress are not enabled then this feature will not be enabled even if set to true via env.

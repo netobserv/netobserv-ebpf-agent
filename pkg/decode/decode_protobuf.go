@@ -88,23 +88,23 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 				out["DstPort"] = flow.Transport.GetDstPort()
 			}
 		}
-	}
 
-	out["DnsErrno"] = flow.GetDnsErrno()
-	if flow.GetDnsId() != 0 {
-		out["DnsLatencyMs"] = flow.DnsLatency.AsDuration().Milliseconds()
-		out["DnsId"] = flow.GetDnsId()
-		out["DnsFlags"] = flow.GetDnsFlags()
-		out["DnsFlagsResponseCode"] = dnsRcodeToStr(flow.GetDnsFlags() & 0xF)
-		out["DnsErrno"] = uint32(0)
+		out["DnsErrno"] = flow.GetDnsErrno()
+		if flow.GetDnsId() != 0 {
+			out["DnsLatencyMs"] = flow.DnsLatency.AsDuration().Milliseconds()
+			out["DnsId"] = flow.GetDnsId()
+			out["DnsFlags"] = flow.GetDnsFlags()
+			out["DnsFlagsResponseCode"] = DNSRcodeToStr(flow.GetDnsFlags() & 0xF)
+			out["DnsErrno"] = uint32(0)
+		}
 	}
 
 	if flow.GetPktDropLatestDropCause() != 0 {
 		out["PktDropBytes"] = flow.PktDropBytes
 		out["PktDropPackets"] = flow.PktDropPackets
 		out["PktDropLatestFlags"] = flow.GetPktDropLatestFlags()
-		out["PktDropLatestState"] = tcpStateToStr(flow.GetPktDropLatestState())
-		out["PktDropLatestDropCause"] = pktDropCauseToStr(flow.GetPktDropLatestDropCause())
+		out["PktDropLatestState"] = TCPStateToStr(flow.GetPktDropLatestState())
+		out["PktDropLatestDropCause"] = PktDropCauseToStr(flow.GetPktDropLatestDropCause())
 	}
 
 	if flow.TimeFlowRtt.AsDuration().Nanoseconds() != 0 {
@@ -133,9 +133,9 @@ func macToStr(mac uint64) string {
 		uint8(mac))
 }
 
-// tcpStateToStr is based on kernel TCP state definition
+// TCPStateToStr is based on kernel TCP state definition
 // https://elixir.bootlin.com/linux/v6.3/source/include/net/tcp_states.h#L12
-func tcpStateToStr(state uint32) string {
+func TCPStateToStr(state uint32) string {
 	switch state {
 	case 1:
 		return "TCP_ESTABLISHED"
@@ -163,10 +163,10 @@ func tcpStateToStr(state uint32) string {
 	return "TCP_INVALID_STATE"
 }
 
-// pktDropCauseToStr is based on kernel drop cause definition
+// PktDropCauseToStr is based on kernel drop cause definition
 // https://elixir.bootlin.com/linux/latest/source/include/net/dropreason.h#L88
 // nolint:cyclop
-func pktDropCauseToStr(dropCause uint32) string {
+func PktDropCauseToStr(dropCause uint32) string {
 	switch dropCause {
 	case skbDropReasonSubSysCore + 2:
 		return "SKB_DROP_REASON_NOT_SPECIFIED"
@@ -345,9 +345,9 @@ func pktDropCauseToStr(dropCause uint32) string {
 	return "SKB_DROP_UNKNOWN_CAUSE"
 }
 
-// dnsRcodeToStr decode DNS flags response code bits and return a string
+// DNSRcodeToStr decode DNS flags response code bits and return a string
 // https://datatracker.ietf.org/doc/html/rfc2929#section-2.3
-func dnsRcodeToStr(rcode uint32) string {
+func DNSRcodeToStr(rcode uint32) string {
 	switch rcode {
 	case 0:
 		return "NoError"
