@@ -3,41 +3,36 @@
 package basic
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/basic"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
+
 	"github.com/sirupsen/logrus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/e2e-framework/klient/k8s"
-	"sigs.k8s.io/e2e-framework/klient/wait"
-	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
+	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/e2e-framework/klient"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 const (
 	clusterNamePrefix = "kafka-test-cluster"
-	testTimeout       = 20 * time.Minute
+	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
 
 var (
+	klog        = logrus.WithField("component", "Kafka")
 	testCluster *cluster.Kind
 )
 
 func TestMain(m *testing.M) {
 	logrus.StandardLogger().SetLevel(logrus.DebugLevel)
-	scheme.Scheme.AddKnownTypeWithName(schema.GroupVersionKind{
-		Group:   "kafka.strimzi.io",
-		Version: "v1beta2",
-		Kind:    "Kafka",
-	}, &Kafka{})
 
 	testCluster = cluster.NewKind(
 		clusterNamePrefix+time.Now().Format("20060102-150405"),
@@ -49,21 +44,9 @@ func TestMain(m *testing.M) {
 		cluster.Deploy(cluster.Deployment{
 			Order: cluster.ExternalServices, ManifestFile: path.Join("manifests", "11-kafka-cluster.yml"),
 			ReadyFunction: func(cfg *envconf.Config) error {
-				client, err := cfg.NewClient()
-				if err != nil {
-					return fmt.Errorf("can't create k8s client: %w", err)
-				}
 				// wait for kafka to be ready
-				kfk := Kafka{ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace, Name: "kafka-cluster",
-				}}
-				if err := wait.For(conditions.New(client.Resources(namespace)).
-					ResourceMatch(&kfk, func(object k8s.Object) bool {
-						return object.(*Kafka).Status.Ready()
-					}),
-					wait.WithTimeout(testTimeout),
-				); err != nil {
-					return fmt.Errorf("waiting for kafka cluster to be ready: %w", err)
+				if !checkResources(cfg.Client(), "kafka-cluster-zookeeper", "kafka-cluster-kafka", "strimzi-cluster-operator", "kafka-cluster-entity-operator") {
+					return errors.New("waiting for kafka cluster to be ready")
 				}
 				return nil
 			},
@@ -93,39 +76,43 @@ func TestBasicFlowCapture(t *testing.T) {
 	bt.DoTest(t)
 }
 
-const conditionReady = "Ready"
-
-var klog = logrus.WithField("component", "Kafka")
-
-// Kafka meta object for its usage within the API
-type Kafka struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Status            *KafkaStatus `json:"status,omitempty"`
-}
-
-type KafkaStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-func (k *Kafka) DeepCopyObject() runtime.Object {
-	return &(*k)
-}
-
-func (ks *KafkaStatus) Ready() bool {
-	if ks == nil {
+func checkResources(client klient.Client, list ...string) bool {
+	ready := map[string]bool{}
+	for _, name := range list {
+		ready[name] = false
+	}
+	var depl appsv1.DeploymentList
+	err := client.Resources(namespace).List(context.TODO(), &depl)
+	if err != nil {
+		klog.Errorf("Can't list deployments: %v", err)
 		return false
 	}
-	for _, cond := range ks.Conditions {
-		klog.WithFields(logrus.Fields{
-			"reason": cond.Reason,
-			"msg":    cond.Message,
-			"type":   cond.Type,
-			"status": cond.Status,
-		}).Debug("Waiting for kafka to be up and running")
-		if cond.Type == conditionReady {
-			return cond.Status == metav1.ConditionTrue
+	deplInfo := []string{}
+	for _, p := range depl.Items {
+		deplInfo = append(deplInfo, fmt.Sprintf("%s (%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.Replicas))
+		if _, toCheck := ready[p.Name]; toCheck {
+			ready[p.Name] = p.Status.ReadyReplicas == 1
 		}
 	}
-	return false
+	klog.Infof("Deployments: " + strings.Join(deplInfo, ", "))
+	var sfs appsv1.StatefulSetList
+	err = client.Resources(namespace).List(context.TODO(), &sfs)
+	if err != nil {
+		klog.Errorf("Can't list stateful sets: %v", err)
+		return false
+	}
+	sfsInfo := []string{}
+	for _, p := range sfs.Items {
+		sfsInfo = append(sfsInfo, fmt.Sprintf("%s (%d/%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.AvailableReplicas, p.Status.Replicas))
+		if _, toCheck := ready[p.Name]; toCheck {
+			ready[p.Name] = p.Status.ReadyReplicas == 1
+		}
+	}
+	klog.Infof("StatefulSets: " + strings.Join(sfsInfo, ", "))
+	for _, state := range ready {
+		if !state {
+			return false
+		}
+	}
+	return true
 }

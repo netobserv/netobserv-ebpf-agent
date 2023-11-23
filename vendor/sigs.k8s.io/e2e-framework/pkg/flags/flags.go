@@ -26,15 +26,19 @@ import (
 )
 
 const (
-	flagNamespaceName      = "namespace"
-	flagKubecofigName      = "kubeconfig"
-	flagFeatureName        = "feature"
-	flagAssessName         = "assess"
-	flagLabelsName         = "labels"
-	flagSkipLabelName      = "skip-labels"
-	flagSkipFeatureName    = "skip-features"
-	flagSkipAssessmentName = "skip-assessment"
-	flagParallelTestsName  = "parallel"
+	flagNamespaceName           = "namespace"
+	flagKubecofigName           = "kubeconfig"
+	flagFeatureName             = "feature"
+	flagAssessName              = "assess"
+	flagLabelsName              = "labels"
+	flagSkipLabelName           = "skip-labels"
+	flagSkipFeatureName         = "skip-features"
+	flagSkipAssessmentName      = "skip-assessment"
+	flagParallelTestsName       = "parallel"
+	flagDryRunName              = "dry-run"
+	flagFailFast                = "fail-fast"
+	flagDisableGracefulTeardown = "disable-graceful-teardown"
+	flagContext                 = "context"
 )
 
 // Supported flag definitions
@@ -75,19 +79,39 @@ var (
 		Name:  flagParallelTestsName,
 		Usage: "Run test features in parallel",
 	}
+	dryRunFlag = flag.Flag{
+		Name:  flagDryRunName,
+		Usage: "Run Test suite in dry-run mode. This will list the tests to be executed without actually running them",
+	}
+	failFastFlag = flag.Flag{
+		Name:  flagFailFast,
+		Usage: "Fail immediately and stop running untested code",
+	}
+	disableGracefulTeardownFlag = flag.Flag{
+		Name:  flagDisableGracefulTeardown,
+		Usage: "Ignore panic recovery while running tests. This will prevent test finish steps from getting executed on panic",
+	}
+	contextFlag = flag.Flag{
+		Name:  flagContext,
+		Usage: "The name of the kubeconfig context to use",
+	}
 )
 
 // EnvFlags surfaces all resolved flag values for the testing framework
 type EnvFlags struct {
-	feature         string
-	assess          string
-	labels          LabelsMap
-	kubeconfig      string
-	namespace       string
-	skiplabels      LabelsMap
-	skipFeatures    string
-	skipAssessments string
-	parallelTests   bool
+	feature                 string
+	assess                  string
+	labels                  LabelsMap
+	kubeconfig              string
+	namespace               string
+	skiplabels              LabelsMap
+	skipFeatures            string
+	skipAssessments         string
+	parallelTests           bool
+	dryRun                  bool
+	failFast                bool
+	disableGracefulTeardown bool
+	kubeContext             string
 }
 
 // Feature returns value for `-feature` flag
@@ -110,14 +134,21 @@ func (f *EnvFlags) Namespace() string {
 	return f.namespace
 }
 
+// SkipFeatures is used to get a RegExp pattern that can be used
+// to skip test features from getting executed
 func (f *EnvFlags) SkipFeatures() string {
 	return f.skipFeatures
 }
 
+// SkipAssessment is used to track the RegExp pattern that can be
+// used to skip certain assessments of the current feature being
+// executed
 func (f *EnvFlags) SkipAssessment() string {
 	return f.skipAssessments
 }
 
+// SkipLabels is used to define a series of labels that can be used
+// to skip test cases during execution
 func (f *EnvFlags) SkipLabels() LabelsMap {
 	return f.skiplabels
 }
@@ -127,8 +158,27 @@ func (f *EnvFlags) Kubeconfig() string {
 	return f.kubeconfig
 }
 
+// Parallel is used to indicate if the test features should be run in parallel
+// under a go-routine
 func (f *EnvFlags) Parallel() bool {
 	return f.parallelTests
+}
+
+func (f *EnvFlags) DryRun() bool {
+	return f.dryRun
+}
+
+// FailFast is used to indicate if the failure of an assessment should continue
+// assessing the rest of the features or skip it and continue to the next one.
+// This is set to false by default.
+func (f *EnvFlags) FailFast() bool {
+	return f.failFast
+}
+
+// DisableGracefulTeardown is used to indicate that the panic handlers should not be registered while
+// starting the test execution. This will prevent the test Finish steps from getting executed
+func (f *EnvFlags) DisableGracefulTeardown() bool {
+	return f.disableGracefulTeardown
 }
 
 // Parse parses defined CLI args os.Args[1:]
@@ -136,17 +186,26 @@ func Parse() (*EnvFlags, error) {
 	return ParseArgs(os.Args[1:])
 }
 
+// Context returns an optional kubeconfig context to use
+func (f *EnvFlags) KubeContext() string {
+	return f.kubeContext
+}
+
 // ParseArgs parses the specified args from global flag.CommandLine
 // and returns a set of environment flag values.
 func ParseArgs(args []string) (*EnvFlags, error) {
 	var (
-		feature        string
-		assess         string
-		namespace      string
-		kubeconfig     string
-		skipFeature    string
-		skipAssessment string
-		parallelTests  bool
+		feature                 string
+		assess                  string
+		namespace               string
+		kubeconfig              string
+		skipFeature             string
+		skipAssessment          string
+		parallelTests           bool
+		dryRun                  bool
+		failFast                bool
+		disableGracefulTeardown bool
+		kubeContext             string
 	)
 
 	labels := make(LabelsMap)
@@ -188,6 +247,22 @@ func ParseArgs(args []string) (*EnvFlags, error) {
 		flag.BoolVar(&parallelTests, parallelTestsFlag.Name, false, parallelTestsFlag.Usage)
 	}
 
+	if flag.Lookup(dryRunFlag.Name) == nil {
+		flag.BoolVar(&dryRun, dryRunFlag.Name, false, dryRunFlag.Usage)
+	}
+
+	if flag.Lookup(failFastFlag.Name) == nil {
+		flag.BoolVar(&failFast, failFastFlag.Name, false, failFastFlag.Usage)
+	}
+
+	if flag.Lookup(disableGracefulTeardownFlag.Name) == nil {
+		flag.BoolVar(&disableGracefulTeardown, disableGracefulTeardownFlag.Name, false, disableGracefulTeardownFlag.Usage)
+	}
+
+	if flag.Lookup(contextFlag.Name) == nil {
+		flag.StringVar(&kubeContext, contextFlag.Name, contextFlag.DefValue, contextFlag.Usage)
+	}
+
 	// Enable klog/v2 flag integration
 	klog.InitFlags(nil)
 
@@ -195,23 +270,37 @@ func ParseArgs(args []string) (*EnvFlags, error) {
 		return nil, fmt.Errorf("flags parsing: %w", err)
 	}
 
+	// Hook into the default test.list of the `go test` and integrate that with the `--dry-run` behavior. Treat them the same way
+	if !dryRun && flag.Lookup("test.list") != nil && flag.Lookup("test.list").Value.String() == "true" {
+		klog.V(2).Info("Enabling dry-run mode as the tests were invoked in list mode")
+		dryRun = true
+	}
+
+	if failFast && parallelTests {
+		panic(fmt.Errorf("--fail-fast and --parallel are mutually exclusive options"))
+	}
+
 	return &EnvFlags{
-		feature:         feature,
-		assess:          assess,
-		labels:          labels,
-		namespace:       namespace,
-		kubeconfig:      kubeconfig,
-		skiplabels:      skipLabels,
-		skipFeatures:    skipFeature,
-		skipAssessments: skipAssessment,
-		parallelTests:   parallelTests,
+		feature:                 feature,
+		assess:                  assess,
+		labels:                  labels,
+		namespace:               namespace,
+		kubeconfig:              kubeconfig,
+		skiplabels:              skipLabels,
+		skipFeatures:            skipFeature,
+		skipAssessments:         skipAssessment,
+		parallelTests:           parallelTests,
+		dryRun:                  dryRun,
+		failFast:                failFast,
+		disableGracefulTeardown: disableGracefulTeardown,
+		kubeContext:             kubeContext,
 	}, nil
 }
 
-type LabelsMap map[string]string
+type LabelsMap map[string][]string
 
 func (m LabelsMap) String() string {
-	i := map[string]string(m)
+	i := map[string][]string(m)
 	return fmt.Sprint(i)
 }
 
@@ -223,8 +312,19 @@ func (m LabelsMap) Set(val string) error {
 		if len(kv) != 2 {
 			return fmt.Errorf("label format error: %s", label)
 		}
-		m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+		m[k] = append(m[k], v)
 	}
 
 	return nil
+}
+
+func (m LabelsMap) Contains(key, val string) bool {
+	for _, v := range m[key] {
+		if val == v {
+			return true
+		}
+	}
+	return false
 }
