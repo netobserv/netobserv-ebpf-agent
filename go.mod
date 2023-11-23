@@ -10,7 +10,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
-	github.com/netobserv/flowlogs-pipeline v0.1.10
+	github.com/netobserv/flowlogs-pipeline v0.1.11-0.20231123152750-f3b03fa192aa
 	github.com/netobserv/gopipes v0.3.0
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/segmentio/kafka-go v0.4.44
@@ -115,5 +115,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-replace github.com/netobserv/flowlogs-pipeline => ../flowlogs-pipeline
