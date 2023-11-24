@@ -17,7 +17,7 @@ const (
 )
 const MacLen = 6
 
-// IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
+// IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const IPv6Type = 0x86DD
 
 type HumanBytes uint64
@@ -138,7 +138,7 @@ func (ia *IPAddr) MarshalJSON() ([]byte, error) {
 }
 
 func (m *MacAddr) String() string {
-	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5])
+	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5])
 }
 
 func (m *MacAddr) MarshalJSON() ([]byte, error) {

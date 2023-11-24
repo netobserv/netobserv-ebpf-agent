@@ -251,6 +251,8 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
 		return buildIPFIXExporter(cfg, "tcp")
+	case "direct-flp":
+		return buildDirectFLPExporter(cfg)
 	default:
 		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
 	}
@@ -266,6 +268,14 @@ func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 		return nil, err
 	}
 	return grpcExporter.ExportFlows, nil
+}
+
+func buildDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
+	if err != nil {
+		return nil, err
+	}
+	return flpExporter.ExportFlows, nil
 }
 
 func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
