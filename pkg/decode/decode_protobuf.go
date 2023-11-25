@@ -65,7 +65,12 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 	if flow.Packets != 0 {
 		out["Packets"] = flow.Packets
 	}
-
+	var interfaces []interface{}
+	var directions []interface{}
+	for _, entry := range flow.GetDupList() {
+		out["Interfaces"] = append([]interface{}{entry.Interface}, interfaces...)
+		out["FlowDirections"] = append([]interface{}{int(entry.Direction.Number())}, directions...)
+	}
 	ethType := ethernet.EtherType(flow.EthProtocol)
 	if ethType == ethernet.EtherTypeIPv4 || ethType == ethernet.EtherTypeIPv6 {
 		out["SrcAddr"] = ipToStr(flow.Network.GetSrcAddr())

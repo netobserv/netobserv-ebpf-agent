@@ -53,6 +53,7 @@ type Record struct {
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt time.Duration
+	DupList     []map[string]uint8
 }
 
 func NewRecord(
@@ -78,6 +79,7 @@ func NewRecord(
 	if metrics.DnsRecord.Latency != 0 {
 		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
+	record.DupList = make([]map[string]uint8, 0)
 	return &record
 }
 

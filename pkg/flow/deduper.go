@@ -29,6 +29,7 @@ type entry struct {
 	dnsRecord  *ebpf.BpfDnsRecordT
 	ifIndex    uint32
 	expiryTime time.Time
+	dupList    *[]map[string]uint8
 }
 
 // Dedupe receives flows and filters these belonging to duplicate interfaces. It will forward
@@ -36,7 +37,7 @@ type entry struct {
 // (no activity for it during the expiration time)
 // The justMark argument tells that the deduper should not drop the duplicate flows but
 // set their Duplicate field.
-func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, out chan<- []*Record) {
+func Dedupe(expireTime time.Duration, justMark, mergeDup bool) func(in <-chan []*Record, out chan<- []*Record) {
 	cache := &deduperCache{
 		expire:  expireTime,
 		entries: list.New(),
@@ -47,7 +48,7 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 			cache.removeExpired()
 			fwd := make([]*Record, 0, len(records))
 			for _, record := range records {
-				cache.checkDupe(record, justMark, &fwd)
+				cache.checkDupe(record, justMark, mergeDup, &fwd)
 			}
 			if len(fwd) > 0 {
 				out <- fwd
@@ -57,7 +58,8 @@ func Dedupe(expireTime time.Duration, justMark bool) func(in <-chan []*Record, o
 }
 
 // checkDupe check current record if its already available nad if not added to fwd records list
-func (c *deduperCache) checkDupe(r *Record, justMark bool, fwd *[]*Record) {
+func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Record) {
+	mergeEntry := make(map[string]uint8)
 	rk := r.Id
 	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IfIndex = 0
@@ -86,6 +88,10 @@ func (c *deduperCache) checkDupe(r *Record, justMark bool, fwd *[]*Record) {
 				r.Duplicate = true
 				*fwd = append(*fwd, r)
 			}
+			if mergeDup {
+				mergeEntry[r.Interface] = r.Id.Direction
+				*fEntry.dupList = append(*fEntry.dupList, mergeEntry)
+			}
 			return
 		}
 		*fwd = append(*fwd, r)
@@ -98,6 +104,11 @@ func (c *deduperCache) checkDupe(r *Record, justMark bool, fwd *[]*Record) {
 		dnsRecord:  &r.Metrics.DnsRecord,
 		ifIndex:    r.Id.IfIndex,
 		expiryTime: timeNow().Add(c.expire),
+	}
+	if mergeDup {
+		mergeEntry[r.Interface] = r.Id.Direction
+		r.DupList = append(r.DupList, mergeEntry)
+		e.dupList = &r.DupList
 	}
 	c.ifaces[rk] = c.entries.PushFront(&e)
 	*fwd = append(*fwd, r)
