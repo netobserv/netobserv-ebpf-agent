@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,7 +71,7 @@ func TestPBFlowToMap(t *testing.T) {
 	delete(out, "TimeReceived")
 	assert.Equal(t, config.GenericMap{
 		"FlowDirection":          1,
-		"FlowDirections":         []interface{}{1},
+		"FlowDirections":         []interface{}{pbflow.Direction(1)},
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",
