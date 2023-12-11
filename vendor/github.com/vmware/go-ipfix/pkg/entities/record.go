@@ -68,6 +68,24 @@ func NewDataRecord(id uint16, numElements, numExtraElements int, isDecoding bool
 	}
 }
 
+func NewDataRecordFromElements(id uint16, elements []InfoElementWithValue, isDecoding bool) *dataRecord {
+	length := 0
+	if !isDecoding {
+		for idx := range elements {
+			length += elements[idx].GetLength()
+		}
+	}
+	return &dataRecord{
+		baseRecord{
+			fieldCount:         uint16(len(elements)),
+			templateID:         id,
+			isDecoding:         isDecoding,
+			len:                length,
+			orderedElementList: elements,
+		},
+	}
+}
+
 type templateRecord struct {
 	baseRecord
 	// Minimum data record length required to be sent for this template.
@@ -89,6 +107,25 @@ func NewTemplateRecord(id uint16, numElements int, isDecoding bool) *templateRec
 		0,
 		0,
 	}
+}
+
+func NewTemplateRecordFromElements(id uint16, elements []InfoElementWithValue, isDecoding bool) *templateRecord {
+	r := &templateRecord{
+		baseRecord{
+			buffer:             make([]byte, 4),
+			fieldCount:         uint16(len(elements)),
+			templateID:         id,
+			isDecoding:         isDecoding,
+			orderedElementList: elements,
+		},
+		0,
+		len(elements),
+	}
+	for idx := range elements {
+		infoElement := elements[idx].GetInfoElement()
+		r.addInfoElement(infoElement)
+	}
+	return r
 }
 
 func (b *baseRecord) GetTemplateID() uint16 {
@@ -205,12 +242,7 @@ func (t *templateRecord) PrepareRecord() error {
 	return nil
 }
 
-func (t *templateRecord) AddInfoElement(element InfoElementWithValue) error {
-	infoElement := element.GetInfoElement()
-	// val could be used to specify smaller length than default? For now assert it to be nil
-	if !element.IsValueEmpty() {
-		return fmt.Errorf("template record cannot take element %v with non-empty value", infoElement.Name)
-	}
+func (t *templateRecord) addInfoElement(infoElement *InfoElement) {
 	initialLength := len(t.buffer)
 	// Add field specifier {elementID: uint16, elementLen: uint16}
 	addBytes := make([]byte, 4)
@@ -224,14 +256,23 @@ func (t *templateRecord) AddInfoElement(element InfoElementWithValue) error {
 		binary.BigEndian.PutUint32(addBytes, infoElement.EnterpriseId)
 		t.buffer = append(t.buffer, addBytes...)
 	}
-	t.orderedElementList[t.index] = element
-	t.index++
 	// Keep track of minimum data record length required for sanity check
 	if infoElement.Len == VariableLength {
 		t.minDataRecLength = t.minDataRecLength + 1
 	} else {
 		t.minDataRecLength = t.minDataRecLength + infoElement.Len
 	}
+}
+
+func (t *templateRecord) AddInfoElement(element InfoElementWithValue) error {
+	infoElement := element.GetInfoElement()
+	// val could be used to specify smaller length than default? For now assert it to be nil
+	if !element.IsValueEmpty() {
+		return fmt.Errorf("template record cannot take element %v with non-empty value", infoElement.Name)
+	}
+	t.addInfoElement(infoElement)
+	t.orderedElementList[t.index] = element
+	t.index++
 	return nil
 }
 

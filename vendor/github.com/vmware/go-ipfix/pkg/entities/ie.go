@@ -318,9 +318,25 @@ func DecodeAndCreateInfoElementWithValue(element *InfoElement, value []byte) (In
 	case DateTimeMicroseconds, DateTimeNanoseconds:
 		return nil, fmt.Errorf("API does not support micro and nano seconds types yet")
 	case MacAddress:
-		return NewMacAddressInfoElement(element, value), nil
+		if value == nil {
+			return NewMacAddressInfoElement(element, nil), nil
+		} else {
+			// make sure that we make a copy of the slice, instead of using it as is
+			// otherwise the underlying array for value may not be GC'd until the IE is GC'd
+			// the underlying array may be much larger than the value slice itself
+			addr := append([]byte{}, value...)
+			return NewMacAddressInfoElement(element, addr), nil
+		}
 	case Ipv4Address, Ipv6Address:
-		return NewIPAddressInfoElement(element, value), nil
+		if value == nil {
+			return NewIPAddressInfoElement(element, nil), nil
+		} else {
+			// make sure that we make a copy of the slice, instead of using it as is
+			// otherwise the underlying array for value may not be GC'd until the IE is GC'd
+			// the underlying array may be much larger than the value slice itself
+			addr := append([]byte{}, value...)
+			return NewIPAddressInfoElement(element, addr), nil
+		}
 	case String:
 		var val string
 		if value == nil {

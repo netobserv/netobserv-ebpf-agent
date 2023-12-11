@@ -280,7 +280,7 @@ func (cp *CollectingProcess) decodeTemplateSet(templateBuffer *bytes.Buffer, obs
 			return nil, err
 		}
 	}
-	err := templateSet.AddRecord(elementsWithValue, templateID)
+	err := templateSet.AddRecordV2(elementsWithValue, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (cp *CollectingProcess) decodeDataSet(dataBuffer *bytes.Buffer, obsDomainID
 	}
 
 	for dataBuffer.Len() > 0 {
-		elements := make([]entities.InfoElementWithValue, len(template))
+		elements := make([]entities.InfoElementWithValue, len(template), len(template)+cp.numExtraElements)
 		for i, element := range template {
 			var length int
 			if element.Len == entities.VariableLength { // string
@@ -312,7 +312,7 @@ func (cp *CollectingProcess) decodeDataSet(dataBuffer *bytes.Buffer, obsDomainID
 				return nil, err
 			}
 		}
-		err = dataSet.AddRecordWithExtraElements(elements, cp.numExtraElements, templateID)
+		err = dataSet.AddRecordV2(elements, templateID)
 		if err != nil {
 			return nil, err
 		}
