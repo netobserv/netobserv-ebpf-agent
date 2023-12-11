@@ -19,7 +19,7 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vishvananda/netns v0.0.4
 	github.com/vladimirvivien/gexe v0.2.0
-	github.com/vmware/go-ipfix v0.8.0
+	github.com/vmware/go-ipfix v0.8.1
 	golang.org/x/sys v0.15.0
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0

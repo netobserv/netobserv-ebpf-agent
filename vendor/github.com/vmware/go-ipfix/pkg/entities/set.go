@@ -49,6 +49,10 @@ type Set interface {
 	UpdateLenInHeader()
 	AddRecord(elements []InfoElementWithValue, templateID uint16) error
 	AddRecordWithExtraElements(elements []InfoElementWithValue, numExtraElements int, templateID uint16) error
+	// Unlike AddRecord, AddRecordV2 uses the elements slice directly, instead of creating a new
+	// one. This can result in fewer memory allocations. The caller should not modify the
+	// contents of the slice after calling AddRecordV2.
+	AddRecordV2(elements []InfoElementWithValue, templateID uint16) error
 	GetRecords() []Record
 	GetNumberOfRecords() uint32
 }
@@ -122,27 +126,7 @@ func (s *set) UpdateLenInHeader() {
 }
 
 func (s *set) AddRecord(elements []InfoElementWithValue, templateID uint16) error {
-	var record Record
-	if s.setType == Data {
-		record = NewDataRecord(templateID, len(elements), 0, s.isDecoding)
-	} else if s.setType == Template {
-		record = NewTemplateRecord(templateID, len(elements), s.isDecoding)
-		err := record.PrepareRecord()
-		if err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("set type is not supported")
-	}
-	for _, element := range elements {
-		err := record.AddInfoElement(element)
-		if err != nil {
-			return err
-		}
-	}
-	s.records = append(s.records, record)
-	s.length += record.GetRecordLength()
-	return nil
+	return s.AddRecordWithExtraElements(elements, 0, templateID)
 }
 
 func (s *set) AddRecordWithExtraElements(elements []InfoElementWithValue, numExtraElements int, templateID uint16) error {
@@ -163,6 +147,24 @@ func (s *set) AddRecordWithExtraElements(elements []InfoElementWithValue, numExt
 		if err != nil {
 			return err
 		}
+	}
+	s.records = append(s.records, record)
+	s.length += record.GetRecordLength()
+	return nil
+}
+
+func (s *set) AddRecordV2(elements []InfoElementWithValue, templateID uint16) error {
+	var record Record
+	if s.setType == Data {
+		record = NewDataRecordFromElements(templateID, elements, s.isDecoding)
+	} else if s.setType == Template {
+		record = NewTemplateRecordFromElements(templateID, elements, s.isDecoding)
+		err := record.PrepareRecord()
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("set type is not supported")
 	}
 	s.records = append(s.records, record)
 	s.length += record.GetRecordLength()
