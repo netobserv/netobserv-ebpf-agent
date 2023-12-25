@@ -429,7 +429,7 @@ github.com/vladimirvivien/gexe/fs
 github.com/vladimirvivien/gexe/http
 github.com/vladimirvivien/gexe/prog
 github.com/vladimirvivien/gexe/vars
-# github.com/vmware/go-ipfix v0.8.1
+# github.com/vmware/go-ipfix v0.8.2
 ## explicit; go 1.21
 github.com/vmware/go-ipfix/pkg/collector
 github.com/vmware/go-ipfix/pkg/entities
