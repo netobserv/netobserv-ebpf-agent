@@ -53,7 +53,7 @@ typedef __u64 u64;
 #define IPPROTO_ICMPV6 58
 #define DSCP_SHIFT 2
 #define DSCP_MASK 0x3F
-
+#define MIN_RTT 10000u //10us
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum {
     INGRESS         = 0,
@@ -158,7 +158,6 @@ typedef struct pkt_info_t {
     u64 current_ts; // ts recorded when pkt came.
     u16 flags;      // TCP specific
     void *l4_hdr;   // Stores the actual l4 header
-    u64 rtt;        // rtt calculated from the flow if possible. else zero
     u8 dscp;        // IPv4/6 DSCP value
     u16 dns_id;
     u16 dns_flags;

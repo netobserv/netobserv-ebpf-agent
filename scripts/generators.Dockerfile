@@ -1,10 +1,14 @@
-FROM fedora:35
+FROM fedora:37
 
 ARG GOVERSION="1.21.3"
 ARG PROTOCVERSION="3.19.4"
+ARG TARGETARCH
+ARG EXTENSION
+
+RUN echo "using TARGETARCH: $TARGETARCH EXTENSION: $EXTENSION"
 
 # Installs dependencies that are required to compile eBPF programs
-RUN dnf install -y kernel-devel make llvm clang glibc-devel.i686 unzip
+RUN dnf install -y git kernel-devel make llvm clang unzip
 RUN dnf clean all
 
 VOLUME ["/src"]
@@ -12,19 +16,18 @@ VOLUME ["/src"]
 WORKDIR /
 
 # Installs a fairly modern distribution of Go
-RUN curl -qL https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz -o go.tar.gz
+RUN curl -qL https://go.dev/dl/go$GOVERSION.linux-$TARGETARCH.tar.gz -o go.tar.gz
 RUN tar -xzf go.tar.gz
 RUN rm go.tar.gz
 
 ENV GOROOT /go
 RUN mkdir -p /gopath
 ENV GOPATH /gopath
-
 RUN mkdir -p /protoc
 WORKDIR /protoc
 
 # Installs Protoc compiler
-RUN curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-x86_64.zip -o protoc.zip
+RUN curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-${EXTENSION}.zip -o protoc.zip
 RUN unzip protoc.zip
 RUN rm protoc.zip
 
@@ -37,6 +40,7 @@ COPY .mk/ .mk/
 RUN make prereqs
 
 WORKDIR /src
+RUN git config --global --add safe.directory '*'
 
 ENTRYPOINT ["make", "generate"]
 

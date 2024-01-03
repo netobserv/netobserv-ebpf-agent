@@ -2,7 +2,6 @@
 #define __PCA_H__
 
 #include "utils.h"
-#include <string.h>
 
 static int attach_packet_payload(void *data, void *data_end, struct __sk_buff *skb){
         payload_meta meta;
