@@ -27,6 +27,7 @@ type deduperCache struct {
 type entry struct {
 	key        *ebpf.BpfFlowId
 	dnsRecord  *ebpf.BpfDnsRecordT
+	flowRTT    *uint64
 	ifIndex    uint32
 	expiryTime time.Time
 	dupList    *[]map[string]uint8
@@ -81,7 +82,10 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 			fEntry.dnsRecord.Flags = r.Metrics.DnsRecord.Flags
 			fEntry.dnsRecord.Id = r.Metrics.DnsRecord.Id
 			fEntry.dnsRecord.Latency = r.Metrics.DnsRecord.Latency
-			// fall through to do interface check
+		}
+		// If the new flow has flowRTT then enrich the flow in the case with the same RTT and mark it duplicate
+		if r.Metrics.FlowRtt != 0 && *fEntry.flowRTT == 0 {
+			*fEntry.flowRTT = r.Metrics.FlowRtt
 		}
 		if fEntry.ifIndex != r.Id.IfIndex {
 			if justMark {
@@ -102,6 +106,7 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 	e := entry{
 		key:        &rk,
 		dnsRecord:  &r.Metrics.DnsRecord,
+		flowRTT:    &r.Metrics.FlowRtt,
 		ifIndex:    r.Id.IfIndex,
 		expiryTime: timeNow().Add(c.expire),
 	}

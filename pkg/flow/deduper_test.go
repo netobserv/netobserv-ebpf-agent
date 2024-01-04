@@ -50,6 +50,19 @@ var (
 		Packets: 2, Bytes: 456, Flags: 1,
 		DnsRecord: ebpf.BpfDnsRecordT{Id: 1, Flags: 100, Latency: 1000},
 	}}, Interface: "123456789", DNSLatency: time.Millisecond}
+	// another flow from 2 different interfaces and directions with RTT set on the latest
+	fourIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 1, SrcPort: 533, DstPort: 456,
+		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+	}, Metrics: ebpf.BpfFlowMetrics{
+		Packets: 2, Bytes: 456, Flags: 1,
+	}}, Interface: "eth0"}
+	fourIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 0, SrcPort: 533, DstPort: 456,
+		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+	}, Metrics: ebpf.BpfFlowMetrics{
+		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
+	}}, Interface: "123456789", TimeFlowRtt: 100}
 )
 
 func TestDedupe(t *testing.T) {
@@ -67,9 +80,11 @@ func TestDedupe(t *testing.T) {
 		oneIf2,   // record 1 at interface 1: should be accepted (same record key, same interface)
 		threeIf1, // record 1 has no DNS so it get enriched with DNS record from the following record
 		threeIf2, // record 2 is duplicate of record1 and have DNS info , should not be accepted
+		fourIf1,  // record 1 has no RTT so it get enriched with RTT from the following record
+		fourIf2,  // record 2 is duplicate of record1 and have RTT , should not be accepted
 	}
 	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, threeIf1}, deduped)
+	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, threeIf1, fourIf1}, deduped)
 
 	// should still accept records with same key, same interface,
 	// and discard these with same key, different interface
@@ -81,6 +96,9 @@ func TestDedupe(t *testing.T) {
 	assert.Equal(t, threeIf1.Metrics.DnsRecord.Id, threeIf2.Metrics.DnsRecord.Id)
 	assert.Equal(t, threeIf1.Metrics.DnsRecord.Flags, threeIf2.Metrics.DnsRecord.Flags)
 	assert.Equal(t, threeIf1.Metrics.DnsRecord.Latency, threeIf2.Metrics.DnsRecord.Latency)
+
+	// make sure flow with no RTT get enriched from the dup flow with RTT
+	assert.Equal(t, fourIf1.Metrics.FlowRtt, fourIf2.Metrics.FlowRtt)
 }
 
 func TestDedupe_EvictFlows(t *testing.T) {
