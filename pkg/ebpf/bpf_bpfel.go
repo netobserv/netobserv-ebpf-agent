@@ -58,6 +58,7 @@ type BpfFlowMetricsT struct {
 	PktDrops        BpfPktDropsT
 	DnsRecord       BpfDnsRecordT
 	FlowRtt         uint64
+	Verdict         uint8
 }
 
 type BpfFlowRecordT struct {
@@ -81,6 +82,14 @@ type BpfPktDropsT struct {
 	LatestFlags     uint16
 	LatestState     uint8
 	LatestDropCause uint32
+}
+
+type BpfSockKey struct {
+	RemoteIp   [16]uint8
+	LocalIp    [16]uint8
+	RemotePort uint32
+	LocalPort  uint32
+	Family     uint32
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -124,6 +133,8 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
+	BpfKtlsRedir     *ebpf.ProgramSpec `ebpf:"bpf_ktls_redir"`
+	BpfSockops       *ebpf.ProgramSpec `ebpf:"bpf_sockops"`
 	EgressFlowParse  *ebpf.ProgramSpec `ebpf:"egress_flow_parse"`
 	EgressPcaParse   *ebpf.ProgramSpec `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
@@ -140,6 +151,7 @@ type BpfMapSpecs struct {
 	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.MapSpec `ebpf:"flow_sequences"`
 	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
+	SockHash        *ebpf.MapSpec `ebpf:"sock_hash"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -166,6 +178,7 @@ type BpfMaps struct {
 	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
 	FlowSequences   *ebpf.Map `ebpf:"flow_sequences"`
 	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
+	SockHash        *ebpf.Map `ebpf:"sock_hash"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -175,6 +188,7 @@ func (m *BpfMaps) Close() error {
 		m.DnsFlows,
 		m.FlowSequences,
 		m.PacketRecord,
+		m.SockHash,
 	)
 }
 
@@ -182,6 +196,8 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
+	BpfKtlsRedir     *ebpf.Program `ebpf:"bpf_ktls_redir"`
+	BpfSockops       *ebpf.Program `ebpf:"bpf_sockops"`
 	EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 	EgressPcaParse   *ebpf.Program `ebpf:"egress_pca_parse"`
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
@@ -191,6 +207,8 @@ type BpfPrograms struct {
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
+		p.BpfKtlsRedir,
+		p.BpfSockops,
 		p.EgressFlowParse,
 		p.EgressPcaParse,
 		p.IngressFlowParse,
