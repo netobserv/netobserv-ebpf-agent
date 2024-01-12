@@ -4,7 +4,7 @@ ARG BUILDPLATFORM=linux/amd64
 ARG TARGETARCH=amd64
 
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.20 as builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.21 as builder
 
 ARG TARGETARCH
 ARG TARGETPLATFORM
@@ -27,7 +27,7 @@ COPY .mk/ .mk/
 RUN GOARCH=$TARGETARCH make compile
 
 # Create final image from minimal + built binary
-FROM --platform=$TARGETPLATFORM registry.access.redhat.com/ubi9/ubi-minimal:9.2
+FROM --platform=$TARGETPLATFORM registry.access.redhat.com/ubi9/ubi-minimal:9.3
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
