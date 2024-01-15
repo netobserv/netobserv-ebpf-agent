@@ -26,13 +26,12 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64,ppc64le,s390x -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
 	// ebpf map names as defined in bpf/maps_definition.h
 	aggregatedFlowsMap = "aggregated_flows"
-	flowSequencesMap   = "flow_sequences"
 	dnsLatencyMap      = "dns_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling          = "sampling"
@@ -62,6 +61,7 @@ type FlowFetcher struct {
 	enableIngress      bool
 	enableEgress       bool
 	pktDropsTracePoint link.Link
+	rttFentryLink      link.Link
 }
 
 type FlowFetcherConfig struct {
@@ -88,7 +88,6 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	// Resize maps according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-	spec.Maps[flowSequencesMap].MaxEntries = uint32(cfg.CacheMaxSize)
 
 	traceMsgs := 0
 	if cfg.Debug {
@@ -97,19 +96,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	enableRtt := 0
 	if cfg.EnableRTT {
-		if !(cfg.EnableEgress && cfg.EnableIngress) {
-			log.Warnf("ENABLE_RTT is set to true. But both Ingress AND Egress are not enabled. Disabling ENABLE_RTT")
-			enableRtt = 0
-		} else {
-			enableRtt = 1
-		}
-	}
-
-	if enableRtt == 0 {
-		// Cannot set the size of map to be 0 so set it to 1.
-		spec.Maps[flowSequencesMap].MaxEntries = uint32(1)
-	} else {
-		log.Debugf("RTT calculations are enabled")
+		enableRtt = 1
 	}
 
 	enableDNSTracking := 0
@@ -154,6 +141,16 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
+	var rttFentryLink link.Link
+	if cfg.EnableRTT {
+		rttFentryLink, err = link.AttachTracing(link.TracingOptions{
+			Program: objects.BpfPrograms.TcpRcvFentry,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveFentry: %w", err)
+		}
+	}
+
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -169,6 +166,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		enableIngress:      cfg.EnableIngress,
 		enableEgress:       cfg.EnableEgress,
 		pktDropsTracePoint: pktDropsLink,
+		rttFentryLink:      rttFentryLink,
 	}, nil
 }
 
@@ -297,6 +295,11 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if m.rttFentryLink != nil {
+		if err := m.rttFentryLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -319,9 +322,6 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.DnsFlows.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.FlowSequences.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if len(errs) == 0 {
@@ -425,7 +425,6 @@ func (m *FlowFetcher) LookupAndDeleteMap() map[BpfFlowId][]BpfFlowMetrics {
 // DeleteMapsStaleEntries Look for any stale entries in the features maps and delete them
 func (m *FlowFetcher) DeleteMapsStaleEntries(timeOut time.Duration) {
 	m.lookupAndDeleteDNSMap(timeOut)
-	m.lookupAndDeleteRTTMap(timeOut)
 }
 
 // lookupAndDeleteDNSMap iterate over DNS queries map and delete any stale DNS requests
@@ -449,28 +448,6 @@ func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
 	}
 }
 
-// lookupAndDeleteRTTMap iterate over flows sequence map and delete any
-// stale flows that we never get responses for.
-func (m *FlowFetcher) lookupAndDeleteRTTMap(timeOut time.Duration) {
-	monotonicTimeNow := monotime.Now()
-	rttMap := m.objects.FlowSequences
-	var rttKey BpfFlowSeqId
-	var rttVal uint64
-
-	if rttMap != nil {
-		iterator := rttMap.Iterate()
-		for iterator.Next(&rttKey, &rttVal) {
-			if time.Duration(uint64(monotonicTimeNow)-rttVal) >= timeOut {
-				if err := rttMap.Delete(rttKey); err != nil {
-					log.WithError(err).WithField("rttKey", rttKey).
-						Warnf("couldn't delete RTT record entry")
-				}
-			}
-		}
-	}
-
-}
-
 // kernelSpecificLoadAndAssign based on kernel version it will load only the supported ebPF hooks
 func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (BpfObjects, error) {
 	objects := BpfObjects{}
@@ -482,6 +459,7 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		type NewBpfPrograms struct {
 			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+			TCPRcvFentry     *ebpf.Program `ebpf:"tcp_rcv_fentry"`
 		}
 		type NewBpfObjects struct {
 			NewBpfPrograms
@@ -504,9 +482,9 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		// Note for any future maps or programs make sure to copy them manually here
 		objects.DirectFlows = newObjects.DirectFlows
 		objects.AggregatedFlows = newObjects.AggregatedFlows
-		objects.FlowSequences = newObjects.FlowSequences
 		objects.EgressFlowParse = newObjects.EgressFlowParse
 		objects.IngressFlowParse = newObjects.IngressFlowParse
+		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
@@ -562,12 +540,9 @@ func NewPacketFetcher(
 	objects.IngressFlowParse = nil
 	objects.DirectFlows = nil
 	objects.AggregatedFlows = nil
-	objects.FlowSequences = nil
 	delete(spec.Programs, aggregatedFlowsMap)
-	delete(spec.Programs, flowSequencesMap)
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constTraceMessages)
-	delete(spec.Programs, constEnableRtt)
 	delete(spec.Programs, constEnableDNSTracking)
 
 	pcaPort := 0

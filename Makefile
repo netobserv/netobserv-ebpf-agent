@@ -123,7 +123,7 @@ generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE)
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64"
 	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
