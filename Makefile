@@ -119,6 +119,7 @@ generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto
 	go generate ./pkg/...
 	@echo "### Generating gRPC and Protocol Buffers code"
 	protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
+	@mv ./pkg/ebpf/bpf_bpfeb_s390.go ./pkg/ebpf/bpf_bpfeb_s390x.go
 
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
