@@ -2,11 +2,13 @@ package flow
 
 import (
 	"container/list"
+	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 var dlog = logrus.WithField("component", "flow/Deduper")
@@ -93,8 +95,17 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 				*fwd = append(*fwd, r)
 			}
 			if mergeDup {
-				mergeEntry[r.Interface] = r.Id.Direction
-				*fEntry.dupList = append(*fEntry.dupList, mergeEntry)
+				ifName := utils.GetInterfaceName(r.Id.IfIndex)
+				mergeEntry[ifName] = r.Id.Direction
+				if dupEntryNew(*fEntry.dupList, mergeEntry) {
+					*fEntry.dupList = append(*fEntry.dupList, mergeEntry)
+					dlog.Debugf("merge list entries dump:")
+					for _, entry := range *fEntry.dupList {
+						for k, v := range entry {
+							dlog.Debugf("interface %s dir %d", k, v)
+						}
+					}
+				}
 			}
 			return
 		}
@@ -111,12 +122,22 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 		expiryTime: timeNow().Add(c.expire),
 	}
 	if mergeDup {
-		mergeEntry[r.Interface] = r.Id.Direction
+		ifName := utils.GetInterfaceName(r.Id.IfIndex)
+		mergeEntry[ifName] = r.Id.Direction
 		r.DupList = append(r.DupList, mergeEntry)
 		e.dupList = &r.DupList
 	}
 	c.ifaces[rk] = c.entries.PushFront(&e)
 	*fwd = append(*fwd, r)
+}
+
+func dupEntryNew(dupList []map[string]uint8, mergeEntry map[string]uint8) bool {
+	for _, entry := range dupList {
+		if reflect.DeepEqual(entry, mergeEntry) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *deduperCache) removeExpired() {
@@ -126,7 +147,9 @@ func (c *deduperCache) removeExpired() {
 	for ele != nil && now.After(ele.Value.(*entry).expiryTime) {
 		evicted++
 		c.entries.Remove(ele)
-		delete(c.ifaces, *ele.Value.(*entry).key)
+		fEntry := ele.Value.(*entry)
+		fEntry.dupList = nil
+		delete(c.ifaces, *fEntry.key)
 		ele = c.entries.Back()
 	}
 	if evicted > 0 {

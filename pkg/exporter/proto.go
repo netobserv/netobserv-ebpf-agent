@@ -85,12 +85,16 @@ func v4FlowToPB(fr *flow.Record) *pbflow.Record {
 	if fr.Metrics.DnsRecord.Latency != 0 {
 		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 	}
-	pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
-	for _, m := range fr.DupList {
-		pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
-			Interface: fr.Interface,
-			Direction: pbflow.Direction(m[fr.Interface]),
-		})
+	if len(fr.DupList) != 0 {
+		pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
+		for _, m := range fr.DupList {
+			for key, value := range m {
+				pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
+					Interface: key,
+					Direction: pbflow.Direction(value),
+				})
+			}
+		}
 	}
 	return &pbflowRecord
 }
@@ -142,12 +146,16 @@ func v6FlowToPB(fr *flow.Record) *pbflow.Record {
 	if fr.Metrics.DnsRecord.Latency != 0 {
 		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 	}
-	pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
-	for _, m := range fr.DupList {
-		pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
-			Interface: fr.Interface,
-			Direction: pbflow.Direction(m[fr.Interface]),
-		})
+	if len(fr.DupList) != 0 {
+		pbflowRecord.DupList = make([]*pbflow.DupMapEntry, 0)
+		for _, m := range fr.DupList {
+			for key, value := range m {
+				pbflowRecord.DupList = append(pbflowRecord.DupList, &pbflow.DupMapEntry{
+					Interface: key,
+					Direction: pbflow.Direction(value),
+				})
+			}
+		}
 	}
 	return &pbflowRecord
 }

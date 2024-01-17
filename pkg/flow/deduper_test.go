@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 var (
@@ -151,6 +152,19 @@ func TestDedupeMerge(t *testing.T) {
 	deduped := receiveTimeout(t, output)
 	assert.Equal(t, []*Record{oneIf2}, deduped)
 	assert.Equal(t, 2, len(oneIf2.DupList))
+
+	expectedMap := []map[string]uint8{
+		{
+			utils.GetInterfaceName(oneIf2.Id.IfIndex): oneIf2.Id.Direction,
+		},
+		{
+			utils.GetInterfaceName(oneIf1.Id.IfIndex): oneIf1.Id.Direction,
+		},
+	}
+
+	for k, v := range oneIf2.DupList {
+		assert.Equal(t, expectedMap[k], v)
+	}
 }
 
 type timerMock struct {
