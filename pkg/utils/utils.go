@@ -95,7 +95,7 @@ func utsnameStr[T int8 | uint8](in []T) string {
 func GetInterfaceName(ifIndex uint32) string {
 	iface, err := net.InterfaceByIndex(int(ifIndex))
 	if err != nil {
-		return ""
+		return "unknown"
 	}
 	return iface.Name
 }
