@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: netobserv-ebpf-agent
+  namespace: netobserv
   labels:
     k8s-app: netobserv-ebpf-agent
 spec:
@@ -15,7 +16,7 @@ spec:
       labels:
         k8s-app: netobserv-ebpf-agent
     spec:
-      serviceAccountName: netobserv-account
+      serviceAccountName: netobserv
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
@@ -42,6 +43,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: flp
+  namespace: netobserv
   labels:
     k8s-app: flp
 spec:
@@ -53,7 +55,7 @@ spec:
       labels:
         k8s-app: flp
     spec:
-      serviceAccountName: netobserv-account
+      serviceAccountName: netobserv
       containers:
         - name: flowlogs-pipeline
           image: quay.io/netobserv/flowlogs-pipeline:main
@@ -79,10 +81,8 @@ data:
     log-level: debug
     pipeline:
       - name: ingest
-      - name: decode
-        follows: ingest
       - name: enrich
-        follows: decode
+        follows: ingest
       - name: loki
         follows: enrich
     parameters:
@@ -91,9 +91,6 @@ data:
           type: grpc
           grpc:
             port: 9999
-      - name: decode
-        decode:
-          type: protobuf
       - name: enrich
         transform:
           type: network
@@ -109,7 +106,6 @@ data:
         write:
           type: loki
           loki:
-            type: loki
             staticLabels:
               app: netobserv-flowcollector
             labels:
@@ -118,19 +114,15 @@ data:
               - "DstK8S_Namespace"
               - "DstK8S_OwnerName"
               - "FlowDirection"
-            url: http://loki:3100
+            url: http://loki.netobserv.svc:3100
             timestampLabel: TimeFlowEndMs
             timestampScale: 1ms
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: netobserv-account
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: netobserv
+  namespace: netobserv
 rules:
   - apiGroups:
       - apps
@@ -159,11 +151,12 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: netobserv
+  namespace: netobserv
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: netobserv
 subjects:
   - kind: ServiceAccount
-    name: netobserv-account
-    namespace: default
+    name: netobserv
+    namespace: netobserv

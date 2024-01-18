@@ -1,0 +1,41 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: netobserv
+  app: netobserv
+  pod-security.kubernetes.io/enforce: privileged
+  pod-security.kubernetes.io/audit: privileged
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: netobserv
+  namespace: netobserv
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: netobserv
+  namespace: netobserv
+rules:
+  - apiGroups:
+     - security.openshift.io
+    resourceNames:
+     - privileged
+    resources:
+     - securitycontextconstraints
+    verbs:
+     - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: netobserv
+  namespace: netobserv
+subjects:
+  - kind: ServiceAccount
+    name: netobserv
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: netobserv

@@ -10,3 +10,23 @@ but the files contained here are useful for documentation and manual testing.
   of deploying a fully-privileged container.
 * `flp-service.yml`, shows how to deploy/configure the Agent when Flowlogs Pipeline is deployed
   as a service, explicitly setting the host configuration as the service name.
+
+For manual testing, create the netobserv namespace and first deploy loki.
+
+'''
+kubectl create namespace netobserv
+curl -S -L https://raw.githubusercontent.com/netobserv/documents/main/examples/zero-click-loki/1-storage.yaml | kubectl create -n netobserv -f - 
+curl -S -L https://raw.githubusercontent.com/netobserv/documents/main/examples/zero-click-loki/2-loki.yaml       | kubectl create -n netobserv -f - 
+'''
+
+Then apply the permissions needed to run ebpf.
+
+'''
+kubectl apply -f ./perms.yml
+'''
+
+Then bring up ebpf and flp.
+
+'''
+kubectl apply -f ./flp-service.yml
+'''
