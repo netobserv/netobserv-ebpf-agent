@@ -2,9 +2,10 @@ kind: Namespace
 apiVersion: v1
 metadata:
   name: netobserv
-  app: netobserv
-  pod-security.kubernetes.io/enforce: privileged
-  pod-security.kubernetes.io/audit: privileged
+  labels:
+    app: netobserv
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
 ---
 apiVersion: v1
 kind: ServiceAccount
