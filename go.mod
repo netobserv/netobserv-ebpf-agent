@@ -26,7 +26,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.29.1
 	k8s.io/apimachinery v0.29.1
-	k8s.io/client-go v0.29.0
+	k8s.io/client-go v0.29.1
 	sigs.k8s.io/e2e-framework v0.3.0
 )
 
