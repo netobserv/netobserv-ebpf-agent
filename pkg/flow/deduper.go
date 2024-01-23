@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 var dlog = logrus.WithField("component", "flow/Deduper")
@@ -40,7 +39,7 @@ type entry struct {
 // (no activity for it during the expiration time)
 // The justMark argument tells that the deduper should not drop the duplicate flows but
 // set their Duplicate field.
-func Dedupe(expireTime time.Duration, justMark, mergeDup bool) func(in <-chan []*Record, out chan<- []*Record) {
+func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer InterfaceNamer) func(in <-chan []*Record, out chan<- []*Record) {
 	cache := &deduperCache{
 		expire:  expireTime,
 		entries: list.New(),
@@ -51,7 +50,7 @@ func Dedupe(expireTime time.Duration, justMark, mergeDup bool) func(in <-chan []
 			cache.removeExpired()
 			fwd := make([]*Record, 0, len(records))
 			for _, record := range records {
-				cache.checkDupe(record, justMark, mergeDup, &fwd)
+				cache.checkDupe(record, justMark, mergeDup, &fwd, ifaceNamer)
 			}
 			if len(fwd) > 0 {
 				out <- fwd
@@ -61,7 +60,7 @@ func Dedupe(expireTime time.Duration, justMark, mergeDup bool) func(in <-chan []
 }
 
 // checkDupe check current record if its already available nad if not added to fwd records list
-func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Record) {
+func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Record, ifaceNamer InterfaceNamer) {
 	mergeEntry := make(map[string]uint8)
 	rk := r.Id
 	// zeroes fields from key that should be ignored from the flow comparison
@@ -95,7 +94,7 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 				*fwd = append(*fwd, r)
 			}
 			if mergeDup {
-				ifName := utils.GetInterfaceName(r.Id.IfIndex)
+				ifName := ifaceNamer(int(r.Id.IfIndex))
 				mergeEntry[ifName] = r.Id.Direction
 				if dupEntryNew(*fEntry.dupList, mergeEntry) {
 					*fEntry.dupList = append(*fEntry.dupList, mergeEntry)
@@ -122,7 +121,7 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 		expiryTime: timeNow().Add(c.expire),
 	}
 	if mergeDup {
-		ifName := utils.GetInterfaceName(r.Id.IfIndex)
+		ifName := ifaceNamer(int(r.Id.IfIndex))
 		mergeEntry[ifName] = r.Id.Direction
 		r.DupList = append(r.DupList, mergeEntry)
 		e.dupList = &r.DupList

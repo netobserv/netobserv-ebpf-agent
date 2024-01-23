@@ -1,13 +1,13 @@
 package flow
 
 import (
+	"net"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 var (
@@ -70,7 +70,7 @@ func TestDedupe(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(time.Minute, false, false)(input, output)
+	go Dedupe(time.Minute, false, false, interfaceNamer)(input, output)
 
 	input <- []*Record{
 		oneIf2,   // record 1 at interface 2: should be accepted
@@ -108,7 +108,7 @@ func TestDedupe_EvictFlows(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(15*time.Second, false, false)(input, output)
+	go Dedupe(15*time.Second, false, false, interfaceNamer)(input, output)
 
 	// Should only accept records 1 and 2, at interface 1
 	input <- []*Record{oneIf1, twoIf1, oneIf2}
@@ -143,7 +143,7 @@ func TestDedupeMerge(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(time.Minute, false, true)(input, output)
+	go Dedupe(time.Minute, false, true, interfaceNamer)(input, output)
 
 	input <- []*Record{
 		oneIf2, // record 1 at interface 2: should be accepted
@@ -155,10 +155,10 @@ func TestDedupeMerge(t *testing.T) {
 
 	expectedMap := []map[string]uint8{
 		{
-			utils.GetInterfaceName(oneIf2.Id.IfIndex): oneIf2.Id.Direction,
+			interfaceNamer(int(oneIf2.Id.IfIndex)): oneIf2.Id.Direction,
 		},
 		{
-			utils.GetInterfaceName(oneIf1.Id.IfIndex): oneIf1.Id.Direction,
+			interfaceNamer(int(oneIf1.Id.IfIndex)): oneIf1.Id.Direction,
 		},
 	}
 
@@ -173,4 +173,12 @@ type timerMock struct {
 
 func (tm *timerMock) Now() time.Time {
 	return tm.now
+}
+
+func interfaceNamer(ifIndex int) string {
+	iface, err := net.InterfaceByIndex(ifIndex)
+	if err != nil {
+		return "unknown"
+	}
+	return iface.Name
 }
