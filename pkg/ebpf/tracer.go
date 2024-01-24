@@ -53,18 +53,19 @@ var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects                  *BpfObjects
-	qdiscs                   map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters            map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters           map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader            *ringbuf.Reader
-	cacheMaxSize             int
-	enableIngress            bool
-	enableEgress             bool
-	pktDropsTracePoint       link.Link
-	rttFentryLink            link.Link
-	rttKprobeLink            link.Link
-	lookupAndDeleteSupported bool
+	objects                       *BpfObjects
+	qdiscs                        map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters                 map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters                map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader                 *ringbuf.Reader
+	cacheMaxSize                  int
+	enableIngress                 bool
+	enableEgress                  bool
+	pktDropsTracePoint            link.Link
+	rttFentryLink                 link.Link
+	rttKprobeLink                 link.Link
+	lookupAndDeleteSupported      bool
+	batchLookupAndDeleteSupported bool
 }
 
 type FlowFetcherConfig struct {
@@ -169,18 +170,19 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	return &FlowFetcher{
-		objects:                  &objects,
-		ringbufReader:            flows,
-		egressFilters:            map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:           map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                   map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:             cfg.CacheMaxSize,
-		enableIngress:            cfg.EnableIngress,
-		enableEgress:             cfg.EnableEgress,
-		pktDropsTracePoint:       pktDropsLink,
-		rttFentryLink:            rttFentryLink,
-		rttKprobeLink:            rttKprobeLink,
-		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
+		objects:                       &objects,
+		ringbufReader:                 flows,
+		egressFilters:                 map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:                map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:                        map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:                  cfg.CacheMaxSize,
+		enableIngress:                 cfg.EnableIngress,
+		enableEgress:                  cfg.EnableEgress,
+		pktDropsTracePoint:            pktDropsLink,
+		rttFentryLink:                 rttFentryLink,
+		rttKprobeLink:                 rttKprobeLink,
+		lookupAndDeleteSupported:      true, // this will be turned off later if found to be not supported
+		batchLookupAndDeleteSupported: !oldKernel,
 	}, nil
 }
 
@@ -409,11 +411,13 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 }
 
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
-// TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
-// Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[BpfFlowId][]BpfFlowMetrics {
 	if !m.lookupAndDeleteSupported {
 		return m.legacyLookupAndDeleteMap(met)
+	}
+
+	if m.batchLookupAndDeleteSupported {
+		return m.batchLookupAndDeleteMap(met)
 	}
 
 	flowMap := m.objects.AggregatedFlows
@@ -545,15 +549,16 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 
 // It provides access to packets from  the kernel space (via PerfCPU hashmap)
 type PacketFetcher struct {
-	objects                  *BpfObjects
-	qdiscs                   map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters            map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters           map[ifaces.Interface]*netlink.BpfFilter
-	perfReader               *perf.Reader
-	cacheMaxSize             int
-	enableIngress            bool
-	enableEgress             bool
-	lookupAndDeleteSupported bool
+	objects                       *BpfObjects
+	qdiscs                        map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters                 map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters                map[ifaces.Interface]*netlink.BpfFilter
+	perfReader                    *perf.Reader
+	cacheMaxSize                  int
+	enableIngress                 bool
+	enableEgress                  bool
+	lookupAndDeleteSupported      bool
+	batchLookupAndDeleteSupported bool
 }
 
 func NewPacketFetcher(
@@ -603,6 +608,10 @@ func NewPacketFetcher(
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
+	oldKernel := utils.IsKernelOlderThan("5.14.0")
+	if oldKernel {
+		log.Infof("kernel older than 5.14.0 detected: not all hooks are supported")
+	}
 	plog.Infof("PCA Filter- Protocol: %d, Port: %d", pcaProto, pcaPort)
 
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
@@ -622,15 +631,16 @@ func NewPacketFetcher(
 	}
 
 	return &PacketFetcher{
-		objects:                  &objects,
-		perfReader:               packets,
-		egressFilters:            map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:           map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                   map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:             cacheMaxSize,
-		enableIngress:            ingress,
-		enableEgress:             egress,
-		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
+		objects:                       &objects,
+		perfReader:                    packets,
+		egressFilters:                 map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:                map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:                        map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:                  cacheMaxSize,
+		enableIngress:                 ingress,
+		enableEgress:                  egress,
+		lookupAndDeleteSupported:      true, // this will be turned off later if found to be not supported
+		batchLookupAndDeleteSupported: !oldKernel,
 	}, nil
 }
 
@@ -817,6 +827,10 @@ func (p *PacketFetcher) ReadPerf() (perf.Record, error) {
 func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte {
 	if !p.lookupAndDeleteSupported {
 		return p.legacyLookupAndDeleteMap(met)
+	}
+
+	if p.batchLookupAndDeleteSupported {
+		return p.batchLookupAndDeleteMap(met)
 	}
 
 	packetMap := p.objects.PacketRecord
