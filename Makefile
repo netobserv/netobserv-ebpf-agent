@@ -35,7 +35,7 @@ OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
-CILIUM_EBPF_VERSION := v0.12.3
+CILIUM_EBPF_VERSION := v0.12.4-0.20240124115601-f95957d1669c
 GOLANGCI_LINT_VERSION = v1.54.2
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
@@ -119,7 +119,6 @@ generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto
 	go generate ./pkg/...
 	@echo "### Generating gRPC and Protocol Buffers code"
 	protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
-	@mv ./pkg/ebpf/bpf_bpfeb_s390.go ./pkg/ebpf/bpf_bpfeb_s390x.go
 
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries

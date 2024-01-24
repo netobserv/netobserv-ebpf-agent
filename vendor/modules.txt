@@ -13,7 +13,7 @@ github.com/caarlos0/env/v6
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/cilium/ebpf v0.12.3
+# github.com/cilium/ebpf v0.12.4-0.20240124115601-f95957d1669c
 ## explicit; go 1.20
 github.com/cilium/ebpf
 github.com/cilium/ebpf/asm
