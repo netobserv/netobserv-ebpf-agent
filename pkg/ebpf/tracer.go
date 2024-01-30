@@ -42,6 +42,7 @@ const (
 	constPcaPort           = "pca_port"
 	constPcaProto          = "pca_proto"
 	pcaRecordsMap          = "packet_record"
+	constEnablePktDrop     = "enable_pkt_drop"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -108,11 +109,16 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		spec.Maps[dnsLatencyMap].MaxEntries = 1
 	}
 
+	enablePktDrop := 0
+	if cfg.PktDrops {
+		enablePktDrop = 1
+	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:          uint32(cfg.Sampling),
 		constTraceMessages:     uint8(traceMsgs),
 		constEnableRtt:         uint8(enableRtt),
 		constEnableDNSTracking: uint8(enableDNSTracking),
+		constEnablePktDrop:     uint8(enablePktDrop),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -544,6 +550,7 @@ func NewPacketFetcher(
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)
+	delete(spec.Programs, constEnablePktDrop)
 
 	pcaPort := 0
 	pcaProto := 0

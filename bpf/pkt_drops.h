@@ -77,6 +77,11 @@ static inline int trace_pkt_drop(void *ctx, u8 state,
 SEC("tracepoint/skb/kfree_skb")
 int kfree_skb(struct trace_event_raw_kfree_skb *args) {
     struct sk_buff skb;
+
+    if (!enable_pkt_drop) {
+        return 0;
+    }
+
     __builtin_memset(&skb, 0, sizeof(skb));
 
     bpf_probe_read(&skb, sizeof(struct sk_buff), args->skbaddr);
