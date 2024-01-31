@@ -17,7 +17,10 @@ static inline int trace_pkt_drop(void *ctx, u8 state,
     u16 family = 0,flags = 0;
 
     id.if_index = skb->skb_iif;
-
+    // filter out TCP sockets with unknown or loopback interface
+    if (id.if_index == 0 || id.if_index == 1) {
+        return 0;
+    }
     // read L2 info
     set_key_with_l2_info(skb, &id, &family);
 
