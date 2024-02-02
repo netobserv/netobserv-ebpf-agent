@@ -23,6 +23,7 @@ import (
 	"github.com/gavv/monotime"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 )
 
@@ -64,6 +65,8 @@ type FlowFetcher struct {
 	pktDropsTracePoint       link.Link
 	rttFentryLink            link.Link
 	rttKprobeLink            link.Link
+	egressTCXLink            map[ifaces.Interface]link.Link
+	ingressTCXLink           map[ifaces.Interface]link.Link
 	lookupAndDeleteSupported bool
 }
 
@@ -134,8 +137,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
 	spec.Maps[pcaRecordsMap].MaxEntries = 1
 
-	objects.EgressPcaParse = nil
-	objects.IngressPcaParse = nil
+	objects.TcxEgressPcaParse = nil
+	objects.TcIngressPcaParse = nil
 	delete(spec.Programs, constPcaPort)
 	delete(spec.Programs, constPcaProto)
 
@@ -180,8 +183,42 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		pktDropsTracePoint:       pktDropsLink,
 		rttFentryLink:            rttFentryLink,
 		rttKprobeLink:            rttKprobeLink,
+		egressTCXLink:            map[ifaces.Interface]link.Link{},
+		ingressTCXLink:           map[ifaces.Interface]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
 	}, nil
+}
+
+func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
+	if iface.NetNS != netns.None() {
+		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
+			return fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err)
+		}
+	}
+	egrLink, err := link.AttachTCX(link.TCXOptions{
+		Program:   m.objects.BpfPrograms.TcxEgressFlowParse,
+		Attach:    ebpf.AttachTCXEgress,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach TCX egress: %w", err)
+	}
+	m.egressTCXLink[iface] = egrLink
+	ilog.WithField("interface", iface.Name).Debug("successfully attach egressTCX hook")
+
+	ingLink, err := link.AttachTCX(link.TCXOptions{
+		Program:   m.objects.BpfPrograms.TcxIngressFlowParse,
+		Attach:    ebpf.AttachTCXIngress,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach TCX ingress: %w", err)
+	}
+	m.ingressTCXLink[iface] = ingLink
+	ilog.WithField("interface", iface.Name).Debug("successfully attach ingressTCX hook")
+
+	return nil
 }
 
 // Register and links the eBPF fetcher into the system. The program should invoke Unregister
@@ -243,8 +280,8 @@ func (m *FlowFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link
 	}
 	egressFilter := &netlink.BpfFilter{
 		FilterAttrs:  egressAttrs,
-		Fd:           m.objects.EgressFlowParse.FD(),
-		Name:         "tc/egress_flow_parse",
+		Fd:           m.objects.TcEgressFlowParse.FD(),
+		Name:         "tc/tc_egress_flow_parse",
 		DirectAction: true,
 	}
 	if err := handle.FilterDel(egressFilter); err == nil {
@@ -277,8 +314,8 @@ func (m *FlowFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Lin
 	}
 	ingressFilter := &netlink.BpfFilter{
 		FilterAttrs:  ingressAttrs,
-		Fd:           m.objects.IngressFlowParse.FD(),
-		Name:         "tc/ingress_flow_parse",
+		Fd:           m.objects.TcIngressFlowParse.FD(),
+		Name:         "tc/tc_ingress_flow_parse",
 		DirectAction: true,
 	}
 	if err := handle.FilterDel(ingressFilter); err == nil {
@@ -328,10 +365,16 @@ func (m *FlowFetcher) Close() error {
 		}
 	}
 	if m.objects != nil {
-		if err := m.objects.EgressFlowParse.Close(); err != nil {
+		if err := m.objects.TcEgressFlowParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
-		if err := m.objects.IngressFlowParse.Close(); err != nil {
+		if err := m.objects.TcIngressFlowParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.TcxEgressFlowParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.TcxIngressFlowParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if err := m.objects.AggregatedFlows.Close(); err != nil {
@@ -350,6 +393,7 @@ func (m *FlowFetcher) Close() error {
 			m.objects = nil
 		}
 	}
+
 	for iface, ef := range m.egressFilters {
 		log := log.WithField("interface", iface)
 		log.Debug("deleting egress filter")
@@ -377,6 +421,19 @@ func (m *FlowFetcher) Close() error {
 	if len(errs) == 0 {
 		return nil
 	}
+	for iface, l := range m.egressTCXLink {
+		log := log.WithField("interface", iface)
+		log.Debug("detach egress TCX hook")
+		l.Close()
+
+	}
+	m.egressTCXLink = map[ifaces.Interface]link.Link{}
+	for iface, l := range m.ingressTCXLink {
+		log := log.WithField("interface", iface)
+		log.Debug("detach ingress TCX hook")
+		l.Close()
+	}
+	m.ingressTCXLink = map[ifaces.Interface]link.Link{}
 
 	var errStrings []string
 	for _, err := range errs {
@@ -510,10 +567,10 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
 		// Note: if new hooks are added in the future we need to update the following structures manually
 		type NewBpfPrograms struct {
-			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
-			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-			TCPRcvFentry     *ebpf.Program `ebpf:"tcp_rcv_fentry"`
-			TCPRcvKprobe     *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
+			TcEgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
+			TcIngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
+			TCPRcvFentry       *ebpf.Program `ebpf:"tcp_rcv_fentry"`
+			TCPRcvKprobe       *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 		}
 		type NewBpfObjects struct {
 			NewBpfPrograms
@@ -536,8 +593,8 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		// Note for any future maps or programs make sure to copy them manually here
 		objects.DirectFlows = newObjects.DirectFlows
 		objects.AggregatedFlows = newObjects.AggregatedFlows
-		objects.EgressFlowParse = newObjects.EgressFlowParse
-		objects.IngressFlowParse = newObjects.IngressFlowParse
+		objects.TcEgressFlowParse = newObjects.TcEgressFlowParse
+		objects.TcIngressFlowParse = newObjects.TcIngressFlowParse
 		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
 		objects.GlobalCounters = newObjects.GlobalCounters
@@ -573,6 +630,8 @@ type PacketFetcher struct {
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
+	egressTCXLink            map[ifaces.Interface]link.Link
+	ingressTCXLink           map[ifaces.Interface]link.Link
 	lookupAndDeleteSupported bool
 }
 
@@ -593,8 +652,10 @@ func NewPacketFetcher(
 	}
 
 	// Removing Specs for flows agent
-	objects.EgressFlowParse = nil
-	objects.IngressFlowParse = nil
+	objects.TcEgressFlowParse = nil
+	objects.TcIngressFlowParse = nil
+	objects.TcxEgressFlowParse = nil
+	objects.TcxIngressFlowParse = nil
 	objects.DirectFlows = nil
 	objects.AggregatedFlows = nil
 	delete(spec.Programs, aggregatedFlowsMap)
@@ -650,13 +711,22 @@ func NewPacketFetcher(
 		cacheMaxSize:             cacheMaxSize,
 		enableIngress:            ingress,
 		enableEgress:             egress,
+		egressTCXLink:            map[ifaces.Interface]link.Link{},
+		ingressTCXLink:           map[ifaces.Interface]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
 	}, nil
 }
 
 func registerInterface(iface ifaces.Interface) (*netlink.GenericQdisc, netlink.Link, error) {
 	ilog := plog.WithField("iface", iface)
-	ipvlan, err := netlink.LinkByIndex(iface.Index)
+	handle, err := netlink.NewHandleAt(iface.NetNS)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
+	}
+	defer handle.Delete()
+
+	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
+	ipvlan, err := handle.LinkByIndex(iface.Index)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
@@ -669,10 +739,10 @@ func registerInterface(iface ifaces.Interface) (*netlink.GenericQdisc, netlink.L
 		QdiscAttrs: qdiscAttrs,
 		QdiscType:  qdiscType,
 	}
-	if err := netlink.QdiscDel(qdisc); err == nil {
+	if err := handle.QdiscDel(qdisc); err == nil {
 		ilog.Warn("qdisc clsact already existed. Deleted it")
 	}
-	if err := netlink.QdiscAdd(qdisc); err != nil {
+	if err := handle.QdiscAdd(qdisc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			ilog.WithError(err).Warn("qdisc clsact already exists. Ignoring")
 		} else {
@@ -694,6 +764,38 @@ func (p *PacketFetcher) Register(iface ifaces.Interface) error {
 		return err
 	}
 	return p.registerIngress(iface, ipvlan)
+}
+
+func (p *PacketFetcher) AttachTCX(iface ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
+	if iface.NetNS != netns.None() {
+		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
+			return fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err)
+		}
+	}
+	egrLink, err := link.AttachTCX(link.TCXOptions{
+		Program:   p.objects.BpfPrograms.TcxEgressPcaParse,
+		Attach:    ebpf.AttachTCXEgress,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach PCA TCX egress: %w", err)
+	}
+	p.egressTCXLink[iface] = egrLink
+	ilog.WithField("interface", iface.Name).Debug("successfully attach PCA egressTCX hook")
+
+	ingLink, err := link.AttachTCX(link.TCXOptions{
+		Program:   p.objects.BpfPrograms.TcxIngressPcaParse,
+		Attach:    ebpf.AttachTCXIngress,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach PCA TCX ingress: %w", err)
+	}
+	p.ingressTCXLink[iface] = ingLink
+	ilog.WithField("interface", iface.Name).Debug("successfully attach PCA ingressTCX hook")
+
+	return nil
 }
 
 func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf.Program, name string) (*netlink.BpfFilter, error) {
@@ -726,7 +828,7 @@ func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf
 }
 
 func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.EgressPcaParse, "egress_pca_parse")
+	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.TcEgressPcaParse, "egress_pca_parse")
 	if err != nil {
 		return err
 	}
@@ -765,7 +867,7 @@ func fetchIngressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebp
 }
 
 func (p *PacketFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.IngressPcaParse, "ingress_pca_parse")
+	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.TcIngressPcaParse, "ingress_pca_parse")
 	if err != nil {
 		return err
 	}
@@ -787,10 +889,16 @@ func (p *PacketFetcher) Close() error {
 		}
 	}
 	if p.objects != nil {
-		if err := p.objects.EgressPcaParse.Close(); err != nil {
+		if err := p.objects.TcEgressPcaParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
-		if err := p.objects.IngressPcaParse.Close(); err != nil {
+		if err := p.objects.TcIngressPcaParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.TcxEgressPcaParse.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.TcxIngressPcaParse.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if err := p.objects.PacketRecord.Close(); err != nil {
@@ -822,6 +930,20 @@ func (p *PacketFetcher) Close() error {
 	if len(errs) == 0 {
 		return nil
 	}
+
+	for iface, l := range p.egressTCXLink {
+		log := log.WithField("interface", iface)
+		log.Debug("detach egress TCX hook")
+		l.Close()
+
+	}
+	p.egressTCXLink = map[ifaces.Interface]link.Link{}
+	for iface, l := range p.ingressTCXLink {
+		log := log.WithField("interface", iface)
+		log.Debug("detach ingress TCX hook")
+		l.Close()
+	}
+	p.ingressTCXLink = map[ifaces.Interface]link.Link{}
 
 	var errStrings []string
 	for _, err := range errs {

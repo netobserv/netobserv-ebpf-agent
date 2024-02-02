@@ -96143,6 +96143,13 @@ struct netdev_notifier_bonding_info {
 	struct netdev_bonding_info bonding_info;
 };
 
+enum tcx_action_base {
+	TCX_NEXT = -1,
+	TCX_PASS = 0,
+	TCX_DROP = 2,
+	TCX_REDIRECT = 7,
+};
+
 typedef int (*bpf_op_t)(struct net_device *, struct netdev_bpf *);
 
 struct dev_kfree_skb_cb {

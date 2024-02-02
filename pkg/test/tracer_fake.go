@@ -36,6 +36,10 @@ func (m *TracerFake) Register(iface ifaces.Interface) error {
 	return nil
 }
 
+func (m *TracerFake) AttachTCX(_ ifaces.Interface) error {
+	return nil
+}
+
 func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
 	select {
 	case r := <-m.mapLookups:
