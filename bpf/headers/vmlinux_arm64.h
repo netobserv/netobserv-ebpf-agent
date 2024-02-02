@@ -77797,6 +77797,13 @@ struct netdev_notifier_bonding_info {
 	struct netdev_bonding_info bonding_info;
 };
 
+enum tcx_action_base {
+	TCX_NEXT = -1,
+	TCX_PASS = 0,
+	TCX_DROP = 2,
+	TCX_REDIRECT = 7,
+};
+
 enum qdisc_state2_t {
 	__QDISC_STATE2_RUNNING = 0,
 };

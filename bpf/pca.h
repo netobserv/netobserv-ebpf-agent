@@ -106,12 +106,22 @@ static inline int export_packet_payload(struct __sk_buff *skb) {
 }
 
 SEC("tc_pca_ingress")
-int ingress_pca_parse(struct __sk_buff *skb) {
+int tc_ingress_pca_parse(struct __sk_buff *skb) {
     return export_packet_payload(skb);
 }
 
 SEC("tc_pca_egress")
-int egress_pca_parse(struct __sk_buff *skb) {
+int tc_egress_pca_parse(struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
+SEC("tcx_pca_ingress")
+int tcx_ingress_pca_parse(struct __sk_buff *skb) {
+    return export_packet_payload(skb);
+}
+
+SEC("tcx_pca_egress")
+int tcx_egress_pca_parse(struct __sk_buff *skb) {
     return export_packet_payload(skb);
 }
 

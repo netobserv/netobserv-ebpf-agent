@@ -214,13 +214,27 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 }
 
 SEC("tc_ingress")
-int ingress_flow_parse(struct __sk_buff *skb) {
+int tc_ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
 }
 
 SEC("tc_egress")
-int egress_flow_parse(struct __sk_buff *skb) {
+int tc_egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
+}
+
+SEC("tcx_ingress")
+int tcx_ingress_flow_parse(struct __sk_buff *skb) {
+    flow_monitor(skb, INGRESS);
+    // return TCX_NEXT to allow existing with other TCX hooks
+    return TCX_NEXT;
+}
+
+SEC("tcx_egress")
+int tcx_egress_flow_parse(struct __sk_buff *skb) {
+    flow_monitor(skb, EGRESS);
+    // return TCX_NEXT to allow existing with other TCX hooks
+    return TCX_NEXT;
 }
 
 char _license[] SEC("license") = "GPL";
