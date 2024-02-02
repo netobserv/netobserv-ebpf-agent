@@ -102,6 +102,10 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     __builtin_memset(&id, 0, sizeof(id));
 
     id.if_index = BPF_CORE_READ(skb, skb_iif);
+    // filter out TCP sockets with unknown or loopback interface
+    if (id.if_index == 0 || id.if_index == 1) {
+        return 0;
+    }
     len = BPF_CORE_READ(skb, len);
 
     // read L2 info
