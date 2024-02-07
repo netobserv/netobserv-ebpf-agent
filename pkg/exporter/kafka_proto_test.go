@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,18 @@ func ByteArrayFromNetIP(netIP net.IP) []uint8 {
 
 func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
-	kj := KafkaProto{Writer: &wc}
+	m := metrics.NewMetrics(
+		&metrics.Settings{
+			PromConnectionInfo: metrics.PromConnectionInfo{},
+			Prefix:             "",
+		})
+
+	kj := KafkaProto{
+		Writer:                         &wc,
+		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
+		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
+		ErrCanNotExportToKafka:         m.CreateErrorCanNotWriteToKafka(),
+	}
 	input := make(chan []*flow.Record, 11)
 	record := flow.Record{}
 	record.Id.EthProtocol = 3

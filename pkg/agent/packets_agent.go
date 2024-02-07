@@ -6,12 +6,14 @@ import (
 	"io"
 	"net"
 
-	"github.com/cilium/ebpf/perf"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+
+	"github.com/cilium/ebpf/perf"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Packets reporting agent
@@ -39,7 +41,7 @@ type ebpfPacketFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap() map[int][]*byte
+	LookupAndDeleteMap(c prometheus.Counter) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }
 

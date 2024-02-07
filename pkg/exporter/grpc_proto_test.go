@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
@@ -28,7 +29,12 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, 1000)
+	exporter, err := StartGRPCProto("127.0.0.1", port, 1000,
+		&metrics.Metrics{Settings: &metrics.Settings{
+			PromConnectionInfo: metrics.PromConnectionInfo{},
+			Prefix:             "",
+		},
+		})
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -70,7 +76,12 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("::1", port, 1000)
+	exporter, err := StartGRPCProto("::1", port, 1000,
+		&metrics.Metrics{Settings: &metrics.Settings{
+			PromConnectionInfo: metrics.PromConnectionInfo{},
+			Prefix:             "",
+		},
+		})
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -113,7 +124,12 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 
 	const msgMaxLen = 10000
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, msgMaxLen)
+	exporter, err := StartGRPCProto("127.0.0.1", port, msgMaxLen,
+		&metrics.Metrics{Settings: &metrics.Settings{
+			PromConnectionInfo: metrics.PromConnectionInfo{},
+			Prefix:             "",
+		},
+		})
 	require.NoError(t, err)
 
 	// Send a message much longer than the limit length

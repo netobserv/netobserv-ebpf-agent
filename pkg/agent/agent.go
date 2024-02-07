@@ -6,15 +6,20 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"time"
 
-	"github.com/cilium/ebpf/ringbuf"
-	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
+
+	"github.com/cilium/ebpf/ringbuf"
+	"github.com/gavv/monotime"
+	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
@@ -111,7 +116,8 @@ type Flows struct {
 	interfaceNamer flow.InterfaceNamer
 	agentIP        net.IP
 
-	status Status
+	status      Status
+	promoServer *http.Server
 }
 
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
@@ -119,7 +125,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(c prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }
@@ -208,11 +214,27 @@ func flowsAgent(cfg *Config,
 		}
 		return iface
 	}
+	var promoServer *http.Server
+	metricsSettings := &metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: cfg.MetricsServerAddress,
+			Port:    cfg.MetricsPort,
+		},
+		Prefix: cfg.MetricsPrefix,
+	}
+	if cfg.MetricsEnable {
+		promoServer = promo.InitializePrometheus(metricsSettings)
+	}
 
-	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout)
-	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout)
+	m := metrics.NewMetrics(metricsSettings)
+	samplingGauge := m.CreateSamplingRate()
+	samplingGauge.Set(float64(cfg.Sampling))
+
+	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m)
+	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
 	accounter := flow.NewAccounter(
-		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now)
+		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+
 	return &Flows{
 		ebpf:           fetcher,
 		exporter:       exporter,
@@ -224,6 +246,7 @@ func flowsAgent(cfg *Config,
 		accounter:      accounter,
 		agentIP:        agentIP,
 		interfaceNamer: interfaceNamer,
+		promoServer:    promoServer,
 	}, nil
 }
 
@@ -263,7 +286,14 @@ func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows)
+	metrics := metrics.NewMetrics(&metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: cfg.MetricsServerAddress,
+			Port:    cfg.MetricsPort,
+		},
+		Prefix: cfg.MetricsPrefix,
+	})
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +318,13 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
 	}
 	transport := kafkago.Transport{}
+	m := metrics.NewMetrics(&metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: cfg.MetricsServerAddress,
+			Port:    cfg.MetricsPort,
+		},
+		Prefix: cfg.MetricsPrefix,
+	})
 	if cfg.KafkaEnableTLS {
 		tlsConfig, err := buildTLSConfig(cfg)
 		if err != nil {
@@ -324,6 +361,9 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			Transport:    &transport,
 			Balancer:     &kafkago.Hash{},
 		},
+		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
+		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
+		ErrCanNotExportToKafka:         m.CreateErrorCanNotWriteToKafka(),
 	}).ExportFlows, nil
 }
 
@@ -361,7 +401,12 @@ func (f *Flows) Run(ctx context.Context) error {
 
 	alog.Debug("waiting for all nodes to finish their pending work")
 	<-graph.Done()
-
+	if f.promoServer != nil {
+		alog.Debug("closing prometheus server")
+		if err := f.promoServer.Close(); err != nil {
+			alog.WithError(err).Warn("error when closing prometheus server")
+		}
+	}
 	f.status = StatusStopped
 	alog.Info("Flows agent stopped")
 	return nil

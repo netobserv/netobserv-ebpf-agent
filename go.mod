@@ -13,6 +13,7 @@ require (
 	github.com/netobserv/flowlogs-pipeline v0.1.11
 	github.com/netobserv/gopipes v0.3.0
 	github.com/paulbellamy/ratecounter v0.2.0
+	github.com/prometheus/client_golang v1.18.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
@@ -87,7 +88,6 @@ require (
 	github.com/pion/udp v0.1.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.46.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
