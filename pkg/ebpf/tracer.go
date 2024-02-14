@@ -62,6 +62,7 @@ type FlowFetcher struct {
 	enableEgress       bool
 	pktDropsTracePoint link.Link
 	rttFentryLink      link.Link
+	rttKprobeLink      link.Link
 }
 
 type FlowFetcherConfig struct {
@@ -141,13 +142,18 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
-	var rttFentryLink link.Link
+	var rttFentryLink, rttKprobeLink link.Link
 	if cfg.EnableRTT {
 		rttFentryLink, err = link.AttachTracing(link.TracingOptions{
 			Program: objects.BpfPrograms.TcpRcvFentry,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveFentry: %w", err)
+			log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
+			// try to use kprobe for older kernels
+			rttKprobeLink, err = link.Kprobe("tcp_rcv_established", objects.TcpRcvKprobe, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveKprobe: %w", err)
+			}
 		}
 	}
 
@@ -167,6 +173,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		enableEgress:       cfg.EnableEgress,
 		pktDropsTracePoint: pktDropsLink,
 		rttFentryLink:      rttFentryLink,
+		rttKprobeLink:      rttKprobeLink,
 	}, nil
 }
 
@@ -297,6 +304,11 @@ func (m *FlowFetcher) Close() error {
 	}
 	if m.rttFentryLink != nil {
 		if err := m.rttFentryLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if m.rttKprobeLink != nil {
+		if err := m.rttKprobeLink.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -460,6 +472,7 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 			EgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
 			IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
 			TCPRcvFentry     *ebpf.Program `ebpf:"tcp_rcv_fentry"`
+			TCPRcvKprobe     *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 		}
 		type NewBpfObjects struct {
 			NewBpfPrograms
@@ -485,6 +498,7 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.EgressFlowParse = newObjects.EgressFlowParse
 		objects.IngressFlowParse = newObjects.IngressFlowParse
 		objects.TcpRcvFentry = newObjects.TCPRcvFentry
+		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
