@@ -120,6 +120,7 @@ type BpfProgramSpecs struct {
 	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	TcpRcvFentry     *ebpf.ProgramSpec `ebpf:"tcp_rcv_fentry"`
+	TcpRcvKprobe     *ebpf.ProgramSpec `ebpf:"tcp_rcv_kprobe"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -176,6 +177,7 @@ type BpfPrograms struct {
 	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
 	TcpRcvFentry     *ebpf.Program `ebpf:"tcp_rcv_fentry"`
+	TcpRcvKprobe     *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 }
 
 func (p *BpfPrograms) Close() error {
@@ -186,6 +188,7 @@ func (p *BpfPrograms) Close() error {
 		p.IngressPcaParse,
 		p.KfreeSkb,
 		p.TcpRcvFentry,
+		p.TcpRcvKprobe,
 	)
 }
 

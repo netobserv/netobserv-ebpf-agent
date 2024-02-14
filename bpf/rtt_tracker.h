@@ -157,4 +157,12 @@ int BPF_PROG(tcp_rcv_fentry, struct sock *sk, struct sk_buff *skb) {
 	return calculate_flow_rtt_tcp(sk, skb);
 }
 
+SEC("kprobe/tcp_rcv_established")
+int BPF_KPROBE(tcp_rcv_kprobe, struct sock *sk, struct sk_buff *skb) {
+    if (sk == NULL || skb == NULL) {
+        return 0;
+    }
+	return calculate_flow_rtt_tcp(sk, skb);
+}
+
 #endif /* __RTT_TRACKER_H__ */
