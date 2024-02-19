@@ -56,3 +56,4 @@ ElementID,Name,Abstract Data Type,Data Type Semantics,Status,Description,Units,R
 154,egressIP,string,,current,,,,,,,,56506,
 155,appProtocolName,string,,current,,,,,,,,56506,
 156,httpVals,string,,current,,,,,,,,56506,
+157,egressNodeName,string,,current,,,,,,,,56506,
