@@ -10,6 +10,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode/opentelemetry"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract/conntrack"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/ingest"
@@ -429,6 +430,12 @@ func getEncoder(opMetrics *operational.Metrics, params config.StageParam) (encod
 		encoder, err = encode.NewEncodeKafka(opMetrics, params)
 	case api.S3Type:
 		encoder, err = encode.NewEncodeS3(opMetrics, params)
+	case api.OtlpLogsType:
+		encoder, err = opentelemetry.NewEncodeOtlpLogs(opMetrics, params)
+	case api.OtlpMetricsType:
+		encoder, err = opentelemetry.NewEncodeOtlpMetrics(opMetrics, params)
+	case api.OtlpTracesType:
+		encoder, err = opentelemetry.NewEncodeOtlpTraces(opMetrics, params)
 	case api.NoneType:
 		encoder, _ = encode.NewEncodeNone()
 	default:

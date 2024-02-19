@@ -24,6 +24,7 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/flowlogs-pipeline/pkg/server"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -63,7 +64,7 @@ func StartServerAsync(conn *api.PromConnectionInfo, registry *prom.Registry) *ht
 	addr := fmt.Sprintf("%s:%v", conn.Address, port)
 	plog.Infof("StartServerAsync: addr = %s", addr)
 
-	httpServer := http.Server{
+	httpServer := &http.Server{
 		Addr: addr,
 		// TLS clients must use TLS 1.2 or higher
 		TLSConfig: &tls.Config{
@@ -79,6 +80,7 @@ func StartServerAsync(conn *api.PromConnectionInfo, registry *prom.Registry) *ht
 		mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	}
 	httpServer.Handler = mux
+	httpServer = server.Default(httpServer)
 
 	go func() {
 		var err error
@@ -92,5 +94,5 @@ func StartServerAsync(conn *api.PromConnectionInfo, registry *prom.Registry) *ht
 		}
 	}()
 
-	return &httpServer
+	return httpServer
 }

@@ -37,17 +37,17 @@ const defaultExpiryTime = time.Duration(2 * time.Minute)
 
 type gaugeInfo struct {
 	gauge *prometheus.GaugeVec
-	info  *metricInfo
+	info  *MetricInfo
 }
 
 type counterInfo struct {
 	counter *prometheus.CounterVec
-	info    *metricInfo
+	info    *MetricInfo
 }
 
 type histoInfo struct {
 	histo *prometheus.HistogramVec
-	info  *metricInfo
+	info  *MetricInfo
 }
 
 type EncodeProm struct {
@@ -67,19 +67,19 @@ type EncodeProm struct {
 }
 
 var (
-	metricsProcessed = operational.DefineMetric(
+	MetricsProcessed = operational.DefineMetric(
 		"metrics_processed",
 		"Number of metrics processed",
 		operational.TypeCounter,
 		"stage",
 	)
-	metricsDropped = operational.DefineMetric(
+	MetricsDropped = operational.DefineMetric(
 		"metrics_dropped",
 		"Number of metrics dropped",
 		operational.TypeCounter,
 		"stage",
 	)
-	encodePromErrors = operational.DefineMetric(
+	EncodePromErrors = operational.DefineMetric(
 		"encode_prom_errors",
 		"Total errors during metrics generation",
 		operational.TypeCounter,
@@ -164,7 +164,7 @@ func (e *EncodeProm) Encode(metricRecord config.GenericMap) {
 	}
 }
 
-func (e *EncodeProm) prepareMetric(flow config.GenericMap, info *metricInfo, m *prometheus.MetricVec) (map[string]string, float64) {
+func (e *EncodeProm) prepareMetric(flow config.GenericMap, info *MetricInfo, m *prometheus.MetricVec) (map[string]string, float64) {
 	val := e.extractGenericValue(flow, info)
 	if val == nil {
 		return nil, 0
@@ -178,7 +178,7 @@ func (e *EncodeProm) prepareMetric(flow config.GenericMap, info *metricInfo, m *
 		floatVal = floatVal / info.ValueScale
 	}
 
-	entryLabels, key := e.extractLabelsAndKey(flow, &info.PromMetricsItem)
+	entryLabels, key := ExtractLabelsAndKey(flow, &info.MetricsItem)
 	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
 	_, ok := e.mCache.UpdateCacheEntry(key, func() { m.Delete(entryLabels) })
 	if !ok {
@@ -188,7 +188,7 @@ func (e *EncodeProm) prepareMetric(flow config.GenericMap, info *metricInfo, m *
 	return entryLabels, floatVal
 }
 
-func (e *EncodeProm) prepareAggHisto(flow config.GenericMap, info *metricInfo, m *prometheus.MetricVec) (map[string]string, []float64) {
+func (e *EncodeProm) prepareAggHisto(flow config.GenericMap, info *MetricInfo, m *prometheus.MetricVec) (map[string]string, []float64) {
 	val := e.extractGenericValue(flow, info)
 	if val == nil {
 		return nil, nil
@@ -199,7 +199,7 @@ func (e *EncodeProm) prepareAggHisto(flow config.GenericMap, info *metricInfo, m
 		return nil, nil
 	}
 
-	entryLabels, key := e.extractLabelsAndKey(flow, &info.PromMetricsItem)
+	entryLabels, key := ExtractLabelsAndKey(flow, &info.MetricsItem)
 	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
 	_, ok = e.mCache.UpdateCacheEntry(key, func() { m.Delete(entryLabels) })
 	if !ok {
@@ -209,8 +209,8 @@ func (e *EncodeProm) prepareAggHisto(flow config.GenericMap, info *metricInfo, m
 	return entryLabels, values
 }
 
-func (e *EncodeProm) extractGenericValue(flow config.GenericMap, info *metricInfo) interface{} {
-	for _, pred := range info.filterPredicates {
+func (e *EncodeProm) extractGenericValue(flow config.GenericMap, info *MetricInfo) interface{} {
+	for _, pred := range info.FilterPredicates {
 		if !pred(flow) {
 			return nil
 		}
@@ -227,7 +227,7 @@ func (e *EncodeProm) extractGenericValue(flow config.GenericMap, info *metricInf
 	return val
 }
 
-func (e *EncodeProm) extractLabelsAndKey(flow config.GenericMap, info *api.PromMetricsItem) (map[string]string, string) {
+func ExtractLabelsAndKey(flow config.GenericMap, info *api.MetricsItem) (map[string]string, string) {
 	entryLabels := make(map[string]string, len(info.Labels))
 	key := strings.Builder{}
 	key.WriteString(info.Name)
@@ -295,7 +295,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 		log.Debugf("Labels = %v", labels)
 		mInfo := CreateMetricInfo(mCfg)
 		switch mCfg.Type {
-		case api.PromEncodeOperationName("Counter"):
+		case api.MetricEncodeOperationName("Counter"):
 			counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, labels)
 			err := registerer.Register(counter)
 			if err != nil {
@@ -306,7 +306,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				counter: counter,
 				info:    mInfo,
 			})
-		case api.PromEncodeOperationName("Gauge"):
+		case api.MetricEncodeOperationName("Gauge"):
 			gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, labels)
 			err := registerer.Register(gauge)
 			if err != nil {
@@ -317,7 +317,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				gauge: gauge,
 				info:  mInfo,
 			})
-		case api.PromEncodeOperationName("Histogram"):
+		case api.MetricEncodeOperationName("Histogram"):
 			log.Debugf("buckets = %v", mCfg.Buckets)
 			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
 			err := registerer.Register(hist)
@@ -329,7 +329,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				histo: hist,
 				info:  mInfo,
 			})
-		case api.PromEncodeOperationName("AggHistogram"):
+		case api.MetricEncodeOperationName("AggHistogram"):
 			log.Debugf("buckets = %v", mCfg.Buckets)
 			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
 			err := registerer.Register(hist)
@@ -365,9 +365,9 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 		mCache:           putils.NewTimedCache(cfg.MaxMetrics, mChacheLenMetric),
 		mChacheLenMetric: mChacheLenMetric,
 		exitChan:         putils.ExitChannel(),
-		metricsProcessed: opMetrics.NewCounter(&metricsProcessed, params.Name),
-		metricsDropped:   opMetrics.NewCounter(&metricsDropped, params.Name),
-		errorsCounter:    opMetrics.NewCounterVec(&encodePromErrors),
+		metricsProcessed: opMetrics.NewCounter(&MetricsProcessed, params.Name),
+		metricsDropped:   opMetrics.NewCounter(&MetricsDropped, params.Name),
+		errorsCounter:    opMetrics.NewCounterVec(&EncodePromErrors),
 	}
 	go w.cleanupExpiredEntriesLoop()
 	return w, nil

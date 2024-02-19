@@ -19,7 +19,6 @@ package location
 
 import (
 	"archive/zip"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ip2location/ip2location-go/v9"
 	log "github.com/sirupsen/logrus"
@@ -43,11 +43,11 @@ type Info struct {
 }
 
 const (
-	DBFilename        = "IP2LOCATION-LITE-DB9.BIN"
-	DBFileLocation    = "/tmp/location_db.bin"
-	DBZIPFileLocation = "/tmp/location_db.bin" + ".zip"
+	dbFilename        = "IP2LOCATION-LITE-DB9.BIN"
+	dbFileLocation    = "/tmp/location_db.bin"
+	dbZIPFileLocation = "/tmp/location_db.bin" + ".zip"
 	// REF: Original location from ip2location DB is: "https://www.ip2location.com/download/?token=OpOljbgT6K2WJnFrFBBmBzRVNpHlcYqNN4CMeGavvh0pPOpyu16gKQyqvDMxTDF4&file=DB9LITEBIN"
-	DbUrl = "https://raw.githubusercontent.com/netobserv/flowlogs-pipeline/main/contrib/location/location.db"
+	dbUrl = "https://raw.githubusercontent.com/netobserv/flowlogs-pipeline/main/contrib/location/location.db"
 )
 
 var locationDB *ip2location.DB
@@ -70,7 +70,7 @@ func init() {
 	_osio.MkdirAll = os.MkdirAll
 	_osio.OpenFile = os.OpenFile
 	_osio.Copy = io.Copy
-	_dbURL = DbUrl
+	_dbURL = dbUrl
 	locationDBMutex = &sync.Mutex{}
 }
 
@@ -78,17 +78,16 @@ func InitLocationDB() error {
 	locationDBMutex.Lock()
 	defer locationDBMutex.Unlock()
 
-	if _, statErr := _osio.Stat(DBFileLocation); errors.Is(statErr, os.ErrNotExist) {
-		log.Infof("Downloading location DB into local file %s ", DBFileLocation)
-		out, createErr := _osio.Create(DBZIPFileLocation)
+	if _, statErr := _osio.Stat(dbFileLocation); errors.Is(statErr, os.ErrNotExist) {
+		log.Infof("Downloading location DB into local file %s ", dbFileLocation)
+		out, createErr := _osio.Create(dbZIPFileLocation)
 		if createErr != nil {
 			return fmt.Errorf("failed os.Create %v ", createErr)
 		}
 
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client := &http.Client{Transport: tr}
+		timeout := time.Minute
+		tr := &http.Transport{IdleConnTimeout: timeout}
+		client := &http.Client{Transport: tr, Timeout: timeout}
 		resp, getErr := client.Get(_dbURL)
 		if getErr != nil {
 			return fmt.Errorf("failed http.Get %v ", getErr)
@@ -101,7 +100,7 @@ func InitLocationDB() error {
 			return fmt.Errorf("failed io.Copy %v ", copyErr)
 		}
 
-		log.Infof("Wrote %d bytes to %s", written, DBZIPFileLocation)
+		log.Infof("Wrote %d bytes to %s", written, dbZIPFileLocation)
 
 		bodyCloseErr := resp.Body.Close()
 		if bodyCloseErr != nil {
@@ -113,13 +112,13 @@ func InitLocationDB() error {
 			return fmt.Errorf("failed out.Close %v ", outCloseErr)
 		}
 
-		unzipErr := unzip(DBZIPFileLocation, DBFileLocation)
+		unzipErr := unzip(dbZIPFileLocation, dbFileLocation)
 		if unzipErr != nil {
-			file, openErr := os.Open(DBFileLocation + "/" + DBFilename)
+			file, openErr := os.Open(dbFileLocation + "/" + dbFilename)
 			if openErr == nil {
 				fi, fileStatErr := file.Stat()
 				if fileStatErr == nil {
-					log.Infof("length of %s is: %d", DBFileLocation+"/"+DBFilename, fi.Size())
+					log.Infof("length of %s is: %d", dbFileLocation+"/"+dbFilename, fi.Size())
 					_ = file.Close()
 				} else {
 					log.Infof("file.Stat err %v", fileStatErr)
@@ -128,9 +127,9 @@ func InitLocationDB() error {
 				log.Infof("os.Open err %v", openErr)
 			}
 
-			fileContent, readFileErr := os.ReadFile(DBFileLocation + "/" + DBFilename)
+			fileContent, readFileErr := os.ReadFile(dbFileLocation + "/" + dbFilename)
 			if readFileErr == nil {
-				log.Infof("content of first 100 bytes of %s  is: %s", DBFileLocation+"/"+DBFilename, fileContent[:100])
+				log.Infof("content of first 100 bytes of %s is: %s", dbFileLocation+"/"+dbFilename, fileContent[:100])
 			} else {
 				log.Infof("os.ReadFile err %v", readFileErr)
 			}
@@ -142,7 +141,7 @@ func InitLocationDB() error {
 	}
 
 	log.Debugf("Loading location DB")
-	db, openDBErr := ip2location.OpenDB(DBFileLocation + "/" + DBFilename)
+	db, openDBErr := ip2location.OpenDB(dbFileLocation + "/" + dbFilename)
 	if openDBErr != nil {
 		return fmt.Errorf("OpenDB err - %v ", openDBErr)
 	}
