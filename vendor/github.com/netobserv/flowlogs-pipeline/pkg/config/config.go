@@ -115,10 +115,13 @@ type Extract struct {
 }
 
 type Encode struct {
-	Type  string           `yaml:"type" json:"type"`
-	Prom  *api.PromEncode  `yaml:"prom,omitempty" json:"prom,omitempty"`
-	Kafka *api.EncodeKafka `yaml:"kafka,omitempty" json:"kafka,omitempty"`
-	S3    *api.EncodeS3    `yaml:"s3,omitempty" json:"s3,omitempty"`
+	Type        string                 `yaml:"type" json:"type"`
+	Prom        *api.PromEncode        `yaml:"prom,omitempty" json:"prom,omitempty"`
+	Kafka       *api.EncodeKafka       `yaml:"kafka,omitempty" json:"kafka,omitempty"`
+	S3          *api.EncodeS3          `yaml:"s3,omitempty" json:"s3,omitempty"`
+	OtlpLogs    *api.EncodeOtlpLogs    `yaml:"otlplogs,omitempty" json:"otlplogs,omitempty"`
+	OtlpMetrics *api.EncodeOtlpMetrics `yaml:"otlpmetrics,omitempty" json:"otlpmetrics,omitempty"`
+	OtlpTraces  *api.EncodeOtlpTraces  `yaml:"otlptraces,omitempty" json:"otlptraces,omitempty"`
 }
 
 type Write struct {

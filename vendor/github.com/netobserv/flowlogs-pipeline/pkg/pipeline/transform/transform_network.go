@@ -98,31 +98,9 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 			outputEntry[rule.Output] = serviceName
 		case api.OpAddKubernetes:
-			kubeInfo, err := kubernetes.Data.GetInfo(fmt.Sprintf("%s", outputEntry[rule.Input]))
-			if err != nil {
-				logrus.WithError(err).Tracef("can't find kubernetes info for IP %v", outputEntry[rule.Input])
-				continue
-			}
-			// NETOBSERV-666: avoid putting empty namespaces or Loki aggregation queries will
-			// differentiate between empty and nil namespaces.
-			if kubeInfo.Namespace != "" {
-				outputEntry[rule.Output+"_Namespace"] = kubeInfo.Namespace
-			}
-			outputEntry[rule.Output+"_Name"] = kubeInfo.Name
-			outputEntry[rule.Output+"_Type"] = kubeInfo.Type
-			outputEntry[rule.Output+"_OwnerName"] = kubeInfo.Owner.Name
-			outputEntry[rule.Output+"_OwnerType"] = kubeInfo.Owner.Type
-			if rule.Parameters != "" {
-				for labelKey, labelValue := range kubeInfo.Labels {
-					outputEntry[rule.Parameters+"_"+labelKey] = labelValue
-				}
-			}
-			if kubeInfo.HostIP != "" {
-				outputEntry[rule.Output+"_HostIP"] = kubeInfo.HostIP
-				if kubeInfo.HostName != "" {
-					outputEntry[rule.Output+"_HostName"] = kubeInfo.HostName
-				}
-			}
+			kubernetes.Enrich(outputEntry, rule)
+		case api.OpAddKubernetesInfra:
+			kubernetes.EnrichLayer(outputEntry, rule)
 		case api.OpReinterpretDirection:
 			reinterpretDirection(outputEntry, &n.DirectionInfo)
 		case api.OpAddIPCategory:
@@ -172,6 +150,8 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 			needToInitLocationDB = true
 		case api.OpAddKubernetes:
 			needToInitKubeData = true
+		case api.OpAddKubernetesInfra:
+			needToInitKubeData = true
 		case api.OpAddService:
 			needToInitNetworkServices = true
 		case api.OpReinterpretDirection:
@@ -193,7 +173,7 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 	}
 
 	if needToInitKubeData {
-		err := kubernetes.Data.InitFromConfig(jsonNetworkTransform.KubeConfigPath)
+		err := kubernetes.InitFromConfig(jsonNetworkTransform.KubeConfigPath)
 		if err != nil {
 			return nil, err
 		}

@@ -8,28 +8,28 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 )
 
-type predicate func(flow config.GenericMap) bool
+type Predicate func(flow config.GenericMap) bool
 
-type metricInfo struct {
-	api.PromMetricsItem
-	filterPredicates []predicate
+type MetricInfo struct {
+	api.MetricsItem
+	FilterPredicates []Predicate
 }
 
-func presence(filter api.PromMetricsFilter) predicate {
+func Presence(filter api.MetricsFilter) Predicate {
 	return func(flow config.GenericMap) bool {
 		_, found := flow[filter.Key]
 		return found
 	}
 }
 
-func absence(filter api.PromMetricsFilter) predicate {
+func Absence(filter api.MetricsFilter) Predicate {
 	return func(flow config.GenericMap) bool {
 		_, found := flow[filter.Key]
 		return !found
 	}
 }
 
-func exact(filter api.PromMetricsFilter) predicate {
+func Exact(filter api.MetricsFilter) Predicate {
 	return func(flow config.GenericMap) bool {
 		if val, found := flow[filter.Key]; found {
 			sVal, ok := val.(string)
@@ -42,7 +42,7 @@ func exact(filter api.PromMetricsFilter) predicate {
 	}
 }
 
-func regex(filter api.PromMetricsFilter) predicate {
+func regex(filter api.MetricsFilter) Predicate {
 	r, _ := regexp.Compile(filter.Value)
 	return func(flow config.GenericMap) bool {
 		if val, found := flow[filter.Key]; found {
@@ -56,27 +56,27 @@ func regex(filter api.PromMetricsFilter) predicate {
 	}
 }
 
-func filterToPredicate(filter api.PromMetricsFilter) predicate {
+func filterToPredicate(filter api.MetricsFilter) Predicate {
 	switch filter.Type {
 	case api.PromFilterExact:
-		return exact(filter)
+		return Exact(filter)
 	case api.PromFilterPresence:
-		return presence(filter)
+		return Presence(filter)
 	case api.PromFilterAbsence:
-		return absence(filter)
+		return Absence(filter)
 	case api.PromFilterRegex:
 		return regex(filter)
 	}
-	// Default = exact
-	return exact(filter)
+	// Default = Exact
+	return Exact(filter)
 }
 
-func CreateMetricInfo(def api.PromMetricsItem) *metricInfo {
-	mi := metricInfo{
-		PromMetricsItem: def,
+func CreateMetricInfo(def api.MetricsItem) *MetricInfo {
+	mi := MetricInfo{
+		MetricsItem: def,
 	}
 	for _, f := range def.GetFilters() {
-		mi.filterPredicates = append(mi.filterPredicates, filterToPredicate(f))
+		mi.FilterPredicates = append(mi.FilterPredicates, filterToPredicate(f))
 	}
 	return &mi
 }
