@@ -46,15 +46,13 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 		return config.GenericMap{}
 	}
 	out := config.GenericMap{
-		"FlowDirection":   int(flow.Direction.Number()),
 		"SrcMac":          macToStr(flow.DataLink.GetSrcMac()),
 		"DstMac":          macToStr(flow.DataLink.GetDstMac()),
 		"Etype":           flow.EthProtocol,
-		"Duplicate":       flow.Duplicate,
+		"Duplicate":       flow.Duplicate, // TODO: remove duplicate field as soon as metrics doesn't rely on it anymore
 		"TimeFlowStartMs": flow.TimeFlowStart.AsTime().UnixMilli(),
 		"TimeFlowEndMs":   flow.TimeFlowEnd.AsTime().UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
-		"Interface":       flow.Interface,
 		"AgentIP":         ipToStr(flow.AgentIp),
 	}
 
@@ -65,17 +63,20 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 	if flow.Packets != 0 {
 		out["Packets"] = flow.Packets
 	}
-	var interfaces []interface{}
-	var flowDirections []interface{}
 
+	var interfaces []string
+	var directions []int
 	if len(flow.GetDupList()) != 0 {
 		for _, entry := range flow.GetDupList() {
 			interfaces = append(interfaces, entry.Interface)
-			flowDirections = append(flowDirections, entry.Direction)
+			directions = append(directions, int(entry.Direction))
 		}
-		out["Interfaces"] = interfaces
-		out["FlowDirections"] = flowDirections
+	} else {
+		interfaces = append(interfaces, flow.Interface)
+		directions = append(directions, int(flow.Direction))
 	}
+	out["Interfaces"] = interfaces
+	out["IfDirections"] = directions
 
 	ethType := ethernet.EtherType(flow.EthProtocol)
 	if ethType == ethernet.EtherTypeIPv4 || ethType == ethernet.EtherTypeIPv6 {

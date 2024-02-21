@@ -57,7 +57,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":   1,
+				"IfDirections":    []int{1},
 				"Bytes":           456,
 				"SrcAddr":         "6.7.8.9",
 				"DstAddr":         "10.11.12.13",
@@ -73,7 +73,7 @@ func TestConversions(t *testing.T) {
 				"Flags":           0x100,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
-				"Interface":       "eth0",
+				"Interfaces":      []string{"eth0"},
 				"AgentIP":         "10.11.12.13",
 				"DnsErrno":        0,
 			},
@@ -105,7 +105,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":   1,
+				"IfDirections":    []int{1},
 				"Bytes":           456,
 				"SrcAddr":         "6.7.8.9",
 				"DstAddr":         "10.11.12.13",
@@ -120,7 +120,7 @@ func TestConversions(t *testing.T) {
 				"DstPort":         443,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
-				"Interface":       "eth0",
+				"Interfaces":      []string{"eth0"},
 				"AgentIP":         "10.11.12.13",
 				"DnsErrno":        0,
 			},
@@ -152,7 +152,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":   1,
+				"IfDirections":    []int{1},
 				"Bytes":           456,
 				"SrcAddr":         "6.7.8.9",
 				"DstAddr":         "10.11.12.13",
@@ -165,7 +165,7 @@ func TestConversions(t *testing.T) {
 				"Proto":           1,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
-				"Interface":       "eth0",
+				"Interfaces":      []string{"eth0"},
 				"AgentIP":         "10.11.12.13",
 				"IcmpType":        8,
 				"IcmpCode":        0,
@@ -199,7 +199,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":   1,
+				"IfDirections":    []int{1},
 				"Bytes":           456,
 				"SrcAddr":         "102:304:506:708:90a:b0c:d0e:f10",
 				"DstAddr":         "b0c:d0e:f10:1112:1314:1516:1718:191a",
@@ -212,7 +212,7 @@ func TestConversions(t *testing.T) {
 				"Proto":           58,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
-				"Interface":       "eth0",
+				"Interfaces":      []string{"eth0"},
 				"AgentIP":         "10.11.12.13",
 				"IcmpType":        8,
 				"IcmpCode":        0,
@@ -247,7 +247,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":   1,
+				"IfDirections":    []int{1},
 				"Bytes":           500,
 				"DstMac":          "0A:0B:0C:0D:0E:0F",
 				"SrcMac":          "04:05:06:07:08:09",
@@ -256,7 +256,7 @@ func TestConversions(t *testing.T) {
 				"Packets":         128,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
-				"Interface":       "eth0",
+				"Interfaces":      []string{"eth0"},
 				"AgentIP":         "10.11.12.13",
 			},
 		},
@@ -293,7 +293,7 @@ func TestConversions(t *testing.T) {
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":          1,
+				"IfDirections":           []int{1},
 				"Bytes":                  500,
 				"DstMac":                 "0A:0B:0C:0D:0E:0F",
 				"SrcMac":                 "04:05:06:07:08:09",
@@ -302,7 +302,7 @@ func TestConversions(t *testing.T) {
 				"Packets":                128,
 				"TimeFlowStartMs":        someTime.UnixMilli(),
 				"TimeFlowEndMs":          someTime.UnixMilli(),
-				"Interface":              "eth0",
+				"Interfaces":             []string{"eth0"},
 				"AgentIP":                "10.11.12.13",
 				"PktDropBytes":           100,
 				"PktDropPackets":         10,
@@ -354,7 +354,7 @@ func TestConversions(t *testing.T) {
 				TimeFlowRtt:   someDuration,
 			},
 			expected: &config.GenericMap{
-				"FlowDirection":          1,
+				"IfDirections":           []int{1},
 				"Bytes":                  456,
 				"SrcAddr":                "6.7.8.9",
 				"DstAddr":                "10.11.12.13",
@@ -370,7 +370,7 @@ func TestConversions(t *testing.T) {
 				"Flags":                  0x100,
 				"TimeFlowStartMs":        someTime.UnixMilli(),
 				"TimeFlowEndMs":          someTime.UnixMilli(),
-				"Interface":              "eth0",
+				"Interfaces":             []string{"eth0"},
 				"AgentIP":                "10.11.12.13",
 				"PktDropBytes":           100,
 				"PktDropPackets":         10,
@@ -383,6 +383,61 @@ func TestConversions(t *testing.T) {
 				"DnsFlagsResponseCode":   "FormErr",
 				"DnsErrno":               0,
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
+			},
+		},
+		{
+			name: "Multiple interfaces record",
+			flow: &flow.Record{
+				RawRecord: flow.RawRecord{
+					Id: ebpf.BpfFlowId{
+						EthProtocol:       2048,
+						Direction:         flow.DirectionEgress,
+						SrcMac:            flow.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
+						DstMac:            flow.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+						SrcIp:             flow.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
+						DstIp:             flow.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
+						SrcPort:           23000,
+						DstPort:           443,
+						TransportProtocol: 6,
+					},
+					Metrics: ebpf.BpfFlowMetrics{
+						Bytes:   64,
+						Packets: 1,
+						Flags:   0x100,
+						Dscp:    64,
+						DnsRecord: ebpf.BpfDnsRecordT{
+							Errno: 0,
+						},
+					},
+				},
+				DupList: []map[string]uint8{
+					{"5e6e92caa1d51cf": 0},
+					{"eth0": 1},
+				},
+				TimeFlowStart: someTime,
+				TimeFlowEnd:   someTime,
+				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
+			},
+			expected: &config.GenericMap{
+				"IfDirections":    []int{0, 1},
+				"Bytes":           64,
+				"SrcAddr":         "6.7.8.9",
+				"DstAddr":         "10.11.12.13",
+				"Dscp":            64,
+				"DstMac":          "0A:0B:0C:0D:0E:0F",
+				"SrcMac":          "04:05:06:07:08:09",
+				"Duplicate":       false,
+				"Etype":           2048,
+				"Packets":         1,
+				"Proto":           6,
+				"SrcPort":         23000,
+				"DstPort":         443,
+				"Flags":           0x100,
+				"TimeFlowStartMs": someTime.UnixMilli(),
+				"TimeFlowEndMs":   someTime.UnixMilli(),
+				"Interfaces":      []string{"5e6e92caa1d51cf", "eth0"},
+				"AgentIP":         "10.11.12.13",
+				"DnsErrno":        0,
 			},
 		},
 	}
@@ -413,7 +468,7 @@ func TestConversions(t *testing.T) {
 func normalizeMap(m config.GenericMap) error {
 	for k, v := range m {
 		switch v := v.(type) {
-		case bool, string, int64:
+		case bool, string, int64, []string, []int:
 			continue
 		default:
 			conv, err := utils.ConvertToUint32(v)
