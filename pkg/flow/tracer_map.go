@@ -6,11 +6,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
-
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 var mtlog = logrus.WithField("component", "flow.MapTracer")
@@ -22,22 +24,30 @@ type MapTracer struct {
 	evictionTimeout          time.Duration
 	staleEntriesEvictTimeout time.Duration
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
-	evictionCond   *sync.Cond
-	lastEvictionNs uint64
+	evictionCond               *sync.Cond
+	lastEvictionNs             uint64
+	hmapEvictionCounter        prometheus.Counter
+	numberOfEvictedFlows       prometheus.Counter
+	timeSpentinLookupAndDelete prometheus.Histogram
+	errCanNotDeleteflows       prometheus.Counter
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(counter prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
-func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout time.Duration) *MapTracer {
+func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout time.Duration, m *metrics.Metrics) *MapTracer {
 	return &MapTracer{
-		mapFetcher:               fetcher,
-		evictionTimeout:          evictionTimeout,
-		lastEvictionNs:           uint64(monotime.Now()),
-		evictionCond:             sync.NewCond(&sync.Mutex{}),
-		staleEntriesEvictTimeout: staleEntriesEvictTimeout,
+		mapFetcher:                 fetcher,
+		evictionTimeout:            evictionTimeout,
+		lastEvictionNs:             uint64(monotime.Now()),
+		evictionCond:               sync.NewCond(&sync.Mutex{}),
+		staleEntriesEvictTimeout:   staleEntriesEvictTimeout,
+		hmapEvictionCounter:        m.CreateHashMapCounter(),
+		numberOfEvictedFlows:       m.CreateNumberOfEvictedFlows(),
+		timeSpentinLookupAndDelete: m.CreateTimeSpendInLookupAndDelete(),
+		errCanNotDeleteflows:       m.CreateCanNotDeleteFlows(),
 	}
 }
 
@@ -95,7 +105,9 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	for flowKey, flowMetrics := range m.mapFetcher.LookupAndDeleteMap() {
+	flows := m.mapFetcher.LookupAndDeleteMap(m.errCanNotDeleteflows)
+	elapsed := time.Since(currentTime)
+	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
 		if aggregatedMetrics.EndMonoTimeTs == 0 {
@@ -124,6 +136,9 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	if forceGC {
 		runtime.GC()
 	}
+	m.hmapEvictionCounter.Inc()
+	m.numberOfEvictedFlows.Add(float64(len(forwardingFlows)))
+	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }
 

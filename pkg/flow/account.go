@@ -3,9 +3,11 @@ package flow
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 // Accounter accumulates flows metrics in memory and eventually evicts them via an evictor channel.
@@ -13,11 +15,12 @@ import (
 // for the edge case where packets are submitted directly via ring-buffer because the kernel-side
 // accounting map is full.
 type Accounter struct {
-	maxEntries   int
-	evictTimeout time.Duration
-	entries      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
-	clock        func() time.Time
-	monoClock    func() time.Duration
+	maxEntries               int
+	evictTimeout             time.Duration
+	entries                  map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	clock                    func() time.Time
+	monoClock                func() time.Duration
+	userSpaceEvictionCounter prometheus.Counter
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -28,13 +31,15 @@ func NewAccounter(
 	maxEntries int, evictTimeout time.Duration,
 	clock func() time.Time,
 	monoClock func() time.Duration,
+	m *metrics.Metrics,
 ) *Accounter {
 	return &Accounter{
-		maxEntries:   maxEntries,
-		evictTimeout: evictTimeout,
-		entries:      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
-		clock:        clock,
-		monoClock:    monoClock,
+		maxEntries:               maxEntries,
+		evictTimeout:             evictTimeout,
+		entries:                  map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
+		clock:                    clock,
+		monoClock:                monoClock,
+		userSpaceEvictionCounter: m.CreateUserSpaceEvictionCounter(),
 	}
 }
 
@@ -92,5 +97,6 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 		records = append(records, NewRecord(key, metrics, now, monotonicNow))
 	}
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
+	c.userSpaceEvictionCounter.Inc()
 	evictor <- records
 }

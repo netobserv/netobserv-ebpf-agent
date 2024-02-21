@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+
+	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -18,7 +20,10 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer kafkaWriter
+	Writer                         kafkaWriter
+	NumberOfRecordsExportedByKafka prometheus.Counter
+	ExportedRecordsBatchSize       prometheus.Counter
+	ErrCanNotExportToKafka         prometheus.Counter
 }
 
 func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
@@ -50,11 +55,14 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 			continue
 		}
 		msgs = append(msgs, kafkago.Message{Value: pbBytes, Key: getFlowKey(record)})
+		kp.ExportedRecordsBatchSize.Add(float64(len(pbBytes)))
 	}
 
 	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
 		klog.WithError(err).Error("can't write messages into Kafka")
+		kp.ErrCanNotExportToKafka.Inc()
 	}
+	kp.NumberOfRecordsExportedByKafka.Add(float64(len(records)))
 }
 
 type JSONRecord struct {

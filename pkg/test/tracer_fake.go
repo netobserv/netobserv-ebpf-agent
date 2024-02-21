@@ -5,10 +5,12 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+
+	"github.com/cilium/ebpf/ringbuf"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // TracerFake fakes the kernel-side eBPF map structures for testing
@@ -34,7 +36,7 @@ func (m *TracerFake) Register(iface ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) LookupAndDeleteMap() map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
+func (m *TracerFake) LookupAndDeleteMap(_ prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
 	select {
 	case r := <-m.mapLookups:
 		return r

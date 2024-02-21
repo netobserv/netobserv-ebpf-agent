@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
 const timeout = 5 * time.Second
@@ -49,7 +50,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	})
+	}, metrics.NewMetrics(&metrics.Settings{}))
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *RawRecord, 20)
@@ -132,7 +133,7 @@ func TestEvict_Period(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	})
+	}, metrics.NewMetrics(&metrics.Settings{}))
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *RawRecord, 20)

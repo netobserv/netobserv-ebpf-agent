@@ -165,4 +165,12 @@ type Config struct {
 	PCAFilters string `env:"PCA_FILTER"`
 	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
 	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
+	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
+	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
+	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.
+	MetricsServerAddress string `env:"METRICS_SERVER_ADDRESS"`
+	// MetricsPort is the port of the server that collects ebpf agent metrics.
+	MetricsPort int `env:"METRICS_SERVER_PORT" envDefault:"9090"`
+	// MetricsPrefix is the prefix of the metrics that are sent to the server.
+	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
 }

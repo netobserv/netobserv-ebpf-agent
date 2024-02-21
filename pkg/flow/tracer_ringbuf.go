@@ -9,8 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,9 +23,11 @@ var rtlog = logrus.WithField("component", "flow.RingBufTracer")
 // added in the eBPF kernel space due to the map being full or busy) and submits them to the
 // userspace Aggregator map
 type RingBufTracer struct {
-	mapFlusher mapFlusher
-	ringBuffer ringBufReader
-	stats      stats
+	mapFlusher                   mapFlusher
+	ringBuffer                   ringBufReader
+	stats                        stats
+	numberOfFlowsReceived        prometheus.Counter
+	errCanNotReadRingBuffCounter prometheus.Counter
 }
 
 type ringBufReader interface {
@@ -42,12 +47,13 @@ type mapFlusher interface {
 }
 
 func NewRingBufTracer(
-	reader ringBufReader, flusher mapFlusher, logTimeout time.Duration,
+	reader ringBufReader, flusher mapFlusher, logTimeout time.Duration, m *metrics.Metrics,
 ) *RingBufTracer {
 	return &RingBufTracer{
-		mapFlusher: flusher,
-		ringBuffer: reader,
-		stats:      stats{loggingTimeout: logTimeout},
+		mapFlusher:            flusher,
+		ringBuffer:            reader,
+		stats:                 stats{loggingTimeout: logTimeout},
+		numberOfFlowsReceived: m.CreateNumberOfFlowsReceivedByRingBuffer(),
 	}
 }
 
@@ -81,6 +87,7 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	// Parses the ringbuf event entry into an Event structure.
 	readFlow, err := ReadFrom(bytes.NewBuffer(event.RawSample))
 	if err != nil {
+		m.errCanNotReadRingBuffCounter.Inc()
 		return fmt.Errorf("parsing data received from the ring buffer: %w", err)
 	}
 	mapFullError := readFlow.Metrics.Errno == uint8(syscall.E2BIG)
@@ -92,7 +99,7 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	if mapFullError {
 		m.mapFlusher.Flush()
 	}
-
+	m.numberOfFlowsReceived.Inc()
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
 	return nil
