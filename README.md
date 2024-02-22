@@ -93,6 +93,22 @@ and whether they worked (✅) or did not (❌):
 | Kind                          | 1.23.5             | ❌            | ✅          |
 | OpenShift                     | 1.23.3             | ✅            | ✅          |
 
+## Running on KinD cluster
+
+### How to run on kind cluster
+
+Install KinD and the ebpf agent and export KUBECONFIG
+```sh
+make create-and-deploy-kind-cluster
+export KUBECONFIG=$(pwd)/scripts/kubeconfig
+```
+
+### Deleting the kind cluster
+
+In order to delete the kind cluster:
+```sh
+make destroy-kind-cluster
+```
 
 ## Development receipts
 

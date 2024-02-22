@@ -160,6 +160,15 @@ tests-e2e: prereqs ## Run e2e tests
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...
 
+.PHONY: create-and-deploy-kind-cluster
+create-and-deploy-kind-cluster: prereqs ## Create a kind cluster and deploy the agent.
+	scripts/kind-cluster.sh
+
+.PHONY: destroy-kind-cluster
+destroy-kind-cluster: ## Destroy the kind cluster.
+	oc delete -f scripts/agent.yml
+	kind delete cluster
+
 ##@ Images
 
 # note: to build and push custom image tag use: IMAGE_ORG=myuser VERSION=dev s
