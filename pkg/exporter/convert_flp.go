@@ -21,11 +21,14 @@ func ConvertToFLP(fr *flow.Record) config.GenericMap {
 		"SrcMac":          srcMAC.String(),
 		"DstMac":          dstMAC.String(),
 		"Etype":           fr.Id.EthProtocol,
-		"Duplicate":       fr.Duplicate, // TODO: remove duplicate field as soon as metrics doesn't rely on it anymore
 		"TimeFlowStartMs": fr.TimeFlowStart.UnixMilli(),
 		"TimeFlowEndMs":   fr.TimeFlowEnd.UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
 		"AgentIP":         fr.AgentIP.String(),
+	}
+
+	if fr.Duplicate {
+		out["Duplicate"] = true
 	}
 
 	if fr.Metrics.Bytes != 0 {

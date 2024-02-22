@@ -49,11 +49,14 @@ func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
 		"SrcMac":          macToStr(flow.DataLink.GetSrcMac()),
 		"DstMac":          macToStr(flow.DataLink.GetDstMac()),
 		"Etype":           flow.EthProtocol,
-		"Duplicate":       flow.Duplicate, // TODO: remove duplicate field as soon as metrics doesn't rely on it anymore
 		"TimeFlowStartMs": flow.TimeFlowStart.AsTime().UnixMilli(),
 		"TimeFlowEndMs":   flow.TimeFlowEnd.AsTime().UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
 		"AgentIP":         ipToStr(flow.AgentIp),
+	}
+
+	if flow.Duplicate {
+		out["Duplicate"] = true
 	}
 
 	if flow.Bytes != 0 {
