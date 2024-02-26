@@ -41,7 +41,7 @@ func TestProtoConversion(t *testing.T) {
 		Writer:                         &wc,
 		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
 		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
-		ErrCanNotExportToKafka:         m.CreateErrorCanNotWriteToKafka(),
+		Errors:                         m.GetErrorsCounter(),
 	}
 	input := make(chan []*flow.Record, 11)
 	record := flow.Record{}

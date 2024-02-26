@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
@@ -23,7 +24,7 @@ type KafkaProto struct {
 	Writer                         kafkaWriter
 	NumberOfRecordsExportedByKafka prometheus.Counter
 	ExportedRecordsBatchSize       prometheus.Counter
-	ErrCanNotExportToKafka         prometheus.Counter
+	Errors                         *metrics.ErrorCounter
 }
 
 func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
@@ -52,6 +53,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 		pbBytes, err := proto.Marshal(flowToPB(record))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
+			kp.Errors.WithValues("CantEncodeMessage", "kafka").Inc()
 			continue
 		}
 		msgs = append(msgs, kafkago.Message{Value: pbBytes, Key: getFlowKey(record)})
@@ -60,7 +62,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 
 	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
 		klog.WithError(err).Error("can't write messages into Kafka")
-		kp.ErrCanNotExportToKafka.Inc()
+		kp.Errors.WithValues("CantWriteMessage", "kafka").Inc()
 	}
 	kp.NumberOfRecordsExportedByKafka.Add(float64(len(records)))
 }
