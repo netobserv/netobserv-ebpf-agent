@@ -25,9 +25,6 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode"
-	putils "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
-	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -36,116 +33,60 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-// TODO: Refactor the code that is common with encode_prom
-const (
-	defaultExpiryTime = time.Duration(2 * time.Minute)
-	flpMeterName      = "flp_meter"
-)
-
-type counterInfo struct {
-	counter *metric.Float64Counter
-	info    *encode.MetricInfo
-}
-
-type gaugeInfo struct {
-	gauge *metric.Float64ObservableGauge
-	info  *encode.MetricInfo
-	obs   Float64Gauge
-}
-
-// TBD: Handle histograms
-/*
-type histoInfo struct {
-	histo *metric.Float64Histogram
-	info  *encode.MetricInfo
-}
-*/
+const defaultExpiryTime = time.Duration(2 * time.Minute)
+const flpMeterName = "flp_meter"
 
 type EncodeOtlpMetrics struct {
-	cfg      api.EncodeOtlpMetrics
-	ctx      context.Context
-	res      *resource.Resource
-	mp       *sdkmetric.MeterProvider
-	counters []counterInfo
-	gauges   []gaugeInfo
-	//histos           []histoInfo
-	//aggHistos        []histoInfo
-	expiryTime       time.Duration
-	mCache           *putils.TimedCache
-	exitChan         <-chan struct{}
-	meter            metric.Meter
-	metricsProcessed prometheus.Counter
-	metricsDropped   prometheus.Counter
-	errorsCounter    *prometheus.CounterVec
+	cfg          api.EncodeOtlpMetrics
+	ctx          context.Context
+	res          *resource.Resource
+	mp           *sdkmetric.MeterProvider
+	meter        metric.Meter
+	metricCommon *encode.MetricsCommonStruct
 }
 
 // Encode encodes a metric to be exported
 func (e *EncodeOtlpMetrics) Encode(metricRecord config.GenericMap) {
 	log.Tracef("entering EncodeOtlpMetrics. entry = %v", metricRecord)
-
-	// Process counters
-	for _, mInfo := range e.counters {
-		labels, value, _ := e.prepareMetric(metricRecord, mInfo.info)
-		if labels == nil {
-			continue
-		}
-		// set attributes using the labels
-		attributes := obtainAttributesFromLabels(labels)
-		(*mInfo.counter).Add(e.ctx, value, metric.WithAttributes(attributes...))
-		e.metricsProcessed.Inc()
-	}
-
-	// Process gauges
-	for _, mInfo := range e.gauges {
-		labels, value, key := e.prepareMetric(metricRecord, mInfo.info)
-		if labels == nil {
-			continue
-		}
-		// set attributes using the labels
-		attributes := obtainAttributesFromLabels(labels)
-		mInfo.obs.Set(key, value, attributes)
-		e.metricsProcessed.Inc()
-	}
-	// TBD: Process histograms
+	e.metricCommon.MetricCommonEncode(e, metricRecord)
 }
 
-func (e *EncodeOtlpMetrics) prepareMetric(flow config.GenericMap, info *encode.MetricInfo) (map[string]string, float64, string) {
-	val := e.extractGenericValue(flow, info)
-	if val == nil {
-		return nil, 0, ""
-	}
-	floatVal, err := utils.ConvertToFloat64(val)
-	if err != nil {
-		e.errorsCounter.WithLabelValues("ValueConversionError", info.Name, info.ValueKey).Inc()
-		return nil, 0, ""
-	}
-
-	entryLabels, key := encode.ExtractLabelsAndKey(flow, &info.MetricsItem)
-	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
-	_, ok := e.mCache.UpdateCacheEntry(key, entryLabels)
-	if !ok {
-		e.metricsDropped.Inc()
-		return nil, 0, ""
-	}
-	return entryLabels, floatVal, key
+func (e *EncodeOtlpMetrics) ProcessCounter(m interface{}, labels map[string]string, value float64) error {
+	counter := m.(metric.Float64Counter)
+	// set attributes using the labels
+	attributes := obtainAttributesFromLabels(labels)
+	counter.Add(e.ctx, value, metric.WithAttributes(attributes...))
+	return nil
 }
 
-func (e *EncodeOtlpMetrics) extractGenericValue(flow config.GenericMap, info *encode.MetricInfo) interface{} {
-	for _, pred := range info.FilterPredicates {
-		if !pred(flow) {
-			return nil
-		}
+func (e *EncodeOtlpMetrics) ProcessGauge(m interface{}, labels map[string]string, value float64, key string) error {
+	obs := m.(Float64Gauge)
+	// set attributes using the labels
+	attributes := obtainAttributesFromLabels(labels)
+	obs.Set(key, value, attributes)
+	return nil
+}
+
+func (e *EncodeOtlpMetrics) ProcessHist(m interface{}, labels map[string]string, value float64) error {
+	histo := m.(metric.Float64Histogram)
+	// set attributes using the labels
+	attributes := obtainAttributesFromLabels(labels)
+	histo.Record(e.ctx, value, metric.WithAttributes(attributes...))
+	return nil
+}
+
+func (e *EncodeOtlpMetrics) ProcessAggHist(m interface{}, labels map[string]string, values []float64) error {
+	histo := m.(metric.Float64Histogram)
+	// set attributes using the labels
+	attributes := obtainAttributesFromLabels(labels)
+	for _, v := range values {
+		histo.Record(e.ctx, v, metric.WithAttributes(attributes...))
 	}
-	if info.ValueKey == "" {
-		// No value key means it's a records / flows counter (1 flow = 1 increment), so just return 1
-		return 1
-	}
-	val, found := flow[info.ValueKey]
-	if !found {
-		e.errorsCounter.WithLabelValues("RecordKeyMissing", info.Name, info.ValueKey).Inc()
-		return nil
-	}
-	return val
+	return nil
+}
+
+func (e *EncodeOtlpMetrics) GetChacheEntry(entryLabels map[string]string, m interface{}) interface{} {
+	return entryLabels
 }
 
 func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
@@ -173,8 +114,17 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 	}
 
 	meterFactory := otel.Meter(flpMeterName)
-	counters := []counterInfo{}
-	gauges := []gaugeInfo{}
+
+	w := &EncodeOtlpMetrics{
+		cfg:   cfg,
+		ctx:   ctx,
+		res:   res,
+		mp:    mp,
+		meter: meterFactory,
+	}
+
+	metricCommon := encode.NewMetricsCommonStruct(opMetrics, 0, params.Name, expiryTime, nil)
+	w.metricCommon = metricCommon
 
 	for _, mCfg := range cfg.Metrics {
 		fullMetricName := cfg.Prefix + mCfg.Name
@@ -189,10 +139,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 				log.Errorf("error during counter creation: %v", err)
 				return nil, err
 			}
-			counters = append(counters, counterInfo{
-				counter: &counter,
-				info:    mInfo,
-			})
+			metricCommon.AddCounter(counter, mInfo)
 		case api.MetricEncodeOperationName("Gauge"):
 			// at implementation time, only asynchronous gauges are supported by otel in golang
 			obs := Float64Gauge{observations: make(map[string]Float64GaugeEntry)}
@@ -204,54 +151,29 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 				log.Errorf("error during gauge creation: %v", err)
 				return nil, err
 			}
-			gInfo := gaugeInfo{
-				info:  mInfo,
-				obs:   obs,
-				gauge: &gauge,
+			metricCommon.AddGauge(gauge, mInfo)
+		case api.MetricEncodeOperationName("Histogram"):
+			var histo metric.Float64Histogram
+			if len(mCfg.Buckets) == 0 {
+				histo, err = meter.Float64Histogram(fullMetricName)
+			} else {
+				histo, err = meter.Float64Histogram(fullMetricName,
+					metric.WithExplicitBucketBoundaries(mCfg.Buckets...),
+				)
+
 			}
-			gauges = append(gauges, gInfo)
-		// TBD: handle histograms
+			if err != nil {
+				log.Errorf("error during histogram creation: %v", err)
+				return nil, err
+			}
+			metricCommon.AddHist(histo, mInfo)
 		case "default":
 			log.Errorf("invalid metric type = %v, skipping", mCfg.Type)
 			continue
 		}
 	}
 
-	w := &EncodeOtlpMetrics{
-		cfg:              cfg,
-		ctx:              ctx,
-		res:              res,
-		mp:               mp,
-		meter:            meterFactory,
-		counters:         counters,
-		gauges:           gauges,
-		expiryTime:       expiryTime.Duration,
-		mCache:           putils.NewTimedCache(0, nil),
-		exitChan:         putils.ExitChannel(),
-		metricsProcessed: opMetrics.NewCounter(&encode.MetricsProcessed, params.Name),
-		metricsDropped:   opMetrics.NewCounter(&encode.MetricsDropped, params.Name),
-		errorsCounter:    opMetrics.NewCounterVec(&encode.EncodePromErrors),
-	}
-	go w.cleanupExpiredEntriesLoop()
 	return w, nil
-}
-
-// Cleanup - callback function from lru cleanup
-func (e *EncodeOtlpMetrics) Cleanup(cleanupFunc interface{}) {
-	// nothing more to do
-}
-
-func (e *EncodeOtlpMetrics) cleanupExpiredEntriesLoop() {
-	ticker := time.NewTicker(e.expiryTime)
-	for {
-		select {
-		case <-e.exitChan:
-			log.Debugf("exiting cleanupExpiredEntriesLoop because of signal")
-			return
-		case <-ticker.C:
-			e.mCache.CleanupExpiredEntries(e.expiryTime, e.Cleanup)
-		}
-	}
 }
 
 // At present, golang only supports asynchronous gauge, so we have some function here to support this
