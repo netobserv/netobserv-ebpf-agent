@@ -29,7 +29,7 @@ type MapTracer struct {
 	hmapEvictionCounter        prometheus.Counter
 	numberOfEvictedFlows       prometheus.Counter
 	timeSpentinLookupAndDelete prometheus.Histogram
-	errCanNotDeleteflows       prometheus.Counter
+	errors                     *metrics.ErrorCounter
 }
 
 type mapFetcher interface {
@@ -47,7 +47,7 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 		hmapEvictionCounter:        m.CreateHashMapCounter(),
 		numberOfEvictedFlows:       m.CreateNumberOfEvictedFlows(),
 		timeSpentinLookupAndDelete: m.CreateTimeSpendInLookupAndDelete(),
-		errCanNotDeleteflows:       m.CreateCanNotDeleteFlows(),
+		errors:                     m.GetErrorsCounter(),
 	}
 }
 
@@ -105,7 +105,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	flows := m.mapFetcher.LookupAndDeleteMap(m.errCanNotDeleteflows)
+	flows := m.mapFetcher.LookupAndDeleteMap(m.errors.WithValues("CannotDeleteFlows", ""))
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)

@@ -88,21 +88,12 @@ var (
 		"Sampling rate seconds",
 		TypeGauge,
 	)
-	errCanNotWriteRecordsTotal = defineMetric(
-		"err_can_not_write_records_total",
-		"error can not write records total",
+	errorsCounter = defineMetric(
+		"errors_total",
+		"errors counter",
 		TypeCounter,
+		"error",
 		"exporter",
-	)
-	errReadingRingBufferMapTotal = defineMetric(
-		"err_reading_ring_buffer_map_total",
-		"Error reading ring buffer map total",
-		TypeCounter,
-	)
-	errCanNotDeleteFlowEntriesTotal = defineMetric(
-		"err_can_not_delete_flow_entries_total",
-		"Error can not delete flow entries total",
-		TypeCounter,
 	)
 )
 
@@ -151,6 +142,17 @@ func (m *Metrics) NewCounter(def *MetricDefinition, labels ...string) prometheus
 		Help:        def.Help,
 		ConstLabels: def.mapLabels(labels),
 	})
+	m.register(c, fullName)
+	return c
+}
+
+func (m *Metrics) NewCounterVec(def *MetricDefinition) *prometheus.CounterVec {
+	verifyMetricType(def, TypeCounter)
+	fullName := m.Settings.Prefix + def.Name
+	c := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: fullName,
+		Help: def.Help,
+	}, def.Labels)
 	m.register(c, fullName)
 	return c
 }
@@ -220,18 +222,16 @@ func (m *Metrics) CreateSamplingRate() prometheus.Gauge {
 	return m.NewGauge(&samplingRateSeconds)
 }
 
-func (m *Metrics) CreateErrorCanNotWriteToGRPC() prometheus.Counter {
-	return m.NewCounter(&errCanNotWriteRecordsTotal, "grpc")
+func (m *Metrics) GetErrorsCounter() *ErrorCounter {
+	return &ErrorCounter{
+		vec: m.NewCounterVec(&errorsCounter),
+	}
 }
 
-func (m *Metrics) CreateErrorCanNotWriteToKafka() prometheus.Counter {
-	return m.NewCounter(&errCanNotWriteRecordsTotal, "kafka")
+type ErrorCounter struct {
+	vec *prometheus.CounterVec
 }
 
-func (m *Metrics) CreateCanNotReadFromRingBufferMap() prometheus.Counter {
-	return m.NewCounter(&errReadingRingBufferMapTotal)
-}
-
-func (m *Metrics) CreateCanNotDeleteFlows() prometheus.Counter {
-	return m.NewCounter(&errCanNotDeleteFlowEntriesTotal)
+func (c *ErrorCounter) WithValues(errName, exporter string) prometheus.Counter {
+	return c.vec.WithLabelValues(errName, exporter)
 }

@@ -363,7 +363,7 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 		},
 		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
 		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
-		ErrCanNotExportToKafka:         m.CreateErrorCanNotWriteToKafka(),
+		Errors:                         m.GetErrorsCounter(),
 	}).ExportFlows, nil
 }
 

@@ -27,7 +27,7 @@ type GRPCProto struct {
 	maxFlowsPerMessage            int
 	numberOfRecordsExportedByGRPC prometheus.Counter
 	exportedRecordsBatchSize      prometheus.Counter
-	errExportByGRPC               prometheus.Counter
+	errors                        *metrics.ErrorCounter
 }
 
 func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int, m *metrics.Metrics) (*GRPCProto, error) {
@@ -42,7 +42,7 @@ func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int, m *metr
 		maxFlowsPerMessage:            maxFlowsPerMessage,
 		numberOfRecordsExportedByGRPC: m.CreateNumberOfRecordsExportedByGRPC(),
 		exportedRecordsBatchSize:      m.CreateGRPCBatchSize(),
-		errExportByGRPC:               m.CreateErrorCanNotWriteToGRPC(),
+		errors:                        m.GetErrorsCounter(),
 	}, nil
 }
 
@@ -56,6 +56,7 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 		for _, pbRecords := range flowsToPB(inputRecords, g.maxFlowsPerMessage) {
 			log.Debugf("sending %d records", len(pbRecords.Entries))
 			if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
+				g.errors.WithValues("CantWriteMessage", "grpc").Inc()
 				log.WithError(err).Error("couldn't send flow records to collector")
 			}
 			g.numberOfRecordsExportedByGRPC.Add(float64(len(pbRecords.Entries)))
@@ -63,6 +64,6 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 	}
 	if err := g.clientConn.Close(); err != nil {
 		log.WithError(err).Warn("couldn't close flow export client")
-		g.errExportByGRPC.Inc()
+		g.errors.WithValues("CantCloseClient", "grpc").Inc()
 	}
 }
