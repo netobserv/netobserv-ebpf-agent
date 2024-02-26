@@ -43,7 +43,43 @@ type writeIpfix struct {
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const IPv6Type = 0x86DD
 
-var ilog = logrus.WithField("component", "write.Ipfix")
+var (
+	ilog       = logrus.WithField("component", "write.Ipfix")
+	IANAFields = []string{
+		"ethernetType",
+		"flowDirection",
+		"sourceMacAddress",
+		"destinationMacAddress",
+		"protocolIdentifier",
+		"sourceTransportPort",
+		"destinationTransportPort",
+		"octetDeltaCount",
+		"flowStartMilliseconds",
+		"flowEndMilliseconds",
+		"packetDeltaCount",
+		"interfaceName",
+	}
+	IPv4IANAFields = append([]string{
+		"sourceIPv4Address",
+		"destinationIPv4Address",
+	}, IANAFields...)
+	IPv6IANAFields = append([]string{
+		"sourceIPv6Address",
+		"destinationIPv6Address",
+		"nextHeaderIPv6",
+	}, IANAFields...)
+	KubeFields = []string{
+		"sourcePodNamespace",
+		"sourcePodName",
+		"destinationPodNamespace",
+		"destinationPodName",
+		"sourceNodeName",
+		"destinationNodeName",
+	}
+	CustomNetworkFields = []string{
+		// TODO
+	}
+)
 
 func addElementToTemplate(elementName string, value []byte, elements *[]entities.InfoElementWithValue, registryID uint32) error {
 	element, err := registry.GetInfoElement(elementName, registryID)
@@ -60,30 +96,20 @@ func addElementToTemplate(elementName string, value []byte, elements *[]entities
 	return nil
 }
 
+func addNetworkEnrichmentToTemplate(elements *[]entities.InfoElementWithValue, registryID uint32) error {
+	for _, field := range CustomNetworkFields {
+		if err := addElementToTemplate(field, nil, elements, registryID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func addKubeContextToTemplate(elements *[]entities.InfoElementWithValue, registryID uint32) error {
-	err := addElementToTemplate("sourcePodNamespace", nil, elements, registryID)
-	if err != nil {
-		return err
-	}
-	err = addElementToTemplate("sourcePodName", nil, elements, registryID)
-	if err != nil {
-		return err
-	}
-	err = addElementToTemplate("destinationPodNamespace", nil, elements, registryID)
-	if err != nil {
-		return err
-	}
-	err = addElementToTemplate("destinationPodName", nil, elements, registryID)
-	if err != nil {
-		return err
-	}
-	err = addElementToTemplate("sourceNodeName", nil, elements, registryID)
-	if err != nil {
-		return err
-	}
-	err = addElementToTemplate("destinationNodeName", nil, elements, registryID)
-	if err != nil {
-		return err
+	for _, field := range KubeFields {
+		if err := addElementToTemplate(field, nil, elements, registryID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -94,32 +120,32 @@ func loadCustomRegistry(EnterpriseID uint32) error {
 		ilog.WithError(err).Errorf("Failed to initialize registry")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodNamespace", 7733, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodNamespace", 7733, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodName", 7734, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodName", 7734, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodNamespace", 7735, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodNamespace", 7735, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodName", 7736, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodName", 7736, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourceNodeName", 7737, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourceNodeName", 7737, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationNodeName", 7738, 13, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationNodeName", 7738, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
@@ -137,64 +163,18 @@ func SendTemplateRecordv4(exporter *ipfixExporter.ExportingProcess, enrichEnterp
 	}
 	elements := make([]entities.InfoElementWithValue, 0)
 
-	err = addElementToTemplate("ethernetType", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowDirection", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceMacAddress", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationMacAddress", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceIPv4Address", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationIPv4Address", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("protocolIdentifier", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceTransportPort", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationTransportPort", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("octetDeltaCount", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowStartMilliseconds", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowEndMilliseconds", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("packetDeltaCount", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("interfaceName", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
+	for _, field := range IPv4IANAFields {
+		err = addElementToTemplate(field, nil, &elements, registry.IANAEnterpriseID)
+		if err != nil {
+			return 0, nil, err
+		}
 	}
 	if enrichEnterpriseID != 0 {
 		err = addKubeContextToTemplate(&elements, enrichEnterpriseID)
+		if err != nil {
+			return 0, nil, err
+		}
+		err = addNetworkEnrichmentToTemplate(&elements, enrichEnterpriseID)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -222,64 +202,18 @@ func SendTemplateRecordv6(exporter *ipfixExporter.ExportingProcess, enrichEnterp
 	}
 	elements := make([]entities.InfoElementWithValue, 0)
 
-	err = addElementToTemplate("ethernetType", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowDirection", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceMacAddress", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationMacAddress", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceIPv6Address", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationIPv6Address", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("nextHeaderIPv6", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("sourceTransportPort", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("destinationTransportPort", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("octetDeltaCount", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowStartMilliseconds", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("flowEndMilliseconds", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("packetDeltaCount", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
-	}
-	err = addElementToTemplate("interfaceName", nil, &elements, registry.IANAEnterpriseID)
-	if err != nil {
-		return 0, nil, err
+	for _, field := range IPv6IANAFields {
+		err = addElementToTemplate(field, nil, &elements, registry.IANAEnterpriseID)
+		if err != nil {
+			return 0, nil, err
+		}
 	}
 	if enrichEnterpriseID != 0 {
 		err = addKubeContextToTemplate(&elements, enrichEnterpriseID)
+		if err != nil {
+			return 0, nil, err
+		}
+		err = addNetworkEnrichmentToTemplate(&elements, enrichEnterpriseID)
 		if err != nil {
 			return 0, nil, err
 		}
