@@ -143,8 +143,18 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 	alog.Debug("agent IP: " + agentIP.String())
 
+	// initialize metrics
+	metricsSettings := &metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: cfg.MetricsServerAddress,
+			Port:    cfg.MetricsPort,
+		},
+		Prefix: cfg.MetricsPrefix,
+	}
+	m := metrics.NewMetrics(metricsSettings)
+
 	// configure selected exporter
-	exportFunc, err := buildFlowExporter(cfg)
+	exportFunc, err := buildFlowExporter(cfg, m)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +181,11 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, informer, fetcher, exportFunc, agentIP)
+	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
-func flowsAgent(cfg *Config,
+func flowsAgent(cfg *Config, m *metrics.Metrics,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*flow.Record],
@@ -214,18 +224,10 @@ func flowsAgent(cfg *Config,
 		return iface
 	}
 	var promoServer *http.Server
-	metricsSettings := &metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	}
 	if cfg.MetricsEnable {
-		promoServer = promo.InitializePrometheus(metricsSettings)
+		promoServer = promo.InitializePrometheus(m.Settings)
 	}
 
-	m := metrics.NewMetrics(metricsSettings)
 	samplingGauge := m.CreateSamplingRate()
 	samplingGauge.Set(float64(cfg.Sampling))
 
@@ -263,12 +265,12 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	switch cfg.Export {
 	case "grpc":
-		return buildGRPCExporter(cfg)
+		return buildGRPCExporter(cfg, m)
 	case "kafka":
-		return buildKafkaExporter(cfg)
+		return buildKafkaExporter(cfg, m)
 	case "ipfix+udp":
 		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
@@ -280,19 +282,12 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 	}
 }
 
-func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	metrics := metrics.NewMetrics(&metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	})
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, metrics)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +302,7 @@ func buildDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], err
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -317,13 +312,6 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
 	}
 	transport := kafkago.Transport{}
-	m := metrics.NewMetrics(&metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	})
 	if cfg.KafkaEnableTLS {
 		tlsConfig, err := buildTLSConfig(cfg)
 		if err != nil {

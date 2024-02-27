@@ -89,11 +89,6 @@ var (
 		"error",
 		"exporter",
 	)
-	// MapSize = defineMetric(
-	// 	"ebpf_map_size",
-	// 	"size of the eBPF maps",
-	// 	TypeGauge,
-	// )
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -115,10 +110,21 @@ func verifyMetricType(def *MetricDefinition, t metricType) {
 
 type Metrics struct {
 	Settings *Settings
+
+	// Shared metrics:
+	evictionCounter     *EvictionCounter
+	evictedFlowsCounter *EvictionCounter
+	errors              *ErrorCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
-	return &Metrics{Settings: settings}
+	m := &Metrics{
+		Settings: settings,
+	}
+	m.evictionCounter = &EvictionCounter{vec: m.NewCounterVec(&evictionsTotal)}
+	m.evictedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedFlowsTotal)}
+	m.errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
+	return m
 }
 
 // register will register against the default registry. May panic or not depending on settings
@@ -197,11 +203,11 @@ type EvictionCounter struct {
 }
 
 func (m *Metrics) GetEvictionCounter() *EvictionCounter {
-	return &EvictionCounter{vec: m.NewCounterVec(&evictionsTotal)}
+	return m.evictionCounter
 }
 
 func (m *Metrics) GetEvictedFlowsCounter() *EvictionCounter {
-	return &EvictionCounter{vec: m.NewCounterVec(&evictedFlowsTotal)}
+	return m.evictedFlowsCounter
 }
 
 func (c *EvictionCounter) ForSourceAndReason(source, reason string) prometheus.Counter {
@@ -233,7 +239,7 @@ func (m *Metrics) CreateSamplingRate() prometheus.Gauge {
 }
 
 func (m *Metrics) GetErrorsCounter() *ErrorCounter {
-	return &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
+	return m.errors
 }
 
 type ErrorCounter struct {
