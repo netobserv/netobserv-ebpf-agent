@@ -19,7 +19,6 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
-	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
@@ -125,7 +124,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap(c prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(c *metrics.ErrorCounter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }

@@ -20,11 +20,11 @@ func TestMetricsCreation(t *testing.T) {
 	metrics := NewMetrics(settings)
 
 	// Test Counter creation
-	counter := metrics.CreateHashMapCounter()
+	counter := metrics.CreateGRPCBatchSize()
 	assert.NotNil(t, counter)
 
 	// Test Gauge creation
-	gauge := metrics.CreateNumberOfEvictedFlows()
+	gauge := metrics.CreateSamplingRate()
 	assert.NotNil(t, gauge)
 
 	// Test Histogram creation

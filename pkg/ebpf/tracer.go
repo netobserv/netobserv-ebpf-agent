@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/cilium/ebpf"
@@ -20,7 +21,6 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/gavv/monotime"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -163,6 +163,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
+
 	return &FlowFetcher{
 		objects:            &objects,
 		ringbufReader:      flows,
@@ -411,7 +412,7 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
-func (m *FlowFetcher) LookupAndDeleteMap(c prometheus.Counter) map[BpfFlowId][]BpfFlowMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap(c *metrics.ErrorCounter) map[BpfFlowId][]BpfFlowMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
@@ -425,7 +426,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(c prometheus.Counter) map[BpfFlowId][]B
 		if err := flowMap.Delete(id); err != nil {
 			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
-			c.Inc()
+			c.ForError("CannotDeleteFlows").Inc()
 		}
 		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
 		// (probably due to race conditions) so we need to re-join metrics again at userspace
@@ -795,7 +796,7 @@ func (p *PacketFetcher) ReadPerf() (perf.Record, error) {
 	return p.perfReader.Read()
 }
 
-func (p *PacketFetcher) LookupAndDeleteMap(c prometheus.Counter) map[int][]*byte {
+func (p *PacketFetcher) LookupAndDeleteMap(c *metrics.ErrorCounter) map[int][]*byte {
 	packetMap := p.objects.PacketRecord
 	iterator := packetMap.Iterate()
 	packets := make(map[int][]*byte, p.cacheMaxSize)
@@ -806,7 +807,7 @@ func (p *PacketFetcher) LookupAndDeleteMap(c prometheus.Counter) map[int][]*byte
 		if err := packetMap.Delete(id); err != nil {
 			log.WithError(err).WithField("packetID ", id).
 				Warnf("couldn't delete  entry")
-			c.Inc()
+			c.ForError("CannotDeleteFlows").Inc()
 		}
 		packets[id] = append(packets[id], packet...)
 	}

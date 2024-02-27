@@ -46,46 +46,40 @@ func defineMetric(name, help string, t metricType, labels ...string) MetricDefin
 }
 
 var (
-	hmapEvictionsTotal = defineMetric(
-		"hashmap_evictions_total",
-		"Number of hashmap evictions total",
+	evictionsTotal = defineMetric(
+		"evictions_total",
+		"Number of eviction events",
 		TypeCounter,
+		"source",
+		"reason",
 	)
-	userspaceNumberOfEvictionsTotal = defineMetric(
-		"userspace_number_of_evictions_total",
-		"Number of userspace evictions total",
+	evictedFlowsTotal = defineMetric(
+		"evicted_flows_total",
+		"Number of evicted flows",
 		TypeCounter,
-	)
-	numberOfevictedFlowsTotal = defineMetric(
-		"number_of_evicted_flows_total",
-		"Number of evicted flows Total",
-		TypeCounter,
-	)
-	numberofFlowsreceivedviaRingBufferTotal = defineMetric(
-		"number_of_flows_received_via_ring_buffer_total",
-		"Number of flows received via ring buffer total",
-		TypeCounter,
+		"source",
+		"reason",
 	)
 	lookupAndDeleteMapDurationSeconds = defineMetric(
 		"lookup_and_delete_map_duration_seconds",
-		"Lookup and delete map duration seconds",
+		"Lookup and delete map duration in seconds",
 		TypeHistogram,
 	)
 	numberOfWrittenRecordsTotal = defineMetric(
-		"number_of_written_records_total",
-		"Number of written records total",
+		"written_records_total",
+		"Number of written records",
 		TypeCounter,
 		"exporter",
 	)
 	exportedBatchSizeTotal = defineMetric(
 		"exported_batch_size_total",
-		"Exported batch size total",
+		"Exported batch size",
 		TypeCounter,
 		"exporter",
 	)
-	samplingRateSeconds = defineMetric(
-		"sampling_rate_seconds",
-		"Sampling rate seconds",
+	samplingRate = defineMetric(
+		"sampling_rate",
+		"Sampling rate",
 		TypeGauge,
 	)
 	errorsCounter = defineMetric(
@@ -95,6 +89,11 @@ var (
 		"error",
 		"exporter",
 	)
+	// MapSize = defineMetric(
+	// 	"ebpf_map_size",
+	// 	"size of the eBPF maps",
+	// 	TypeGauge,
+	// )
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -169,6 +168,17 @@ func (m *Metrics) NewGauge(def *MetricDefinition, labels ...string) prometheus.G
 	return c
 }
 
+func (m *Metrics) NewGaugeFunc(def *MetricDefinition, f func() float64, labels ...string) {
+	verifyMetricType(def, TypeGauge)
+	fullName := m.Settings.Prefix + def.Name
+	gf := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name:        fullName,
+		Help:        def.Help,
+		ConstLabels: def.mapLabels(labels),
+	}, f)
+	m.register(gf, fullName)
+}
+
 func (m *Metrics) NewHistogram(def *MetricDefinition, buckets []float64, labels ...string) prometheus.Histogram {
 	verifyMetricType(def, TypeHistogram)
 	fullName := m.Settings.Prefix + def.Name
@@ -182,20 +192,20 @@ func (m *Metrics) NewHistogram(def *MetricDefinition, buckets []float64, labels 
 	return c
 }
 
-func (m *Metrics) CreateHashMapCounter() prometheus.Counter {
-	return m.NewCounter(&hmapEvictionsTotal)
+type EvictionCounter struct {
+	vec *prometheus.CounterVec
 }
 
-func (m *Metrics) CreateUserSpaceEvictionCounter() prometheus.Counter {
-	return m.NewCounter(&userspaceNumberOfEvictionsTotal)
+func (m *Metrics) GetEvictionCounter() *EvictionCounter {
+	return &EvictionCounter{vec: m.NewCounterVec(&evictionsTotal)}
 }
 
-func (m *Metrics) CreateNumberOfEvictedFlows() prometheus.Counter {
-	return m.NewCounter(&numberOfevictedFlowsTotal)
+func (m *Metrics) GetEvictedFlowsCounter() *EvictionCounter {
+	return &EvictionCounter{vec: m.NewCounterVec(&evictedFlowsTotal)}
 }
 
-func (m *Metrics) CreateNumberOfFlowsReceivedByRingBuffer() prometheus.Counter {
-	return m.NewCounter(&numberofFlowsreceivedviaRingBufferTotal)
+func (c *EvictionCounter) ForSourceAndReason(source, reason string) prometheus.Counter {
+	return c.vec.WithLabelValues(source, reason)
 }
 
 func (m *Metrics) CreateTimeSpendInLookupAndDelete() prometheus.Histogram {
@@ -219,19 +229,21 @@ func (m *Metrics) CreateKafkaBatchSize() prometheus.Counter {
 }
 
 func (m *Metrics) CreateSamplingRate() prometheus.Gauge {
-	return m.NewGauge(&samplingRateSeconds)
+	return m.NewGauge(&samplingRate)
 }
 
 func (m *Metrics) GetErrorsCounter() *ErrorCounter {
-	return &ErrorCounter{
-		vec: m.NewCounterVec(&errorsCounter),
-	}
+	return &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 }
 
 type ErrorCounter struct {
 	vec *prometheus.CounterVec
 }
 
-func (c *ErrorCounter) WithValues(errName, exporter string) prometheus.Counter {
+func (c *ErrorCounter) ForErrorAndExporter(errName, exporter string) prometheus.Counter {
 	return c.vec.WithLabelValues(errName, exporter)
+}
+
+func (c *ErrorCounter) ForError(errName string) prometheus.Counter {
+	return c.vec.WithLabelValues(errName, "")
 }

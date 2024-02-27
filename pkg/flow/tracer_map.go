@@ -26,14 +26,14 @@ type MapTracer struct {
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond               *sync.Cond
 	lastEvictionNs             uint64
-	hmapEvictionCounter        prometheus.Counter
-	numberOfEvictedFlows       prometheus.Counter
+	evictionCounter            *metrics.EvictionCounter
+	evictedFlowsCounter        *metrics.EvictionCounter
 	timeSpentinLookupAndDelete prometheus.Histogram
 	errors                     *metrics.ErrorCounter
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap(counter prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(counter *metrics.ErrorCounter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
@@ -44,8 +44,8 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 		lastEvictionNs:             uint64(monotime.Now()),
 		evictionCond:               sync.NewCond(&sync.Mutex{}),
 		staleEntriesEvictTimeout:   staleEntriesEvictTimeout,
-		hmapEvictionCounter:        m.CreateHashMapCounter(),
-		numberOfEvictedFlows:       m.CreateNumberOfEvictedFlows(),
+		evictionCounter:            m.GetEvictionCounter(),
+		evictedFlowsCounter:        m.GetEvictedFlowsCounter(),
 		timeSpentinLookupAndDelete: m.CreateTimeSpendInLookupAndDelete(),
 		errors:                     m.GetErrorsCounter(),
 	}
@@ -53,8 +53,9 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 
 // Flush forces reading (and removing) all the flows from the source eBPF map
 // and sending the entries to the next stage in the pipeline
-func (m *MapTracer) Flush() {
+func (m *MapTracer) Flush(reason string) {
 	m.evictionCond.Broadcast()
+	m.evictionCounter.ForSourceAndReason("hashmap", reason).Inc()
 }
 
 func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*Record] {
@@ -69,7 +70,7 @@ func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[
 				return
 			case <-evictionTicker.C:
 				mtlog.Debug("triggering flow eviction on timer")
-				m.Flush()
+				m.Flush("timeout")
 			}
 		}
 	}
@@ -105,7 +106,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	flows := m.mapFetcher.LookupAndDeleteMap(m.errors.WithValues("CannotDeleteFlows", ""))
+	flows := m.mapFetcher.LookupAndDeleteMap(m.errors)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)
@@ -136,8 +137,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	if forceGC {
 		runtime.GC()
 	}
-	m.hmapEvictionCounter.Inc()
-	m.numberOfEvictedFlows.Add(float64(len(forwardingFlows)))
+	m.evictedFlowsCounter.ForSourceAndReason("hashmap", "").Add(float64(len(forwardingFlows)))
 	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }

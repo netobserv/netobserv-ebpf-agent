@@ -13,7 +13,6 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/gopipes/pkg/node"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,11 +22,11 @@ var rtlog = logrus.WithField("component", "flow.RingBufTracer")
 // added in the eBPF kernel space due to the map being full or busy) and submits them to the
 // userspace Aggregator map
 type RingBufTracer struct {
-	mapFlusher                   mapFlusher
-	ringBuffer                   ringBufReader
-	stats                        stats
-	numberOfFlowsReceived        prometheus.Counter
-	errCanNotReadRingBuffCounter prometheus.Counter
+	mapFlusher          mapFlusher
+	ringBuffer          ringBufReader
+	stats               stats
+	evictedFlowsCounter *metrics.EvictionCounter
+	errors              *metrics.ErrorCounter
 }
 
 type ringBufReader interface {
@@ -43,17 +42,16 @@ type stats struct {
 }
 
 type mapFlusher interface {
-	Flush()
+	Flush(reason string)
 }
 
-func NewRingBufTracer(
-	reader ringBufReader, flusher mapFlusher, logTimeout time.Duration, m *metrics.Metrics,
-) *RingBufTracer {
+func NewRingBufTracer(reader ringBufReader, flusher mapFlusher, logTimeout time.Duration, m *metrics.Metrics) *RingBufTracer {
 	return &RingBufTracer{
-		mapFlusher:            flusher,
-		ringBuffer:            reader,
-		stats:                 stats{loggingTimeout: logTimeout},
-		numberOfFlowsReceived: m.CreateNumberOfFlowsReceivedByRingBuffer(),
+		mapFlusher:          flusher,
+		ringBuffer:          reader,
+		stats:               stats{loggingTimeout: logTimeout},
+		evictedFlowsCounter: m.GetEvictedFlowsCounter(),
+		errors:              m.GetErrorsCounter(),
 	}
 }
 
@@ -82,12 +80,13 @@ func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord
 func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh chan<- *RawRecord) error {
 	event, err := m.ringBuffer.ReadRingBuf()
 	if err != nil {
+		m.errors.ForError("CantReadRingbuffer").Inc()
 		return fmt.Errorf("reading from ring buffer: %w", err)
 	}
 	// Parses the ringbuf event entry into an Event structure.
 	readFlow, err := ReadFrom(bytes.NewBuffer(event.RawSample))
 	if err != nil {
-		m.errCanNotReadRingBuffCounter.Inc()
+		m.errors.ForError("CantParseRingbuffer").Inc()
 		return fmt.Errorf("parsing data received from the ring buffer: %w", err)
 	}
 	mapFullError := readFlow.Metrics.Errno == uint8(syscall.E2BIG)
@@ -96,10 +95,12 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	}
 	// if the flow was received due to lack of space in the eBPF map
 	// forces a flow's eviction to leave room for new flows in the ebpf cache
+	var reason string
 	if mapFullError {
-		m.mapFlusher.Flush()
+		m.mapFlusher.Flush("full")
+		reason = "mapfull"
 	}
-	m.numberOfFlowsReceived.Inc()
+	m.evictedFlowsCounter.ForSourceAndReason("ringbuffer", reason).Inc()
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
 	return nil
