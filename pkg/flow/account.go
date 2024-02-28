@@ -14,13 +14,12 @@ import (
 // for the edge case where packets are submitted directly via ring-buffer because the kernel-side
 // accounting map is full.
 type Accounter struct {
-	maxEntries          int
-	evictTimeout        time.Duration
-	entries             map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
-	clock               func() time.Time
-	monoClock           func() time.Duration
-	evictionCounter     *metrics.EvictionCounter
-	evictedFlowsCounter *metrics.EvictionCounter
+	maxEntries   int
+	evictTimeout time.Duration
+	entries      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	clock        func() time.Time
+	monoClock    func() time.Duration
+	metrics      *metrics.Metrics
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -33,15 +32,15 @@ func NewAccounter(
 	monoClock func() time.Duration,
 	m *metrics.Metrics,
 ) *Accounter {
-	return &Accounter{
-		maxEntries:          maxEntries,
-		evictTimeout:        evictTimeout,
-		entries:             map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
-		clock:               clock,
-		monoClock:           monoClock,
-		evictionCounter:     m.GetEvictionCounter(),
-		evictedFlowsCounter: m.GetEvictedFlowsCounter(),
+	acc := Accounter{
+		maxEntries:   maxEntries,
+		evictTimeout: evictTimeout,
+		entries:      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
+		clock:        clock,
+		monoClock:    monoClock,
+		metrics:      m,
 	}
+	return &acc
 }
 
 // Account runs in a new goroutine. It reads all the records from the input channel
@@ -87,6 +86,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				c.entries[record.Id] = &record.Metrics
 			}
 		}
+		c.metrics.BufferSizeGauge.WithBufferName("accounter-entries").Set(float64(len(c.entries)))
 	}
 }
 
@@ -97,8 +97,8 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 	for key, metrics := range entries {
 		records = append(records, NewRecord(key, metrics, now, monotonicNow))
 	}
-	c.evictionCounter.ForSourceAndReason("accounter", reason).Inc()
-	c.evictedFlowsCounter.ForSourceAndReason("accounter", reason).Add(float64(len(records)))
+	c.metrics.EvictionCounter.WithSourceAndReason("accounter", reason).Inc()
+	c.metrics.EvictedFlowsCounter.WithSourceAndReason("accounter", reason).Add(float64(len(records)))
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
 	evictor <- records
 }

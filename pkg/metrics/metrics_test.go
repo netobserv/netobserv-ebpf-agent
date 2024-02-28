@@ -20,7 +20,7 @@ func TestMetricsCreation(t *testing.T) {
 	metrics := NewMetrics(settings)
 
 	// Test Counter creation
-	counter := metrics.CreateGRPCBatchSize()
+	counter := metrics.CreateBatchCounter("grpc")
 	assert.NotNil(t, counter)
 
 	// Test Gauge creation

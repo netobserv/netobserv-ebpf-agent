@@ -109,6 +109,8 @@ type Flows struct {
 	mapTracer *flow.MapTracer
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
+	limiter   *flow.CapacityLimiter
+	deduper   node.MiddleFunc[[]*flow.Record, []*flow.Record]
 	exporter  node.TerminalFunc[[]*flow.Record]
 
 	// elements used to decorate flows with extra information
@@ -233,8 +235,12 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
-	accounter := flow.NewAccounter(
-		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+	limiter := flow.NewCapacityLimiter(m)
+	var deduper node.MiddleFunc[[]*flow.Record, []*flow.Record]
+	if cfg.Deduper == DeduperFirstCome {
+		deduper = flow.Dedupe(cfg.DeduperFCExpiry, cfg.DeduperJustMark, cfg.DeduperMerge, interfaceNamer, m)
+	}
 
 	return &Flows{
 		ebpf:           fetcher,
@@ -245,6 +251,8 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 		mapTracer:      mapTracer,
 		rbTracer:       rbTracer,
 		accounter:      accounter,
+		limiter:        limiter,
+		deduper:        deduper,
 		agentIP:        agentIP,
 		interfaceNamer: interfaceNamer,
 		promoServer:    promoServer,
@@ -348,9 +356,7 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*f
 			Transport:    &transport,
 			Balancer:     &kafkago.Hash{},
 		},
-		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
-		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
-		Errors:                         m.GetErrorsCounter(),
+		Metrics: m,
 	}).ExportFlows, nil
 }
 
@@ -437,7 +443,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
-	limiter := node.AsMiddle((&flow.CapacityLimiter{}).Limit,
+	limiter := node.AsMiddle(f.limiter.Limit,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
 	decorator := node.AsMiddle(flow.Decorate(f.agentIP, f.interfaceNamer),
@@ -453,9 +459,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 
 	rbTracer.SendsTo(accounter)
 
-	if f.cfg.Deduper == DeduperFirstCome {
-		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry, f.cfg.DeduperJustMark, f.cfg.DeduperMerge, f.interfaceNamer),
-			node.ChannelBufferLen(f.cfg.BuffersLength))
+	if f.deduper != nil {
+		deduper := node.AsMiddle(f.deduper, node.ChannelBufferLen(f.cfg.BuffersLength))
 		mapTracer.SendsTo(deduper)
 		accounter.SendsTo(deduper)
 		deduper.SendsTo(limiter)

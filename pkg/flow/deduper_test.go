@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 )
 
 var (
@@ -70,7 +71,7 @@ func TestDedupe(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(time.Minute, false, false, interfaceNamer)(input, output)
+	go Dedupe(time.Minute, false, false, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
 	input <- []*Record{
 		oneIf2,   // record 1 at interface 2: should be accepted
@@ -108,7 +109,7 @@ func TestDedupe_EvictFlows(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(15*time.Second, false, false, interfaceNamer)(input, output)
+	go Dedupe(15*time.Second, false, false, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
 	// Should only accept records 1 and 2, at interface 1
 	input <- []*Record{oneIf1, twoIf1, oneIf2}
@@ -143,7 +144,7 @@ func TestDedupeMerge(t *testing.T) {
 	input := make(chan []*Record, 100)
 	output := make(chan []*Record, 100)
 
-	go Dedupe(time.Minute, false, true, interfaceNamer)(input, output)
+	go Dedupe(time.Minute, false, true, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
 	input <- []*Record{
 		oneIf2, // record 1 at interface 2: should be accepted

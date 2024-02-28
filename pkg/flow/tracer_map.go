@@ -26,10 +26,8 @@ type MapTracer struct {
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond               *sync.Cond
 	lastEvictionNs             uint64
-	evictionCounter            *metrics.EvictionCounter
-	evictedFlowsCounter        *metrics.EvictionCounter
+	metrics                    *metrics.Metrics
 	timeSpentinLookupAndDelete prometheus.Histogram
-	errors                     *metrics.ErrorCounter
 }
 
 type mapFetcher interface {
@@ -44,10 +42,8 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 		lastEvictionNs:             uint64(monotime.Now()),
 		evictionCond:               sync.NewCond(&sync.Mutex{}),
 		staleEntriesEvictTimeout:   staleEntriesEvictTimeout,
-		evictionCounter:            m.GetEvictionCounter(),
-		evictedFlowsCounter:        m.GetEvictedFlowsCounter(),
+		metrics:                    m,
 		timeSpentinLookupAndDelete: m.CreateTimeSpendInLookupAndDelete(),
-		errors:                     m.GetErrorsCounter(),
 	}
 }
 
@@ -55,7 +51,7 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 // and sending the entries to the next stage in the pipeline
 func (m *MapTracer) Flush(reason string) {
 	m.evictionCond.Broadcast()
-	m.evictionCounter.ForSourceAndReason("hashmap", reason).Inc()
+	m.metrics.EvictionCounter.WithSourceAndReason("hashmap", reason).Inc()
 }
 
 func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*Record] {
@@ -106,7 +102,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	flows := m.mapFetcher.LookupAndDeleteMap(m.errors)
+	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics.Errors)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)
@@ -137,7 +133,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	if forceGC {
 		runtime.GC()
 	}
-	m.evictedFlowsCounter.ForSourceAndReason("hashmap", "").Add(float64(len(forwardingFlows)))
+	m.metrics.EvictedFlowsCounter.WithSourceAndReason("hashmap", "").Add(float64(len(forwardingFlows)))
 	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }
