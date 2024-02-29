@@ -422,15 +422,16 @@ func (m *FlowFetcher) LookupAndDeleteMap(c prometheus.Counter) map[BpfFlowId][]B
 	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
 	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
 	for iterator.Next(&id, &metrics) {
+		if _, exists := flows[id]; exists {
+			// flow id was already processed & deleted but was recreated in the meantime; just skip it, we'll get it next time
+			continue
+		}
 		if err := flowMap.Delete(id); err != nil {
 			log.WithError(err).WithField("flowId", id).
 				Warnf("couldn't delete flow entry")
 			c.Inc()
 		}
-		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
-		// (probably due to race conditions) so we need to re-join metrics again at userspace
-		// TODO: instrument how many times the keys are is repeated in the same eviction
-		flows[id] = append(flows[id], metrics...)
+		flows[id] = metrics
 	}
 
 	return flows
