@@ -12,9 +12,17 @@ import (
 )
 
 var (
-	getCurrentKernelVersion = currentKernelVersion
-	log                     = logrus.WithField("component", "utils")
+	kernelVersion uint32
+	log           = logrus.WithField("component", "utils")
 )
+
+func init() {
+	var err error
+	kernelVersion, err = currentKernelVersion()
+	if err != nil {
+		log.Errorf("failed to get current kernel version: %v", err)
+	}
+}
 
 // GetSocket returns socket string in the correct format based on address family
 func GetSocket(hostIP string, hostPort int) string {
@@ -26,22 +34,13 @@ func GetSocket(hostIP string, hostPort int) string {
 	return socket
 }
 
-func IskernelOlderthan514() bool {
-	kernelVersion514, err := kernelVersionFromReleaseString("5.14.0")
+func IsKernelOlderThan(version string) bool {
+	refVersion, err := kernelVersionFromReleaseString(version)
 	if err != nil {
 		log.Warnf("failed to get kernel version from release string: %v", err)
 		return false
 	}
-	currentVersion, err := getCurrentKernelVersion()
-	if err != nil {
-		log.Warnf("failed to get current kernel version: %v", err)
-		return false
-	}
-	if currentVersion < kernelVersion514 {
-		log.Infof("older kernel version not all hooks will be supported")
-		return true
-	}
-	return false
+	return kernelVersion != 0 && kernelVersion < refVersion
 }
 
 var versionRegex = regexp.MustCompile(`^(\d+)\.(\d+).(\d+).*$`)
