@@ -60,6 +60,13 @@ var (
 		"source",
 		"reason",
 	)
+	evictedPktTotal = defineMetric(
+		"evicted_packets_total",
+		"Number of evicted packets",
+		TypeCounter,
+		"source",
+		"reason",
+	)
 	lookupAndDeleteMapDurationSeconds = defineMetric(
 		"lookup_and_delete_map_duration_seconds",
 		"Lookup and delete map duration in seconds",
@@ -119,11 +126,12 @@ type Metrics struct {
 	Settings *Settings
 
 	// Shared metrics:
-	EvictionCounter     *EvictionCounter
-	EvictedFlowsCounter *EvictionCounter
-	DroppedFlowsCounter *EvictionCounter
-	BufferSizeGauge     *BufferSizeGauge
-	Errors              *ErrorCounter
+	EvictionCounter       *EvictionCounter
+	EvictedFlowsCounter   *EvictionCounter
+	EvictedPacketsCounter *EvictionCounter
+	DroppedFlowsCounter   *EvictionCounter
+	BufferSizeGauge       *BufferSizeGauge
+	Errors                *ErrorCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
@@ -132,6 +140,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	}
 	m.EvictionCounter = &EvictionCounter{vec: m.NewCounterVec(&evictionsTotal)}
 	m.EvictedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedFlowsTotal)}
+	m.EvictedPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedPktTotal)}
 	m.DroppedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&droppedFlows)}
 	m.BufferSizeGauge = &BufferSizeGauge{vec: m.NewGaugeVec(&bufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}

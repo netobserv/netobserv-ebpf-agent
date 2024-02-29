@@ -49,9 +49,8 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 
 // Flush forces reading (and removing) all the flows from the source eBPF map
 // and sending the entries to the next stage in the pipeline
-func (m *MapTracer) Flush(reason string) {
+func (m *MapTracer) Flush() {
 	m.evictionCond.Broadcast()
-	m.metrics.EvictionCounter.WithSourceAndReason("hashmap", reason).Inc()
 }
 
 func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*Record] {
@@ -66,7 +65,7 @@ func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[
 				return
 			case <-evictionTicker.C:
 				mtlog.Debug("triggering flow eviction on timer")
-				m.Flush("timeout")
+				m.Flush()
 			}
 		}
 	}
@@ -133,7 +132,8 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	if forceGC {
 		runtime.GC()
 	}
-	m.metrics.EvictedFlowsCounter.WithSourceAndReason("hashmap", "").Add(float64(len(forwardingFlows)))
+	m.metrics.EvictionCounter.WithSource("hashmap").Inc()
+	m.metrics.EvictedFlowsCounter.WithSource("hashmap").Add(float64(len(forwardingFlows)))
 	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }

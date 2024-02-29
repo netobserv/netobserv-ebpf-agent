@@ -30,7 +30,7 @@ func (c *CapacityLimiter) Limit(in <-chan []*Record, out chan<- []*Record) {
 		if len(out) < cap(out) || cap(out) == 0 {
 			out <- i
 		} else {
-			c.metrics.DroppedFlowsCounter.WithSourceAndReason("limiter", "limit reached").Add(float64(len(i)))
+			c.metrics.DroppedFlowsCounter.WithSourceAndReason("limiter", "full").Add(float64(len(i)))
 			c.droppedFlows += len(i)
 		}
 	}

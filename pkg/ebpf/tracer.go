@@ -595,9 +595,6 @@ func NewPacketFetcher(
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	// read packets from igress+egress perf array
 	packets, err := perf.NewReader(objects.PacketRecord, os.Getpagesize())
 	if err != nil {

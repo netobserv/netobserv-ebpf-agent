@@ -41,7 +41,7 @@ type stats struct {
 }
 
 type mapFlusher interface {
-	Flush(reason string)
+	Flush()
 }
 
 func NewRingBufTracer(reader ringBufReader, flusher mapFlusher, logTimeout time.Duration, m *metrics.Metrics) *RingBufTracer {
@@ -95,10 +95,11 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	// forces a flow's eviction to leave room for new flows in the ebpf cache
 	var reason string
 	if mapFullError {
-		m.mapFlusher.Flush("full")
+		m.mapFlusher.Flush()
 		reason = "mapfull"
 	}
-	m.metrics.EvictedFlowsCounter.WithSourceAndReason("ringbuffer", reason).Inc()
+	// In ringbuffer, a "flow" is a 1-packet flow, it hasn't gone through aggregation yet. So we use the packet counter metric.
+	m.metrics.EvictedPacketsCounter.WithSourceAndReason("ringbuffer", reason).Inc()
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
 	return nil
