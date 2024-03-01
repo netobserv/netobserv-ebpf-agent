@@ -36,7 +36,7 @@ func (m *TracerFake) Register(iface ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) LookupAndDeleteMap(_ *metrics.ErrorCounter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
+func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
 	select {
 	case r := <-m.mapLookups:
 		return r

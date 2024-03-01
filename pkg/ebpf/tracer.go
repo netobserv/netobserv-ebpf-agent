@@ -412,7 +412,7 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 // Race conditions here causes that some flows are lost in high-load scenarios
-func (m *FlowFetcher) LookupAndDeleteMap(errs *metrics.ErrorCounter) map[BpfFlowId][]BpfFlowMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[BpfFlowId][]BpfFlowMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
@@ -420,19 +420,22 @@ func (m *FlowFetcher) LookupAndDeleteMap(errs *metrics.ErrorCounter) map[BpfFlow
 	var id BpfFlowId
 	var metrics []BpfFlowMetrics
 
+	count := 0
 	// Changing Iterate+Delete by LookupAndDelete would prevent some possible race conditions
 	// TODO: detect whether LookupAndDelete is supported (Kernel>=4.20) and use it selectively
 	for iterator.Next(&id, &metrics) {
+		count++
 		if err := flowMap.Delete(id); err != nil {
-			log.WithError(err).WithField("flowId", id).
-				Warnf("couldn't delete flow entry")
-			errs.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
+			log.WithError(err).WithField("flowId", id).Warnf("couldn't delete flow entry")
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 		}
 		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
 		// (probably due to race conditions) so we need to re-join metrics again at userspace
 		// TODO: instrument how many times the keys are is repeated in the same eviction
 		flows[id] = append(flows[id], metrics...)
 	}
+	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
+	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
 
 	return flows
 }
@@ -793,7 +796,7 @@ func (p *PacketFetcher) ReadPerf() (perf.Record, error) {
 	return p.perfReader.Read()
 }
 
-func (p *PacketFetcher) LookupAndDeleteMap(errs *metrics.ErrorCounter) map[int][]*byte {
+func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte {
 	packetMap := p.objects.PacketRecord
 	iterator := packetMap.Iterate()
 	packets := make(map[int][]*byte, p.cacheMaxSize)
@@ -804,7 +807,7 @@ func (p *PacketFetcher) LookupAndDeleteMap(errs *metrics.ErrorCounter) map[int][
 		if err := packetMap.Delete(id); err != nil {
 			log.WithError(err).WithField("packetID ", id).
 				Warnf("couldn't delete  entry")
-			errs.WithErrorName("pkt-fetcher", "CannotDeleteFlows").Inc()
+			met.Errors.WithErrorName("pkt-fetcher", "CannotDeleteFlows").Inc()
 		}
 		packets[id] = append(packets[id], packet...)
 	}

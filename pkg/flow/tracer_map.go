@@ -31,7 +31,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap(counter *metrics.ErrorCounter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
@@ -101,7 +101,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics.Errors)
+	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)
