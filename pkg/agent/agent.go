@@ -168,14 +168,15 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	ebpfConfig := &ebpf.FlowFetcherConfig{
-		EnableIngress: ingress,
-		EnableEgress:  egress,
-		Debug:         debug,
-		Sampling:      cfg.Sampling,
-		CacheMaxSize:  cfg.CacheMaxFlows,
-		PktDrops:      cfg.EnablePktDrops,
-		DNSTracker:    cfg.EnableDNSTracking,
-		EnableRTT:     cfg.EnableRTT,
+		EnableIngress:       ingress,
+		EnableEgress:        egress,
+		Debug:               debug,
+		Sampling:            cfg.Sampling,
+		CacheMaxSize:        cfg.CacheMaxFlows,
+		PktDrops:            cfg.EnablePktDrops,
+		DNSTracker:          cfg.EnableDNSTracking,
+		EnableRTT:           cfg.EnableRTT,
+		EnableOVSMonitoring: cfg.EnableOVSMonitoring,
 	}
 
 	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)

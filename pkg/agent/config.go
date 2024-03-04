@@ -173,4 +173,6 @@ type Config struct {
 	MetricsPort int `env:"METRICS_SERVER_PORT" envDefault:"9090"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
+	// EnableOVSMonitoring enables monitoring of OVS flows, default is false.
+	EnableOVSMonitoring bool `env:"ENABLE_OVS_MONITORING" envDefault:"false"`
 }

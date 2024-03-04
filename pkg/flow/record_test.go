@@ -46,6 +46,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x00, // errno
 		// u64 flow_rtt
 		0xad, 0xde, 0xef, 0xbe, 0xef, 0xbe, 0xad, 0xde,
+		// u64 ovs_dp_keys[2]
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	}))
 	require.NoError(t, err)
 
@@ -86,6 +88,10 @@ func TestRecordBinaryEncoding(t *testing.T) {
 				Errno:   0,
 			},
 			FlowRtt: 0xdeadbeefbeefdead,
+			OvsDpKeys: [2]uint64{
+				0x0000000000000000,
+				0x0000000000000000,
+			},
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses

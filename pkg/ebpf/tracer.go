@@ -64,17 +64,19 @@ type FlowFetcher struct {
 	pktDropsTracePoint link.Link
 	rttFentryLink      link.Link
 	rttKprobeLink      link.Link
+	ovsMonitoringLink  link.Link
 }
 
 type FlowFetcherConfig struct {
-	EnableIngress bool
-	EnableEgress  bool
-	Debug         bool
-	Sampling      int
-	CacheMaxSize  int
-	PktDrops      bool
-	DNSTracker    bool
-	EnableRTT     bool
+	EnableIngress       bool
+	EnableEgress        bool
+	Debug               bool
+	Sampling            int
+	CacheMaxSize        int
+	PktDrops            bool
+	DNSTracker          bool
+	EnableRTT           bool
+	EnableOVSMonitoring bool
 }
 
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
@@ -143,6 +145,14 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
+	var ovsMonitoringLink link.Link
+	if cfg.EnableOVSMonitoring {
+		ovsMonitoringLink, err = link.Tracepoint("net", "openvswitch", objects.OvsDpMonitor, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach the BPF program to openvswitch tracepoint: %w", err)
+		}
+	}
+
 	var rttFentryLink, rttKprobeLink link.Link
 	if cfg.EnableRTT {
 		rttFentryLink, err = link.AttachTracing(link.TracingOptions{
@@ -176,6 +186,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		pktDropsTracePoint: pktDropsLink,
 		rttFentryLink:      rttFentryLink,
 		rttKprobeLink:      rttKprobeLink,
+		ovsMonitoringLink:  ovsMonitoringLink,
 	}, nil
 }
 
@@ -311,6 +322,11 @@ func (m *FlowFetcher) Close() error {
 	}
 	if m.rttKprobeLink != nil {
 		if err := m.rttKprobeLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if m.ovsMonitoringLink != nil {
+		if err := m.ovsMonitoringLink.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
