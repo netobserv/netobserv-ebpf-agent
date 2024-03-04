@@ -142,8 +142,9 @@ type Config struct {
 	KafkaSASLClientSecretPath string `env:"KAFKA_SASL_CLIENT_SECRET_PATH"`
 	// ProfilePort sets the listening port for Go's Pprof tool. If it is not set, profile is disabled
 	ProfilePort int `env:"PROFILE_PORT"`
-	// Flowlogs-pipeline configuration, used when export is "direct-flp". Cf https://github.com/netobserv/flowlogs-pipeline
-	// The "ingest" stage must be omitted from this configuration, since it is handled internally by the agent.
+	// Flowlogs-pipeline configuration as YAML or JSON, used when export is "direct-flp". Cf https://github.com/netobserv/flowlogs-pipeline
+	// The "ingest" stage must be omitted from this configuration, since it is handled internally by the agent. The first stage should follow "preset-ingester".
+	// E.g: {"pipeline":[{"name": "writer","follows": "preset-ingester"}],"parameters":[{"name": "writer","write": {"type": "stdout"}}]}.
 	FLPConfig string `env:"FLP_CONFIG"`
 	// Enable RTT calculations for the flows, default is false (disabled), set to true to enable.
 	// This feature requires the flows agent to attach at both Ingress and Egress hookpoints.

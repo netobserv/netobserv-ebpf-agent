@@ -1,8 +1,10 @@
 # eBPF Agent configuration environment variables
 
+_Please also refer to the file [config.go](../pkg/agent/config.go) which is the primary source of truth._
+
 The following environment variables are available to configure the NetObserv eBFP Agent:
 
-* `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc` or `kafka` or `ipfix+tcp` or `ipfix+udp`.
+* `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc`, `kafka`, `ipfix+udp`, `ipfix+tcp` or `direct-flp`. In `direct-flp` mode, [flowlogs-pipeline](https://github.com/netobserv/flowlogs-pipeline) is run internally from the agent, allowing more filtering, transformations and exporting options.
 * `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the target Flow collector.
 * `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow collector.
 * `GRPC_MESSAGE_MAX_FLOWS` (default: `10000`). Specifies the limit, in number of flows, of each GRPC
@@ -73,6 +75,8 @@ The following environment variables are available to configure the NetObserv eBF
 * `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
   `PCA_FILTER=tcp,22`.
 * `PCA_SERVER_PORT` (default: 0). Works only when `ENABLE_PCA` is set. Agent opens PCA Server at this port. A collector can connect to it and recieve filtered packets as pcap stream. The filter is set using `PCA_FILTER`.
+* `DIRECT_FLP`: [flowlogs-pipeline](https://github.com/netobserv/flowlogs-pipeline) configuration as YAML or JSON, used when `EXPORT` is `direct-flp`. The ingest stage must be omitted from this configuration, since it is handled internally by the agent. The first stage should follow "preset-ingester". E.g, for a minimal configuration printing on terminal: `{"pipeline":[{"name": "writer","follows": "preset-ingester"}],"parameters":[{"name": "writer","write": {"type": "stdout"}}]}`. Refer to flowlogs-pipeline documentation for more options.
+
 
 ## Development-only variables
 
