@@ -14,11 +14,13 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
+	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
@@ -37,6 +39,11 @@ const (
 	StatusStarted
 	StatusStopping
 	StatusStopped
+)
+
+const (
+	networkEventsDBPath    = "/var/run/ovn/ovnnb_db.sock"
+	networkEventsOwnerName = "netobservAgent"
 )
 
 func (s Status) String() string {
@@ -116,8 +123,9 @@ type Flows struct {
 	interfaceNamer flow.InterfaceNamer
 	agentIP        net.IP
 
-	status      Status
-	promoServer *http.Server
+	status        Status
+	promoServer   *http.Server
+	sampleDecoder *ovnobserv.SampleDecoder
 }
 
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
@@ -166,8 +174,20 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 	m := metrics.NewMetrics(metricsSettings)
 
+	var s *ovnobserv.SampleDecoder
+	if cfg.EnableNetworkEventsMonitoring {
+		if !kernel.IsKernelOlderThan("5.14.0") {
+			if s, err = ovnobserv.NewSampleDecoderWithDefaultCollector(context.Background(), networkEventsDBPath,
+				networkEventsOwnerName, cfg.NetworkEventsMonitoringGroupID); err != nil {
+				alog.Warnf("failed to create Network Events sample decoder: %v for id: %d", err, cfg.NetworkEventsMonitoringGroupID)
+			}
+		} else {
+			alog.Warn("old kernel doesn't support network events monitoring skip")
+		}
+	}
+
 	// configure selected exporter
-	exportFunc, err := buildFlowExporter(cfg, m)
+	exportFunc, err := buildFlowExporter(cfg, m, s)
 	if err != nil {
 		return nil, err
 	}
@@ -179,16 +199,18 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	ebpfConfig := &ebpf.FlowFetcherConfig{
-		EnableIngress:    ingress,
-		EnableEgress:     egress,
-		Debug:            debug,
-		Sampling:         cfg.Sampling,
-		CacheMaxSize:     cfg.CacheMaxFlows,
-		PktDrops:         cfg.EnablePktDrops,
-		DNSTracker:       cfg.EnableDNSTracking,
-		DNSTrackerPort:   cfg.DNSTrackingPort,
-		EnableRTT:        cfg.EnableRTT,
-		EnableFlowFilter: cfg.EnableFlowFilter,
+		EnableIngress:                  ingress,
+		EnableEgress:                   egress,
+		Debug:                          debug,
+		Sampling:                       cfg.Sampling,
+		CacheMaxSize:                   cfg.CacheMaxFlows,
+		PktDrops:                       cfg.EnablePktDrops,
+		DNSTracker:                     cfg.EnableDNSTracking,
+		DNSTrackerPort:                 cfg.DNSTrackingPort,
+		EnableRTT:                      cfg.EnableRTT,
+		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
+		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
+		EnableFlowFilter:               cfg.EnableFlowFilter,
 		FilterConfig: &ebpf.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,
@@ -207,7 +229,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP)
+	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP, s)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
@@ -216,6 +238,7 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*flow.Record],
 	agentIP net.IP,
+	s *ovnobserv.SampleDecoder,
 ) (*Flows, error) {
 	var filter InterfaceFilter
 
@@ -280,6 +303,7 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 		agentIP:        agentIP,
 		interfaceNamer: interfaceNamer,
 		promoServer:    promoServer,
+		sampleDecoder:  s,
 	}, nil
 }
 
@@ -297,12 +321,12 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
 	switch cfg.Export {
 	case "grpc":
-		return buildGRPCExporter(cfg, m)
+		return buildGRPCExporter(cfg, m, s)
 	case "kafka":
-		return buildKafkaExporter(cfg, m)
+		return buildKafkaExporter(cfg, m, s)
 	case "ipfix+udp":
 		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
@@ -314,12 +338,12 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 	}
 }
 
-func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
+func buildGRPCExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m, s)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +358,7 @@ func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record],
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
+func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -380,7 +404,8 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*f
 			Transport:    &transport,
 			Balancer:     &kafkago.Hash{},
 		},
-		Metrics: m,
+		Metrics:       m,
+		SampleDecoder: s,
 	}).ExportFlows, nil
 }
 
@@ -423,6 +448,9 @@ func (f *Flows) Run(ctx context.Context) error {
 		if err := f.promoServer.Close(); err != nil {
 			alog.WithError(err).Warn("error when closing prometheus server")
 		}
+	}
+	if f.sampleDecoder != nil {
+		f.sampleDecoder.Shutdown()
 	}
 	f.status = StatusStopped
 	alog.Info("Flows agent stopped")

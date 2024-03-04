@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -18,7 +19,11 @@ const (
 const MacLen = 6
 
 // IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
-const IPv6Type = 0x86DD
+const (
+	IPv6Type                 = 0x86DD
+	networkEventsMaxEventsMD = 8
+	maxNetworkEvents         = 4
+)
 
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
@@ -52,8 +57,9 @@ type Record struct {
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
-	TimeFlowRtt time.Duration
-	DupList     []map[string]uint8
+	TimeFlowRtt            time.Duration
+	DupList                []map[string]uint8
+	NetworkMonitorEventsMD []string
 }
 
 func NewRecord(
@@ -80,6 +86,7 @@ func NewRecord(
 		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
 	record.DupList = make([]map[string]uint8, 0)
+	record.NetworkMonitorEventsMD = make([]string, 0)
 	return &record
 }
 
@@ -120,6 +127,22 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if src.Dscp != 0 {
 		r.Dscp = src.Dscp
 	}
+
+	for _, md := range src.NetworkEvents {
+		if !AllZerosMetaData(md) && !networkEventsMDExist(r.NetworkEvents, md) {
+			copy(r.NetworkEvents[r.NetworkEventsIdx][:], md[:])
+			r.NetworkEventsIdx = (r.NetworkEventsIdx + 1) % maxNetworkEvents
+		}
+	}
+}
+
+func networkEventsMDExist(events [maxNetworkEvents][networkEventsMaxEventsMD]uint8, md [networkEventsMaxEventsMD]uint8) bool {
+	for _, e := range events {
+		if reflect.DeepEqual(e, md) {
+			return true
+		}
+	}
+	return false
 }
 
 // IP returns the net.IP equivalent object
@@ -158,4 +181,13 @@ func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	var fr RawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
 	return &fr, err
+}
+
+func AllZerosMetaData(s [networkEventsMaxEventsMD]uint8) bool {
+	for _, v := range s {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
 }

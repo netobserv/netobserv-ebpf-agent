@@ -181,7 +181,6 @@ type Config struct {
 	MetricsTLSKeyPath string `env:"METRICS_TLS_KEY_PATH"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
-
 	// EnableFlowFilter enables flow filter, default is false.
 	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
 	// FilterDirection is the direction of the flow filter.
@@ -230,6 +229,10 @@ type Config struct {
 	// FilterTCPFlags is the TCP flags to filter flows.
 	// possible values are: SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST-ACK
 	FilterTCPFlags string `env:"FILTER_TCP_FLAGS"`
+	// EnableNetworkEventsMonitoring enables monitoring network plugin events, default is false.
+	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
+	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest
+	NetworkEventsMonitoringGroupID int `env:"NETWORK_EVENTS_MONITORING_GROUP_ID" envDefault:"10"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details

@@ -19,28 +19,37 @@
 #include "configs.h"
 #include "utils.h"
 
-/* Defines a packet drops statistics tracker,
-   which attaches at kfree_skb hook. Is optional.
-*/
+/*
+ * Defines a packet drops statistics tracker,
+ * which attaches at kfree_skb hook. Is optional.
+ */
 #include "pkt_drops.h"
 
-/* Defines a dns tracker,
-   which attaches at net_dev_queue hook. Is optional.
-*/
+/*
+ * Defines a dns tracker,
+ * which attaches at net_dev_queue hook. Is optional.
+ */
 #include "dns_tracker.h"
 
-/* Defines an rtt tracker,
-   which runs inside flow_monitor. Is optional.
-*/
+/*
+ * Defines an rtt tracker,
+ * which runs inside flow_monitor. Is optional.
+ */
 #include "rtt_tracker.h"
 
-/* Defines a Packet Capture Agent (PCA) tracker, 
-    It is enabled by setting env var ENABLE_PCA= true. Is Optional 
-*/
+/*
+ * Defines a Packet Capture Agent (PCA) tracker,
+ * It is enabled by setting env var ENABLE_PCA= true. Is Optional
+ */
 #include "pca.h"
 
 /* Do flow filtering. Is optional. */
 #include "flows_filter.h"
+/*
+ * Defines an Network events monitoring tracker,
+ * which runs inside flow_monitor. Is optional.
+ */
+#include "network_events_monitoring.h"
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
