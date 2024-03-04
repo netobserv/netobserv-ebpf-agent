@@ -3,6 +3,7 @@ package flow
 import (
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,6 +17,11 @@ var cllog = logrus.WithField("component", "capacity.Limiter")
 // log a message about the number of lost flows.
 type CapacityLimiter struct {
 	droppedFlows int
+	metrics      *metrics.Metrics
+}
+
+func NewCapacityLimiter(m *metrics.Metrics) *CapacityLimiter {
+	return &CapacityLimiter{metrics: m}
 }
 
 func (c *CapacityLimiter) Limit(in <-chan []*Record, out chan<- []*Record) {
@@ -24,6 +30,7 @@ func (c *CapacityLimiter) Limit(in <-chan []*Record, out chan<- []*Record) {
 		if len(out) < cap(out) || cap(out) == 0 {
 			out <- i
 		} else {
+			c.metrics.DroppedFlowsCounter.WithSourceAndReason("limiter", "full").Add(float64(len(i)))
 			c.droppedFlows += len(i)
 		}
 	}

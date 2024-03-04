@@ -19,7 +19,6 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
-	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
@@ -110,6 +109,8 @@ type Flows struct {
 	mapTracer *flow.MapTracer
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
+	limiter   *flow.CapacityLimiter
+	deduper   node.MiddleFunc[[]*flow.Record, []*flow.Record]
 	exporter  node.TerminalFunc[[]*flow.Record]
 
 	// elements used to decorate flows with extra information
@@ -125,7 +126,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
 
-	LookupAndDeleteMap(c prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }
@@ -144,8 +145,18 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 	alog.Debug("agent IP: " + agentIP.String())
 
+	// initialize metrics
+	metricsSettings := &metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: cfg.MetricsServerAddress,
+			Port:    cfg.MetricsPort,
+		},
+		Prefix: cfg.MetricsPrefix,
+	}
+	m := metrics.NewMetrics(metricsSettings)
+
 	// configure selected exporter
-	exportFunc, err := buildFlowExporter(cfg)
+	exportFunc, err := buildFlowExporter(cfg, m)
 	if err != nil {
 		return nil, err
 	}
@@ -172,11 +183,11 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, informer, fetcher, exportFunc, agentIP)
+	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
-func flowsAgent(cfg *Config,
+func flowsAgent(cfg *Config, m *metrics.Metrics,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*flow.Record],
@@ -215,25 +226,21 @@ func flowsAgent(cfg *Config,
 		return iface
 	}
 	var promoServer *http.Server
-	metricsSettings := &metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	}
 	if cfg.MetricsEnable {
-		promoServer = promo.InitializePrometheus(metricsSettings)
+		promoServer = promo.InitializePrometheus(m.Settings)
 	}
 
-	m := metrics.NewMetrics(metricsSettings)
 	samplingGauge := m.CreateSamplingRate()
 	samplingGauge.Set(float64(cfg.Sampling))
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
-	accounter := flow.NewAccounter(
-		cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+	limiter := flow.NewCapacityLimiter(m)
+	var deduper node.MiddleFunc[[]*flow.Record, []*flow.Record]
+	if cfg.Deduper == DeduperFirstCome {
+		deduper = flow.Dedupe(cfg.DeduperFCExpiry, cfg.DeduperJustMark, cfg.DeduperMerge, interfaceNamer, m)
+	}
 
 	return &Flows{
 		ebpf:           fetcher,
@@ -244,6 +251,8 @@ func flowsAgent(cfg *Config,
 		mapTracer:      mapTracer,
 		rbTracer:       rbTracer,
 		accounter:      accounter,
+		limiter:        limiter,
+		deduper:        deduper,
 		agentIP:        agentIP,
 		interfaceNamer: interfaceNamer,
 		promoServer:    promoServer,
@@ -264,12 +273,12 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	switch cfg.Export {
 	case "grpc":
-		return buildGRPCExporter(cfg)
+		return buildGRPCExporter(cfg, m)
 	case "kafka":
-		return buildKafkaExporter(cfg)
+		return buildKafkaExporter(cfg, m)
 	case "ipfix+udp":
 		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
@@ -281,19 +290,12 @@ func buildFlowExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 	}
 }
 
-func buildGRPCExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	metrics := metrics.NewMetrics(&metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	})
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, metrics)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +310,7 @@ func buildDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], err
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -318,13 +320,6 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			"none, gzip, snappy, lz4, zstd: %w", cfg.KafkaCompression, err)
 	}
 	transport := kafkago.Transport{}
-	m := metrics.NewMetrics(&metrics.Settings{
-		PromConnectionInfo: metrics.PromConnectionInfo{
-			Address: cfg.MetricsServerAddress,
-			Port:    cfg.MetricsPort,
-		},
-		Prefix: cfg.MetricsPrefix,
-	})
 	if cfg.KafkaEnableTLS {
 		tlsConfig, err := buildTLSConfig(cfg)
 		if err != nil {
@@ -361,9 +356,7 @@ func buildKafkaExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) 
 			Transport:    &transport,
 			Balancer:     &kafkago.Hash{},
 		},
-		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
-		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
-		Errors:                         m.GetErrorsCounter(),
+		Metrics: m,
 	}).ExportFlows, nil
 }
 
@@ -450,7 +443,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	accounter := node.AsMiddle(f.accounter.Account,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
-	limiter := node.AsMiddle((&flow.CapacityLimiter{}).Limit,
+	limiter := node.AsMiddle(f.limiter.Limit,
 		node.ChannelBufferLen(f.cfg.BuffersLength))
 
 	decorator := node.AsMiddle(flow.Decorate(f.agentIP, f.interfaceNamer),
@@ -466,9 +459,8 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 
 	rbTracer.SendsTo(accounter)
 
-	if f.cfg.Deduper == DeduperFirstCome {
-		deduper := node.AsMiddle(flow.Dedupe(f.cfg.DeduperFCExpiry, f.cfg.DeduperJustMark, f.cfg.DeduperMerge, f.interfaceNamer),
-			node.ChannelBufferLen(f.cfg.BuffersLength))
+	if f.deduper != nil {
+		deduper := node.AsMiddle(f.deduper, node.ChannelBufferLen(f.cfg.BuffersLength))
 		mapTracer.SendsTo(deduper)
 		accounter.SendsTo(deduper)
 		deduper.SendsTo(limiter)

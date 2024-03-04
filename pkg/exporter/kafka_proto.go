@@ -6,13 +6,14 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 
-	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
 var klog = logrus.WithField("component", "exporter/KafkaProto")
+
+const componentKafka = "kafka"
 
 type kafkaWriter interface {
 	WriteMessages(ctx context.Context, msgs ...kafkago.Message) error
@@ -21,10 +22,8 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer                         kafkaWriter
-	NumberOfRecordsExportedByKafka prometheus.Counter
-	ExportedRecordsBatchSize       prometheus.Counter
-	Errors                         *metrics.ErrorCounter
+	Writer  kafkaWriter
+	Metrics *metrics.Metrics
 }
 
 func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
@@ -53,18 +52,18 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 		pbBytes, err := proto.Marshal(flowToPB(record))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
-			kp.Errors.WithValues("CantEncodeMessage", "kafka").Inc()
+			kp.Metrics.Errors.WithErrorName(componentKafka, "CannotEncodeMessage").Inc()
 			continue
 		}
 		msgs = append(msgs, kafkago.Message{Value: pbBytes, Key: getFlowKey(record)})
-		kp.ExportedRecordsBatchSize.Add(float64(len(pbBytes)))
 	}
 
 	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
 		klog.WithError(err).Error("can't write messages into Kafka")
-		kp.Errors.WithValues("CantWriteMessage", "kafka").Inc()
+		kp.Metrics.Errors.WithErrorName(componentKafka, "CannotWriteMessage").Inc()
 	}
-	kp.NumberOfRecordsExportedByKafka.Add(float64(len(records)))
+	kp.Metrics.EvictionCounter.WithSource(componentKafka).Inc()
+	kp.Metrics.EvictedFlowsCounter.WithSource(componentKafka).Add(float64(len(records)))
 }
 
 type JSONRecord struct {

@@ -26,14 +26,12 @@ type MapTracer struct {
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond               *sync.Cond
 	lastEvictionNs             uint64
-	hmapEvictionCounter        prometheus.Counter
-	numberOfEvictedFlows       prometheus.Counter
+	metrics                    *metrics.Metrics
 	timeSpentinLookupAndDelete prometheus.Histogram
-	errors                     *metrics.ErrorCounter
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap(counter prometheus.Counter) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
@@ -44,10 +42,8 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 		lastEvictionNs:             uint64(monotime.Now()),
 		evictionCond:               sync.NewCond(&sync.Mutex{}),
 		staleEntriesEvictTimeout:   staleEntriesEvictTimeout,
-		hmapEvictionCounter:        m.CreateHashMapCounter(),
-		numberOfEvictedFlows:       m.CreateNumberOfEvictedFlows(),
+		metrics:                    m,
 		timeSpentinLookupAndDelete: m.CreateTimeSpendInLookupAndDelete(),
-		errors:                     m.GetErrorsCounter(),
 	}
 }
 
@@ -105,7 +101,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	var forwardingFlows []*Record
 	laterFlowNs := uint64(0)
-	flows := m.mapFetcher.LookupAndDeleteMap(m.errors.WithValues("CannotDeleteFlows", ""))
+	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
 		aggregatedMetrics := m.aggregate(flowMetrics)
@@ -136,8 +132,8 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	if forceGC {
 		runtime.GC()
 	}
-	m.hmapEvictionCounter.Inc()
-	m.numberOfEvictedFlows.Add(float64(len(forwardingFlows)))
+	m.metrics.EvictionCounter.WithSource("hashmap").Inc()
+	m.metrics.EvictedFlowsCounter.WithSource("hashmap").Add(float64(len(forwardingFlows)))
 	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
 }

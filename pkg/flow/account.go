@@ -6,7 +6,6 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,12 +14,12 @@ import (
 // for the edge case where packets are submitted directly via ring-buffer because the kernel-side
 // accounting map is full.
 type Accounter struct {
-	maxEntries               int
-	evictTimeout             time.Duration
-	entries                  map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
-	clock                    func() time.Time
-	monoClock                func() time.Duration
-	userSpaceEvictionCounter prometheus.Counter
+	maxEntries   int
+	evictTimeout time.Duration
+	entries      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	clock        func() time.Time
+	monoClock    func() time.Duration
+	metrics      *metrics.Metrics
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -33,14 +32,15 @@ func NewAccounter(
 	monoClock func() time.Duration,
 	m *metrics.Metrics,
 ) *Accounter {
-	return &Accounter{
-		maxEntries:               maxEntries,
-		evictTimeout:             evictTimeout,
-		entries:                  map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
-		clock:                    clock,
-		monoClock:                monoClock,
-		userSpaceEvictionCounter: m.CreateUserSpaceEvictionCounter(),
+	acc := Accounter{
+		maxEntries:   maxEntries,
+		evictTimeout: evictTimeout,
+		entries:      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
+		clock:        clock,
+		monoClock:    monoClock,
+		metrics:      m,
 	}
+	return &acc
 }
 
 // Account runs in a new goroutine. It reads all the records from the input channel
@@ -59,14 +59,14 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 			c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 			logrus.WithField("flows", len(evictingEntries)).
 				Debug("evicting flows from userspace accounter on timeout")
-			c.evict(evictingEntries, out)
+			c.evict(evictingEntries, out, "timeout")
 		case record, ok := <-in:
 			if !ok {
 				alog.Debug("input channel closed. Evicting entries")
 				// if the records channel is closed, we evict the entries in the
 				// same goroutine to wait for all the entries to be sent before
 				// closing the channel
-				c.evict(c.entries, out)
+				c.evict(c.entries, out, "closing")
 				alog.Debug("exiting account routine")
 				return
 			}
@@ -78,7 +78,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 					c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
-					c.evict(evictingEntries, out)
+					c.evict(evictingEntries, out, "full")
 					// Since we will evict flows because we reached to cacheMaxFlows then reset
 					// evictTimer to avoid unnecessary another eviction when timer expires.
 					evictTick.Reset(c.evictTimeout)
@@ -86,17 +86,19 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				c.entries[record.Id] = &record.Metrics
 			}
 		}
+		c.metrics.BufferSizeGauge.WithBufferName("accounter-entries").Set(float64(len(c.entries)))
 	}
 }
 
-func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*Record) {
+func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*Record, reason string) {
 	now := c.clock()
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*Record, 0, len(entries))
 	for key, metrics := range entries {
 		records = append(records, NewRecord(key, metrics, now, monotonicNow))
 	}
+	c.metrics.EvictionCounter.WithSourceAndReason("accounter", reason).Inc()
+	c.metrics.EvictedFlowsCounter.WithSourceAndReason("accounter", reason).Add(float64(len(records)))
 	alog.WithField("numEntries", len(records)).Debug("records evicted from userspace accounter")
-	c.userSpaceEvictionCounter.Inc()
 	evictor <- records
 }

@@ -31,18 +31,9 @@ func ByteArrayFromNetIP(netIP net.IP) []uint8 {
 
 func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
-	m := metrics.NewMetrics(
-		&metrics.Settings{
-			PromConnectionInfo: metrics.PromConnectionInfo{},
-			Prefix:             "",
-		})
+	m := metrics.NewMetrics(&metrics.Settings{})
 
-	kj := KafkaProto{
-		Writer:                         &wc,
-		NumberOfRecordsExportedByKafka: m.CreateNumberOfRecordsExportedByKafka(),
-		ExportedRecordsBatchSize:       m.CreateKafkaBatchSize(),
-		Errors:                         m.GetErrorsCounter(),
-	}
+	kj := KafkaProto{Writer: &wc, Metrics: m}
 	input := make(chan []*flow.Record, 11)
 	record := flow.Record{}
 	record.Id.EthProtocol = 3

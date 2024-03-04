@@ -10,6 +10,7 @@ import (
 	test2 "github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,6 +205,7 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	ebpfTracer := test.NewTracerFake()
 	export := test.NewExporterFake()
 	agent, err := flowsAgent(cfg,
+		metrics.NewMetrics(&metrics.Settings{}),
 		test.SliceInformerFake{
 			{Name: "foo", Index: 3},
 			{Name: "bar", Index: 4},

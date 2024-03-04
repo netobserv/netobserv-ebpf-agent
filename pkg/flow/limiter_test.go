@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +72,7 @@ func capacityLimiterPipe() (in chan<- []*Record, out <-chan []*Record) {
 			initOut <- i
 		}
 	})
-	limiter := node.AsMiddle((&CapacityLimiter{}).Limit)
+	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NewMetrics(&metrics.Settings{}))).Limit)
 	term := node.AsTerminal(func(termIn <-chan []*Record) {
 		for i := range termIn {
 			outCh <- i

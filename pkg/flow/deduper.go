@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 )
 
 var dlog = logrus.WithField("component", "flow/Deduper")
@@ -39,7 +40,7 @@ type entry struct {
 // (no activity for it during the expiration time)
 // The justMark argument tells that the deduper should not drop the duplicate flows but
 // set their Duplicate field.
-func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer InterfaceNamer) func(in <-chan []*Record, out chan<- []*Record) {
+func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer InterfaceNamer, m *metrics.Metrics) func(in <-chan []*Record, out chan<- []*Record) {
 	cache := &deduperCache{
 		expire:  expireTime,
 		entries: list.New(),
@@ -54,7 +55,11 @@ func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer Interf
 			}
 			if len(fwd) > 0 {
 				out <- fwd
+				m.EvictionCounter.WithSource("deduper").Inc()
+				m.EvictedFlowsCounter.WithSource("deduper").Add(float64(len(fwd)))
 			}
+			m.BufferSizeGauge.WithBufferName("deduper-list").Set(float64(cache.entries.Len()))
+			m.BufferSizeGauge.WithBufferName("deduper-map").Set(float64(len(cache.ifaces)))
 		}
 	}
 }
