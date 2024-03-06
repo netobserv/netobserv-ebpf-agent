@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
@@ -20,7 +21,7 @@ func InitFromConfig(kubeConfigPath string) error {
 	return informers.InitFromConfig(kubeConfigPath)
 }
 
-func Enrich(outputEntry config.GenericMap, rule api.NetworkTransformRule) {
+func Enrich(outputEntry config.GenericMap, rule api.K8sRule) {
 	kubeInfo, err := informers.GetInfo(fmt.Sprintf("%s", outputEntry[rule.Input]))
 	if err != nil {
 		logrus.WithError(err).Tracef("can't find kubernetes info for IP %v", outputEntry[rule.Input])
@@ -36,9 +37,9 @@ func Enrich(outputEntry config.GenericMap, rule api.NetworkTransformRule) {
 		outputEntry[rule.Output+"_Type"] = kubeInfo.Type
 		outputEntry[rule.Output+"_OwnerName"] = kubeInfo.Owner.Name
 		outputEntry[rule.Output+"_OwnerType"] = kubeInfo.Owner.Type
-		if rule.Parameters != "" {
+		if rule.LabelsPrefix != "" {
 			for labelKey, labelValue := range kubeInfo.Labels {
-				outputEntry[rule.Parameters+"_"+labelKey] = labelValue
+				outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
 			}
 		}
 		if kubeInfo.HostIP != "" {
@@ -70,9 +71,9 @@ func Enrich(outputEntry config.GenericMap, rule api.NetworkTransformRule) {
 		outputEntry[rule.Output+"k8s.type"] = kubeInfo.Type
 		outputEntry[rule.Output+"k8s.owner.name"] = kubeInfo.Owner.Name
 		outputEntry[rule.Output+"k8s.owner.type"] = kubeInfo.Owner.Type
-		if rule.Parameters != "" {
+		if rule.LabelsPrefix != "" {
 			for labelKey, labelValue := range kubeInfo.Labels {
-				outputEntry[rule.Parameters+"."+labelKey] = labelValue
+				outputEntry[rule.LabelsPrefix+"."+labelKey] = labelValue
 			}
 		}
 		if kubeInfo.HostIP != "" {
@@ -87,8 +88,8 @@ func Enrich(outputEntry config.GenericMap, rule api.NetworkTransformRule) {
 
 const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
-func fillInK8sZone(outputEntry config.GenericMap, rule api.NetworkTransformRule, kubeInfo inf.Info, zonePrefix string) {
-	if rule.Kubernetes == nil || !rule.Kubernetes.AddZone {
+func fillInK8sZone(outputEntry config.GenericMap, rule api.K8sRule, kubeInfo inf.Info, zonePrefix string) {
+	if !rule.AddZone {
 		//Nothing to do
 		return
 	}
@@ -119,39 +120,34 @@ func fillInK8sZone(outputEntry config.GenericMap, rule api.NetworkTransformRule,
 	}
 }
 
-func EnrichLayer(outputEntry config.GenericMap, rule api.NetworkTransformRule) {
-	if rule.KubernetesInfra == nil {
-		logrus.Error("transformation rule: Missing Kubernetes Infra configuration ")
-		return
-	}
-	outputEntry[rule.KubernetesInfra.Output] = "infra"
-	for _, input := range rule.KubernetesInfra.Inputs {
-		if objectIsApp(fmt.Sprintf("%s", outputEntry[input]), rule.KubernetesInfra.InfraPrefix) {
-			outputEntry[rule.KubernetesInfra.Output] = "app"
+func EnrichLayer(outputEntry config.GenericMap, rule api.K8sInfraRule) {
+	outputEntry[rule.Output] = "infra"
+	for _, input := range rule.Inputs {
+		if objectIsApp(fmt.Sprintf("%s", outputEntry[input]), rule) {
+			outputEntry[rule.Output] = "app"
 			return
 		}
 	}
 }
 
-const openshiftNamespacePrefix = "openshift-"
-const openshiftPrefixLen = len(openshiftNamespacePrefix)
-
-func objectIsApp(addr string, additionalInfraPrefix string) bool {
+func objectIsApp(addr string, rule api.K8sInfraRule) bool {
 	obj, err := informers.GetInfo(addr)
 	if err != nil {
 		logrus.WithError(err).Tracef("can't find kubernetes info for IP %s", addr)
 		return false
 	}
-	nsLen := len(obj.Namespace)
-	additionalPrefixLen := len(additionalInfraPrefix)
-	if nsLen == 0 {
+	if len(obj.Namespace) == 0 {
 		return false
 	}
-	if nsLen >= openshiftPrefixLen && obj.Namespace[:openshiftPrefixLen] == openshiftNamespacePrefix {
-		return false
+	for _, prefix := range rule.InfraPrefixes {
+		if strings.HasPrefix(obj.Namespace, prefix) {
+			return false
+		}
 	}
-	if nsLen >= additionalPrefixLen && obj.Namespace[:additionalPrefixLen] == additionalInfraPrefix {
-		return false
+	for _, ref := range rule.InfraRefs {
+		if obj.Namespace == ref.Namespace && obj.Name == ref.Name {
+			return false
+		}
 	}
 	//Special case with openshift and kubernetes service in default namespace
 	if obj.Namespace == "default" && (obj.Name == "kubernetes" || obj.Name == "openshift") {

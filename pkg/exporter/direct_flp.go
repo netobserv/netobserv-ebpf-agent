@@ -19,7 +19,7 @@ func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
 	// Note that, despite jsonConfig being json, we use yaml unmarshaler because the json one
 	// is screwed up for HTTPClientConfig in github.com/prometheus/common/config (used for Loki)
 	// This is ok as YAML is a superset of JSON.
-	// E.g. try unmarshaling `{"clientConfig":{"authorization":{}}}` as a api.WriteLoki
+	// E.g. try unmarshaling `{"clientConfig":{"proxy_url":null}}` as a api.WriteLoki
 	// See also https://github.com/prometheus/prometheus/issues/11816
 	if err := yaml.Unmarshal([]byte(jsonConfig), &cfg); err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
