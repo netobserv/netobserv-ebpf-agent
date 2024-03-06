@@ -55,30 +55,42 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 	for _, rule := range n.Rules {
 		switch rule.Type {
 		case api.OpAddSubnet:
-			_, ipv4Net, err := net.ParseCIDR(fmt.Sprintf("%v%s", outputEntry[rule.Input], rule.Parameters))
-			if err != nil {
-				log.Warningf("Can't find subnet for IP %v and prefix length %s - err %v", outputEntry[rule.Input], rule.Parameters, err)
+			if rule.AddSubnet == nil {
+				log.Errorf("Missing add subnet configuration")
 				continue
 			}
-			outputEntry[rule.Output] = ipv4Net.String()
+			_, ipv4Net, err := net.ParseCIDR(fmt.Sprintf("%v%s", outputEntry[rule.AddSubnet.Input], rule.AddSubnet.SubnetMask))
+			if err != nil {
+				log.Warningf("Can't find subnet for IP %v and prefix length %s - err %v", outputEntry[rule.AddSubnet.Input], rule.AddSubnet.SubnetMask, err)
+				continue
+			}
+			outputEntry[rule.AddSubnet.Output] = ipv4Net.String()
 		case api.OpAddLocation:
-			var locationInfo *location.Info
-			err, locationInfo := location.GetLocation(fmt.Sprintf("%s", outputEntry[rule.Input]))
-			if err != nil {
-				log.Warningf("Can't find location for IP %v err %v", outputEntry[rule.Input], err)
+			if rule.AddLocation == nil {
+				log.Errorf("Missing add location configuration")
 				continue
 			}
-			outputEntry[rule.Output+"_CountryName"] = locationInfo.CountryName
-			outputEntry[rule.Output+"_CountryLongName"] = locationInfo.CountryLongName
-			outputEntry[rule.Output+"_RegionName"] = locationInfo.RegionName
-			outputEntry[rule.Output+"_CityName"] = locationInfo.CityName
-			outputEntry[rule.Output+"_Latitude"] = locationInfo.Latitude
-			outputEntry[rule.Output+"_Longitude"] = locationInfo.Longitude
-		case api.OpAddService:
-			protocol := fmt.Sprintf("%v", outputEntry[rule.Parameters])
-			portNumber, err := strconv.Atoi(fmt.Sprintf("%v", outputEntry[rule.Input]))
+			var locationInfo *location.Info
+			err, locationInfo := location.GetLocation(fmt.Sprintf("%s", outputEntry[rule.AddLocation.Input]))
 			if err != nil {
-				log.Errorf("Can't convert port to int: Port %v - err %v", outputEntry[rule.Input], err)
+				log.Warningf("Can't find location for IP %v err %v", outputEntry[rule.AddLocation.Input], err)
+				continue
+			}
+			outputEntry[rule.AddLocation.Output+"_CountryName"] = locationInfo.CountryName
+			outputEntry[rule.AddLocation.Output+"_CountryLongName"] = locationInfo.CountryLongName
+			outputEntry[rule.AddLocation.Output+"_RegionName"] = locationInfo.RegionName
+			outputEntry[rule.AddLocation.Output+"_CityName"] = locationInfo.CityName
+			outputEntry[rule.AddLocation.Output+"_Latitude"] = locationInfo.Latitude
+			outputEntry[rule.AddLocation.Output+"_Longitude"] = locationInfo.Longitude
+		case api.OpAddService:
+			if rule.AddService == nil {
+				log.Errorf("Missing add service configuration")
+				continue
+			}
+			protocol := fmt.Sprintf("%v", outputEntry[rule.AddService.Protocol])
+			portNumber, err := strconv.Atoi(fmt.Sprintf("%v", outputEntry[rule.AddService.Input]))
+			if err != nil {
+				log.Errorf("Can't convert port to int: Port %v - err %v", outputEntry[rule.AddService.Input], err)
 				continue
 			}
 			var serviceName string
@@ -92,25 +104,33 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 			if serviceName == "" {
 				if err != nil {
-					log.Debugf("Can't find service name for Port %v and protocol %v - err %v", outputEntry[rule.Input], protocol, err)
+					log.Debugf("Can't find service name for Port %v and protocol %v - err %v", outputEntry[rule.AddService.Input], protocol, err)
 					continue
 				}
 			}
-			outputEntry[rule.Output] = serviceName
+			outputEntry[rule.AddService.Output] = serviceName
 		case api.OpAddKubernetes:
-			kubernetes.Enrich(outputEntry, rule)
+			kubernetes.Enrich(outputEntry, *rule.Kubernetes)
 		case api.OpAddKubernetesInfra:
-			kubernetes.EnrichLayer(outputEntry, rule)
+			if rule.KubernetesInfra == nil {
+				logrus.Error("transformation rule: Missing configuration ")
+				continue
+			}
+			kubernetes.EnrichLayer(outputEntry, *rule.KubernetesInfra)
 		case api.OpReinterpretDirection:
 			reinterpretDirection(outputEntry, &n.DirectionInfo)
 		case api.OpAddIPCategory:
-			if strIP, ok := outputEntry[rule.Input].(string); ok {
+			if rule.AddIPCategory == nil {
+				logrus.Error("AddIPCategory rule: Missing configuration ")
+				continue
+			}
+			if strIP, ok := outputEntry[rule.AddIPCategory.Input].(string); ok {
 				cat, ok := n.ipCatCache.GetCacheEntry(strIP)
 				if !ok {
 					cat = n.categorizeIP(net.ParseIP(strIP))
 					n.ipCatCache.UpdateCacheEntry(strIP, cat)
 				}
-				outputEntry[rule.Output] = cat
+				outputEntry[rule.AddIPCategory.Output] = cat
 			}
 
 		default:

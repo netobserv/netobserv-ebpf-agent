@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 IBM, Inc.
+ * Copyright (C) 2024 IBM, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ var (
 		"destinationNodeName",
 	}
 	CustomNetworkFields = []string{
-		// TODO
+		"timeFlowRttNs",
 	}
 )
 
@@ -146,6 +146,11 @@ func loadCustomRegistry(EnterpriseID uint32) error {
 		return err
 	}
 	err = registry.PutInfoElement((*entities.NewInfoElement("destinationNodeName", 7738, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	if err != nil {
+		ilog.WithError(err).Errorf("Failed to register element")
+		return err
+	}
+	err = registry.PutInfoElement((*entities.NewInfoElement("timeFlowRttNs", 7740, entities.Unsigned64, EnterpriseID, 8)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
@@ -335,6 +340,12 @@ func setStandardIEValue(record config.GenericMap, ieValPtr *entities.InfoElement
 			ieVal.SetStringValue(record["Interface"].(string))
 		} else {
 			return fmt.Errorf("unable to find interface in record")
+		}
+	case "timeFlowRttNs":
+		if record["TimeFlowRttNs"] != nil {
+			ieVal.SetUnsigned64Value(uint64(record["TimeFlowRttNs"].(int64)))
+		} else {
+			return fmt.Errorf("unable to find timeflowrtt in record")
 		}
 	}
 	return nil

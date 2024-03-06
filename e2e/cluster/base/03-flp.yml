@@ -54,12 +54,14 @@ data:
           type: network
           network:
             rules:
-              - input: SrcAddr
-                output: SrcK8S
-                type: "add_kubernetes"
-              - input: DstAddr
-                output: DstK8S
-                type: "add_kubernetes"
+              - type: add_kubernetes
+                kubernetes:
+                  input: SrcAddr
+                  output: SrcK8S
+              - type: add_kubernetes
+                kubernetes:
+                  input: DstAddr
+                  output: DstK8S
       - name: loki
         write:
           type: loki

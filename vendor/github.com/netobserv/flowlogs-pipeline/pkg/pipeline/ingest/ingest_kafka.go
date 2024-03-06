@@ -87,6 +87,7 @@ func (k *ingestKafka) kafkaListener() {
 			kafkaMessage, err := k.kafkaReader.ReadMessage(context.Background())
 			if err != nil {
 				klog.Errorln(err)
+				k.metrics.error("Cannot read message")
 				continue
 			}
 			if k.canLogMessages && logrus.IsLevelEnabled(logrus.TraceLevel) {
