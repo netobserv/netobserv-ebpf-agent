@@ -1,4 +1,4 @@
-package grpc
+package pktgrpc
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
 )
 
 // CollectorServer wraps a Flow Collector connection & session
@@ -31,9 +31,9 @@ func WithGRPCServerOptions(options ...grpc.ServerOption) CollectorOption {
 }
 
 // StartCollector listens in background for gRPC+Protobuf flows in the given port, and forwards each
-// set of *pbflow.Records by the provided channel.
+// set of *pbpacket.Packet by the provided channel.
 func StartCollector(
-	port int, recordForwarder chan<- *pbflow.Records, options ...CollectorOption,
+	port int, pktForwarder chan<- *pbpacket.Packet, options ...CollectorOption,
 ) (*CollectorServer, error) {
 	copts := collectorOptions{}
 	for _, opt := range options {
@@ -45,8 +45,8 @@ func StartCollector(
 		return nil, err
 	}
 	grpcServer := grpc.NewServer(copts.grpcServerOptions...)
-	pbflow.RegisterCollectorServer(grpcServer, &collectorAPI{
-		recordForwarder: recordForwarder,
+	pbpacket.RegisterCollectorServer(grpcServer, &collectorAPI{
+		pktForwarder: pktForwarder,
 	})
 	reflection.Register(grpcServer)
 	go func() {
@@ -65,13 +65,13 @@ func (c *CollectorServer) Close() error {
 }
 
 type collectorAPI struct {
-	pbflow.UnimplementedCollectorServer
-	recordForwarder chan<- *pbflow.Records
+	pbpacket.UnimplementedCollectorServer
+	pktForwarder chan<- *pbpacket.Packet
 }
 
-var okReply = &pbflow.CollectorReply{}
+var okReply = &pbpacket.CollectorReply{}
 
-func (c *collectorAPI) Send(_ context.Context, records *pbflow.Records) (*pbflow.CollectorReply, error) {
-	c.recordForwarder <- records
+func (c *collectorAPI) Send(_ context.Context, pkts *pbpacket.Packet) (*pbpacket.CollectorReply, error) {
+	c.pktForwarder <- pkts
 	return okReply, nil
 }

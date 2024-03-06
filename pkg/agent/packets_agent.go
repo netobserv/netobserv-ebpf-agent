@@ -131,18 +131,43 @@ func packetsAgent(cfg *Config,
 	}, nil
 }
 
-func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.PCAServerPort == 0 {
-		return nil, fmt.Errorf("missing PCA Server port: %d",
-			cfg.PCAServerPort)
+func buildTCPPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	if cfg.TargetPort == 0 {
+		return nil, fmt.Errorf("missing target port for PCA: %d",
+			cfg.TargetPort)
 	}
-	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.PCAServerPort))
+	plog.Info("starting TCP Packet send")
+	pcapStreamer, err := exporter.StartTCPPacketSend(fmt.Sprintf("%d", cfg.TargetPort))
 	if err != nil {
 		return nil, err
 	}
 
-	return pcapStreamer.ExportFlows, err
+	return pcapStreamer.ExportTCPPackets, err
+}
 
+func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+		return nil, fmt.Errorf("missing target host or port for PCA: %d",
+			cfg.TargetPort)
+	}
+	plog.Info("starting gRPC Packet send")
+	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.TargetHost, cfg.TargetPort)
+	if err != nil {
+		return nil, err
+	}
+
+	return pcapStreamer.ExportGRPCPackets, err
+}
+
+func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	switch cfg.Export {
+	case "grpc":
+		return buildGRPCPacketExporter(cfg)
+	case "tcp":
+		return buildTCPPacketExporter(cfg)
+	default:
+		return nil, fmt.Errorf("wrong packet export type %s", cfg.Export)
+	}
 }
 
 // Run a Packets agent. The function will keep running in the same thread

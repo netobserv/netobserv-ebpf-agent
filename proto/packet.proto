@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "./pbpacket";
+
+package pbpacket;
+
+import "google/protobuf/any.proto";
+
+service Collector {
+  rpc Send (Packet) returns (CollectorReply) {}
+}
+
+// The request message containing the Packet
+message Packet {
+  google.protobuf.Any pcap = 1;
+}
+
+// intentionally empty
+message CollectorReply {}

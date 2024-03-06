@@ -286,7 +286,7 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 	case "direct-flp":
 		return buildDirectFLPExporter(cfg)
 	default:
-		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
+		return nil, fmt.Errorf("wrong flow export type %s", cfg.Export)
 	}
 }
 

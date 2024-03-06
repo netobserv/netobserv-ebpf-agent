@@ -34,8 +34,9 @@ type Config struct {
 	// in the AgentID field of each flow. Accepted values are: any (default), ipv4, ipv6.
 	// If the AgentIP configuration property is set, this property has no effect.
 	AgentIPType string `env:"AGENT_IP_TYPE" envDefault:"any"`
-	// Export selects the flows' exporter protocol. Accepted values are: grpc (default), kafka,
-	// ipfix+udp, ipfix+tcp or direct-flp.
+	// Export selects the exporter protocol.
+	// Accepted values for Flows are: grpc (default), kafka, ipfix+udp, ipfix+tcp or direct-flp.
+	// Accepted values for Packets are: grpc (default) or tcp
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
@@ -164,8 +165,6 @@ type Config struct {
 	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
 	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80". Currently, we support 'tcp','udp','sctp' for protocol.
 	PCAFilters string `env:"PCA_FILTER"`
-	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
-	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.

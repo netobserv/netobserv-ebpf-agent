@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
+	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"

@@ -1,5 +1,5 @@
-// Package grpc provides the basic interfaces to build a gRPC+Protobuf flows client & server
-package grpc
+// Package flowgrpc provides the basic interfaces to build a gRPC+Protobuf flows client & server
+package flowgrpc
 
 import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
