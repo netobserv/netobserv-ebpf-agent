@@ -55,7 +55,7 @@ func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 		}
 	}
 	// register to get notification when netns is created or deleted and register for link update for new netns
-	w.netnsNotify(ctx, out)
+	w.netnsNotify()
 	return out, nil
 }
 
@@ -150,7 +150,7 @@ func getNetNSHandles() ([]netns.NsHandle, error) {
 	return handles, nil
 }
 
-func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
+func (w *Watcher) netnsNotify() {
 	var err error
 	log := logrus.WithField("component", "ifaces.Watcher")
 
@@ -167,15 +167,12 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 				if !ok {
 					return
 				}
-				if event.Op&fsnotify.Create == fsnotify.Create {
+				if event.Has(fsnotify.Create) {
 					ns := filepath.Base(event.Name)
-					log.WithField("netns", ns).Debug("netns notification")
-					handle, err := netns.GetFromName(ns)
-					if err != nil {
-						log.WithField("netns", ns).Debug("can't get NsHandle for this netns. Ignoring")
-						return
+					log.WithField("netns", ns).Debug("create netns notification, reload ebpf agent")
+					if err := syscall.Kill(syscall.Getgid(), syscall.SIGTERM); err != nil {
+						log.WithError(err).Error("can't kill ebpf agent")
 					}
-					go w.sendUpdates(ctx, handle, out)
 				}
 			case err, ok := <-w.netnsWatcher.Errors:
 				if !ok {
