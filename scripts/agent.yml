@@ -50,8 +50,15 @@ spec:
             - name: bpf-kernel-debug
               mountPath: /sys/kernel/debug
               mountPropagation: Bidirectional
+            - name: netns
+              mountPath: /var/run/netns
+              mountPropagation: Bidirectional
       volumes:
         - name: bpf-kernel-debug
           hostPath:
             path: /sys/kernel/debug
+            type: Directory
+        - name: netns
+          hostPath:
+            path: /var/run/netns
             type: Directory

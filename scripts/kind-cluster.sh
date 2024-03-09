@@ -16,6 +16,9 @@ networking:
     ipFamily: $IP_FAMILY
 nodes:
 - role: control-plane
+  extraMounts:
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
   kubeadmConfigPatches:
   - |
     kind: ClusterConfiguration
@@ -29,7 +32,13 @@ nodes:
         extraArgs:
             v: "5"
 - role: worker
+  extraMounts:
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
 - role: worker
+  extraMounts:
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
 EOF
 }
 
