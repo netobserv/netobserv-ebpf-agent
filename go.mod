@@ -22,7 +22,7 @@ require (
 	github.com/vladimirvivien/gexe v0.2.0
 	github.com/vmware/go-ipfix v0.9.0
 	golang.org/x/sys v0.18.0
-	google.golang.org/grpc v1.62.0
+	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.29.2
