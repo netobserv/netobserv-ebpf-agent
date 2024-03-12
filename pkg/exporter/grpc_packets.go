@@ -35,7 +35,7 @@ func writeGRPCPacket(ci gopacket.CaptureInfo, data []byte, conn *grpc.ClientConn
 		return fmt.Errorf("error writing packet header: %w", err)
 	}
 	// write 16 byte packet header & data all at once
-	conn.Client().Send(context.TODO(), &pbpacket.Packet{
+	_, err = conn.Client().Send(context.TODO(), &pbpacket.Packet{
 		Pcap: &anypb.Any{
 			Value: append(b, data...),
 		},
