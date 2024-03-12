@@ -21,6 +21,10 @@ func TestPBFlowToMap(t *testing.T) {
 		Interface: "eth0",
 		DupList: []*pbflow.DupMapEntry{
 			{
+				Interface: "5e6e92caa1d51cf",
+				Direction: pbflow.Direction_INGRESS,
+			},
+			{
 				Interface: "eth0",
 				Direction: pbflow.Direction_EGRESS,
 			},
@@ -70,8 +74,7 @@ func TestPBFlowToMap(t *testing.T) {
 	assert.NotZero(t, out["TimeReceived"])
 	delete(out, "TimeReceived")
 	assert.Equal(t, config.GenericMap{
-		"FlowDirection":          1,
-		"FlowDirections":         []interface{}{pbflow.Direction(1)},
+		"IfDirections":           []int{0, 1},
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",
@@ -86,8 +89,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"Proto":                  uint32(6),
 		"TimeFlowStartMs":        someTime.UnixMilli(),
 		"TimeFlowEndMs":          someTime.UnixMilli(),
-		"Interfaces":             []interface{}{"eth0"},
-		"Interface":              "eth0",
+		"Interfaces":             []string{"5e6e92caa1d51cf", "eth0"},
 		"AgentIP":                "10.9.8.7",
 		"Flags":                  uint32(0x100),
 		"PktDropBytes":           uint64(200),

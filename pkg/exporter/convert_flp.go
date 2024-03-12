@@ -18,16 +18,17 @@ func ConvertToFLP(fr *flow.Record) config.GenericMap {
 	srcMAC := flow.MacAddr(fr.Id.SrcMac)
 	dstMAC := flow.MacAddr(fr.Id.DstMac)
 	out := config.GenericMap{
-		"FlowDirection":   int(fr.Id.Direction),
 		"SrcMac":          srcMAC.String(),
 		"DstMac":          dstMAC.String(),
 		"Etype":           fr.Id.EthProtocol,
-		"Duplicate":       fr.Duplicate,
 		"TimeFlowStartMs": fr.TimeFlowStart.UnixMilli(),
 		"TimeFlowEndMs":   fr.TimeFlowEnd.UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
-		"Interface":       fr.Interface,
 		"AgentIP":         fr.AgentIP.String(),
+	}
+
+	if fr.Duplicate {
+		out["Duplicate"] = true
 	}
 
 	if fr.Metrics.Bytes != 0 {
@@ -37,6 +38,22 @@ func ConvertToFLP(fr *flow.Record) config.GenericMap {
 	if fr.Metrics.Packets != 0 {
 		out["Packets"] = fr.Metrics.Packets
 	}
+
+	var interfaces []string
+	var directions []int
+	if len(fr.DupList) != 0 {
+		for _, m := range fr.DupList {
+			for key, value := range m {
+				interfaces = append(interfaces, key)
+				directions = append(directions, int(flow.Direction(value)))
+			}
+		}
+	} else {
+		interfaces = append(interfaces, fr.Interface)
+		directions = append(directions, int(fr.Id.Direction))
+	}
+	out["Interfaces"] = interfaces
+	out["IfDirections"] = directions
 
 	if fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
 		out["SrcAddr"] = flow.IP(fr.Id.SrcIp).String()
