@@ -4,6 +4,7 @@ package basic
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ type FlowCaptureTester struct {
 	Timeout   time.Duration
 }
 
-func (bt *FlowCaptureTester) DoTest(t *testing.T) {
+func (bt *FlowCaptureTester) DoTest(t *testing.T, isIPFIX bool) {
 	var pci podsConnectInfo
 	f1 := features.New("basic flow capture").Setup(
 		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -55,7 +56,6 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			// Same for DstMac when the flow is towards the service
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["DstMac"])
 
-			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
 			assert.EqualValues(t, 6, flow["Proto"])
 
@@ -67,7 +67,18 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
 			assert.Less(t, time.Since(asTime(flow["TimeFlowStartMs"])), 15*time.Second)
 
-			assert.NotEmpty(t, flow["Interface"])
+			// IPFIX format doesn't manage plural fields
+			if isIPFIX {
+				assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
+				assert.NotEmpty(t, flow["Interface"])
+			} else {
+				assert.NotNil(t, flow["Interfaces"])
+				interfaces := flow["Interfaces"].([]interface{})
+				assert.NotNil(t, flow["IfDirections"])
+				directions := flow["IfDirections"].([]interface{})
+				assert.Equal(t, len(interfaces), len(directions))
+				assert.Regexp(t, "^[01]$", fmt.Sprintf("%.0f", directions[0]))
+			}
 			return ctx
 		},
 	).Assess("correctness of client -> server (as Pod) request flows",
@@ -89,7 +100,6 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["SrcMac"])
 			assert.Regexp(t, "(?i)"+pci.serverMAC, flow["DstMac"])
 
-			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
 
 			assert.NotZero(t, flow["Bytes"])
@@ -99,7 +109,18 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
 			assert.Less(t, time.Since(asTime(flow["TimeFlowStartMs"])), 15*time.Second)
 
-			assert.NotEmpty(t, flow["Interface"])
+			// IPFIX format doesn't manage plural fields
+			if isIPFIX {
+				assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
+				assert.NotEmpty(t, flow["Interface"])
+			} else {
+				assert.NotNil(t, flow["Interfaces"])
+				interfaces := flow["Interfaces"].([]interface{})
+				assert.NotNil(t, flow["IfDirections"])
+				directions := flow["IfDirections"].([]interface{})
+				assert.Equal(t, len(interfaces), len(directions))
+				assert.Regexp(t, "^[01]$", fmt.Sprintf("%.0f", directions[0]))
+			}
 			return ctx
 		},
 	).Assess("correctness of server (from Service) -> client response flows",
@@ -120,7 +141,6 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["SrcMac"])
 			assert.Regexp(t, "(?i)"+pci.clientMAC, flow["DstMac"])
 
-			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
 			assert.EqualValues(t, 6, flow["Proto"])
 
@@ -132,7 +152,18 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
 			assert.Less(t, time.Since(asTime(flow["TimeFlowStartMs"])), 15*time.Second)
 
-			assert.NotEmpty(t, flow["Interface"])
+			// IPFIX format doesn't manage plural fields
+			if isIPFIX {
+				assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
+				assert.NotEmpty(t, flow["Interface"])
+			} else {
+				assert.NotNil(t, flow["Interfaces"])
+				interfaces := flow["Interfaces"].([]interface{})
+				assert.NotNil(t, flow["IfDirections"])
+				directions := flow["IfDirections"].([]interface{})
+				assert.Equal(t, len(interfaces), len(directions))
+				assert.Regexp(t, "^[01]$", fmt.Sprintf("%.0f", directions[0]))
+			}
 			return ctx
 		},
 	).Assess("correctness of server (from Pod) -> client response flows",
@@ -154,7 +185,6 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			// only check that it is well-formed.
 			assert.Regexp(t, "^[\\da-fA-F]{2}(:[\\da-fA-F]{2}){5}$", flow["DstMac"])
 
-			assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
 			assert.EqualValues(t, 2048, flow["Etype"])
 			assert.EqualValues(t, 6, flow["Proto"])
 
@@ -166,7 +196,18 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T) {
 			assert.Less(t, time.Since(asTime(flow["TimeFlowEndMs"])), 15*time.Second)
 			assert.Less(t, time.Since(asTime(flow["TimeFlowStartMs"])), 15*time.Second)
 
-			assert.NotEmpty(t, flow["Interface"])
+			// IPFIX format doesn't manage plural fields
+			if isIPFIX {
+				assert.Regexp(t, "^[01]$", lq.Stream["FlowDirection"])
+				assert.NotEmpty(t, flow["Interface"])
+			} else {
+				assert.NotNil(t, flow["Interfaces"])
+				interfaces := flow["Interfaces"].([]interface{})
+				assert.NotNil(t, flow["IfDirections"])
+				directions := flow["IfDirections"].([]interface{})
+				assert.Equal(t, len(interfaces), len(directions))
+				assert.Regexp(t, "^[01]$", fmt.Sprintf("%.0f", directions[0]))
+			}
 			return ctx
 		},
 	).Feature()

@@ -112,7 +112,6 @@ data:
               - "SrcK8S_OwnerName"
               - "DstK8S_Namespace"
               - "DstK8S_OwnerName"
-              - "FlowDirection"
             url: http://loki.netobserv.svc:3100
             timestampLabel: TimeFlowEndMs
             timestampScale: 1ms

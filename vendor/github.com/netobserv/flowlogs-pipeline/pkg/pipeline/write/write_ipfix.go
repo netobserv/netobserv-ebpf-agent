@@ -246,8 +246,9 @@ func setStandardIEValue(record config.GenericMap, ieValPtr *entities.InfoElement
 			return fmt.Errorf("unable to find ethernet type (Etype) in record")
 		}
 	case "flowDirection":
-		if record["FlowDirection"] != nil {
-			ieVal.SetUnsigned8Value(uint8(record["FlowDirection"].(int)))
+		dirs := record["IfDirections"].([]int)
+		if len(dirs) > 0 {
+			ieVal.SetUnsigned8Value(uint8(dirs[0]))
 		} else {
 			return fmt.Errorf("unable to find flow direction (flowDirection) in record")
 		}
@@ -336,8 +337,9 @@ func setStandardIEValue(record config.GenericMap, ieValPtr *entities.InfoElement
 			return fmt.Errorf("unable to find packets in record")
 		}
 	case "interfaceName":
-		if record["Interface"] != nil {
-			ieVal.SetStringValue(record["Interface"].(string))
+		interfaces := record["Interfaces"].([]string)
+		if len(interfaces) > 0 {
+			ieVal.SetStringValue(interfaces[0])
 		} else {
 			return fmt.Errorf("unable to find interface in record")
 		}
