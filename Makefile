@@ -37,6 +37,7 @@ OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.12.4-0.20240124115601-f95957d1669c
 GOLANGCI_LINT_VERSION = v1.54.2
+PROTOC_VERSION = "3.19.4"
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS ?= linux
@@ -86,6 +87,11 @@ vendors: ## Check go vendors
 	@echo "### Checking vendors"
 	go mod tidy && go mod vendor
 
+.PHONY: install-protoc
+install-protoc: ## Install protoc
+	curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/protoc-$(PROTOC_VERSION)-linux-x86_64.zip -o protoc.zip
+	unzip protoc.zip -d protoc && rm protoc.zip
+
 .PHONY: prereqs
 prereqs: ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
@@ -94,6 +100,7 @@ prereqs: ## Check if prerequisites are met, and install missing dependencies
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	test -f $(shell go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
+	test "$(shell PATH="$$(pwd)/protoc/bin:$$PATH" && protoc --version)" = "libprotoc $(PROTOC_VERSION)" || $(MAKE) install-protoc
 
 ##@ Develop
 
@@ -118,12 +125,12 @@ generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto
 	@echo "### Generating BPF Go bindings"
 	go generate ./pkg/...
 	@echo "### Generating gRPC and Protocol Buffers code"
-	protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
+	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
 
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64"
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)"
 	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile

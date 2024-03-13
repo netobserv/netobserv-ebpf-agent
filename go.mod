@@ -1,6 +1,8 @@
 module github.com/netobserv/netobserv-ebpf-agent
 
-go 1.20
+go 1.21
+
+toolchain go1.21.7
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1

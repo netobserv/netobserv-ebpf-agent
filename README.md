@@ -119,18 +119,18 @@ This step is generally not needed unless you change the C code in the `bpf` fold
 
 If you have Docker installed, you just need to run:
 
-```
+```bash
 make docker-generate
 ```
 
-If you can't install docker, you should locally install the following required packages:
+If you can't install docker, you can install locally the following packages, then run `make generate`:
 
-```
+```bash
 dnf install -y kernel-devel make llvm clang glibc-devel.i686
 make generate
 ```
 
-Tested in Fedora 35 and Red Hat Enterprise Linux 8.
+Regularly tested on Fedora.
 
 ## Known issues
 
