@@ -58,6 +58,7 @@ type BpfFlowMetricsT struct {
 	PktDrops        BpfPktDropsT
 	DnsRecord       BpfDnsRecordT
 	FlowRtt         uint64
+	OvsDpKeys       [2]uint64
 }
 
 type BpfFlowRecordT struct {
@@ -119,6 +120,7 @@ type BpfProgramSpecs struct {
 	IngressFlowParse *ebpf.ProgramSpec `ebpf:"ingress_flow_parse"`
 	IngressPcaParse  *ebpf.ProgramSpec `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	OvsDpMonitor     *ebpf.ProgramSpec `ebpf:"ovs_dp_monitor"`
 	TcpRcvFentry     *ebpf.ProgramSpec `ebpf:"tcp_rcv_fentry"`
 	TcpRcvKprobe     *ebpf.ProgramSpec `ebpf:"tcp_rcv_kprobe"`
 }
@@ -176,6 +178,7 @@ type BpfPrograms struct {
 	IngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
 	IngressPcaParse  *ebpf.Program `ebpf:"ingress_pca_parse"`
 	KfreeSkb         *ebpf.Program `ebpf:"kfree_skb"`
+	OvsDpMonitor     *ebpf.Program `ebpf:"ovs_dp_monitor"`
 	TcpRcvFentry     *ebpf.Program `ebpf:"tcp_rcv_fentry"`
 	TcpRcvKprobe     *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 }
@@ -187,6 +190,7 @@ func (p *BpfPrograms) Close() error {
 		p.IngressFlowParse,
 		p.IngressPcaParse,
 		p.KfreeSkb,
+		p.OvsDpMonitor,
 		p.TcpRcvFentry,
 		p.TcpRcvKprobe,
 	)

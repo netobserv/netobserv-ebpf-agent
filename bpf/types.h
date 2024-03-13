@@ -92,6 +92,7 @@ typedef struct flow_metrics_t {
         u8 errno;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
+    u64 ovs_dp_keys[2];
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct pkt_drops into the ELF.
