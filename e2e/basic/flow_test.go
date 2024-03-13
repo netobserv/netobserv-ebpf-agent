@@ -55,7 +55,7 @@ func TestBasicFlowCapture(t *testing.T) {
 		Namespace: namespace,
 		Timeout:   testTimeout,
 	}
-	bt.DoTest(t)
+	bt.DoTest(t, false)
 }
 
 // TestSinglePacketFlows uses a known packet size and number to check that,

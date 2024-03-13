@@ -73,7 +73,7 @@ func TestBasicFlowCapture(t *testing.T) {
 		Namespace: namespace,
 		Timeout:   testTimeout,
 	}
-	bt.DoTest(t)
+	bt.DoTest(t, false)
 }
 
 func checkResources(client klient.Client, list ...string) bool {

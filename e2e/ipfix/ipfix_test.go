@@ -51,5 +51,5 @@ func TestBasicFlowCapture(t *testing.T) {
 		Namespace: namespace,
 		Timeout:   testTimeout,
 	}
-	bt.DoTest(t)
+	bt.DoTest(t, true)
 }
