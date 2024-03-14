@@ -458,7 +458,6 @@ func (t *writeIpfix) Write(entry config.GenericMap) {
 			ilog.WithError(err).Error("Failed in send v4 IPFIX record")
 		}
 	}
-
 }
 
 // NewWriteIpfix creates a new write

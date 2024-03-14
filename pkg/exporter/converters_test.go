@@ -10,6 +10,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -435,22 +436,28 @@ func TestConversions(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		// Test direct conversion
-		outDirect := ConvertToFLP(tt.flow)
+		// Generate with direct conversion
+		outDirect := decode.RecordToMap(tt.flow)
 		assert.NotZero(t, outDirect["TimeReceived"])
 		delete(outDirect, "TimeReceived")
-		err := normalizeMap(outDirect)
-		require.NoError(t, err)
-		assert.Equalf(t, *tt.expected, outDirect, tt.name)
 
-		// Test protobuf conversion
-		tmpPB := flowToPB(tt.flow)
+		// Generate the same using protobuf
+		tmpPB := pbflow.FlowToPB(tt.flow)
 		rawPB, err := proto.Marshal(tmpPB)
 		require.NoError(t, err)
 		outPB, err := decoder.Decode(rawPB)
 		require.NoError(t, err)
 		assert.NotZero(t, outPB["TimeReceived"])
 		delete(outPB, "TimeReceived")
+
+		// Make sure they're both equal
+		assert.Equalf(t, outPB, outDirect, "%s: direct conversion and protobuf conversion should be identical", tt.name)
+
+		// Check versus expected map
+		err = normalizeMap(outDirect)
+		require.NoError(t, err)
+		assert.Equalf(t, *tt.expected, outDirect, tt.name)
+
 		err = normalizeMap(outPB)
 		require.NoError(t, err)
 		assert.Equalf(t, *tt.expected, outPB, tt.name)

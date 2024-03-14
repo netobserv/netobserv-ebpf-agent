@@ -6,6 +6,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/grpc"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,7 +54,7 @@ func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
 	log := glog.WithField("collector", socket)
 	for inputRecords := range input {
 		g.metrics.EvictionCounter.WithSource(componentGRPC).Inc()
-		for _, pbRecords := range flowsToPB(inputRecords, g.maxFlowsPerMessage) {
+		for _, pbRecords := range pbflow.FlowsToPB(inputRecords, g.maxFlowsPerMessage) {
 			log.Debugf("sending %d records", len(pbRecords.Entries))
 			if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
 				g.metrics.Errors.WithErrorName(componentGRPC, "CannotWriteMessage").Inc()

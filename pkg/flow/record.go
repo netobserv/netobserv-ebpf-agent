@@ -135,6 +135,13 @@ func IntEncodeV4(ia [net.IPv6len]uint8) uint32 {
 	return binary.BigEndian.Uint32(ia[net.IPv6len-net.IPv4len : net.IPv6len])
 }
 
+// IPAddrFromNetIP returns IPAddr from net.IP
+func IPAddrFromNetIP(netIP net.IP) IPAddr {
+	var arr [net.IPv6len]uint8
+	copy(arr[:], (netIP)[0:net.IPv6len])
+	return arr
+}
+
 func (ia *IPAddr) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + IP(*ia).String() + `"`), nil
 }
