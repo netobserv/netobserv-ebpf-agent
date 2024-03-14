@@ -21,7 +21,7 @@ type GRPCPacketProto struct {
 
 var gplog = logrus.WithField("component", "packet/GRPCPackets")
 
-// WritePacket writes the given packet data out to the file.
+// WritePacket writes the given packet data out to gRPC.
 func writeGRPCPacket(ci gopacket.CaptureInfo, data []byte, conn *grpc.ClientConnection) error {
 	if ci.CaptureLength != len(data) {
 		return fmt.Errorf("capture length %d does not match data length %d", ci.CaptureLength, len(data))
@@ -57,22 +57,23 @@ func StartGRPCPacketSend(hostIP string, hostPort int) (*GRPCPacketProto, error) 
 
 func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*flow.PacketRecord) {
 	for packetRecord := range in {
-		if len(packetRecord) > 0 {
-			for _, packet := range packetRecord {
-				packetStream := packet.Stream
-				packetTimestamp := packet.Time
-				if len(packetStream) != 0 {
-					captureInfo := gopacket.CaptureInfo{
-						Timestamp:     packetTimestamp,
-						CaptureLength: len(packetStream),
-						Length:        len(packetStream),
-					}
-					err := writeGRPCPacket(captureInfo, packetStream, p.clientConn)
-					if err != nil {
-						gplog.Fatal(err)
-					}
+		for _, packet := range packetRecord {
+			packetStream := packet.Stream
+			packetTimestamp := packet.Time
+			if len(packetStream) != 0 {
+				captureInfo := gopacket.CaptureInfo{
+					Timestamp:     packetTimestamp,
+					CaptureLength: len(packetStream),
+					Length:        len(packetStream),
+				}
+				err := writeGRPCPacket(captureInfo, packetStream, p.clientConn)
+				if err != nil {
+					gplog.Error(err)
 				}
 			}
 		}
+	}
+	if err := p.clientConn.Close(); err != nil {
+		gplog.WithError(err).Warn("couldn't close packet export client")
 	}
 }

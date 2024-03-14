@@ -22,7 +22,7 @@ var tplog = logrus.WithField("component", "packet/TCPPackets")
 // Setting Snapshot length to 0 sets it to maximum packet size
 var snapshotlen uint32
 
-// WritePacket writes the given packet data out to the file.
+// WritePacket writes the given packet data out to tcp connection.
 func writeTCPPacket(ci gopacket.CaptureInfo, data []byte, conn net.Conn) error {
 	if ci.CaptureLength != len(data) {
 		return fmt.Errorf("capture length %d does not match data length %d", ci.CaptureLength, len(data))
@@ -77,22 +77,23 @@ func (p *PCAPStream) ExportTCPPackets(in <-chan []*flow.PacketRecord) {
 		tplog.Fatal(err)
 	}
 	for packetRecord := range in {
-		if len(packetRecord) > 0 {
-			for _, packet := range packetRecord {
-				packetStream := packet.Stream
-				packetTimestamp := packet.Time
-				if len(packetStream) != 0 {
-					captureInfo := gopacket.CaptureInfo{
-						Timestamp:     packetTimestamp,
-						CaptureLength: len(packetStream),
-						Length:        len(packetStream),
-					}
-					err = writeTCPPacket(captureInfo, packetStream, p.clientConn)
-					if err != nil {
-						tplog.Fatal(err)
-					}
+		for _, packet := range packetRecord {
+			packetStream := packet.Stream
+			packetTimestamp := packet.Time
+			if len(packetStream) != 0 {
+				captureInfo := gopacket.CaptureInfo{
+					Timestamp:     packetTimestamp,
+					CaptureLength: len(packetStream),
+					Length:        len(packetStream),
+				}
+				err = writeTCPPacket(captureInfo, packetStream, p.clientConn)
+				if err != nil {
+					tplog.Fatal(err)
 				}
 			}
 		}
+	}
+	if err := p.clientConn.Close(); err != nil {
+		tplog.WithError(err).Warn("couldn't close packet export client")
 	}
 }

@@ -147,8 +147,8 @@ func buildTCPPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord
 
 func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
-		return nil, fmt.Errorf("missing target host or port for PCA: %d",
-			cfg.TargetPort)
+		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
+			cfg.TargetHost, cfg.TargetPort)
 	}
 	plog.Info("starting gRPC Packet send")
 	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.TargetHost, cfg.TargetPort)
@@ -166,7 +166,7 @@ func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], 
 	case "tcp":
 		return buildTCPPacketExporter(cfg)
 	default:
-		return nil, fmt.Errorf("wrong packet export type %s", cfg.Export)
+		return nil, fmt.Errorf("unsupported packet export type %s", cfg.Export)
 	}
 }
 
