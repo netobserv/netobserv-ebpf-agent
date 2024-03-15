@@ -135,6 +135,9 @@ type ebpfFlowFetcher interface {
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
 
+	// manage deprecated configs
+	manageDeprecatedConfigs(cfg)
+
 	// configure informer for new interfaces
 	var informer = configureInformer(cfg, alog)
 

@@ -2,7 +2,11 @@ package agent
 
 import (
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
+
+var clog = logrus.WithField("component", "config")
 
 const (
 	ListenPoll       = "poll"
@@ -40,9 +44,9 @@ type Config struct {
 	Export string `env:"EXPORT" envDefault:"grpc"`
 	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
 	// set to "grpc"
-	TargetHost string `env:"FLOWS_TARGET_HOST"`
+	TargetHost string `env:"TARGET_HOST"`
 	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
-	TargetPort int `env:"FLOWS_TARGET_PORT"`
+	TargetPort int `env:"TARGET_PORT"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
@@ -173,4 +177,30 @@ type Config struct {
 	MetricsPort int `env:"METRICS_SERVER_PORT" envDefault:"9090"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
+
+	/* Deprecated configs are listed below this line
+	 * See manageDeprecatedConfigs function for details
+	 */
+
+	// Deprecated FlowsTargetHost replaced by TargetHost
+	FlowsTargetHost string `env:"FLOWS_TARGET_HOST"`
+	// Deprecated FlowsTargetPort replaced by TargetPort
+	FlowsTargetPort int `env:"FLOWS_TARGET_PORT"`
+	// Deprecated PCAServerPort replaced by TargetPort
+	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
+}
+
+func manageDeprecatedConfigs(cfg *Config) {
+	if len(cfg.FlowsTargetHost) > 0 {
+		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
+		cfg.TargetHost = cfg.FlowsTargetHost
+	}
+
+	if cfg.FlowsTargetPort != 0 {
+		clog.Infof("Using deprecated FlowsTargetPort %d", cfg.FlowsTargetPort)
+		cfg.TargetPort = cfg.FlowsTargetPort
+	} else if cfg.PCAServerPort != 0 {
+		clog.Infof("Using deprecated PCAServerPort %d", cfg.PCAServerPort)
+		cfg.TargetPort = cfg.PCAServerPort
+	}
 }
