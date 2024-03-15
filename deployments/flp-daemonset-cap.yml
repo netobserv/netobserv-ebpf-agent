@@ -32,11 +32,11 @@ spec:
               - SYS_RESOURCE
           runAsUser: 0
         env:
-          - name: FLOWS_TARGET_HOST
+          - name: HOST
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
-          - name: FLOWS_TARGET_PORT
+          - name: PORT
             value: "9999"
 ---
 apiVersion: apps/v1

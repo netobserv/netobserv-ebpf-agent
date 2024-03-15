@@ -42,11 +42,11 @@ type Config struct {
 	// Accepted values for Flows are: grpc (default), kafka, ipfix+udp, ipfix+tcp or direct-flp.
 	// Accepted values for Packets are: grpc (default) or tcp
 	Export string `env:"EXPORT" envDefault:"grpc"`
-	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
+	// Host is the host name or IP of the Flow collector, when the EXPORT variable is
 	// set to "grpc"
-	TargetHost string `env:"TARGET_HOST"`
-	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
-	TargetPort int `env:"TARGET_PORT"`
+	Host string `env:"HOST"`
+	// Port is the port the Flow collector, when the EXPORT variable is set to "grpc"
+	Port int `env:"PORT"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
@@ -193,14 +193,14 @@ type Config struct {
 func manageDeprecatedConfigs(cfg *Config) {
 	if len(cfg.FlowsTargetHost) > 0 {
 		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
-		cfg.TargetHost = cfg.FlowsTargetHost
+		cfg.Host = cfg.FlowsTargetHost
 	}
 
 	if cfg.FlowsTargetPort != 0 {
 		clog.Infof("Using deprecated FlowsTargetPort %d", cfg.FlowsTargetPort)
-		cfg.TargetPort = cfg.FlowsTargetPort
+		cfg.Port = cfg.FlowsTargetPort
 	} else if cfg.PCAServerPort != 0 {
 		clog.Infof("Using deprecated PCAServerPort %d", cfg.PCAServerPort)
-		cfg.TargetPort = cfg.PCAServerPort
+		cfg.Port = cfg.PCAServerPort
 	}
 }

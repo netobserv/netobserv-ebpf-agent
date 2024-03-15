@@ -14,7 +14,7 @@ go build -mod vendor -o bin/packetcapture-client examples/packetcapture-dump/cli
 ```
 Start the agent using:
 ```bash
-sudo EXPORT=tcp FLOWS_TARGET_PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
+sudo EXPORT=tcp PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
 ```
 
 Start the packetcapture-client using: (in a secondary shell)

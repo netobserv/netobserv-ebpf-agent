@@ -29,10 +29,10 @@ func TestFlowsAgent_InvalidConfigs(t *testing.T) {
 		c: Config{Export: "foo"},
 	}, {
 		d: "GRPC: missing host",
-		c: Config{Export: "grpc", TargetPort: 3333},
+		c: Config{Export: "grpc", Port: 3333},
 	}, {
 		d: "GRPC: missing port",
-		c: Config{Export: "grpc", TargetHost: "flp"},
+		c: Config{Export: "grpc", Host: "flp"},
 	}, {
 		d: "Kafka: missing brokers",
 		c: Config{Export: "kafka"},

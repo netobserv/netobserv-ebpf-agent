@@ -132,12 +132,12 @@ func packetsAgent(cfg *Config,
 }
 
 func buildTCPPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.TargetPort == 0 {
+	if cfg.Port == 0 {
 		return nil, fmt.Errorf("missing target port for PCA: %d",
-			cfg.TargetPort)
+			cfg.Port)
 	}
 	plog.Info("starting TCP Packet send")
-	pcapStreamer, err := exporter.StartTCPPacketSend(fmt.Sprintf("%d", cfg.TargetPort))
+	pcapStreamer, err := exporter.StartTCPPacketSend(fmt.Sprintf("%d", cfg.Port))
 	if err != nil {
 		return nil, err
 	}
@@ -146,12 +146,12 @@ func buildTCPPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord
 }
 
 func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+	if cfg.Host == "" || cfg.Port == 0 {
 		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
-			cfg.TargetHost, cfg.TargetPort)
+			cfg.Host, cfg.Port)
 	}
 	plog.Info("starting gRPC Packet send")
-	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.TargetHost, cfg.TargetPort)
+	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.Host, cfg.Port)
 	if err != nil {
 		return nil, err
 	}
