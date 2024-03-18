@@ -49,6 +49,9 @@ type ebpfPacketFetcher interface {
 func PacketsAgent(cfg *Config) (*Packets, error) {
 	plog.Info("initializing Packets agent")
 
+	// manage deprecated configs
+	manageDeprecatedConfigs(cfg)
+
 	// configure informer for new interfaces
 	informer := configureInformer(cfg, plog)
 

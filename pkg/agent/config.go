@@ -187,7 +187,7 @@ type Config struct {
 	// Deprecated FlowsTargetPort replaced by TargetPort
 	FlowsTargetPort int `env:"FLOWS_TARGET_PORT"`
 	// Deprecated PCAServerPort replaced by TargetPort
-	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
+	PCAServerPort int `env:"PCA_SERVER_PORT"`
 }
 
 func manageDeprecatedConfigs(cfg *Config) {
