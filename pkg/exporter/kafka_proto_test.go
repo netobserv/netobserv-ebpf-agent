@@ -16,13 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// IPAddrFromNetIP returns IPAddr from net.IP
-func IPAddrFromNetIP(netIP net.IP) flow.IPAddr {
-	var arr [net.IPv6len]uint8
-	copy(arr[:], (netIP)[0:net.IPv6len])
-	return arr
-}
-
 func ByteArrayFromNetIP(netIP net.IP) []uint8 {
 	var arr [net.IPv6len]uint8
 	copy(arr[:], (netIP)[0:net.IPv6len])
@@ -40,8 +33,8 @@ func TestProtoConversion(t *testing.T) {
 	record.Id.Direction = 1
 	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
 	record.Id.SrcPort = 4321
 	record.Id.DstPort = 1234
 	record.Id.IcmpType = 8
@@ -88,8 +81,8 @@ func TestIdenticalKeys(t *testing.T) {
 	record.Id.Direction = 1
 	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
 	record.Id.SrcPort = 4321
 	record.Id.DstPort = 1234
 	record.Id.IcmpType = 8
@@ -103,8 +96,8 @@ func TestIdenticalKeys(t *testing.T) {
 
 	key1 := getFlowKey(&record)
 
-	record.Id.SrcIp = IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.DstIp = IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
 	key2 := getFlowKey(&record)
 
 	// Both keys should be identical

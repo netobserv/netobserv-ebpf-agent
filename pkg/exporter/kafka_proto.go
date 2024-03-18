@@ -5,6 +5,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
@@ -49,7 +50,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 	klog.Debugf("sending %d records", len(records))
 	msgs := make([]kafkago.Message, 0, len(records))
 	for _, record := range records {
-		pbBytes, err := proto.Marshal(flowToPB(record))
+		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			kp.Metrics.Errors.WithErrorName(componentKafka, "CannotEncodeMessage").Inc()

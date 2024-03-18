@@ -5,6 +5,7 @@ import (
 
 	flpconfig "github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"gopkg.in/yaml.v2"
 )
@@ -39,7 +40,7 @@ func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
 func (d *DirectFLP) ExportFlows(input <-chan []*flow.Record) {
 	for inputRecords := range input {
 		for _, rec := range inputRecords {
-			d.fwd <- ConvertToFLP(rec)
+			d.fwd <- decode.RecordToMap(rec)
 		}
 	}
 }

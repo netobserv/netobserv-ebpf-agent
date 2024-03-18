@@ -2,11 +2,11 @@ package decode
 
 import (
 	"fmt"
-	"net"
 	"syscall"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
 	"github.com/mdlayher/ethernet"
@@ -41,111 +41,102 @@ func (p *Protobuf) Decode(rawFlow []byte) (config.GenericMap, error) {
 	return PBFlowToMap(&record), nil
 }
 
-func PBFlowToMap(flow *pbflow.Record) config.GenericMap {
+func PBFlowToMap(pb *pbflow.Record) config.GenericMap {
+	flow := pbflow.PBToFlow(pb)
 	if flow == nil {
 		return config.GenericMap{}
 	}
+	return RecordToMap(flow)
+}
+
+// RecordToMap converts the flow from Agent inner model into FLP GenericMap model
+func RecordToMap(fr *flow.Record) config.GenericMap {
+	if fr == nil {
+		return config.GenericMap{}
+	}
+	srcMAC := flow.MacAddr(fr.Id.SrcMac)
+	dstMAC := flow.MacAddr(fr.Id.DstMac)
 	out := config.GenericMap{
-		"SrcMac":          macToStr(flow.DataLink.GetSrcMac()),
-		"DstMac":          macToStr(flow.DataLink.GetDstMac()),
-		"Etype":           flow.EthProtocol,
-		"TimeFlowStartMs": flow.TimeFlowStart.AsTime().UnixMilli(),
-		"TimeFlowEndMs":   flow.TimeFlowEnd.AsTime().UnixMilli(),
+		"SrcMac":          srcMAC.String(),
+		"DstMac":          dstMAC.String(),
+		"Etype":           fr.Id.EthProtocol,
+		"TimeFlowStartMs": fr.TimeFlowStart.UnixMilli(),
+		"TimeFlowEndMs":   fr.TimeFlowEnd.UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
-		"AgentIP":         ipToStr(flow.AgentIp),
+		"AgentIP":         fr.AgentIP.String(),
 	}
 
-	if flow.Duplicate {
+	if fr.Duplicate {
 		out["Duplicate"] = true
 	}
 
-	if flow.Bytes != 0 {
-		out["Bytes"] = flow.Bytes
+	if fr.Metrics.Bytes != 0 {
+		out["Bytes"] = fr.Metrics.Bytes
 	}
 
-	if flow.Packets != 0 {
-		out["Packets"] = flow.Packets
+	if fr.Metrics.Packets != 0 {
+		out["Packets"] = fr.Metrics.Packets
 	}
 
 	var interfaces []string
 	var directions []int
-	if len(flow.GetDupList()) != 0 {
-		for _, entry := range flow.GetDupList() {
-			interfaces = append(interfaces, entry.Interface)
-			directions = append(directions, int(entry.Direction))
+	if len(fr.DupList) != 0 {
+		for _, m := range fr.DupList {
+			for key, value := range m {
+				interfaces = append(interfaces, key)
+				directions = append(directions, int(flow.Direction(value)))
+			}
 		}
 	} else {
-		interfaces = append(interfaces, flow.Interface)
-		directions = append(directions, int(flow.Direction))
+		interfaces = append(interfaces, fr.Interface)
+		directions = append(directions, int(fr.Id.Direction))
 	}
 	out["Interfaces"] = interfaces
 	out["IfDirections"] = directions
 
-	ethType := ethernet.EtherType(flow.EthProtocol)
-	if ethType == ethernet.EtherTypeIPv4 || ethType == ethernet.EtherTypeIPv6 {
-		out["SrcAddr"] = ipToStr(flow.Network.GetSrcAddr())
-		out["DstAddr"] = ipToStr(flow.Network.GetDstAddr())
-		out["Proto"] = flow.Transport.GetProtocol()
-		out["Dscp"] = flow.Network.GetDscp()
-		proto := flow.Transport.GetProtocol()
-		if proto == syscall.IPPROTO_ICMP || proto == syscall.IPPROTO_ICMPV6 {
-			out["IcmpType"] = flow.GetIcmpType()
-			out["IcmpCode"] = flow.GetIcmpCode()
-		}
+	if fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
+		out["SrcAddr"] = flow.IP(fr.Id.SrcIp).String()
+		out["DstAddr"] = flow.IP(fr.Id.DstIp).String()
+		out["Proto"] = fr.Id.TransportProtocol
+		out["Dscp"] = fr.Metrics.Dscp
 
-		if proto == syscall.IPPROTO_TCP || proto == syscall.IPPROTO_UDP || proto == syscall.IPPROTO_SCTP {
-			if proto == syscall.IPPROTO_TCP {
-				out["SrcPort"] = flow.Transport.GetSrcPort()
-				out["DstPort"] = flow.Transport.GetDstPort()
-				out["Flags"] = flow.Flags
-			} else {
-				out["SrcPort"] = flow.Transport.GetSrcPort()
-				out["DstPort"] = flow.Transport.GetDstPort()
+		if fr.Id.TransportProtocol == syscall.IPPROTO_ICMP || fr.Id.TransportProtocol == syscall.IPPROTO_ICMPV6 {
+			out["IcmpType"] = fr.Id.IcmpType
+			out["IcmpCode"] = fr.Id.IcmpCode
+		} else if fr.Id.TransportProtocol == syscall.IPPROTO_TCP || fr.Id.TransportProtocol == syscall.IPPROTO_UDP || fr.Id.TransportProtocol == syscall.IPPROTO_SCTP {
+			out["SrcPort"] = fr.Id.SrcPort
+			out["DstPort"] = fr.Id.DstPort
+			if fr.Id.TransportProtocol == syscall.IPPROTO_TCP {
+				out["Flags"] = fr.Metrics.Flags
 			}
 		}
 
-		out["DnsErrno"] = flow.GetDnsErrno()
-		if flow.GetDnsId() != 0 {
-			out["DnsLatencyMs"] = flow.DnsLatency.AsDuration().Milliseconds()
-			out["DnsId"] = flow.GetDnsId()
-			out["DnsFlags"] = flow.GetDnsFlags()
-			out["DnsFlagsResponseCode"] = DNSRcodeToStr(flow.GetDnsFlags() & 0xF)
+		out["DnsErrno"] = fr.Metrics.DnsRecord.Errno
+		dnsID := fr.Metrics.DnsRecord.Id
+		if dnsID != 0 {
+			out["DnsId"] = dnsID
+			out["DnsFlags"] = fr.Metrics.DnsRecord.Flags
+			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.DnsRecord.Flags) & 0xF)
+			if fr.Metrics.DnsRecord.Latency != 0 {
+				out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
+			}
+			// Not sure about the logic here, why erasing errno?
 			out["DnsErrno"] = uint32(0)
 		}
 	}
 
-	if flow.GetPktDropLatestDropCause() != 0 {
-		out["PktDropBytes"] = flow.PktDropBytes
-		out["PktDropPackets"] = flow.PktDropPackets
-		out["PktDropLatestFlags"] = flow.GetPktDropLatestFlags()
-		out["PktDropLatestState"] = TCPStateToStr(flow.GetPktDropLatestState())
-		out["PktDropLatestDropCause"] = PktDropCauseToStr(flow.GetPktDropLatestDropCause())
+	if fr.Metrics.PktDrops.LatestDropCause != 0 {
+		out["PktDropBytes"] = fr.Metrics.PktDrops.Bytes
+		out["PktDropPackets"] = fr.Metrics.PktDrops.Packets
+		out["PktDropLatestFlags"] = fr.Metrics.PktDrops.LatestFlags
+		out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.PktDrops.LatestState))
+		out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.PktDrops.LatestDropCause)
 	}
 
-	if flow.TimeFlowRtt.AsDuration().Nanoseconds() != 0 {
-		out["TimeFlowRttNs"] = flow.TimeFlowRtt.AsDuration().Nanoseconds()
+	if fr.TimeFlowRtt != 0 {
+		out["TimeFlowRttNs"] = fr.TimeFlowRtt.Nanoseconds()
 	}
 	return out
-}
-
-func ipToStr(ip *pbflow.IP) string {
-	if ip.GetIpv6() != nil {
-		return net.IP(ip.GetIpv6()).String()
-	}
-	n := ip.GetIpv4()
-	return fmt.Sprintf("%d.%d.%d.%d",
-		byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
-
-}
-
-func macToStr(mac uint64) string {
-	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X",
-		uint8(mac>>40),
-		uint8(mac>>32),
-		uint8(mac>>24),
-		uint8(mac>>16),
-		uint8(mac>>8),
-		uint8(mac))
 }
 
 // TCPStateToStr is based on kernel TCP state definition
