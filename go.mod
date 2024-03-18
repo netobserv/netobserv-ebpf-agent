@@ -1,12 +1,11 @@
 module github.com/netobserv/netobserv-ebpf-agent
 
 go 1.21
-
-toolchain go1.21.7
+toolchain go1.22.1
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/cilium/ebpf v0.12.4-0.20240124115601-f95957d1669c
+	github.com/cilium/ebpf v0.13.2
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/google/gopacket v1.1.19
