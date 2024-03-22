@@ -57,6 +57,7 @@ func StartGRPCPacketSend(hostIP string, hostPort int) (*GRPCPacketProto, error) 
 
 func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*flow.PacketRecord) {
 	for packetRecord := range in {
+		var errs []error
 		for _, packet := range packetRecord {
 			packetStream := packet.Stream
 			packetTimestamp := packet.Time
@@ -66,11 +67,13 @@ func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*flow.PacketRecord) {
 					CaptureLength: len(packetStream),
 					Length:        len(packetStream),
 				}
-				err := writeGRPCPacket(captureInfo, packetStream, p.clientConn)
-				if err != nil {
-					gplog.Error(err)
+				if err := writeGRPCPacket(captureInfo, packetStream, p.clientConn); err != nil {
+					errs = append(errs, err)
 				}
 			}
+		}
+		if len(errs) != 0 {
+			gplog.Errorf("%d errors while sending packets:\n%s", len(errs), errs)
 		}
 	}
 	if err := p.clientConn.Close(); err != nil {
