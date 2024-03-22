@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
 )
 
 // CollectorServer wraps a Flow Collector connection & session

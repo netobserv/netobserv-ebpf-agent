@@ -23,10 +23,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/gopacket/layers"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+
+	"github.com/google/gopacket/layers"
 )
 
 var (
