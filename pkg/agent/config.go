@@ -191,7 +191,7 @@ type Config struct {
 }
 
 func manageDeprecatedConfigs(cfg *Config) {
-	if len(cfg.FlowsTargetHost) > 0 {
+	if len(cfg.FlowsTargetHost) != 0 {
 		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
 		cfg.Host = cfg.FlowsTargetHost
 	}
