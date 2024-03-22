@@ -2,7 +2,11 @@ package agent
 
 import (
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
+
+var clog = logrus.WithField("component", "config")
 
 const (
 	ListenPoll       = "poll"
@@ -34,14 +38,15 @@ type Config struct {
 	// in the AgentID field of each flow. Accepted values are: any (default), ipv4, ipv6.
 	// If the AgentIP configuration property is set, this property has no effect.
 	AgentIPType string `env:"AGENT_IP_TYPE" envDefault:"any"`
-	// Export selects the flows' exporter protocol. Accepted values are: grpc (default), kafka,
-	// ipfix+udp, ipfix+tcp or direct-flp.
+	// Export selects the exporter protocol.
+	// Accepted values for Flows are: grpc (default), kafka, ipfix+udp, ipfix+tcp or direct-flp.
+	// Accepted values for Packets are: grpc (default) or tcp
 	Export string `env:"EXPORT" envDefault:"grpc"`
-	// TargetHost is the host name or IP of the target Flow collector, when the EXPORT variable is
+	// Host is the host name or IP of the Flow collector, when the EXPORT variable is
 	// set to "grpc"
-	TargetHost string `env:"FLOWS_TARGET_HOST"`
-	// TargetPort is the port the target Flow collector, when the EXPORT variable is set to "grpc"
-	TargetPort int `env:"FLOWS_TARGET_PORT"`
+	Host string `env:"HOST"`
+	// Port is the port the Flow collector, when the EXPORT variable is set to "grpc"
+	Port int `env:"PORT"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
@@ -164,8 +169,6 @@ type Config struct {
 	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
 	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80". Currently, we support 'tcp','udp','sctp' for protocol.
 	PCAFilters string `env:"PCA_FILTER"`
-	// PCAServerPort is the port PCA Server starts at, when ENABLE_PCA variable is set to true.
-	PCAServerPort int `env:"PCA_SERVER_PORT" envDefault:"9990"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.
@@ -174,4 +177,30 @@ type Config struct {
 	MetricsPort int `env:"METRICS_SERVER_PORT" envDefault:"9090"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
+
+	/* Deprecated configs are listed below this line
+	 * See manageDeprecatedConfigs function for details
+	 */
+
+	// Deprecated FlowsTargetHost replaced by TargetHost
+	FlowsTargetHost string `env:"FLOWS_TARGET_HOST"`
+	// Deprecated FlowsTargetPort replaced by TargetPort
+	FlowsTargetPort int `env:"FLOWS_TARGET_PORT"`
+	// Deprecated PCAServerPort replaced by TargetPort
+	PCAServerPort int `env:"PCA_SERVER_PORT"`
+}
+
+func manageDeprecatedConfigs(cfg *Config) {
+	if len(cfg.FlowsTargetHost) != 0 {
+		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
+		cfg.Host = cfg.FlowsTargetHost
+	}
+
+	if cfg.FlowsTargetPort != 0 {
+		clog.Infof("Using deprecated FlowsTargetPort %d", cfg.FlowsTargetPort)
+		cfg.Port = cfg.FlowsTargetPort
+	} else if cfg.PCAServerPort != 0 {
+		clog.Infof("Using deprecated PCAServerPort %d", cfg.PCAServerPort)
+		cfg.Port = cfg.PCAServerPort
+	}
 }

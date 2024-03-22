@@ -135,6 +135,9 @@ type ebpfFlowFetcher interface {
 func FlowsAgent(cfg *Config) (*Flows, error) {
 	alog.Info("initializing Flows agent")
 
+	// manage deprecated configs
+	manageDeprecatedConfigs(cfg)
+
 	// configure informer for new interfaces
 	var informer = configureInformer(cfg, alog)
 
@@ -286,16 +289,16 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 	case "direct-flp":
 		return buildDirectFLPExporter(cfg)
 	default:
-		return nil, fmt.Errorf("wrong export type %s. Admitted values are grpc, kafka", cfg.Export)
+		return nil, fmt.Errorf("wrong flow export type %s", cfg.Export)
 	}
 }
 
 func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
-	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+	if cfg.Host == "" || cfg.Port == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
-			cfg.TargetHost, cfg.TargetPort)
+			cfg.Host, cfg.Port)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.Host, cfg.Port, cfg.GRPCMessageMaxFlows, m)
 	if err != nil {
 		return nil, err
 	}
@@ -361,11 +364,11 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*f
 }
 
 func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*flow.Record], error) {
-	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
+	if cfg.Host == "" || cfg.Port == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
-			cfg.TargetHost, cfg.TargetPort)
+			cfg.Host, cfg.Port)
 	}
-	ipfix, err := exporter.StartIPFIXExporter(cfg.TargetHost, cfg.TargetPort, proto)
+	ipfix, err := exporter.StartIPFIXExporter(cfg.Host, cfg.Port, proto)
 	if err != nil {
 		return nil, err
 	}

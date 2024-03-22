@@ -1,4 +1,4 @@
-# packetcapture-client
+# Packet Capture TCP Client
 
 ## How to run 
 
@@ -12,14 +12,14 @@ Build the packetcapture-dump-collector (the client that receives full packets fr
 ```bash
 go build -mod vendor -o bin/packetcapture-client examples/packetcapture-dump/client/packetcapture-client.go  
 ```
-Start the agent using:
-```bash
-sudo PCA_SERVER_PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
-```
-
 Start the packetcapture-client using: (in a secondary shell)
 ```bash
 ./bin/packetcapture-client -outfile=capture.pcap
+```
+
+Start the agent using:
+```bash
+sudo HOST=localhost PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
 ```
 
 You should see output such as:
@@ -29,13 +29,13 @@ By default, the read packets are printed on stdout.
 To write to a pcap file use flag '-outfile=[filename]'
 This creates a file [filename] and writes packets to it.
 To view captured packets 'tcpdump -r [filename]'.
-
-07-24-2023 07:58:59.264323 : Received Packet of length  24
-07-24-2023 07:59:04.268965 : Received Packet of length  410
-07-24-2023 07:59:04.269048 : Received Packet of length  644
-07-24-2023 07:59:04.269087 : Received Packet of length  224
-07-24-2023 07:59:04.269125 : Received Packet of length  82
-07-24-2023 07:59:04.269173 : Received Packet of length  148
+writting into capture.pcap
+03-22-2024 10:48:44.941828 : Received Packet of length  136
+03-22-2024 10:48:44.942901 : Received Packet of length  106
+03-22-2024 10:48:44.943597 : Received Packet of length  110
+03-22-2024 10:48:44.944182 : Received Packet of length  70
+03-22-2024 10:48:44.944447 : Received Packet of length  70
+03-22-2024 10:48:44.944644 : Received Packet of length  138
 ...
 ```
 

@@ -5,8 +5,8 @@ _Please also refer to the file [config.go](../pkg/agent/config.go) which is the 
 The following environment variables are available to configure the NetObserv eBFP Agent:
 
 * `EXPORT` (default: `grpc`). Flows' exporter protocol. Accepted values are: `grpc`, `kafka`, `ipfix+udp`, `ipfix+tcp` or `direct-flp`. In `direct-flp` mode, [flowlogs-pipeline](https://github.com/netobserv/flowlogs-pipeline) is run internally from the agent, allowing more filtering, transformations and exporting options.
-* `FLOWS_TARGET_HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the target Flow collector.
-* `FLOWS_TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow collector.
+* `HOST` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Host name or IP of the Flow collector.
+* `PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the flow collector.
 * `GRPC_MESSAGE_MAX_FLOWS` (default: `10000`). Specifies the limit, in number of flows, of each GRPC
   message. Messages larger than that number will be split and submitted sequentially.
 * `AGENT_IP` (optional). Allows overriding the reported Agent IP address on each flow.

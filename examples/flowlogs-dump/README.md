@@ -14,7 +14,7 @@ go build -mod vendor -o bin/flowlogs-dump-collector examples/flowlogs-dump/serve
 ```
 Start the agent using:
 ```bash
-sudo FLOWS_TARGET_HOST=127.0.0.1 FLOWS_TARGET_PORT=9999 ./bin/netobserv-ebpf-agent
+sudo HOST=127.0.0.1 PORT=9999 ./bin/netobserv-ebpf-agent
 ```
 
 Start the flowlogs-dump-collector using: (in a secondary shell)

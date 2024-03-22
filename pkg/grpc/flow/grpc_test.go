@@ -1,4 +1,4 @@
-package grpc
+package flowgrpc
 
 import (
 	"context"

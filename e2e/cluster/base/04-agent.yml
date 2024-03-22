@@ -26,11 +26,11 @@ spec:
             value: 200ms
           - name: LOG_LEVEL
             value: debug
-          - name: FLOWS_TARGET_HOST
+          - name: HOST
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
-          - name: FLOWS_TARGET_PORT
+          - name: PORT
             value: "9999"
         volumeMounts:
             - name: bpf-kernel-debug

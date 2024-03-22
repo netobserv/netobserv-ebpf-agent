@@ -49,6 +49,9 @@ type ebpfPacketFetcher interface {
 func PacketsAgent(cfg *Config) (*Packets, error) {
 	plog.Info("initializing Packets agent")
 
+	// manage deprecated configs
+	manageDeprecatedConfigs(cfg)
+
 	// configure informer for new interfaces
 	informer := configureInformer(cfg, plog)
 
@@ -131,18 +134,27 @@ func packetsAgent(cfg *Config,
 	}, nil
 }
 
-func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.PCAServerPort == 0 {
-		return nil, fmt.Errorf("missing PCA Server port: %d",
-			cfg.PCAServerPort)
+func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	if cfg.Host == "" || cfg.Port == 0 {
+		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
+			cfg.Host, cfg.Port)
 	}
-	pcapStreamer, err := exporter.StartPCAPSend(fmt.Sprintf("%d", cfg.PCAServerPort))
+	plog.Info("starting gRPC Packet send")
+	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.Host, cfg.Port)
 	if err != nil {
 		return nil, err
 	}
 
-	return pcapStreamer.ExportFlows, err
+	return pcapStreamer.ExportGRPCPackets, nil
+}
 
+func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	switch cfg.Export {
+	case "grpc":
+		return buildGRPCPacketExporter(cfg)
+	default:
+		return nil, fmt.Errorf("unsupported packet export type %s", cfg.Export)
+	}
 }
 
 // Run a Packets agent. The function will keep running in the same thread
