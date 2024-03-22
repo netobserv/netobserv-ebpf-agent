@@ -20,16 +20,22 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"time"
+
+	"github.com/google/gopacket/layers"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
+	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
 )
 
 var (
-	PORT     = flag.String("connect_port", "9990", "TCP port to connect to for packet stream")
-	HOST     = flag.String("connect_host", "localhost", "Packet Capture Agent IP")
-	FILENAME = flag.String("outfile", "", "Create and write to Filename.pcap")
+	PORT     = flag.Int("port", 9990, "gRPC collector port for packet stream")
+	FILENAME = flag.String("outfile", "", "Create and write to <Filename>.pcap")
 )
+
+// Setting Snapshot length to 0 sets it to maximum packet size
+var snapshotlen uint32
 
 func check(e error) {
 	if e != nil {
@@ -45,47 +51,41 @@ func main() {
 	fmt.Println("To view captured packets 'tcpdump -r [filename]'.")
 	flag.Parse()
 
-	tcpServer, err := net.ResolveTCPAddr("tcp", *HOST+":"+*PORT)
+	flowPackets := make(chan *pbpacket.Packet, 100)
+	collector, err := grpc.StartCollector(*PORT, flowPackets)
+	if err != nil {
+		fmt.Println("StartCollector failed:", err.Error())
+		os.Exit(1)
+	}
 
-	if err != nil {
-		println("ResolveTCPAddr failed:", err.Error())
-		os.Exit(1)
-	}
-	conn, err := net.DialTCP("tcp", nil, tcpServer)
-	if err != nil {
-		println("Dial failed:", err.Error())
-		os.Exit(1)
-	}
 	var f *os.File
 	if *FILENAME != "" {
 		f, err = os.Create(*FILENAME)
 		if err != nil {
+			fmt.Println("Create file failed:", err.Error())
 			os.Exit(1)
 		}
+		// write pcap file header
+		_, err = f.Write(exporter.GetPCAPFileHeader(snapshotlen, layers.LinkTypeEthernet))
+		if err != nil {
+			fmt.Println("Write file header failed:", err.Error())
+			os.Exit(1)
+		}
+		fmt.Println("writting into", *FILENAME)
+
 		defer f.Close()
-		for {
-			received := make([]byte, 65535)
-			n, err := conn.Read(received)
-			if err != nil {
-				println("Read data failed:", err.Error())
-				os.Exit(1)
-			}
-			_, err = f.Write(received[:n])
+		for fp := range flowPackets {
+			_, err = f.Write(fp.Pcap.Value)
 			check(err)
 			dt := time.Now()
-			fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", n)
+			fmt.Println(dt.Format("01-02-2006 15:04:05.000000"), ": Received Packet of length ", len(fp.Pcap.Value))
 		}
 	} else {
-		fmt.Println("into else")
-		for {
-			received := make([]byte, 65535)
-			n, err := conn.Read(received)
-			if err != nil {
-				println("Read data failed:", err.Error())
-				os.Exit(1)
-			}
-			fmt.Println(received[:n])
+		fmt.Println("printing stdout without saving in file")
+
+		for fp := range flowPackets {
+			fmt.Println(fp.Pcap.Value)
 		}
 	}
-	conn.Close()
+	collector.Close()
 }
