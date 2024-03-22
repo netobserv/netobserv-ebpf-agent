@@ -145,7 +145,7 @@ func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecor
 		return nil, err
 	}
 
-	return pcapStreamer.ExportGRPCPackets, err
+	return pcapStreamer.ExportGRPCPackets, nil
 }
 
 func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
