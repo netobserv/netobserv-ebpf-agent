@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/gopacket"
-	"github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+
+	"github.com/google/gopacket"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type GRPCPacketProto struct {
