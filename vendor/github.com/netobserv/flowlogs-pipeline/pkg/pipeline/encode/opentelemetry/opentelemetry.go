@@ -309,7 +309,7 @@ func obtainAttributesFromLabels(labels map[string]string) []attribute.KeyValue {
 	return att
 }
 
-func (e *EncodeOtlpMetrics) MetricWrite(entry config.GenericMap) {
+func (e *EncodeOtlpMetrics) MetricWrite(_ config.GenericMap) {
 	// nothing more to do at present
 }
 

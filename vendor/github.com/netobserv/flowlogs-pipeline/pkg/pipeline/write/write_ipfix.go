@@ -20,6 +20,8 @@ package write
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
@@ -40,8 +42,16 @@ type writeIpfix struct {
 	entitiesV6         []entities.InfoElementWithValue
 }
 
+type FieldMap struct {
+	Key      string
+	Getter   func(entities.InfoElementWithValue) any
+	Setter   func(entities.InfoElementWithValue, any)
+	Matcher  func(entities.InfoElementWithValue, any) bool
+	Optional bool
+}
+
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
-const IPv6Type = 0x86DD
+const IPv6Type uint16 = 0x86DD
 
 var (
 	ilog       = logrus.WithField("component", "write.Ipfix")
@@ -78,6 +88,191 @@ var (
 	}
 	CustomNetworkFields = []string{
 		"timeFlowRttNs",
+		"interfaces",
+		"directions",
+	}
+
+	MapIPFIXKeys = map[string]FieldMap{
+		"sourceIPv4Address": {
+			Key:    "SrcAddr",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetIPAddressValue().String() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+		},
+		"destinationIPv4Address": {
+			Key:    "DstAddr",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetIPAddressValue().String() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+		},
+		"sourceIPv6Address": {
+			Key:    "SrcAddr",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetIPAddressValue().String() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+		},
+		"destinationIPv6Address": {
+			Key:    "DstAddr",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetIPAddressValue().String() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+		},
+		"nextHeaderIPv6": {
+			Key:    "Proto",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned8Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned8Value(rec.(uint8)) },
+		},
+		"sourceMacAddress": {
+			Key: "SrcMac",
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				elt.SetMacAddressValue(net.HardwareAddr(rec.(string)))
+			},
+			Matcher: func(_ entities.InfoElementWithValue, _ any) bool {
+				// Getting some discrepancies here, need to figure out why
+				return true
+			},
+		},
+		"destinationMacAddress": {
+			Key: "DstMac",
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				elt.SetMacAddressValue(net.HardwareAddr(rec.(string)))
+			},
+			Matcher: func(_ entities.InfoElementWithValue, _ any) bool {
+				// Getting some discrepancies here, need to figure out why
+				return true
+			},
+		},
+		"ethernetType": {
+			Key:    "Etype",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned16Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned16Value(rec.(uint16)) },
+		},
+		"flowDirection": {
+			Key: "IfDirections",
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				if dirs, ok := rec.([]int); ok && len(dirs) > 0 {
+					elt.SetUnsigned8Value(uint8(dirs[0]))
+				}
+			},
+			Matcher: func(elt entities.InfoElementWithValue, expected any) bool {
+				ifdirs := expected.([]int)
+				return int(elt.GetUnsigned8Value()) == ifdirs[0]
+			},
+		},
+		"directions": {
+			Key: "IfDirections",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				var dirs []int
+				for _, dir := range strings.Split(elt.GetStringValue(), ",") {
+					d, _ := strconv.Atoi(dir)
+					dirs = append(dirs, d)
+				}
+				return dirs
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				if dirs, ok := rec.([]int); ok && len(dirs) > 0 {
+					var asStr []string
+					for _, dir := range dirs {
+						asStr = append(asStr, strconv.Itoa(dir))
+					}
+					elt.SetStringValue(strings.Join(asStr, ","))
+				}
+			},
+		},
+		"protocolIdentifier": {
+			Key:    "Proto",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned8Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned8Value(rec.(uint8)) },
+		},
+		"sourceTransportPort": {
+			Key:    "SrcPort",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned16Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned16Value(rec.(uint16)) },
+		},
+		"destinationTransportPort": {
+			Key:    "DstPort",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned16Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned16Value(rec.(uint16)) },
+		},
+		"octetDeltaCount": {
+			Key:    "Bytes",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned64Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(rec.(uint64)) },
+		},
+		"flowStartMilliseconds": {
+			Key:    "TimeFlowStartMs",
+			Getter: func(elt entities.InfoElementWithValue) any { return int64(elt.GetUnsigned64Value()) },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(uint64(rec.(int64))) },
+		},
+		"flowEndMilliseconds": {
+			Key:    "TimeFlowEndMs",
+			Getter: func(elt entities.InfoElementWithValue) any { return int64(elt.GetUnsigned64Value()) },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(uint64(rec.(int64))) },
+		},
+		"packetDeltaCount": {
+			Key:    "Packets",
+			Getter: func(elt entities.InfoElementWithValue) any { return uint32(elt.GetUnsigned64Value()) },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(uint64(rec.(uint32))) },
+		},
+		"interfaceName": {
+			Key: "Interfaces",
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				if ifs, ok := rec.([]string); ok && len(ifs) > 0 {
+					elt.SetStringValue(ifs[0])
+				}
+			},
+			Matcher: func(elt entities.InfoElementWithValue, expected any) bool {
+				ifs := expected.([]string)
+				return elt.GetStringValue() == ifs[0]
+			},
+		},
+		"interfaces": {
+			Key:    "Interfaces",
+			Getter: func(elt entities.InfoElementWithValue) any { return strings.Split(elt.GetStringValue(), ",") },
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				if ifs, ok := rec.([]string); ok {
+					elt.SetStringValue(strings.Join(ifs, ","))
+				}
+			},
+		},
+		"sourcePodNamespace": {
+			Key:      "SrcK8S_Namespace",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"sourcePodName": {
+			Key:      "SrcK8S_Name",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"destinationPodNamespace": {
+			Key:      "DstK8S_Namespace",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"destinationPodName": {
+			Key:      "DstK8S_Name",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"sourceNodeName": {
+			Key:      "SrcK8S_HostName",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"destinationNodeName": {
+			Key:      "DstK8S_HostName",
+			Getter:   func(elt entities.InfoElementWithValue) any { return elt.GetStringValue() },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetStringValue(rec.(string)) },
+			Optional: true,
+		},
+		"timeFlowRttNs": {
+			Key:      "TimeFlowRttNs",
+			Getter:   func(elt entities.InfoElementWithValue) any { return int64(elt.GetUnsigned64Value()) },
+			Setter:   func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(uint64(rec.(int64))) },
+			Optional: true,
+		},
 	}
 )
 
@@ -151,6 +346,16 @@ func loadCustomRegistry(EnterpriseID uint32) error {
 		return err
 	}
 	err = registry.PutInfoElement((*entities.NewInfoElement("timeFlowRttNs", 7740, entities.Unsigned64, EnterpriseID, 8)), EnterpriseID)
+	if err != nil {
+		ilog.WithError(err).Errorf("Failed to register element")
+		return err
+	}
+	err = registry.PutInfoElement((*entities.NewInfoElement("interfaces", 7741, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	if err != nil {
+		ilog.WithError(err).Errorf("Failed to register element")
+		return err
+	}
+	err = registry.PutInfoElement((*entities.NewInfoElement("directions", 7742, entities.String, EnterpriseID, 65535)), EnterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
@@ -236,172 +441,27 @@ func SendTemplateRecordv6(exporter *ipfixExporter.ExportingProcess, enrichEnterp
 	return templateID, elements, nil
 }
 
-func setStandardIEValue(record config.GenericMap, ieValPtr *entities.InfoElementWithValue) error {
+//nolint:cyclop
+func setElementValue(record config.GenericMap, ieValPtr *entities.InfoElementWithValue) error {
 	ieVal := *ieValPtr
-	switch ieVal.GetName() {
-	case "ethernetType":
-		if record["Etype"] != nil {
-			ieVal.SetUnsigned16Value(uint16(record["Etype"].(uint32)))
-		} else {
-			return fmt.Errorf("unable to find ethernet type (Etype) in record")
-		}
-	case "flowDirection":
-		dirs := record["IfDirections"].([]int)
-		if len(dirs) > 0 {
-			ieVal.SetUnsigned8Value(uint8(dirs[0]))
-		} else {
-			return fmt.Errorf("unable to find flow direction (flowDirection) in record")
-		}
-	case "sourceMacAddress":
-		if record["SrcMac"] != nil {
-			ieVal.SetMacAddressValue(net.HardwareAddr(record["SrcMac"].(string)))
-		} else {
-			return fmt.Errorf("unable to find source mac address (SrcMac) in record")
-		}
-	case "destinationMacAddress":
-		if record["DstMac"] != nil {
-			ieVal.SetMacAddressValue(net.HardwareAddr(record["DstMac"].(string)))
-		} else {
-			return fmt.Errorf("unable to find dest mac address (DstMac) in record")
-		}
-	case "sourceIPv4Address":
-		if record["SrcAddr"] != nil {
-			ieVal.SetIPAddressValue(net.ParseIP(record["SrcAddr"].(string)))
-		} else {
-			return fmt.Errorf("unable to find source IPv4 address (SrcAddr) in record")
-		}
-	case "destinationIPv4Address":
-		if record["DstAddr"] != nil {
-			ieVal.SetIPAddressValue(net.ParseIP(record["DstAddr"].(string)))
-		} else {
-			return fmt.Errorf("unable to find dest IPv4 address (DstAddr) in record")
-		}
-	case "sourceIPv6Address":
-		if record["SrcAddr"] != nil {
-			ieVal.SetIPAddressValue(net.ParseIP(record["SrcAddr"].(string)))
-		} else {
-			return fmt.Errorf("unable to find source IPv6 address (SrcAddr) in record")
-		}
-	case "destinationIPv6Address":
-		if record["DstAddr"] != nil {
-			ieVal.SetIPAddressValue(net.ParseIP(record["DstAddr"].(string)))
-		} else {
-			return fmt.Errorf("unable to find dest IPv6 address (DstAddr) in record")
-		}
-	case "protocolIdentifier":
-		if record["Proto"] != nil {
-			ieVal.SetUnsigned8Value(uint8(record["Proto"].(uint32)))
-		} else {
-			return fmt.Errorf("unable to find protocol identifier (Proto) in record")
-		}
-	case "nextHeaderIPv6":
-		if record["Proto"] != nil {
-			ieVal.SetUnsigned8Value(uint8(record["Proto"].(uint32)))
-		} else {
-			return fmt.Errorf("unable to find next header (Proto) in record")
-		}
-	case "sourceTransportPort":
-		if record["SrcPort"] != nil {
-			ieVal.SetUnsigned16Value(uint16(record["SrcPort"].(uint32)))
-		} else {
-			return fmt.Errorf("unable to find source port (SrcPort) in record")
-		}
-	case "destinationTransportPort":
-		if record["DstPort"] != nil {
-			ieVal.SetUnsigned16Value(uint16(record["DstPort"].(uint32)))
-		} else {
-			return fmt.Errorf("unable to find dest port (DstPort) in record")
-		}
-	case "octetDeltaCount":
-		if record["Bytes"] != nil {
-			ieVal.SetUnsigned64Value(record["Bytes"].(uint64))
-		} else {
-			return fmt.Errorf("unable to find bytes in record")
-		}
-	case "flowStartMilliseconds":
-		if record["TimeFlowStartMs"] != nil {
-			ieVal.SetUnsigned64Value(uint64(record["TimeFlowStartMs"].(int64)))
-		} else {
-			return fmt.Errorf("unable to find flow start time (TimeFlowStartMs) in record")
-		}
-	case "flowEndMilliseconds":
-		if record["TimeFlowEndMs"] != nil {
-			ieVal.SetUnsigned64Value(uint64(record["TimeFlowEndMs"].(int64)))
-		} else {
-			return fmt.Errorf("unable to find flow end time (TimeFlowEndMs) in record")
-		}
-	case "packetDeltaCount":
-		if record["Packets"] != nil {
-			ieVal.SetUnsigned64Value(record["Packets"].(uint64))
-		} else {
-			return fmt.Errorf("unable to find packets in record")
-		}
-	case "interfaceName":
-		interfaces := record["Interfaces"].([]string)
-		if len(interfaces) > 0 {
-			ieVal.SetStringValue(interfaces[0])
-		} else {
-			return fmt.Errorf("unable to find interface in record")
-		}
-	case "timeFlowRttNs":
-		if record["TimeFlowRttNs"] != nil {
-			ieVal.SetUnsigned64Value(uint64(record["TimeFlowRttNs"].(int64)))
-		} else {
-			return fmt.Errorf("unable to find timeflowrtt in record")
-		}
+	name := ieVal.GetName()
+	mapping, ok := MapIPFIXKeys[name]
+	if !ok {
+		return nil
+	}
+	if value := record[mapping.Key]; value != nil {
+		mapping.Setter(ieVal, value)
+	} else if !mapping.Optional {
+		return fmt.Errorf("unable to find %s (%s) in record", name, mapping.Key)
 	}
 	return nil
 }
 
-func setKubeIEValue(record config.GenericMap, ieValPtr *entities.InfoElementWithValue) {
-	ieVal := *ieValPtr
-	switch ieVal.GetName() {
-	case "sourcePodNamespace":
-		if record["SrcK8S_Namespace"] != nil {
-			ieVal.SetStringValue(record["SrcK8S_Namespace"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	case "sourcePodName":
-		if record["SrcK8S_Name"] != nil {
-			ieVal.SetStringValue(record["SrcK8S_Name"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	case "destinationPodNamespace":
-		if record["DstK8S_Namespace"] != nil {
-			ieVal.SetStringValue(record["DstK8S_Namespace"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	case "destinationPodName":
-		if record["DstK8S_Name"] != nil {
-			ieVal.SetStringValue(record["DstK8S_Name"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	case "sourceNodeName":
-		if record["SrcK8S_HostName"] != nil {
-			ieVal.SetStringValue(record["SrcK8S_HostName"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	case "destinationNodeName":
-		if record["DstK8S_HostName"] != nil {
-			ieVal.SetStringValue(record["DstK8S_HostName"].(string))
-		} else {
-			ieVal.SetStringValue("none")
-		}
-	}
-}
-func setEntities(record config.GenericMap, enrichEnterpriseID uint32, elements *[]entities.InfoElementWithValue) error {
+func setEntities(record config.GenericMap, elements *[]entities.InfoElementWithValue) error {
 	for _, ieVal := range *elements {
-		err := setStandardIEValue(record, &ieVal)
+		err := setElementValue(record, &ieVal)
 		if err != nil {
 			return err
-		}
-		if enrichEnterpriseID != 0 {
-			setKubeIEValue(record, &ieVal)
 		}
 	}
 	return nil
@@ -411,13 +471,13 @@ func (t *writeIpfix) sendDataRecord(record config.GenericMap, v6 bool) error {
 	var templateID uint16
 	if v6 {
 		templateID = t.templateIDv6
-		err := setEntities(record, t.enrichEnterpriseID, &t.entitiesV6)
+		err := setEntities(record, &t.entitiesV6)
 		if err != nil {
 			return err
 		}
 	} else {
 		templateID = t.templateIDv4
-		err := setEntities(record, t.enrichEnterpriseID, &t.entitiesV4)
+		err := setEntities(record, &t.entitiesV4)
 		if err != nil {
 			return err
 		}
@@ -447,7 +507,7 @@ func (t *writeIpfix) sendDataRecord(record config.GenericMap, v6 bool) error {
 // Write writes a flow before being stored
 func (t *writeIpfix) Write(entry config.GenericMap) {
 	ilog.Tracef("entering writeIpfix Write")
-	if IPv6Type == entry["Etype"].(uint32) {
+	if IPv6Type == entry["Etype"].(uint16) {
 		err := t.sendDataRecord(entry, true)
 		if err != nil {
 			ilog.WithError(err).Error("Failed in send v6 IPFIX record")
@@ -458,7 +518,6 @@ func (t *writeIpfix) Write(entry config.GenericMap) {
 			ilog.WithError(err).Error("Failed in send v4 IPFIX record")
 		}
 	}
-
 }
 
 // NewWriteIpfix creates a new write

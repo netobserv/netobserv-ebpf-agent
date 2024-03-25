@@ -14,7 +14,7 @@ type Predicate func(flow config.GenericMap) bool
 var variableExtractor, _ = regexp.Compile(`\$\(([^\)]+)\)`)
 
 type MetricInfo struct {
-	api.MetricsItem
+	*api.MetricsItem
 	FilterPredicates []Predicate
 }
 
@@ -76,17 +76,17 @@ func NotRegex(filter api.MetricsFilter) Predicate {
 
 func filterToPredicate(filter api.MetricsFilter) Predicate {
 	switch filter.Type {
-	case api.PromFilterEqual:
+	case api.MetricFilterEqual:
 		return Equal(filter)
-	case api.PromFilterNotEqual:
+	case api.MetricFilterNotEqual:
 		return NotEqual(filter)
-	case api.PromFilterPresence:
+	case api.MetricFilterPresence:
 		return Presence(filter)
-	case api.PromFilterAbsence:
+	case api.MetricFilterAbsence:
 		return Absence(filter)
-	case api.PromFilterRegex:
+	case api.MetricFilterRegex:
 		return Regex(filter)
-	case api.PromFilterNotRegex:
+	case api.MetricFilterNotRegex:
 		return NotRegex(filter)
 	}
 	// Default = Exact
@@ -118,7 +118,7 @@ func injectVars(flow config.GenericMap, filterValue string, varLookups [][]strin
 	return injected
 }
 
-func CreateMetricInfo(def api.MetricsItem) *MetricInfo {
+func CreateMetricInfo(def *api.MetricsItem) *MetricInfo {
 	mi := MetricInfo{
 		MetricsItem: def,
 	}

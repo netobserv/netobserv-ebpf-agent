@@ -50,6 +50,7 @@ const (
 
 var log = logrus.WithField("component", "transform.Network.Kubernetes")
 
+//nolint:revive
 type InformersInterface interface {
 	GetInfo(string) (*Info, error)
 	GetNodeInfo(string) (*Info, error)

@@ -29,10 +29,10 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	pUtils "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/netsampler/goflow2/decoders/netflow/templates"
-	_ "github.com/netsampler/goflow2/decoders/netflow/templates/memory"
+	_ "github.com/netsampler/goflow2/decoders/netflow/templates/memory" // required for goflow in-memory templates
 	goflowFormat "github.com/netsampler/goflow2/format"
 	goflowCommonFormat "github.com/netsampler/goflow2/format/common"
-	_ "github.com/netsampler/goflow2/format/protobuf"
+	_ "github.com/netsampler/goflow2/format/protobuf" // required for goflow protobuf
 	goflowpb "github.com/netsampler/goflow2/pb"
 	"github.com/netsampler/goflow2/utils"
 	log "github.com/sirupsen/logrus"

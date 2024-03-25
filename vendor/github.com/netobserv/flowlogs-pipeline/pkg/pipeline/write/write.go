@@ -27,21 +27,21 @@ import (
 type Writer interface {
 	Write(in config.GenericMap)
 }
-type WriteNone struct {
+type None struct {
 	// synchronized access to avoid race conditions
 	mt          sync.Mutex
 	prevRecords []config.GenericMap
 }
 
 // Write writes entries
-func (t *WriteNone) Write(in config.GenericMap) {
+func (t *None) Write(in config.GenericMap) {
 	logrus.Debugf("entering Write none, in = %v", in)
 	t.mt.Lock()
 	t.prevRecords = append(t.prevRecords, in)
 	t.mt.Unlock()
 }
 
-func (t *WriteNone) PrevRecords() []config.GenericMap {
+func (t *None) PrevRecords() []config.GenericMap {
 	t.mt.Lock()
 	defer t.mt.Unlock()
 	var copies []config.GenericMap
@@ -53,5 +53,5 @@ func (t *WriteNone) PrevRecords() []config.GenericMap {
 
 // NewWriteNone create a new write
 func NewWriteNone() (Writer, error) {
-	return &WriteNone{}, nil
+	return &None{}, nil
 }

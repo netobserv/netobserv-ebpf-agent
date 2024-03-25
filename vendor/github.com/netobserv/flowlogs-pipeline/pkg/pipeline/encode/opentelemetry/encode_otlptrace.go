@@ -91,7 +91,7 @@ OUTER:
 	}
 }
 
-func NewEncodeOtlpTraces(opMetrics *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
+func NewEncodeOtlpTraces(_ *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
 	log.Tracef("entering NewEncodeOtlpTraces \n")
 	cfg := api.EncodeOtlpTraces{}
 	if params.Encode != nil && params.Encode.OtlpTraces != nil {

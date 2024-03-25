@@ -173,6 +173,7 @@ func (k *ingestKafka) reportStats() {
 }
 
 // NewIngestKafka create a new ingester
+// nolint:cyclop
 func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (Ingester, error) {
 	klog.Debugf("entering NewIngestKafka")
 	jsonIngestKafka := api.IngestKafka{}
@@ -248,7 +249,7 @@ func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (I
 	readerConfig := kafkago.ReaderConfig{
 		Brokers:        jsonIngestKafka.Brokers,
 		Topic:          jsonIngestKafka.Topic,
-		GroupID:        jsonIngestKafka.GroupId,
+		GroupID:        jsonIngestKafka.GroupID,
 		GroupBalancers: groupBalancers,
 		StartOffset:    startOffset,
 		CommitInterval: time.Duration(commitInterval) * time.Millisecond,
@@ -293,6 +294,6 @@ func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (I
 		batchMaxLength:   bml,
 		batchReadTimeout: batchReadTimeout,
 		metrics:          metrics,
-		canLogMessages:   jsonIngestKafka.Decoder.Type == api.DecoderName("JSON"),
+		canLogMessages:   jsonIngestKafka.Decoder.Type == api.DecoderJSON,
 	}, nil
 }

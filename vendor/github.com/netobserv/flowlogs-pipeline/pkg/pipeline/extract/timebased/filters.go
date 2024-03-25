@@ -35,8 +35,9 @@ func (fs *FilterStruct) CalculateResults(nowInSecs time.Time) {
 	for tableKey, l := range fs.IndexKeyDataTable.dataTableMap {
 		var valueFloat64 = float64(0)
 		var err error
+		//nolint:exhaustive
 		switch fs.Rule.OperationType {
-		case api.FilterOperationName("FilterOperationLast"):
+		case api.FilterOperationLast:
 			// handle empty list
 			if l.Len() == 0 {
 				continue
@@ -45,7 +46,7 @@ func (fs *FilterStruct) CalculateResults(nowInSecs time.Time) {
 			if err != nil {
 				continue
 			}
-		case api.FilterOperationName("FilterOperationDiff"):
+		case api.FilterOperationDiff:
 			for e := l.Front(); e != nil; e = e.Next() {
 				cEntry := e.Value.(*TableEntry)
 				if cEntry.timeStamp.Before(oldestValidTime) {
@@ -90,35 +91,36 @@ func (fs *FilterStruct) CalculateValue(l *list.List, oldestValidTime time.Time) 
 		} else {
 			nItems++
 			switch fs.Rule.OperationType {
-			case api.FilterOperationName("FilterOperationSum"), api.FilterOperationName("FilterOperationAvg"):
+			case api.FilterOperationSum, api.FilterOperationAvg:
 				currentValue += valueFloat64
-			case api.FilterOperationName("FilterOperationMax"):
+			case api.FilterOperationMax:
 				currentValue = math.Max(currentValue, valueFloat64)
-			case api.FilterOperationName("FilterOperationMin"):
+			case api.FilterOperationMin:
 				currentValue = math.Min(currentValue, valueFloat64)
+			case api.FilterOperationCnt, api.FilterOperationLast, api.FilterOperationDiff:
 			}
 		}
 	}
-	if fs.Rule.OperationType == api.FilterOperationName("FilterOperationAvg") && nItems > 0 {
+	if fs.Rule.OperationType == api.FilterOperationAvg && nItems > 0 {
 		currentValue = currentValue / float64(nItems)
 	}
-	if fs.Rule.OperationType == api.FilterOperationName("FilterOperationCnt") {
+	if fs.Rule.OperationType == api.FilterOperationCnt {
 		currentValue = float64(nItems)
 	}
 	return currentValue
 }
 
-func getInitValue(operation string) float64 {
+func getInitValue(operation api.FilterOperationEnum) float64 {
 	switch operation {
-	case api.FilterOperationName("FilterOperationSum"),
-		api.FilterOperationName("FilterOperationAvg"),
-		api.FilterOperationName("FilterOperationCnt"),
-		api.FilterOperationName("FilterOperationLast"),
-		api.FilterOperationName("FilterOperationDiff"):
+	case api.FilterOperationSum,
+		api.FilterOperationAvg,
+		api.FilterOperationCnt,
+		api.FilterOperationLast,
+		api.FilterOperationDiff:
 		return 0
-	case api.FilterOperationName("FilterOperationMax"):
+	case api.FilterOperationMax:
 		return (-math.MaxFloat64)
-	case api.FilterOperationName("FilterOperationMin"):
+	case api.FilterOperationMin:
 		return math.MaxFloat64
 	default:
 		log.Panicf("unknown operation %v", operation)

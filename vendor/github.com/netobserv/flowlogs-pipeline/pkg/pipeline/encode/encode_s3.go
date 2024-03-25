@@ -52,7 +52,7 @@ type encodeS3 struct {
 	mutex             *sync.Mutex
 	expiryTime        time.Time
 	exitChan          <-chan struct{}
-	streamId          string
+	streamID          string
 	intervalStartTime time.Time
 	sequenceNumber    int64
 }
@@ -79,7 +79,7 @@ func (s *encodeS3) writeObject() error {
 	day := fmt.Sprintf("%02d", now.Day())
 	hour := fmt.Sprintf("%02d", now.Hour())
 	seq := fmt.Sprintf("%08d", s.sequenceNumber)
-	objectName := s.s3Params.Account + "/year=" + year + "/month=" + month + "/day=" + day + "/hour=" + hour + "/stream-id=" + s.streamId + "/" + seq
+	objectName := s.s3Params.Account + "/year=" + year + "/month=" + month + "/day=" + day + "/hour=" + hour + "/stream-id=" + s.streamID + "/" + seq
 	log.Debugf("S3 writeObject: objectName = %s", objectName)
 	log.Debugf("S3 writeObject: object = %v", object)
 	s.pendingEntries = s.pendingEntries[nLogs:]
@@ -163,7 +163,7 @@ func NewEncodeS3(opMetrics *operational.Metrics, params config.StageParam) (Enco
 		pendingEntries:    make([]config.GenericMap, 0),
 		expiryTime:        time.Now().Add(configParams.WriteTimeout.Duration),
 		exitChan:          utils.ExitChannel(),
-		streamId:          time.Now().Format(time.RFC3339),
+		streamID:          time.Now().Format(time.RFC3339),
 		intervalStartTime: time.Now(),
 		mutex:             &sync.Mutex{},
 	}
@@ -174,7 +174,7 @@ func NewEncodeS3(opMetrics *operational.Metrics, params config.StageParam) (Enco
 func (e *encodeS3Writer) connectS3(config *api.EncodeS3) (*minio.Client, error) {
 	// Initialize s3 client object.
 	minioOptions := minio.Options{
-		Creds:  credentials.NewStaticV4(config.AccessKeyId, config.SecretAccessKey, ""),
+		Creds:  credentials.NewStaticV4(config.AccessKeyID, config.SecretAccessKey, ""),
 		Secure: config.Secure,
 	}
 	s3Client, err := minio.New(config.Endpoint, &minioOptions)

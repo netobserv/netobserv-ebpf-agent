@@ -45,7 +45,7 @@ type Labels map[string]string
 type NormalizedValues string
 
 type Aggregate struct {
-	Definition api.AggregateDefinition
+	definition *api.AggregateDefinition
 	cache      *utils.TimedCache
 	mutex      *sync.Mutex
 	expiryTime time.Duration
@@ -65,7 +65,7 @@ func (aggregate *Aggregate) LabelsFromEntry(entry config.GenericMap) (Labels, bo
 	allLabelsFound := true
 	labels := Labels{}
 
-	for _, key := range aggregate.Definition.GroupByKeys {
+	for _, key := range aggregate.definition.GroupByKeys {
 		value, ok := entry[key]
 		if !ok {
 			allLabelsFound = false
@@ -96,14 +96,14 @@ func (labels Labels) getNormalizedValues() NormalizedValues {
 	return NormalizedValues(normalizedAsString)
 }
 
-func (aggregate *Aggregate) FilterEntry(entry config.GenericMap) (error, NormalizedValues, Labels) {
+func (aggregate *Aggregate) filterEntry(entry config.GenericMap) (NormalizedValues, Labels, error) {
 	labels, allLabelsFound := aggregate.LabelsFromEntry(entry)
 	if !allLabelsFound {
-		return fmt.Errorf("missing keys in entry"), "", nil
+		return "", nil, fmt.Errorf("missing keys in entry")
 	}
 
 	normalizedValues := labels.getNormalizedValues()
-	return nil, normalizedValues, labels
+	return normalizedValues, labels, nil
 }
 
 func getInitValue(operation string) float64 {
@@ -130,10 +130,10 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	oldEntry, ok := aggregate.cache.GetCacheEntry(string(normalizedValues))
 	if !ok {
 		groupState = &GroupState{normalizedValues: normalizedValues, labels: labels}
-		initVal := getInitValue(string(aggregate.Definition.OperationType))
+		initVal := getInitValue(string(aggregate.definition.OperationType))
 		groupState.totalValue = initVal
 		groupState.recentOpValue = initVal
-		if aggregate.Definition.OperationType == OperationRawValues {
+		if aggregate.definition.OperationType == OperationRawValues {
 			groupState.recentRawValues = make([]float64, 0)
 		}
 	} else {
@@ -142,8 +142,8 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	aggregate.cache.UpdateCacheEntry(string(normalizedValues), groupState)
 
 	// update value
-	operationKey := aggregate.Definition.OperationKey
-	operation := aggregate.Definition.OperationType
+	operationKey := aggregate.definition.OperationKey
+	operation := aggregate.definition.OperationType
 
 	if operation == OperationCount {
 		groupState.totalValue = float64(groupState.totalCount + 1)
@@ -179,8 +179,8 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	}
 
 	// update count
-	groupState.totalCount += 1
-	groupState.recentCount += 1
+	groupState.totalCount++
+	groupState.recentCount++
 
 	return nil
 }
@@ -188,7 +188,7 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 func (aggregate *Aggregate) Evaluate(entries []config.GenericMap) error {
 	for _, entry := range entries {
 		// filter entries matching labels with aggregates
-		err, normalizedValues, labels := aggregate.FilterEntry(entry)
+		normalizedValues, labels, err := aggregate.filterEntry(entry)
 		if err != nil {
 			continue
 		}
@@ -211,37 +211,33 @@ func (aggregate *Aggregate) GetMetrics() []config.GenericMap {
 	var metrics []config.GenericMap
 
 	// iterate over the items in the cache
-	aggregate.cache.Iterate(func(key string, value interface{}) {
+	aggregate.cache.Iterate(func(_ string, value interface{}) {
 		group := value.(*GroupState)
 		newEntry := config.GenericMap{
-			"name":              aggregate.Definition.Name,
-			"operation_type":    aggregate.Definition.OperationType,
-			"operation_key":     aggregate.Definition.OperationKey,
-			"by":                strings.Join(aggregate.Definition.GroupByKeys, ","),
+			"name":              aggregate.definition.Name,
+			"operation_type":    aggregate.definition.OperationType,
+			"operation_key":     aggregate.definition.OperationKey,
+			"by":                strings.Join(aggregate.definition.GroupByKeys, ","),
 			"aggregate":         string(group.normalizedValues),
 			"total_value":       group.totalValue,
 			"total_count":       group.totalCount,
 			"recent_raw_values": group.recentRawValues,
 			"recent_op_value":   group.recentOpValue,
 			"recent_count":      group.recentCount,
-			strings.Join(aggregate.Definition.GroupByKeys, "_"): string(group.normalizedValues),
+			strings.Join(aggregate.definition.GroupByKeys, "_"): string(group.normalizedValues),
 		}
-		// add the items in aggregate.Definition.GroupByKeys individually to the entry
-		for _, key := range aggregate.Definition.GroupByKeys {
+		// add the items in aggregate.definition.GroupByKeys individually to the entry
+		for _, key := range aggregate.definition.GroupByKeys {
 			newEntry[key] = group.labels[key]
 		}
 		metrics = append(metrics, newEntry)
 		// Once reported, we reset the recentXXX fields
-		if aggregate.Definition.OperationType == OperationRawValues {
+		if aggregate.definition.OperationType == OperationRawValues {
 			group.recentRawValues = make([]float64, 0)
 		}
 		group.recentCount = 0
-		group.recentOpValue = getInitValue(string(aggregate.Definition.OperationType))
+		group.recentOpValue = getInitValue(string(aggregate.definition.OperationType))
 	})
 
 	return metrics
-}
-
-func (aggregate Aggregate) Cleanup(entry interface{}) {
-	// nothing special to do in this callback function
 }

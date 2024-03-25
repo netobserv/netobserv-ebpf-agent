@@ -40,7 +40,7 @@ const (
 // This allows efficient retrieval and removal of connections.
 type connectionStore struct {
 	groups          []*groupType
-	hashId2groupIdx map[uint64]int
+	hashID2groupIdx map[uint64]int
 	metrics         *metricsType
 	now             func() time.Time
 }
@@ -68,23 +68,23 @@ func (cs *connectionStore) getGroupIdx(conn connection) (groupIdx int) {
 	return lastGroupIdx
 }
 
-func (cs *connectionStore) addConnection(hashId uint64, conn connection) {
+func (cs *connectionStore) addConnection(hashID uint64, conn connection) {
 	groupIdx := cs.getGroupIdx(conn)
 	mom := cs.groups[groupIdx].activeMom
 
-	err := mom.AddRecord(utils.Key(hashId), conn)
+	err := mom.AddRecord(utils.Key(hashID), conn)
 	if err != nil {
-		log.Errorf("BUG. connection with hash %x already exists in store. %v", hashId, conn)
+		log.Errorf("BUG. connection with hash %x already exists in store. %v", hashID, conn)
 	}
-	cs.hashId2groupIdx[hashId] = groupIdx
+	cs.hashID2groupIdx[hashID] = groupIdx
 
 	groupLabel := cs.groups[groupIdx].labelValue
 	activeLen := cs.groups[groupIdx].activeMom.Len()
 	cs.metrics.connStoreLength.WithLabelValues(groupLabel, activeLabel).Set(float64(activeLen))
 }
 
-func (cs *connectionStore) getConnection(hashId uint64) (connection, bool, bool) {
-	groupIdx, found := cs.hashId2groupIdx[hashId]
+func (cs *connectionStore) getConnection(hashID uint64) (connection, bool, bool) {
+	groupIdx, found := cs.hashID2groupIdx[hashID]
 	if !found {
 		return nil, false, false
 	}
@@ -92,12 +92,12 @@ func (cs *connectionStore) getConnection(hashId uint64) (connection, bool, bool)
 
 	// get connection from active map
 	isRunning := true
-	record, ok := mom.GetRecord(utils.Key(hashId))
+	record, ok := mom.GetRecord(utils.Key(hashID))
 	if !ok {
 		// fallback on terminating map if not found
 		isRunning = false
 		mom := cs.groups[groupIdx].terminatingMom
-		record, ok = mom.GetRecord(utils.Key(hashId))
+		record, ok = mom.GetRecord(utils.Key(hashID))
 		if !ok {
 			return nil, false, false
 		}
@@ -106,16 +106,16 @@ func (cs *connectionStore) getConnection(hashId uint64) (connection, bool, bool)
 	return conn, true, isRunning
 }
 
-func (cs *connectionStore) setConnectionTerminating(hashId uint64) {
-	conn, ok, active := cs.getConnection(hashId)
+func (cs *connectionStore) setConnectionTerminating(hashID uint64) {
+	conn, ok, active := cs.getConnection(hashID)
 	if !ok {
-		log.Panicf("BUG. connection hash %x doesn't exist", hashId)
+		log.Panicf("BUG. connection hash %x doesn't exist", hashID)
 		return
 	} else if !active {
 		// connection is terminating
 		return
 	}
-	groupIdx := cs.hashId2groupIdx[hashId]
+	groupIdx := cs.hashID2groupIdx[hashID]
 	groupLabel := cs.groups[groupIdx].labelValue
 	activeMom := cs.groups[groupIdx].activeMom
 	terminatingMom := cs.groups[groupIdx].terminatingMom
@@ -123,58 +123,58 @@ func (cs *connectionStore) setConnectionTerminating(hashId uint64) {
 	newExpiryTime := cs.now().Add(timeout)
 	conn.setExpiryTime(newExpiryTime)
 	// Remove connection from active map
-	activeMom.RemoveRecord(utils.Key(hashId))
+	activeMom.RemoveRecord(utils.Key(hashID))
 	activeLen := cs.groups[groupIdx].activeMom.Len()
 	cs.metrics.connStoreLength.WithLabelValues(groupLabel, activeLabel).Set(float64(activeLen))
 	// Add connection to terminating map
-	err := terminatingMom.AddRecord(utils.Key(hashId), conn)
+	err := terminatingMom.AddRecord(utils.Key(hashID), conn)
 	if err != nil {
-		log.Errorf("BUG. connection with hash %x already exists in store. %v", hashId, conn)
+		log.Errorf("BUG. connection with hash %x already exists in store. %v", hashID, conn)
 	}
 	terminatingLen := cs.groups[groupIdx].terminatingMom.Len()
 	cs.metrics.connStoreLength.WithLabelValues(groupLabel, terminatingLabel).Set(float64(terminatingLen))
 }
 
-func (cs *connectionStore) updateConnectionExpiryTime(hashId uint64) {
-	conn, ok, active := cs.getConnection(hashId)
+func (cs *connectionStore) updateConnectionExpiryTime(hashID uint64) {
+	conn, ok, active := cs.getConnection(hashID)
 	if !ok {
-		log.Panicf("BUG. connection hash %x doesn't exist", hashId)
+		log.Panicf("BUG. connection hash %x doesn't exist", hashID)
 		return
 	} else if !active {
 		// connection is terminating. expiry time can't be updated anymore
 		return
 	}
-	groupIdx := cs.hashId2groupIdx[hashId]
+	groupIdx := cs.hashID2groupIdx[hashID]
 	mom := cs.groups[groupIdx].activeMom
 	timeout := cs.groups[groupIdx].scheduling.EndConnectionTimeout.Duration
 	newExpiryTime := cs.now().Add(timeout)
 	conn.setExpiryTime(newExpiryTime)
 	// Move to the back of the list
-	err := mom.MoveToBack(utils.Key(hashId), expiryOrder)
+	err := mom.MoveToBack(utils.Key(hashID), expiryOrder)
 	if err != nil {
-		log.Panicf("BUG. Can't update connection expiry time for hash %x: %v", hashId, err)
+		log.Panicf("BUG. Can't update connection expiry time for hash %x: %v", hashID, err)
 		return
 	}
 }
 
-func (cs *connectionStore) updateNextHeartbeatTime(hashId uint64) {
-	conn, ok, active := cs.getConnection(hashId)
+func (cs *connectionStore) updateNextHeartbeatTime(hashID uint64) {
+	conn, ok, active := cs.getConnection(hashID)
 	if !ok {
-		log.Panicf("BUG. connection hash %x doesn't exist", hashId)
+		log.Panicf("BUG. connection hash %x doesn't exist", hashID)
 		return
 	} else if !active {
 		// connection is terminating. heartbeat are disabled
 		return
 	}
-	groupIdx := cs.hashId2groupIdx[hashId]
+	groupIdx := cs.hashID2groupIdx[hashID]
 	mom := cs.groups[groupIdx].activeMom
 	timeout := cs.groups[groupIdx].scheduling.HeartbeatInterval.Duration
 	newNextHeartbeatTime := cs.now().Add(timeout)
 	conn.setNextHeartbeatTime(newNextHeartbeatTime)
 	// Move to the back of the list
-	err := mom.MoveToBack(utils.Key(hashId), nextHeartbeatTimeOrder)
+	err := mom.MoveToBack(utils.Key(hashID), nextHeartbeatTimeOrder)
 	if err != nil {
-		log.Panicf("BUG. Can't update next heartbeat time for hash %x: %v", hashId, err)
+		log.Panicf("BUG. Can't update next heartbeat time for hash %x: %v", hashID, err)
 		return
 	}
 }
@@ -189,7 +189,7 @@ func (cs *connectionStore) popEndConnectionOfMap(mom *utils.MultiOrderedMap, gro
 			// The connection has expired. We want to pop it.
 			poppedConnections = append(poppedConnections, conn)
 			shouldDelete, shouldStop = true, false
-			delete(cs.hashId2groupIdx, conn.getHash().hashTotal)
+			delete(cs.hashID2groupIdx, conn.getHash().hashTotal)
 		} else {
 			// No more expired connections
 			shouldDelete, shouldStop = false, true
@@ -251,7 +251,7 @@ func (cs *connectionStore) prepareHeartbeats() []connection {
 }
 
 func (cs *connectionStore) len() int {
-	return len(cs.hashId2groupIdx)
+	return len(cs.hashID2groupIdx)
 }
 
 // schedulingGroupToLabelValue returns a string representation of a scheduling group to be used as a Prometheus label
@@ -286,7 +286,7 @@ func newConnectionStore(scheduling []api.ConnTrackSchedulingGroup, metrics *metr
 
 	cs := &connectionStore{
 		groups:          groups,
-		hashId2groupIdx: map[uint64]int{},
+		hashID2groupIdx: map[uint64]int{},
 		metrics:         metrics,
 		now:             nowFunc,
 	}

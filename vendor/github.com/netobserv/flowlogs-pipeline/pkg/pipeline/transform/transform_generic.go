@@ -26,7 +26,7 @@ import (
 var glog = logrus.WithField("component", "transform.Generic")
 
 type Generic struct {
-	policy string
+	policy api.TransformGenericOperationEnum
 	rules  []api.GenericTransformRule
 }
 
@@ -96,7 +96,7 @@ func NewTransformGeneric(params config.StageParam) (Transformer, error) {
 	rules := genConfig.Rules
 	policy := genConfig.Policy
 	switch policy {
-	case "replace_keys", "preserve_original_keys", "":
+	case api.ReplaceKeys, api.PreserveOriginalKeys, "":
 		// valid; nothing to do
 		glog.Infof("NewTransformGeneric, policy = %s", policy)
 	default:

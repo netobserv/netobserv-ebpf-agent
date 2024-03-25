@@ -24,21 +24,21 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type WriteFake struct {
+type Fake struct {
 	// access is locked and copied to avoid race condition errors during tests
 	mt         sync.Mutex
 	allRecords []config.GenericMap
 }
 
 // Write stores in memory all records.
-func (w *WriteFake) Write(in config.GenericMap) {
+func (w *Fake) Write(in config.GenericMap) {
 	logrus.Trace("entering writeFake Write")
 	w.mt.Lock()
 	w.allRecords = append(w.allRecords, in.Copy())
 	w.mt.Unlock()
 }
 
-func (w *WriteFake) AllRecords() []config.GenericMap {
+func (w *Fake) AllRecords() []config.GenericMap {
 	w.mt.Lock()
 	defer w.mt.Unlock()
 	var copies []config.GenericMap
@@ -51,6 +51,6 @@ func (w *WriteFake) AllRecords() []config.GenericMap {
 // NewWriteFake creates a new write.
 func NewWriteFake(_ config.StageParam) (Writer, error) {
 	logrus.Debugf("entering NewWriteFake")
-	w := &WriteFake{}
+	w := &Fake{}
 	return w, nil
 }

@@ -8,18 +8,18 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type InformersMock struct {
+type Mock struct {
 	mock.Mock
 	InformersInterface
 }
 
-func NewInformersMock() *InformersMock {
-	inf := new(InformersMock)
+func NewInformersMock() *Mock {
+	inf := new(Mock)
 	inf.On("InitFromConfig", mock.Anything).Return(nil)
 	return inf
 }
 
-func (o *InformersMock) InitFromConfig(kubeConfigPath string) error {
+func (o *Mock) InitFromConfig(kubeConfigPath string) error {
 	args := o.Called(kubeConfigPath)
 	return args.Error(0)
 }

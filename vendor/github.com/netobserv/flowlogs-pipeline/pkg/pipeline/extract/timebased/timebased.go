@@ -87,13 +87,13 @@ func CreateIndexKeysAndFilters(rules []api.TimebasedFilterRule) (map[string]*Ind
 		}
 		// verify the validity of the OperationType field in the filterRule
 		switch filterRule.OperationType {
-		case api.FilterOperationName("FilterOperationLast"),
-			api.FilterOperationName("FilterOperationDiff"),
-			api.FilterOperationName("FilterOperationCnt"),
-			api.FilterOperationName("FilterOperationAvg"),
-			api.FilterOperationName("FilterOperationMax"),
-			api.FilterOperationName("FilterOperationMin"),
-			api.FilterOperationName("FilterOperationSum"):
+		case api.FilterOperationLast,
+			api.FilterOperationDiff,
+			api.FilterOperationCnt,
+			api.FilterOperationAvg,
+			api.FilterOperationMax,
+			api.FilterOperationMin,
+			api.FilterOperationSum:
 			// OK; nothing to do
 		default:
 			log.Errorf("illegal operation type %s", filterRule.OperationType)

@@ -47,6 +47,7 @@ type subnetCategory struct {
 	name  string
 }
 
+//nolint:cyclop
 func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bool) {
 	// copy input entry before transform to avoid alteration on parallel stages
 	outputEntry := inputEntry.Copy()
@@ -54,7 +55,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 	// TODO: for efficiency and maintainability, maybe each case in the switch below should be an individual implementation of Transformer
 	for _, rule := range n.Rules {
 		switch rule.Type {
-		case api.OpAddSubnet:
+		case api.NetworkAddSubnet:
 			if rule.AddSubnet == nil {
 				log.Errorf("Missing add subnet configuration")
 				continue
@@ -65,13 +66,13 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 				continue
 			}
 			outputEntry[rule.AddSubnet.Output] = ipv4Net.String()
-		case api.OpAddLocation:
+		case api.NetworkAddLocation:
 			if rule.AddLocation == nil {
 				log.Errorf("Missing add location configuration")
 				continue
 			}
 			var locationInfo *location.Info
-			err, locationInfo := location.GetLocation(fmt.Sprintf("%s", outputEntry[rule.AddLocation.Input]))
+			locationInfo, err := location.GetLocation(fmt.Sprintf("%s", outputEntry[rule.AddLocation.Input]))
 			if err != nil {
 				log.Warningf("Can't find location for IP %v err %v", outputEntry[rule.AddLocation.Input], err)
 				continue
@@ -82,7 +83,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			outputEntry[rule.AddLocation.Output+"_CityName"] = locationInfo.CityName
 			outputEntry[rule.AddLocation.Output+"_Latitude"] = locationInfo.Latitude
 			outputEntry[rule.AddLocation.Output+"_Longitude"] = locationInfo.Longitude
-		case api.OpAddService:
+		case api.NetworkAddService:
 			if rule.AddService == nil {
 				log.Errorf("Missing add service configuration")
 				continue
@@ -109,17 +110,17 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 				}
 			}
 			outputEntry[rule.AddService.Output] = serviceName
-		case api.OpAddKubernetes:
+		case api.NetworkAddKubernetes:
 			kubernetes.Enrich(outputEntry, *rule.Kubernetes)
-		case api.OpAddKubernetesInfra:
+		case api.NetworkAddKubernetesInfra:
 			if rule.KubernetesInfra == nil {
 				logrus.Error("transformation rule: Missing configuration ")
 				continue
 			}
-			kubernetes.EnrichLayer(outputEntry, *rule.KubernetesInfra)
-		case api.OpReinterpretDirection:
+			kubernetes.EnrichLayer(outputEntry, rule.KubernetesInfra)
+		case api.NetworkReinterpretDirection:
 			reinterpretDirection(outputEntry, &n.DirectionInfo)
-		case api.OpAddIPCategory:
+		case api.NetworkAddIPCategory:
 			if rule.AddIPCategory == nil {
 				logrus.Error("AddIPCategory rule: Missing configuration ")
 				continue
@@ -155,6 +156,8 @@ func (n *Network) categorizeIP(ip net.IP) string {
 }
 
 // NewTransformNetwork create a new transform
+//
+//nolint:cyclop
 func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 	var needToInitLocationDB = false
 	var needToInitKubeData = false
@@ -166,22 +169,23 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 	}
 	for _, rule := range jsonNetworkTransform.Rules {
 		switch rule.Type {
-		case api.OpAddLocation:
+		case api.NetworkAddLocation:
 			needToInitLocationDB = true
-		case api.OpAddKubernetes:
+		case api.NetworkAddKubernetes:
 			needToInitKubeData = true
-		case api.OpAddKubernetesInfra:
+		case api.NetworkAddKubernetesInfra:
 			needToInitKubeData = true
-		case api.OpAddService:
+		case api.NetworkAddService:
 			needToInitNetworkServices = true
-		case api.OpReinterpretDirection:
+		case api.NetworkReinterpretDirection:
 			if err := validateReinterpretDirectionConfig(&jsonNetworkTransform.DirectionInfo); err != nil {
 				return nil, err
 			}
-		case api.OpAddIPCategory:
+		case api.NetworkAddIPCategory:
 			if len(jsonNetworkTransform.IPCategories) == 0 {
-				return nil, fmt.Errorf("a rule '%s' was found, but there are no IP categories configured", api.OpAddIPCategory)
+				return nil, fmt.Errorf("a rule '%s' was found, but there are no IP categories configured", api.NetworkAddIPCategory)
 			}
+		case api.NetworkAddSubnet:
 		}
 	}
 

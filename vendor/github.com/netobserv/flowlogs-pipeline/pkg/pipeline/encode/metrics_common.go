@@ -105,67 +105,67 @@ func (m *MetricsCommonStruct) AddAggHist(g interface{}, info *MetricInfo) {
 	m.aggHistos = append(m.aggHistos, mStruct)
 }
 
-func (e *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, metricRecord config.GenericMap) {
+func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, metricRecord config.GenericMap) {
 	log.Tracef("entering MetricCommonEncode. metricRecord = %v", metricRecord)
 
 	// Process counters
-	for _, mInfo := range e.counters {
-		labels, value, _ := e.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+	for _, mInfo := range m.counters {
+		labels, value, _ := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
 		if labels == nil {
 			continue
 		}
 		err := mci.ProcessCounter(mInfo.genericMetric, labels, value)
 		if err != nil {
 			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			e.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
 			continue
 		}
-		e.metricsProcessed.Inc()
+		m.metricsProcessed.Inc()
 	}
 
 	// Process gauges
-	for _, mInfo := range e.gauges {
-		labels, value, key := e.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+	for _, mInfo := range m.gauges {
+		labels, value, key := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
 		if labels == nil {
 			continue
 		}
 		err := mci.ProcessGauge(mInfo.genericMetric, labels, value, key)
 		if err != nil {
 			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			e.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
 			continue
 		}
-		e.metricsProcessed.Inc()
+		m.metricsProcessed.Inc()
 	}
 
 	// Process histograms
-	for _, mInfo := range e.histos {
-		labels, value, _ := e.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+	for _, mInfo := range m.histos {
+		labels, value, _ := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
 		if labels == nil {
 			continue
 		}
 		err := mci.ProcessHist(mInfo.genericMetric, labels, value)
 		if err != nil {
 			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			e.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
 			continue
 		}
-		e.metricsProcessed.Inc()
+		m.metricsProcessed.Inc()
 	}
 
 	// Process pre-aggregated histograms
-	for _, mInfo := range e.aggHistos {
-		labels, values := e.prepareAggHisto(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+	for _, mInfo := range m.aggHistos {
+		labels, values := m.prepareAggHisto(mci, metricRecord, mInfo.info, mInfo.genericMetric)
 		if labels == nil {
 			continue
 		}
 		err := mci.ProcessAggHist(mInfo.genericMetric, labels, values)
 		if err != nil {
 			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			e.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
 			continue
 		}
-		e.metricsProcessed.Inc()
+		m.metricsProcessed.Inc()
 	}
 }
 
@@ -183,10 +183,10 @@ func (m *MetricsCommonStruct) prepareMetric(mci MetricsCommonInterface, flow con
 		floatVal = floatVal / info.ValueScale
 	}
 
-	entryLabels, key := extractLabelsAndKey(flow, &info.MetricsItem)
+	entryLabels, key := extractLabelsAndKey(flow, info.MetricsItem)
 	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
 	cacheEntry := mci.GetChacheEntry(entryLabels, mv)
-	_, ok := m.mCache.UpdateCacheEntry(key, cacheEntry)
+	ok := m.mCache.UpdateCacheEntry(key, cacheEntry)
 	if !ok {
 		m.metricsDropped.Inc()
 		return nil, 0, ""
@@ -205,10 +205,10 @@ func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow c
 		return nil, nil
 	}
 
-	entryLabels, key := extractLabelsAndKey(flow, &info.MetricsItem)
+	entryLabels, key := extractLabelsAndKey(flow, info.MetricsItem)
 	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
 	cacheEntry := mci.GetChacheEntry(entryLabels, mc)
-	_, ok = m.mCache.UpdateCacheEntry(key, cacheEntry)
+	ok = m.mCache.UpdateCacheEntry(key, cacheEntry)
 	if !ok {
 		m.metricsDropped.Inc()
 		return nil, nil

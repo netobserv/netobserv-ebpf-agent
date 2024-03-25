@@ -76,15 +76,15 @@ func NewEncodeKafka(opMetrics *operational.Metrics, params config.StageParam) (E
 
 	var balancer kafkago.Balancer
 	switch config.Balancer {
-	case api.KafkaEncodeBalancerName("RoundRobin"):
+	case api.KafkaRoundRobin:
 		balancer = &kafkago.RoundRobin{}
-	case api.KafkaEncodeBalancerName("LeastBytes"):
+	case api.KafkaLeastBytes:
 		balancer = &kafkago.LeastBytes{}
-	case api.KafkaEncodeBalancerName("Hash"):
+	case api.KafkaHash:
 		balancer = &kafkago.Hash{}
-	case api.KafkaEncodeBalancerName("Crc32"):
+	case api.KafkaCrc32:
 		balancer = &kafkago.CRC32Balancer{}
-	case api.KafkaEncodeBalancerName("Murmur2"):
+	case api.KafkaMurmur2:
 		balancer = &kafkago.Murmur2Balancer{}
 	default:
 		balancer = nil

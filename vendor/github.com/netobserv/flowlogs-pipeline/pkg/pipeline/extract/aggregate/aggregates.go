@@ -58,13 +58,13 @@ func (aggregates *Aggregates) GetMetrics() []config.GenericMap {
 	return metrics
 }
 
-func (aggregates *Aggregates) AddAggregate(aggregateDefinition api.AggregateDefinition) []Aggregate {
+func (aggregates *Aggregates) addAggregate(aggregateDefinition *api.AggregateDefinition) []Aggregate {
 	expiryTime := aggregateDefinition.ExpiryTime
 	if expiryTime.Duration == 0 {
 		expiryTime.Duration = defaultExpiryTime
 	}
 	aggregate := Aggregate{
-		Definition: aggregateDefinition,
+		definition: aggregateDefinition,
 		cache:      utils.NewTimedCache(0, nil),
 		mutex:      &sync.Mutex{},
 		expiryTime: expiryTime.Duration,
@@ -92,7 +92,7 @@ func (aggregates *Aggregates) cleanupExpiredEntriesLoop() {
 func (aggregates *Aggregates) cleanupExpiredEntries() {
 	for _, aggregate := range aggregates.Aggregates {
 		aggregate.mutex.Lock()
-		aggregate.cache.CleanupExpiredEntries(aggregate.expiryTime, aggregate.Cleanup)
+		aggregate.cache.CleanupExpiredEntries(aggregate.expiryTime, func(_ interface{}) {})
 		aggregate.mutex.Unlock()
 	}
 }
@@ -106,8 +106,8 @@ func NewAggregatesFromConfig(aggConfig *api.Aggregates) (Aggregates, error) {
 		aggregates.defaultExpiryTime = defaultExpiryTime
 	}
 
-	for _, aggregateDefinition := range aggConfig.Rules {
-		aggregates.Aggregates = aggregates.AddAggregate(aggregateDefinition)
+	for i := range aggConfig.Rules {
+		aggregates.Aggregates = aggregates.addAggregate(&aggConfig.Rules[i])
 	}
 
 	aggregates.cleanupExpiredEntriesLoop()
