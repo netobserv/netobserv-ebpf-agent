@@ -135,12 +135,12 @@ func packetsAgent(cfg *Config,
 }
 
 func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
-	if cfg.Host == "" || cfg.Port == 0 {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
-			cfg.Host, cfg.Port)
+			cfg.TargetHost, cfg.TargetPort)
 	}
 	plog.Info("starting gRPC Packet send")
-	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.Host, cfg.Port)
+	pcapStreamer, err := exporter.StartGRPCPacketSend(cfg.TargetHost, cfg.TargetPort)
 	if err != nil {
 		return nil, err
 	}
