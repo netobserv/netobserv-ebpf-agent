@@ -67,9 +67,9 @@ spec:
           value: call_error,cares_resolver,dns_resolver
         - name: GRPC_DNS_RESOLVER
           value: "ares"
-        - name: HOST
+        - name: TARGET_HOST
           value: "packet-counter"
-        - name: PORT
+        - name: TARGET_PORT
           value: "9999"
 #      resources:
 #        limits:

@@ -27,9 +27,9 @@ spec:
           privileged: true
           runAsUser: 0
         env:
-          - name: HOST
+          - name: TARGET_HOST
             value: "flp"
-          - name: PORT
+          - name: TARGET_PORT
             value: "9999"
 ---
 apiVersion: v1

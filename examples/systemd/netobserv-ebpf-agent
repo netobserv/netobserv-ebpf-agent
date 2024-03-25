@@ -3,5 +3,5 @@
 # /etc/default/netobserv-ebpf-agent
 
 DIRECTION=both
-HOST=127.0.0.1
-PORT=9999
+TARGET_HOST=127.0.0.1
+TARGET_PORT=9999

@@ -19,7 +19,7 @@ Start the packetcapture-client using: (in a secondary shell)
 
 Start the agent using:
 ```bash
-sudo HOST=localhost PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
+sudo TARGET_HOST=localhost TARGET_PORT=9990 ENABLE_PCA=true PCA_FILTER=tcp,22 ./bin/netobserv-ebpf-agent
 ```
 
 You should see output such as:

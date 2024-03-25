@@ -294,11 +294,11 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 }
 
 func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*flow.Record], error) {
-	if cfg.Host == "" || cfg.Port == 0 {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
-			cfg.Host, cfg.Port)
+			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.Host, cfg.Port, cfg.GRPCMessageMaxFlows, m)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
 	if err != nil {
 		return nil, err
 	}
@@ -364,11 +364,11 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*f
 }
 
 func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*flow.Record], error) {
-	if cfg.Host == "" || cfg.Port == 0 {
+	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
-			cfg.Host, cfg.Port)
+			cfg.TargetHost, cfg.TargetPort)
 	}
-	ipfix, err := exporter.StartIPFIXExporter(cfg.Host, cfg.Port, proto)
+	ipfix, err := exporter.StartIPFIXExporter(cfg.TargetHost, cfg.TargetPort, proto)
 	if err != nil {
 		return nil, err
 	}
