@@ -15,16 +15,16 @@ const (
 
 func validateReinterpretDirectionConfig(info *api.NetworkTransformDirectionInfo) error {
 	if info.FlowDirectionField == "" {
-		return fmt.Errorf("invalid config for transform.Network rule %s: missing FlowDirectionField", api.OpReinterpretDirection)
+		return fmt.Errorf("invalid config for transform.Network rule %s: missing FlowDirectionField", api.NetworkReinterpretDirection)
 	}
 	if info.ReporterIPField == "" {
-		return fmt.Errorf("invalid config for transform.Network rule %s: missing ReporterIPField", api.OpReinterpretDirection)
+		return fmt.Errorf("invalid config for transform.Network rule %s: missing ReporterIPField", api.NetworkReinterpretDirection)
 	}
 	if info.SrcHostField == "" {
-		return fmt.Errorf("invalid config for transform.Network rule %s: missing SrcHostField", api.OpReinterpretDirection)
+		return fmt.Errorf("invalid config for transform.Network rule %s: missing SrcHostField", api.NetworkReinterpretDirection)
 	}
 	if info.DstHostField == "" {
-		return fmt.Errorf("invalid config for transform.Network rule %s: missing DstHostField", api.OpReinterpretDirection)
+		return fmt.Errorf("invalid config for transform.Network rule %s: missing DstHostField", api.NetworkReinterpretDirection)
 	}
 	return nil
 }

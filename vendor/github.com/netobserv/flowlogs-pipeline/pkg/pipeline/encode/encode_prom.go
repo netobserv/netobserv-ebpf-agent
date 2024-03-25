@@ -30,6 +30,7 @@ import (
 
 const defaultExpiryTime = time.Duration(2 * time.Minute)
 
+// nolint:revive
 type EncodeProm struct {
 	cfg          *api.PromEncode
 	registerer   prometheus.Registerer
@@ -52,7 +53,7 @@ func (e *EncodeProm) ProcessCounter(m interface{}, labels map[string]string, val
 	return nil
 }
 
-func (e *EncodeProm) ProcessGauge(m interface{}, labels map[string]string, value float64, key string) error {
+func (e *EncodeProm) ProcessGauge(m interface{}, labels map[string]string, value float64, _ string) error {
 	gauge := m.(*prometheus.GaugeVec)
 	mm, err := gauge.GetMetricWith(labels)
 	if err != nil {
@@ -130,14 +131,15 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 	metricCommon := NewMetricsCommonStruct(opMetrics, cfg.MaxMetrics, params.Name, expiryTime, w.Cleanup)
 	w.metricCommon = metricCommon
 
-	for _, mCfg := range cfg.Metrics {
+	for i := range cfg.Metrics {
+		mCfg := &cfg.Metrics[i]
 		fullMetricName := cfg.Prefix + mCfg.Name
 		labels := mCfg.Labels
 		log.Debugf("fullMetricName = %v", fullMetricName)
 		log.Debugf("Labels = %v", labels)
 		mInfo := CreateMetricInfo(mCfg)
 		switch mCfg.Type {
-		case api.MetricEncodeOperationName("Counter"):
+		case api.MetricCounter:
 			counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, labels)
 			err := registerer.Register(counter)
 			if err != nil {
@@ -145,7 +147,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				return nil, err
 			}
 			metricCommon.AddCounter(counter, mInfo)
-		case api.MetricEncodeOperationName("Gauge"):
+		case api.MetricGauge:
 			gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, labels)
 			err := registerer.Register(gauge)
 			if err != nil {
@@ -153,7 +155,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				return nil, err
 			}
 			metricCommon.AddGauge(gauge, mInfo)
-		case api.MetricEncodeOperationName("Histogram"):
+		case api.MetricHistogram:
 			log.Debugf("buckets = %v", mCfg.Buckets)
 			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
 			err := registerer.Register(hist)
@@ -162,7 +164,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 				return nil, err
 			}
 			metricCommon.AddHist(hist, mInfo)
-		case api.MetricEncodeOperationName("AggHistogram"):
+		case api.MetricAggHistogram:
 			log.Debugf("buckets = %v", mCfg.Buckets)
 			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
 			err := registerer.Register(hist)

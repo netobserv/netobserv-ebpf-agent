@@ -25,14 +25,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type DecodeJson struct {
+//nolint:revive
+type DecodeJSON struct {
 }
 
 // Decode decodes input strings to a list of flow entries
-func (c *DecodeJson) Decode(line []byte) (config.GenericMap, error) {
+func (c *DecodeJSON) Decode(line []byte) (config.GenericMap, error) {
 
 	if log.IsLevelEnabled(log.DebugLevel) {
-		log.Debugf("decodeJson: line = %v", string(line))
+		log.Debugf("decodeJSON: line = %v", string(line))
 	}
 	var decodedLine map[string]interface{}
 	if err := json.Unmarshal(line, &decodedLine); err != nil {
@@ -51,8 +52,8 @@ func (c *DecodeJson) Decode(line []byte) (config.GenericMap, error) {
 	return decodedLine2, nil
 }
 
-// NewDecodeJson create a new decode
-func NewDecodeJson() (Decoder, error) {
-	log.Debugf("entering NewDecodeJson")
-	return &DecodeJson{}, nil
+// NewDecodeJSON create a new decode
+func NewDecodeJSON() (Decoder, error) {
+	log.Debugf("entering NewDecodeJSON")
+	return &DecodeJSON{}, nil
 }

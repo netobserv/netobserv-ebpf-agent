@@ -36,6 +36,8 @@ type Filter struct {
 }
 
 // Transform transforms a flow
+//
+//nolint:cyclop
 func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	tlog.Tracef("f = %v", f)
 	outputEntry := entry.Copy()
@@ -43,72 +45,72 @@ func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	for _, rule := range f.Rules {
 		tlog.Tracef("rule = %v", rule)
 		switch rule.Type {
-		case api.TransformFilterOperationName("RemoveField"):
-			delete(outputEntry, rule.Input)
-		case api.TransformFilterOperationName("RemoveEntryIfExists"):
-			if _, ok := entry[rule.Input]; ok {
+		case api.RemoveField:
+			delete(outputEntry, rule.RemoveField.Input)
+		case api.RemoveEntryIfExists:
+			if _, ok := entry[rule.RemoveEntryIfExists.Input]; ok {
 				return nil, false
 			}
-		case api.TransformFilterOperationName("RemoveEntryIfDoesntExist"):
-			if _, ok := entry[rule.Input]; !ok {
+		case api.RemoveEntryIfDoesntExist:
+			if _, ok := entry[rule.RemoveEntryIfDoesntExist.Input]; !ok {
 				return nil, false
 			}
-		case api.TransformFilterOperationName("RemoveEntryIfEqual"):
-			if val, ok := entry[rule.Input]; ok {
-				if val == rule.Value {
+		case api.RemoveEntryIfEqual:
+			if val, ok := entry[rule.RemoveEntryIfEqual.Input]; ok {
+				if val == rule.RemoveEntryIfEqual.Value {
 					return nil, false
 				}
 			}
-		case api.TransformFilterOperationName("RemoveEntryIfNotEqual"):
-			if val, ok := entry[rule.Input]; ok {
-				if val != rule.Value {
+		case api.RemoveEntryIfNotEqual:
+			if val, ok := entry[rule.RemoveEntryIfNotEqual.Input]; ok {
+				if val != rule.RemoveEntryIfNotEqual.Value {
 					return nil, false
 				}
 			}
-		case api.TransformFilterOperationName("AddField"):
-			outputEntry[rule.Input] = rule.Value
-		case api.TransformFilterOperationName("AddFieldIfDoesntExist"):
-			if _, ok := entry[rule.Input]; !ok {
-				outputEntry[rule.Input] = rule.Value
+		case api.AddField:
+			outputEntry[rule.AddField.Input] = rule.AddField.Value
+		case api.AddFieldIfDoesntExist:
+			if _, ok := entry[rule.AddFieldIfDoesntExist.Input]; !ok {
+				outputEntry[rule.AddFieldIfDoesntExist.Input] = rule.AddFieldIfDoesntExist.Value
 			}
-		case api.TransformFilterOperationName("AddRegExIf"):
-			matched, err := regexp.MatchString(rule.Parameters, fmt.Sprintf("%s", outputEntry[rule.Input]))
+		case api.AddRegExIf:
+			matched, err := regexp.MatchString(rule.AddRegExIf.Parameters, fmt.Sprintf("%s", outputEntry[rule.AddRegExIf.Input]))
 			if err != nil {
 				continue
 			}
 			if matched {
-				outputEntry[rule.Output] = outputEntry[rule.Input]
-				outputEntry[rule.Output+"_Matched"] = true
+				outputEntry[rule.AddRegExIf.Output] = outputEntry[rule.AddRegExIf.Input]
+				outputEntry[rule.AddRegExIf.Output+"_Matched"] = true
 			}
-		case api.TransformFilterOperationName("AddFieldIf"):
-			expressionString := fmt.Sprintf("val %s", rule.Parameters)
+		case api.AddFieldIf:
+			expressionString := fmt.Sprintf("val %s", rule.AddFieldIf.Parameters)
 			expression, err := govaluate.NewEvaluableExpression(expressionString)
 			if err != nil {
 				log.Warningf("Can't evaluate AddIf rule: %+v expression: %v. err %v", rule, expressionString, err)
 				continue
 			}
-			result, evaluateErr := expression.Evaluate(map[string]interface{}{"val": outputEntry[rule.Input]})
+			result, evaluateErr := expression.Evaluate(map[string]interface{}{"val": outputEntry[rule.AddFieldIf.Input]})
 			if evaluateErr == nil && result.(bool) {
-				if rule.Assignee != "" {
-					outputEntry[rule.Output] = rule.Assignee
+				if rule.AddFieldIf.Assignee != "" {
+					outputEntry[rule.AddFieldIf.Output] = rule.AddFieldIf.Assignee
 				} else {
-					outputEntry[rule.Output] = outputEntry[rule.Input]
+					outputEntry[rule.AddFieldIf.Output] = outputEntry[rule.AddFieldIf.Input]
 				}
-				outputEntry[rule.Output+"_Evaluate"] = true
+				outputEntry[rule.AddFieldIf.Output+"_Evaluate"] = true
 			}
-		case api.TransformFilterOperationName("AddLabel"):
-			labels[rule.Input], _ = utils.ConvertToString(rule.Value)
-		case api.TransformFilterOperationName("AddLabelIf"):
+		case api.AddLabel:
+			labels[rule.AddLabel.Input], _ = utils.ConvertToString(rule.AddLabel.Value)
+		case api.AddLabelIf:
 			// TODO perhaps add a cache of previously evaluated expressions
-			expressionString := fmt.Sprintf("val %s", rule.Parameters)
+			expressionString := fmt.Sprintf("val %s", rule.AddLabelIf.Parameters)
 			expression, err := govaluate.NewEvaluableExpression(expressionString)
 			if err != nil {
 				log.Warningf("Can't evaluate AddLabelIf rule: %+v expression: %v. err %v", rule, expressionString, err)
 				continue
 			}
-			result, evaluateErr := expression.Evaluate(map[string]interface{}{"val": outputEntry[rule.Input]})
+			result, evaluateErr := expression.Evaluate(map[string]interface{}{"val": outputEntry[rule.AddLabelIf.Input]})
 			if evaluateErr == nil && result.(bool) {
-				labels[rule.Output] = rule.Assignee
+				labels[rule.AddLabelIf.Output] = rule.AddLabelIf.Assignee
 			}
 		default:
 			tlog.Panicf("unknown type %s for transform.Filter rule: %v", rule.Type, rule)

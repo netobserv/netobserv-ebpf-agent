@@ -59,16 +59,15 @@ func (tc *TimedCache) GetCacheEntry(key string) (interface{}, bool) {
 	cEntry, ok := tc.cacheMap[key]
 	if ok {
 		return cEntry.SourceEntry, ok
-	} else {
-		return nil, ok
 	}
+	return nil, ok
 }
 
 var uclog = log.WithField("method", "UpdateCacheEntry")
 
 // If cache entry exists, update it and return it; if it does not exist, create it if there is room.
 // If we exceed the size of the cache, then do not allocate new entry
-func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) (*cacheEntry, bool) {
+func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) bool {
 	nowInSecs := time.Now()
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -81,7 +80,7 @@ func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) (*cacheEnt
 	} else {
 		// create new entry for cache
 		if (tc.maxEntries > 0) && (tc.cacheList.Len() >= tc.maxEntries) {
-			return nil, false
+			return false
 		}
 		cEntry = &cacheEntry{
 			lastUpdatedTime: nowInSecs,
@@ -96,7 +95,7 @@ func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) (*cacheEnt
 			tc.cacheLenMetric.Inc()
 		}
 	}
-	return cEntry, true
+	return true
 }
 
 func (tc *TimedCache) GetCacheLen() int {
@@ -174,7 +173,7 @@ func NewQuietExpiringTimedCache(expiry time.Duration) *TimedCache {
 			case <-ExitChannel():
 				return
 			case <-ticker.C:
-				l.CleanupExpiredEntries(expiry, func(entry interface{}) {})
+				l.CleanupExpiredEntries(expiry, func(_ interface{}) {})
 			}
 		}
 	}()

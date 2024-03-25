@@ -47,7 +47,7 @@ const (
 	dbFileLocation    = "/tmp/location_db.bin"
 	dbZIPFileLocation = "/tmp/location_db.bin" + ".zip"
 	// REF: Original location from ip2location DB is: "https://www.ip2location.com/download/?token=OpOljbgT6K2WJnFrFBBmBzRVNpHlcYqNN4CMeGavvh0pPOpyu16gKQyqvDMxTDF4&file=DB9LITEBIN"
-	dbUrl = "https://raw.githubusercontent.com/netobserv/flowlogs-pipeline/main/contrib/location/location.db"
+	dbURL = "https://raw.githubusercontent.com/netobserv/flowlogs-pipeline/main/contrib/location/location.db"
 )
 
 var locationDB *ip2location.DB
@@ -70,7 +70,7 @@ func init() {
 	_osio.MkdirAll = os.MkdirAll
 	_osio.OpenFile = os.OpenFile
 	_osio.Copy = io.Copy
-	_dbURL = dbUrl
+	_dbURL = dbURL
 	locationDBMutex = &sync.Mutex{}
 }
 
@@ -82,7 +82,7 @@ func InitLocationDB() error {
 		log.Infof("Downloading location DB into local file %s ", dbFileLocation)
 		out, createErr := _osio.Create(dbZIPFileLocation)
 		if createErr != nil {
-			return fmt.Errorf("failed os.Create %v ", createErr)
+			return fmt.Errorf("failed os.Create %w ", createErr)
 		}
 
 		timeout := time.Minute
@@ -90,26 +90,26 @@ func InitLocationDB() error {
 		client := &http.Client{Transport: tr, Timeout: timeout}
 		resp, getErr := client.Get(_dbURL)
 		if getErr != nil {
-			return fmt.Errorf("failed http.Get %v ", getErr)
+			return fmt.Errorf("failed http.Get %w ", getErr)
 		}
 
 		log.Infof("Got response %s", resp.Status)
 
 		written, copyErr := io.Copy(out, resp.Body)
 		if copyErr != nil {
-			return fmt.Errorf("failed io.Copy %v ", copyErr)
+			return fmt.Errorf("failed io.Copy %w ", copyErr)
 		}
 
 		log.Infof("Wrote %d bytes to %s", written, dbZIPFileLocation)
 
 		bodyCloseErr := resp.Body.Close()
 		if bodyCloseErr != nil {
-			return fmt.Errorf("failed resp.Body.Close %v ", bodyCloseErr)
+			return fmt.Errorf("failed resp.Body.Close %w ", bodyCloseErr)
 		}
 
 		outCloseErr := out.Close()
 		if outCloseErr != nil {
-			return fmt.Errorf("failed out.Close %v ", outCloseErr)
+			return fmt.Errorf("failed out.Close %w ", outCloseErr)
 		}
 
 		unzipErr := unzip(dbZIPFileLocation, dbFileLocation)
@@ -134,7 +134,7 @@ func InitLocationDB() error {
 				log.Infof("os.ReadFile err %v", readFileErr)
 			}
 
-			return fmt.Errorf("failed unzip %v ", unzipErr)
+			return fmt.Errorf("failed unzip %w ", unzipErr)
 		}
 
 		log.Infof("Download completed successfully")
@@ -143,32 +143,32 @@ func InitLocationDB() error {
 	log.Debugf("Loading location DB")
 	db, openDBErr := ip2location.OpenDB(dbFileLocation + "/" + dbFilename)
 	if openDBErr != nil {
-		return fmt.Errorf("OpenDB err - %v ", openDBErr)
+		return fmt.Errorf("OpenDB err - %w ", openDBErr)
 	}
 
 	locationDB = db
 	return nil
 }
 
-func GetLocation(ip string) (error, *Info) {
+func GetLocation(ip string) (*Info, error) {
 
 	if locationDB == nil {
-		return fmt.Errorf("no location DB available"), nil
+		return nil, fmt.Errorf("no location DB available")
 	}
 
 	res, err := locationDB.Get_all(ip)
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
 
-	return nil, &Info{
+	return &Info{
 		CountryName:     res.Country_short,
 		CountryLongName: res.Country_long,
 		RegionName:      res.Region,
 		CityName:        res.City,
 		Latitude:        fmt.Sprintf("%f", res.Latitude),
 		Longitude:       fmt.Sprintf("%f", res.Longitude),
-	}
+	}, nil
 }
 
 //goland:noinspection ALL

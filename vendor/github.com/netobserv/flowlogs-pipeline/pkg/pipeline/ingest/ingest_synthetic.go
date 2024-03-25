@@ -28,7 +28,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type IngestSynthetic struct {
+type ingestSynthetic struct {
 	params            api.IngestSynthetic
 	exitChan          <-chan struct{}
 	flowLogsProcessed prometheus.Counter
@@ -50,7 +50,7 @@ var (
 )
 
 // Ingest generates flow logs according to provided parameters
-func (ingestS *IngestSynthetic) Ingest(out chan<- config.GenericMap) {
+func (ingestS *ingestSynthetic) Ingest(out chan<- config.GenericMap) {
 	log.Debugf("entering IngestSynthetic Ingest, params = %v", ingestS.params)
 	// get a list of flow log entries, one per desired connection
 	// these flow logs will be sent again and again to simulate ongoing traffic on those connections
@@ -99,7 +99,7 @@ func NewIngestSynthetic(opMetrics *operational.Metrics, params config.StageParam
 	}
 	log.Debugf("params = %v", confIngestSynthetic)
 
-	return &IngestSynthetic{
+	return &ingestSynthetic{
 		params:            confIngestSynthetic,
 		exitChan:          utils.ExitChannel(),
 		flowLogsProcessed: opMetrics.NewCounter(&flowLogsProcessed, params.Name),

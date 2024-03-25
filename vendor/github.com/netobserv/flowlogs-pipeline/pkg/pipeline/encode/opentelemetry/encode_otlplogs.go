@@ -42,7 +42,7 @@ func (e *EncodeOtlpLogs) Encode(entry config.GenericMap) {
 	e.LogWrite(entry)
 }
 
-func NewEncodeOtlpLogs(opMetrics *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
+func NewEncodeOtlpLogs(_ *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
 	log.Tracef("entering NewEncodeOtlpLogs \n")
 	cfg := api.EncodeOtlpLogs{}
 	if params.Encode != nil && params.Encode.OtlpLogs != nil {

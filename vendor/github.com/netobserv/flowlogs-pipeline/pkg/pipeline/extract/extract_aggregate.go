@@ -19,16 +19,16 @@ package extract
 
 import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract/aggregate"
+	agg "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract/aggregate"
 	log "github.com/sirupsen/logrus"
 )
 
-type ExtractAggregate struct {
-	Aggregates aggregate.Aggregates
+type aggregates struct {
+	agg.Aggregates
 }
 
 // Extract extracts a flow before being stored
-func (ea *ExtractAggregate) Extract(entries []config.GenericMap) []config.GenericMap {
+func (ea *aggregates) Extract(entries []config.GenericMap) []config.GenericMap {
 	err := ea.Aggregates.Evaluate(entries)
 	if err != nil {
 		log.Debugf("Evaluate error %v", err)
@@ -42,13 +42,13 @@ func (ea *ExtractAggregate) Extract(entries []config.GenericMap) []config.Generi
 // NewExtractAggregate creates a new extractor
 func NewExtractAggregate(params config.StageParam) (Extractor, error) {
 	log.Debugf("entering NewExtractAggregate")
-	aggregates, err := aggregate.NewAggregatesFromConfig(params.Extract.Aggregates)
+	cfg, err := agg.NewAggregatesFromConfig(params.Extract.Aggregates)
 	if err != nil {
 		log.Errorf("error in NewAggregatesFromConfig: %v", err)
 		return nil, err
 	}
 
-	return &ExtractAggregate{
-		Aggregates: aggregates,
+	return &aggregates{
+		Aggregates: cfg,
 	}, nil
 }

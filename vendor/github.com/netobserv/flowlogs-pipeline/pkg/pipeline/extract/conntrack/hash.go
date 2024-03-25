@@ -36,9 +36,9 @@ type totalHashType struct {
 	hashTotal uint64
 }
 
-// ComputeHash computes the hash of a flow log according to keyDefinition.
+// computeHash computes the hash of a flow log according to keyDefinition.
 // Two flow logs will have the same hash if they belong to the same connection.
-func ComputeHash(flowLog config.GenericMap, keyDefinition api.KeyDefinition, hasher hash.Hash64, metrics *metricsType) (totalHashType, error) {
+func computeHash(flowLog config.GenericMap, keyDefinition *api.KeyDefinition, hasher hash.Hash64, metrics *metricsType) (totalHashType, error) {
 	fieldGroup2hash := make(map[string]uint64)
 
 	// Compute the hash of each field group

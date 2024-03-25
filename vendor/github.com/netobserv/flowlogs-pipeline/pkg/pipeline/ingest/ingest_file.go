@@ -29,7 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type IngestFile struct {
+type ingestFile struct {
 	params       config.Ingest
 	decoder      decode.Decoder
 	exitChan     <-chan struct{}
@@ -43,7 +43,7 @@ const (
 )
 
 // Ingest ingests entries from a file and resends the same data every delaySeconds seconds
-func (ingestF *IngestFile) Ingest(out chan<- config.GenericMap) {
+func (ingestF *ingestFile) Ingest(out chan<- config.GenericMap) {
 	var filename string
 	if ingestF.params.File != nil {
 		filename = ingestF.params.File.Filename
@@ -95,7 +95,7 @@ func (ingestF *IngestFile) Ingest(out chan<- config.GenericMap) {
 	}
 }
 
-func (ingestF *IngestFile) sendAllLines(lines [][]byte, out chan<- config.GenericMap) {
+func (ingestF *ingestFile) sendAllLines(lines [][]byte, out chan<- config.GenericMap) {
 	log.Debugf("ingestFile sending %d lines", len(lines))
 	ingestF.TotalRecords = len(lines)
 	for _, line := range lines {
@@ -121,7 +121,7 @@ func NewIngestFile(params config.StageParam) (Ingester, error) {
 		return nil, err
 	}
 
-	return &IngestFile{
+	return &ingestFile{
 		params:   *params.Ingest,
 		exitChan: utils.ExitChannel(),
 		decoder:  decoder,

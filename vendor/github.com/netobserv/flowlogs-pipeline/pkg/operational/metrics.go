@@ -18,6 +18,7 @@
 package operational
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -111,7 +112,8 @@ func NewMetrics(settings *config.MetricsSettings) *Metrics {
 func (o *Metrics) register(c prometheus.Collector, name string) {
 	err := prometheus.DefaultRegisterer.Register(c)
 	if err != nil {
-		if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		var castErr prometheus.AlreadyRegisteredError
+		if errors.As(err, &castErr) {
 			logrus.Warningf("metrics registration error [%s]: %v", name, err)
 		} else if o.settings.NoPanic {
 			logrus.Errorf("metrics registration error [%s]: %v", name, err)

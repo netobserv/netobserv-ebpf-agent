@@ -26,7 +26,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type IngestFake struct {
+type Fake struct {
 	Count    int64
 	params   config.Ingest
 	In       chan config.GenericMap
@@ -34,7 +34,7 @@ type IngestFake struct {
 }
 
 // Ingest reads records from an input channel and writes them as-is to the output channel
-func (inf *IngestFake) Ingest(out chan<- config.GenericMap) {
+func (inf *Fake) Ingest(out chan<- config.GenericMap) {
 	for {
 		select {
 		case <-inf.exitChan:
@@ -54,7 +54,7 @@ func NewIngestFake(params config.StageParam) (Ingester, error) {
 		return nil, fmt.Errorf("ingest not specified")
 	}
 
-	return &IngestFake{
+	return &Fake{
 		params:   *params.Ingest,
 		In:       make(chan config.GenericMap),
 		exitChan: utils.ExitChannel(),

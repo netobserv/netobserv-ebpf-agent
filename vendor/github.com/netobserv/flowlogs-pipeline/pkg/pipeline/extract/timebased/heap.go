@@ -59,12 +59,12 @@ func (h *topkHeap) Pop() interface{} {
 	return x
 }
 
-func (filter *FilterStruct) computeTopK(inputs filterOperationResults) []filterOperationResult {
+func (fs *FilterStruct) computeTopK(inputs filterOperationResults) []filterOperationResult {
 	// maintain a heap with k items, always dropping the lowest
 	// we will be left with the TopK items
 	var prevMin float64
 	prevMin = -math.MaxFloat64
-	topk := filter.Rule.TopK
+	topk := fs.Rule.TopK
 	h := &topkHeap{}
 	for key, metricMap := range inputs {
 		val := metricMap.operationResult
@@ -120,12 +120,12 @@ func (h *botkHeap) Pop() interface{} {
 	return x
 }
 
-func (filter *FilterStruct) computeBotK(inputs filterOperationResults) []filterOperationResult {
+func (fs *FilterStruct) computeBotK(inputs filterOperationResults) []filterOperationResult {
 	// maintain a heap with k items, always dropping the highest
 	// we will be left with the BotK items
 	var prevMax float64
 	prevMax = math.MaxFloat64
-	botk := filter.Rule.TopK
+	botk := fs.Rule.TopK
 	h := &botkHeap{}
 	for key, metricMap := range inputs {
 		val := metricMap.operationResult

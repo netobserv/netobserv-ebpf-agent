@@ -103,7 +103,7 @@ func newBuilder(cfg *config.ConfigFileStruct) *builder {
 func (b *builder) presetIngester(ing ingest.Ingester) {
 	name := config.PresetIngesterStage
 	log.Debugf("stage = %v", name)
-	b.appendEntry(pipelineEntry{
+	b.appendEntry(&pipelineEntry{
 		stageName: name,
 		stageType: StageIngest,
 		Ingester:  ing,
@@ -136,15 +136,15 @@ func (b *builder) readStages() error {
 		if err != nil {
 			return err
 		}
-		b.appendEntry(pEntry)
+		b.appendEntry(&pEntry)
 	}
 	log.Debugf("pipeline = %v", b.pipelineStages)
 	return nil
 }
 
-func (b *builder) appendEntry(pEntry pipelineEntry) {
-	b.pipelineEntryMap[pEntry.stageName] = &pEntry
-	b.pipelineStages = append(b.pipelineStages, &pEntry)
+func (b *builder) appendEntry(pEntry *pipelineEntry) {
+	b.pipelineEntryMap[pEntry.stageName] = pEntry
+	b.pipelineStages = append(b.pipelineStages, pEntry)
 	log.Debugf("pipeline = %v", b.pipelineStages)
 }
 
@@ -386,7 +386,7 @@ func getWriter(opMetrics *operational.Metrics, params config.StageParam) (write.
 	return writer, err
 }
 
-func getTransformer(opMetrics *operational.Metrics, params config.StageParam) (transform.Transformer, error) {
+func getTransformer(_ *operational.Metrics, params config.StageParam) (transform.Transformer, error) {
 	var transformer transform.Transformer
 	var err error
 	switch params.Transform.Type {

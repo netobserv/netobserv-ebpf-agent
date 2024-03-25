@@ -64,22 +64,22 @@ type Loki struct {
 func buildLokiConfig(c *api.WriteLoki) (loki.Config, error) {
 	batchWait, err := time.ParseDuration(c.BatchWait)
 	if err != nil {
-		return loki.Config{}, fmt.Errorf("failed in parsing BatchWait : %v", err)
+		return loki.Config{}, fmt.Errorf("failed in parsing BatchWait : %w", err)
 	}
 
 	timeout, err := time.ParseDuration(c.Timeout)
 	if err != nil {
-		return loki.Config{}, fmt.Errorf("failed in parsing Timeout : %v", err)
+		return loki.Config{}, fmt.Errorf("failed in parsing Timeout : %w", err)
 	}
 
 	minBackoff, err := time.ParseDuration(c.MinBackoff)
 	if err != nil {
-		return loki.Config{}, fmt.Errorf("failed in parsing MinBackoff : %v", err)
+		return loki.Config{}, fmt.Errorf("failed in parsing MinBackoff : %w", err)
 	}
 
 	maxBackoff, err := time.ParseDuration(c.MaxBackoff)
 	if err != nil {
-		return loki.Config{}, fmt.Errorf("failed in parsing MaxBackoff : %v", err)
+		return loki.Config{}, fmt.Errorf("failed in parsing MaxBackoff : %w", err)
 	}
 
 	cfg := loki.Config{

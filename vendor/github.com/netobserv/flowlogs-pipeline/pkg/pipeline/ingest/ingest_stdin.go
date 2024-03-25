@@ -102,7 +102,7 @@ func NewIngestStdin(opMetrics *operational.Metrics, params config.StageParam) (I
 	in := make(chan string, stdinChannelSize)
 	eof := make(chan struct{})
 	metrics := newMetrics(opMetrics, params.Name, params.Ingest.Type, func() int { return len(in) })
-	decoderParams := api.Decoder{Type: api.DecoderName("JSON")}
+	decoderParams := api.Decoder{Type: api.DecoderJSON}
 	decoder, err := decode.GetDecoder(decoderParams)
 	if err != nil {
 		return nil, err

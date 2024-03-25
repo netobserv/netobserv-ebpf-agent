@@ -123,6 +123,7 @@ func (c *connType) markReported() bool {
 	return isFirst
 }
 
+//nolint:cyclop
 func (c *connType) isMatchSelector(selector map[string]interface{}) bool {
 	for k, v := range selector {
 		connValueRaw, found := c.keys[k]
@@ -182,7 +183,7 @@ type connBuilder struct {
 	metrics      *metricsType
 }
 
-func NewConnBuilder(metrics *metricsType) *connBuilder {
+func newConnBuilder(metrics *metricsType) *connBuilder {
 	return &connBuilder{
 		conn: &connType{
 			aggFields:  make(map[string]interface{}),
@@ -206,7 +207,7 @@ func (cb *connBuilder) ShouldSwapAB(b bool) *connBuilder {
 	return cb
 }
 
-func (cb *connBuilder) KeysFrom(flowLog config.GenericMap, kd api.KeyDefinition, endpointAFields, endpointBFields []string) *connBuilder {
+func (cb *connBuilder) keysFrom(flowLog config.GenericMap, kd *api.KeyDefinition, endpointAFields, endpointBFields []string) *connBuilder {
 	for _, fg := range kd.FieldGroups {
 		for _, f := range fg.Fields {
 			cb.conn.keys[f] = flowLog[f]

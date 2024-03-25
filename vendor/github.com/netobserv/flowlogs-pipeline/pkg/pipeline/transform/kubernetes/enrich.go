@@ -48,7 +48,7 @@ func Enrich(outputEntry config.GenericMap, rule api.K8sRule) {
 				outputEntry[rule.Output+"_HostName"] = kubeInfo.HostName
 			}
 		}
-		fillInK8sZone(outputEntry, rule, *kubeInfo, "_Zone")
+		fillInK8sZone(outputEntry, rule, kubeInfo, "_Zone")
 	} else {
 		// NOTE: Some of these fields are taken from opentelemetry specs.
 		// See https://opentelemetry.io/docs/specs/semconv/resource/k8s/
@@ -82,13 +82,13 @@ func Enrich(outputEntry config.GenericMap, rule api.K8sRule) {
 				outputEntry[rule.Output+"k8s.host.name"] = kubeInfo.HostName
 			}
 		}
-		fillInK8sZone(outputEntry, rule, *kubeInfo, "k8s.zone")
+		fillInK8sZone(outputEntry, rule, kubeInfo, "k8s.zone")
 	}
 }
 
 const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
-func fillInK8sZone(outputEntry config.GenericMap, rule api.K8sRule, kubeInfo inf.Info, zonePrefix string) {
+func fillInK8sZone(outputEntry config.GenericMap, rule api.K8sRule, kubeInfo *inf.Info, zonePrefix string) {
 	if !rule.AddZone {
 		//Nothing to do
 		return
@@ -120,7 +120,7 @@ func fillInK8sZone(outputEntry config.GenericMap, rule api.K8sRule, kubeInfo inf
 	}
 }
 
-func EnrichLayer(outputEntry config.GenericMap, rule api.K8sInfraRule) {
+func EnrichLayer(outputEntry config.GenericMap, rule *api.K8sInfraRule) {
 	outputEntry[rule.Output] = "infra"
 	for _, input := range rule.Inputs {
 		if objectIsApp(fmt.Sprintf("%s", outputEntry[input]), rule) {
@@ -130,7 +130,7 @@ func EnrichLayer(outputEntry config.GenericMap, rule api.K8sInfraRule) {
 	}
 }
 
-func objectIsApp(addr string, rule api.K8sInfraRule) bool {
+func objectIsApp(addr string, rule *api.K8sInfraRule) bool {
 	obj, err := informers.GetInfo(addr)
 	if err != nil {
 		logrus.WithError(err).Tracef("can't find kubernetes info for IP %s", addr)

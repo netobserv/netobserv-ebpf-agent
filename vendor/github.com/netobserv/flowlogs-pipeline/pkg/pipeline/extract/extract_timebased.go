@@ -22,28 +22,29 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract/timebased"
+	tb "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/extract/timebased"
 	log "github.com/sirupsen/logrus"
 )
 
-type ExtractTimebased struct {
-	Filters         []timebased.FilterStruct
-	IndexKeyStructs map[string]*timebased.IndexKeyTable
+type timebased struct {
+	Filters         []tb.FilterStruct
+	IndexKeyStructs map[string]*tb.IndexKeyTable
 }
 
 // Extract extracts a flow before being stored
-func (et *ExtractTimebased) Extract(entries []config.GenericMap) []config.GenericMap {
-	log.Debugf("entering ExtractTimebased Extract")
+func (et *timebased) Extract(entries []config.GenericMap) []config.GenericMap {
+	log.Debugf("entering timebased Extract")
 	nowInSecs := time.Now()
 	// Populate the Table with the current entries
 	for _, entry := range entries {
-		log.Debugf("ExtractTimebased Extract, entry = %v", entry)
-		timebased.AddEntryToTables(et.IndexKeyStructs, entry, nowInSecs)
+		log.Debugf("timebased Extract, entry = %v", entry)
+		tb.AddEntryToTables(et.IndexKeyStructs, entry, nowInSecs)
 	}
 
 	output := make([]config.GenericMap, 0)
 	// Calculate Filters based on time windows
-	for _, filter := range et.Filters {
+	for i := range et.Filters {
+		filter := &et.Filters[i]
 		filter.CalculateResults(nowInSecs)
 		filter.ComputeTopkBotk()
 		genMap := filter.CreateGenericMap()
@@ -52,7 +53,7 @@ func (et *ExtractTimebased) Extract(entries []config.GenericMap) []config.Generi
 	log.Debugf("output of extract timebased: %v", output)
 
 	// delete entries from tables that are outside time windows
-	timebased.DeleteOldEntriesFromTables(et.IndexKeyStructs, nowInSecs)
+	tb.DeleteOldEntriesFromTables(et.IndexKeyStructs, nowInSecs)
 
 	return output
 }
@@ -65,9 +66,9 @@ func NewExtractTimebased(params config.StageParam) (Extractor, error) {
 	}
 	log.Debugf("NewExtractTimebased; rules = %v", rules)
 
-	tmpIndexKeyStructs, tmpFilters := timebased.CreateIndexKeysAndFilters(rules)
+	tmpIndexKeyStructs, tmpFilters := tb.CreateIndexKeysAndFilters(rules)
 
-	return &ExtractTimebased{
+	return &timebased{
 		Filters:         tmpFilters,
 		IndexKeyStructs: tmpIndexKeyStructs,
 	}, nil
