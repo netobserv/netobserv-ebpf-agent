@@ -156,6 +156,12 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		},
 		Prefix: cfg.MetricsPrefix,
 	}
+	if cfg.MetricsTLSCertPath != "" && cfg.MetricsTLSKeyPath != "" {
+		metricsSettings.PromConnectionInfo.TLS = &metrics.PromTLS{
+			CertPath: cfg.MetricsTLSCertPath,
+			KeyPath:  cfg.MetricsTLSKeyPath,
+		}
+	}
 	m := metrics.NewMetrics(metricsSettings)
 
 	// configure selected exporter

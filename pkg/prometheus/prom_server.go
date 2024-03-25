@@ -53,7 +53,12 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 	httpServer = defaultServer(httpServer)
 
 	go func() {
-		err := httpServer.ListenAndServe()
+		var err error
+		if conn.TLS != nil {
+			err = httpServer.ListenAndServeTLS(conn.TLS.CertPath, conn.TLS.KeyPath)
+		} else {
+			err = httpServer.ListenAndServe()
+		}
 		if err != nil && err != http.ErrServerClosed {
 			maybePanic("error in http.ListenAndServe: %v", err)
 		}
