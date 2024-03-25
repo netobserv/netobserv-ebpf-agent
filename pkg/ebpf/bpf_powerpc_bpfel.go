@@ -65,6 +65,12 @@ type BpfFlowRecordT struct {
 	Metrics BpfFlowMetrics
 }
 
+type BpfGlobalCountersKeyT uint32
+
+const (
+	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY BpfGlobalCountersKeyT = 0
+)
+
 type BpfPktDropsT struct {
 	Packets         uint32
 	Bytes           uint64
@@ -130,6 +136,7 @@ type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
+	GlobalCounters  *ebpf.MapSpec `ebpf:"global_counters"`
 	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
 }
 
@@ -155,6 +162,7 @@ type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
+	GlobalCounters  *ebpf.Map `ebpf:"global_counters"`
 	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
 }
 
@@ -163,6 +171,7 @@ func (m *BpfMaps) Close() error {
 		m.AggregatedFlows,
 		m.DirectFlows,
 		m.DnsFlows,
+		m.GlobalCounters,
 		m.PacketRecord,
 	)
 }
