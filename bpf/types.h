@@ -54,12 +54,17 @@ typedef __u64 u64;
 #define DSCP_SHIFT 2
 #define DSCP_MASK 0x3F
 #define MIN_RTT 10000u //10us
+
+#define MAX_FILTER_ENTRIES 1 // we have only one global filter
+
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
-typedef enum {
+typedef enum direction_t {
     INGRESS         = 0,
     EGRESS          = 1,
     MAX_DIRECTION   = 2,
-} direction_t;
+} direction;
+// Force emitting enum direction_t into the ELF.
+const enum direction_t *unused8 __attribute__((unused));
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
@@ -126,18 +131,6 @@ typedef struct flow_id_t {
 // Force emitting struct flow_id into the ELF.
 const struct flow_id_t *unused2 __attribute__((unused));
 
-// Standard 4 tuple, transport protocol and a sequence identifier.
-// No need to emit this struct. It's used only in kernel space
-typedef struct flow_seq_id_t {
-    u16 src_port;
-    u16 dst_port;
-    u8 src_ip[IP_MAX_LEN];
-    u8 dst_ip[IP_MAX_LEN];
-    u32 seq_id;
-    u8 transport_protocol;
-    u32 if_index; // OS interface index
-} __attribute__((packed)) flow_seq_id;
-
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.
 // Contents in this struct must match byte-by-byte with Go's pkc/flow/Record struct
@@ -183,11 +176,51 @@ typedef struct dns_flow_id_t {
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
-    HASHMAP_FLOWS_DROPPED_KEY = 0,
+    HASHMAP_FLOWS_DROPPED_KEY   = 0,
+    FILTER_FLOWS_REJECT_KEY     = 1,
+    FILTER_FLOWS_ACCEPT_KEY     = 2,
+    FILTER_FLOWS_NOMATCH_KEY    = 3,
+    MAX_DROPPED_FLOWS_KEY       = 4,
 } global_counters_key;
 
 // Force emitting enum global_counters_key_t into the ELF.
 const enum global_counters_key_t *unused5 __attribute__((unused));
+
+// filter key used as key to LPM map to filter out flows that are not interesting for the user
+struct filter_key_t {
+    u32 prefix_len;
+    u8 ip_data[IP_MAX_LEN];
+} __attribute__((packed));
+// Force emitting struct filter_key_t into the ELF.
+const struct filter_key_t *unused6 __attribute__((unused));
+
+// Enum to define filter action
+typedef enum filter_action_t {
+    ACCEPT         = 0,
+    REJECT         = 1,
+    MAX_FILTER_ACTIONS = 2,
+} filter_action;
+// Force emitting enum direction_t into the ELF.
+const enum filter_action_t *unused7 __attribute__((unused));
+
+// filter value used as value from LPM map lookup to filter out flows that are not interesting for the user
+struct filter_value_t {
+    u8 protocol;
+    u16 dstPortStart;
+    u16 dstPortEnd;
+    u16 srcPortStart;
+    u16 srcPortEnd;
+    u16 portStart;
+    u16 portEnd;
+    u8 icmpType;
+    u8 icmpCode;
+    direction direction;
+    filter_action action;
+    u8 ip[IP_MAX_LEN];
+} __attribute__((packed));
+// Force emitting struct filter_value_t into the ELF.
+const struct filter_value_t *unused9 __attribute__((unused));
+
 
 #endif /* __TYPES_H__ */
 

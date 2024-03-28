@@ -12,6 +12,14 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfDirectionT uint32
+
+const (
+	BpfDirectionTINGRESS       BpfDirectionT = 0
+	BpfDirectionTEGRESS        BpfDirectionT = 1
+	BpfDirectionTMAX_DIRECTION BpfDirectionT = 2
+)
+
 type BpfDnsFlowId struct {
 	SrcPort  uint16
 	DstPort  uint16
@@ -26,6 +34,34 @@ type BpfDnsRecordT struct {
 	Flags   uint16
 	Latency uint64
 	Errno   uint8
+}
+
+type BpfFilterActionT uint32
+
+const (
+	BpfFilterActionTACCEPT             BpfFilterActionT = 0
+	BpfFilterActionTREJECT             BpfFilterActionT = 1
+	BpfFilterActionTMAX_FILTER_ACTIONS BpfFilterActionT = 2
+)
+
+type BpfFilterKeyT struct {
+	PrefixLen uint32
+	IpData    [16]uint8
+}
+
+type BpfFilterValueT struct {
+	Protocol     uint8
+	DstPortStart uint16
+	DstPortEnd   uint16
+	SrcPortStart uint16
+	SrcPortEnd   uint16
+	PortStart    uint16
+	PortEnd      uint16
+	IcmpType     uint8
+	IcmpCode     uint8
+	Direction    BpfDirectionT
+	Action       BpfFilterActionT
+	Ip           [16]uint8
 }
 
 type BpfFlowId BpfFlowIdT
@@ -69,6 +105,10 @@ type BpfGlobalCountersKeyT uint32
 
 const (
 	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY BpfGlobalCountersKeyT = 0
+	BpfGlobalCountersKeyTFILTER_FLOWS_REJECT_KEY   BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTFILTER_FLOWS_ACCEPT_KEY   BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_FLOWS_NOMATCH_KEY  BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY     BpfGlobalCountersKeyT = 4
 )
 
 type BpfPktDropsT struct {
@@ -136,6 +176,7 @@ type BpfMapSpecs struct {
 	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
+	FilterMap       *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters  *ebpf.MapSpec `ebpf:"global_counters"`
 	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
 }
@@ -162,6 +203,7 @@ type BpfMaps struct {
 	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
 	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
+	FilterMap       *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters  *ebpf.Map `ebpf:"global_counters"`
 	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
 }
@@ -171,6 +213,7 @@ func (m *BpfMaps) Close() error {
 		m.AggregatedFlows,
 		m.DirectFlows,
 		m.DnsFlows,
+		m.FilterMap,
 		m.GlobalCounters,
 		m.PacketRecord,
 	)
