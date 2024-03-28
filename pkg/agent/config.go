@@ -182,6 +182,43 @@ type Config struct {
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
 
+	// EnableFlowFilter enables flow filter, default is false.
+	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
+	// FlowFilterDirection is the direction of the flow filter.
+	// Possible values are "ingress" or "egress".
+	FlowFilterDirection string `env:"FLOW_FILTER_DIRECTION"`
+	// FlowFilterIPCIDR is the IP CIDR to filter flows.
+	// Example: 10.10.10.0/24 or 100:100:100:100::/64
+	FlowFilterIPCIDR string `env:"FLOW_FILTER_IP_CIDR"`
+	// FlowFilterProtocol is the protocol to filter flows.
+	// Example: tcp,udp,sctp,icmpv4,icmpv6
+	FlowFilterProtocol string `env:"FLOW_FILTER_PROTOCOL"`
+	// FlowFilterSourcePort is the source port to filter flows.
+	FlowFilterSourcePort int32 `env:"FLOW_FILTER_SOURCE_PORT"`
+	// FlowFilterDestinationPort is the destination port to filter flows.
+	FlowFilterDestinationPort int32 `env:"FLOW_FILTER_DESTINATION_PORT"`
+	// FlowFilterPort is the port to filter flows, can be use for either source or destination port.
+	FlowFilterPort int32 `env:"FLOW_FILTER_PORT"`
+	// FlowFilterSourcePortRange is the source port range to filter flows.
+	// Example: 8000-8010
+	FlowFilterSourcePortRange string `env:"FLOW_FILTER_SOURCE_PORT_RANGE"`
+	// FlowFilterDestinationPortRange is the destination port range to filter flows.
+	// Example: 8000-8010
+	FlowFilterDestinationPortRange string `env:"FLOW_FILTER_DESTINATION_PORT_RANGE"`
+	// FlowFilterPortRange is the port range to filter flows, can be used for either source or destination port.
+	// Example: 8000-8010
+	FlowFilterPortRange string `env:"FLOW_FILTER_PORT_RANGE"`
+	// FlowFilterICMPType is the ICMP type to filter flows.
+	FlowFilterICMPType int `env:"FLOW_FILTER_ICMP_TYPE"`
+	// FlowFilterICMPCode is the ICMP code to filter flows.
+	FlowFilterICMPCode int `env:"FLOW_FILTER_ICMP_CODE"`
+	// FlowFilterPeerIP is the IP to filter flows.
+	// Example: 10.10.10.10
+	FlowFilterPeerIP string `env:"FLOW_FILTER_PEER_IP"`
+	// FlowFilterAction is the action to filter flows.
+	// Possible values are "Accept" or "Reject".
+	FlowFilterAction string `env:"FLOW_FILTER_ACTION"`
+
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */
