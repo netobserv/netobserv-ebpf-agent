@@ -89,13 +89,24 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         aggregate_flow->dns_record.latency = pkt.dns_latency;
         aggregate_flow->dns_record.errno = dns_errno;
         long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
-        if (trace_messages && ret != 0) {
+        if (ret != 0) {
+            u32 *error_counter_p = NULL;
+            u32 initVal = 1, key = HASHMAP_FLOWS_DROPPED_KEY;
             // usually error -16 (-EBUSY) is printed here.
             // In this case, the flow is dropped, as submitting it to the ringbuffer would cause
             // a duplicated UNION of flows (two different flows with partial aggregation of the same packets),
             // which can't be deduplicated.
             // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
-            bpf_printk("error updating flow %d\n", ret);
+            if (trace_messages) {
+                bpf_printk("error updating flow %d\n", ret);
+            }
+            // Update global counter for hashmap update errors
+            error_counter_p = bpf_map_lookup_elem(&global_counters, &key);
+            if (!error_counter_p) {
+                bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
+                return TC_ACT_OK;
+            }
+            __sync_fetch_and_add(error_counter_p, 1);
         }
     } else {
         // Key does not exist in the map, and will need to create a new entry.

@@ -181,5 +181,13 @@ typedef struct dns_flow_id_t {
     u8 protocol;
 } __attribute__((packed)) dns_flow_id;
 
+// Enum to define global counters keys and share it with userspace
+typedef enum global_counters_key_t {
+    HASHMAP_FLOWS_DROPPED_KEY = 0,
+} global_counters_key;
+
+// Force emitting enum global_counters_key_t into the ELF.
+const enum global_counters_key_t *unused5 __attribute__((unused));
+
 #endif /* __TYPES_H__ */
 

@@ -36,4 +36,12 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } dns_flows SEC(".maps");
 
+// Global counter for hashmap update errors
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __type(key, u32);
+    __type(value, u32);
+    __uint(max_entries, 1);
+} global_counters SEC(".maps");
+
 #endif //__MAPS_DEFINITION_H__

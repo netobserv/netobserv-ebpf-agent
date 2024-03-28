@@ -27,7 +27,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64,ppc64le,s390x -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64,ppc64le,s390x -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t -type global_counters_key_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
@@ -343,6 +343,9 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.DnsFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.GlobalCounters.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -448,7 +451,23 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[BpfFlowId][]B
 	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
 
+	m.ReadGlobalCounter(met)
 	return flows
+}
+
+// ReadGlobalCounter reads the global counter and updates hashmap update error counter metrics
+func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
+	var allCPUValue []uint32
+	key := BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY
+
+	if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
+		log.WithError(err).Warnf("couldn't read global counter")
+		return
+	}
+	// aggregate all the counters
+	for _, counter := range allCPUValue {
+		met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateHashMapCounter").Add(float64(counter))
+	}
 }
 
 // DeleteMapsStaleEntries Look for any stale entries in the features maps and delete them
@@ -521,6 +540,7 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.IngressFlowParse = newObjects.IngressFlowParse
 		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
+		objects.GlobalCounters = newObjects.GlobalCounters
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
