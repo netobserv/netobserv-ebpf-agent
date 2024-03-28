@@ -175,6 +175,10 @@ type Config struct {
 	MetricsServerAddress string `env:"METRICS_SERVER_ADDRESS"`
 	// MetricsPort is the port of the server that collects ebpf agent metrics.
 	MetricsPort int `env:"METRICS_SERVER_PORT" envDefault:"9090"`
+	// MetricsTLSCertPath is the path to the server certificate for TLS connections
+	MetricsTLSCertPath string `env:"METRICS_TLS_CERT_PATH"`
+	// MetricsTLSKeyPath is the path to the server private key for TLS connections
+	MetricsTLSKeyPath string `env:"METRICS_TLS_KEY_PATH"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
 

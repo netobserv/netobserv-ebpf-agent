@@ -14,9 +14,15 @@ type MetricDefinition struct {
 	Labels []string
 }
 
+type PromTLS struct {
+	CertPath string
+	KeyPath  string
+}
+
 type PromConnectionInfo struct {
 	Address string
 	Port    int
+	TLS     *PromTLS
 }
 
 type Settings struct {
