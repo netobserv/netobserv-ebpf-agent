@@ -185,13 +185,13 @@ type Config struct {
 	// EnableFlowFilter enables flow filter, default is false.
 	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
 	// FlowFilterDirection is the direction of the flow filter.
-	// Possible values are "ingress" or "egress".
+	// Possible values are "Ingress" or "Egress".
 	FlowFilterDirection string `env:"FLOW_FILTER_DIRECTION"`
 	// FlowFilterIPCIDR is the IP CIDR to filter flows.
 	// Example: 10.10.10.0/24 or 100:100:100:100::/64
 	FlowFilterIPCIDR string `env:"FLOW_FILTER_IP_CIDR"`
 	// FlowFilterProtocol is the protocol to filter flows.
-	// Example: tcp,udp,sctp,icmpv4,icmpv6
+	// Example: TCP, UDP, SCTP, ICMP, ICMPv6
 	FlowFilterProtocol string `env:"FLOW_FILTER_PROTOCOL"`
 	// FlowFilterSourcePort is the source port to filter flows.
 	FlowFilterSourcePort int32 `env:"FLOW_FILTER_SOURCE_PORT"`

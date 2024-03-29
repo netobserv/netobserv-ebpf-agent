@@ -81,9 +81,9 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 	val := BpfFilterValueT{}
 
 	switch config.FlowFilterDirection {
-	case "ingress":
+	case "Ingress":
 		val.Direction = BpfDirectionTINGRESS
-	case "egress":
+	case "Egress":
 		val.Direction = BpfDirectionTEGRESS
 	default:
 		val.Direction = BpfDirectionTMAX_DIRECTION
@@ -99,7 +99,7 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 	}
 
 	switch config.FlowFilterProtocol {
-	case "tcp":
+	case "TCP":
 		val.Protocol = syscall.IPPROTO_TCP
 		val.DstPortStart, val.DstPortEnd = getDstPorts(config)
 		val.SrcPortStart, val.SrcPortEnd = getSrcPorts(config)
@@ -118,7 +118,7 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 		val.Protocol = syscall.IPPROTO_ICMP
 		val.IcmpType = uint8(config.FlowFilterIcmpType)
 		val.IcmpCode = uint8(config.FlowFilterIcmpCode)
-	case "icmpv6":
+	case "ICMPv6":
 		val.Protocol = syscall.IPPROTO_ICMPV6
 		val.IcmpType = uint8(config.FlowFilterIcmpType)
 		val.IcmpCode = uint8(config.FlowFilterIcmpCode)
