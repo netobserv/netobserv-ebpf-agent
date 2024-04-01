@@ -35,7 +35,7 @@ OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
-CILIUM_EBPF_VERSION := v0.13.2
+CILIUM_EBPF_VERSION := v0.14.0
 GOLANGCI_LINT_VERSION = v1.54.2
 PROTOC_VERSION = "3.19.4"
 CLANG ?= clang
@@ -132,7 +132,7 @@ generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
 	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)"
-	$(OCI_BIN) run --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
+	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
 compile: ## Compile ebpf agent project
