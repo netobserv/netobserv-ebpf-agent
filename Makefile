@@ -114,19 +114,26 @@ lint: prereqs ## Lint the code
 	@echo "### Linting code"
 	golangci-lint run ./... --timeout=3m
 
+.PHONY: gen-bpf
+gen-bpf: export BPF_CLANG := $(CLANG)
+gen-bpf: export BPF_CFLAGS := $(CFLAGS)
+gen-bpf: ## Generate BPF (pkg/ebpf package)
+	@echo "### Generating BPF Go bindings"
+	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
+	go generate ./pkg/...
+
+.PHONY: gen-protobuf
+gen-protobuf: prereqs ## Generate protocol buffer (pkg/proto package)
+	@echo "### Generating gRPC and Protocol Buffers code"
+	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
+	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/packet.proto
+
 # As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
 # to run this target for each build. Only when you change the C code inside the bpf folder or the
 # protobuf definitions in the proto folder.
 # You might want to use the docker-generate target instead of this.
 .PHONY: generate
-generate: export BPF_CLANG := $(CLANG)
-generate: export BPF_CFLAGS := $(CFLAGS)
-generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto packages)
-	@echo "### Generating BPF Go bindings"
-	go generate ./pkg/...
-	@echo "### Generating gRPC and Protocol Buffers code"
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/packet.proto
+generate: gen-bpf gen-protobuf
 
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
