@@ -5,13 +5,13 @@ ARG TARGETARCH=amd64
 ARG GOVERSION="1.21.7"
 
 # Build layer
-FROM --platform=$TARGETPLATFORM fedora:38 as builder
+FROM --platform=$TARGETPLATFORM fedora:39 as builder
 ARG TARGETARCH
 ARG TARGETPLATFORM
 ARG GOVERSION
 ARG VERSION="unknown"
 
-RUN dnf install -y git go kernel-devel make llvm clang
+RUN dnf install -y git go kernel-devel make llvm clang unzip
 RUN dnf clean all
 
 WORKDIR /
