@@ -491,7 +491,11 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		}
 		// aggregate all the counters
 		for _, counter := range allCPUValue {
-			met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
+			if key == BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY {
+				met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
+			} else {
+				met.FilteredFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
+			}
 		}
 	}
 }
