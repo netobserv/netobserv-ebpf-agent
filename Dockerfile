@@ -2,13 +2,28 @@
 ARG TARGETPLATFORM=linux/amd64
 ARG BUILDPLATFORM=linux/amd64
 ARG TARGETARCH=amd64
+ARG GOVERSION="1.21.7"
 
-# Build the manager binary
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.21 as builder
-
+# Build layer
+FROM --platform=$TARGETPLATFORM fedora:39 as builder
 ARG TARGETARCH
 ARG TARGETPLATFORM
+ARG GOVERSION
 ARG VERSION="unknown"
+
+RUN dnf install -y git go kernel-devel make llvm clang unzip
+RUN dnf clean all
+
+WORKDIR /
+
+RUN curl -qL https://go.dev/dl/go$GOVERSION.linux-$TARGETARCH.tar.gz -o go.tar.gz
+RUN tar -xzf go.tar.gz
+RUN rm go.tar.gz
+
+ENV GOROOT /go
+RUN mkdir -p /gopath
+ENV GOPATH /gopath
+ENV PATH $GOROOT/bin:$GOPATH/bin:$PATH
 
 WORKDIR /opt/app-root
 
@@ -24,6 +39,7 @@ COPY Makefile Makefile
 COPY .mk/ .mk/
 
 # Build
+RUN make gen-bpf
 RUN GOARCH=$TARGETARCH make compile
 
 # Create final image from minimal + built binary

@@ -37,6 +37,7 @@ OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.14.0
 GOLANGCI_LINT_VERSION = v1.54.2
+GO_VERSION = "1.21.7"
 PROTOC_VERSION = "3.19.4"
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
@@ -50,7 +51,7 @@ EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 # build a single arch target provided as argument
 define build_target
 	echo 'building image for arch $(1)'; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$(1) --build-arg TARGETARCH=$(1) --build-arg BUILDPLATFORM=linux/amd64 ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETPLATFORM=linux/$(1) --build-arg TARGETARCH=$(1) --build-arg BUILDPLATFORM=linux/amd64 --build-arg GOVERSION="$(GO_VERSION)" ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
 endef
 
 # push a single arch target image
@@ -114,24 +115,30 @@ lint: prereqs ## Lint the code
 	@echo "### Linting code"
 	golangci-lint run ./... --timeout=3m
 
+.PHONY: gen-bpf
+gen-bpf: export BPF_CLANG := $(CLANG)
+gen-bpf: export BPF_CFLAGS := $(CFLAGS)
+gen-bpf: prereqs ## Generate BPF (pkg/ebpf package)
+	@echo "### Generating BPF Go bindings"
+	go generate ./pkg/...
+
+.PHONY: gen-protobuf
+gen-protobuf: prereqs ## Generate protocol buffer (pkg/proto package)
+	@echo "### Generating gRPC and Protocol Buffers code"
+	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
+	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/packet.proto
+
 # As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
 # to run this target for each build. Only when you change the C code inside the bpf folder or the
 # protobuf definitions in the proto folder.
 # You might want to use the docker-generate target instead of this.
 .PHONY: generate
-generate: export BPF_CLANG := $(CLANG)
-generate: export BPF_CFLAGS := $(CFLAGS)
-generate: prereqs ## Generate artifacts of the code repo (pkg/ebpf and pkg/proto packages)
-	@echo "### Generating BPF Go bindings"
-	go generate ./pkg/...
-	@echo "### Generating gRPC and Protocol Buffers code"
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/packet.proto
+generate: gen-bpf gen-protobuf
 
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)"
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
