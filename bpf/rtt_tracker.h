@@ -39,7 +39,7 @@ static inline void rtt_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family, 
         __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip.daddr, sizeof(ip.daddr));
         *dscp = ipv4_get_dscp(&ip);
         break;
-        }
+    }
     case AF_INET6: {
         struct ipv6hdr ip;
         __builtin_memset(&ip, 0, sizeof(ip));
@@ -48,7 +48,7 @@ static inline void rtt_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family, 
         __builtin_memcpy(id->dst_ip, ip.daddr.in6_u.u6_addr8, IP_MAX_LEN);
         *dscp = ipv6_get_dscp(&ip);
         break;
-        }
+    }
     default:
         return;
     }
@@ -86,7 +86,7 @@ static inline int rtt_lookup_and_update_flow(flow_id *id, u16 flags, u64 rtt) {
         return 0;
     }
     return -1;
- }
+}
 
 static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     struct tcp_sock *ts;
@@ -154,7 +154,7 @@ int BPF_PROG(tcp_rcv_fentry, struct sock *sk, struct sk_buff *skb) {
     if (sk == NULL || skb == NULL) {
         return 0;
     }
-	return calculate_flow_rtt_tcp(sk, skb);
+    return calculate_flow_rtt_tcp(sk, skb);
 }
 
 SEC("kprobe/tcp_rcv_established")
@@ -162,7 +162,7 @@ int BPF_KPROBE(tcp_rcv_kprobe, struct sock *sk, struct sk_buff *skb) {
     if (sk == NULL || skb == NULL) {
         return 0;
     }
-	return calculate_flow_rtt_tcp(sk, skb);
+    return calculate_flow_rtt_tcp(sk, skb);
 }
 
 #endif /* __RTT_TRACKER_H__ */

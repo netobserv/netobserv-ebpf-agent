@@ -7,14 +7,13 @@
 
 #include "utils.h"
 
-static inline int trace_pkt_drop(void *ctx, u8 state,
-                                 struct sk_buff *skb,
+static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
                                  enum skb_drop_reason reason) {
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
 
     u8 protocol = 0;
-    u16 family = 0,flags = 0;
+    u16 family = 0, flags = 0;
 
     id.if_index = skb->skb_iif;
     // filter out TCP sockets with unknown or loopback interface
@@ -29,23 +28,23 @@ static inline int trace_pkt_drop(void *ctx, u8 state,
 
     // read L4 info
     switch (protocol) {
-        case IPPROTO_TCP:
-            set_key_with_tcp_info(skb, &id, protocol, &flags);
-            break;
-        case IPPROTO_UDP:
-            set_key_with_udp_info(skb, &id, protocol);
-            break;
-        case IPPROTO_SCTP:
-            set_key_with_sctp_info(skb, &id, protocol);
-            break;
-        case IPPROTO_ICMP:
-            set_key_with_icmpv4_info(skb, &id, protocol);
-            break;
-        case IPPROTO_ICMPV6:
-            set_key_with_icmpv6_info(skb, &id, protocol);
-            break;
-        default:
-            return 0;
+    case IPPROTO_TCP:
+        set_key_with_tcp_info(skb, &id, protocol, &flags);
+        break;
+    case IPPROTO_UDP:
+        set_key_with_udp_info(skb, &id, protocol);
+        break;
+    case IPPROTO_SCTP:
+        set_key_with_sctp_info(skb, &id, protocol);
+        break;
+    case IPPROTO_ICMP:
+        set_key_with_icmpv4_info(skb, &id, protocol);
+        break;
+    case IPPROTO_ICMPV6:
+        set_key_with_icmpv6_info(skb, &id, protocol);
+        break;
+    default:
+        return 0;
     }
 
     long ret = 0;
@@ -92,7 +91,7 @@ int kfree_skb(struct trace_event_raw_kfree_skb *args) {
     if (reason > SKB_DROP_REASON_NOT_SPECIFIED) {
         u8 state = 0;
         if (sk) {
-         // pull in details from the packet headers and the sock struct
+            // pull in details from the packet headers and the sock struct
             bpf_probe_read(&state, sizeof(u8), (u8 *)&sk->__sk_common.skc_state);
         }
         return trace_pkt_drop(args, state, &skb, reason);

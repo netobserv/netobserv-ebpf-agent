@@ -32,11 +32,11 @@ static __always_inline int is_equal_ip(u8 *ip1, u8 *ip2, u8 len) {
             return 0;
         }
     }
-   return 1;
+    return 1;
 }
 
-static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_t *key, filter_action *action,
-                                                 u8 len, u8 offset) {
+static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_t *key,
+                                                 filter_action *action, u8 len, u8 offset) {
     int result = 0;
 
     struct filter_value_t *rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, key);
@@ -68,7 +68,8 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                             goto end;
                         }
                     } else if (rule->dstPortStart != 0 && rule->dstPortEnd != 0) {
-                        if (rule->dstPortStart <= id->dst_port && id->dst_port <= rule->dstPortEnd) {
+                        if (rule->dstPortStart <= id->dst_port &&
+                            id->dst_port <= rule->dstPortEnd) {
                             BPF_PRINTK("dstPortStart and dstPortEnd matched\n");
                             result++;
                         } else {
@@ -86,7 +87,8 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                             goto end;
                         }
                     } else if (rule->srcPortStart != 0 && rule->srcPortEnd != 0) {
-                        if (rule->srcPortStart <= id->src_port && id->src_port <= rule->srcPortEnd) {
+                        if (rule->srcPortStart <= id->src_port &&
+                            id->src_port <= rule->srcPortEnd) {
                             BPF_PRINTK("srcPortStart and srcPortEnd matched\n");
                             result++;
                         } else {
@@ -137,8 +139,8 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                     break;
                 }
             } else {
-               result = 0;
-               goto end;
+                result = 0;
+                goto end;
             }
         }
 
