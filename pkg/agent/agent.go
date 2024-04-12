@@ -177,14 +177,25 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	ebpfConfig := &ebpf.FlowFetcherConfig{
-		EnableIngress: ingress,
-		EnableEgress:  egress,
-		Debug:         debug,
-		Sampling:      cfg.Sampling,
-		CacheMaxSize:  cfg.CacheMaxFlows,
-		PktDrops:      cfg.EnablePktDrops,
-		DNSTracker:    cfg.EnableDNSTracking,
-		EnableRTT:     cfg.EnableRTT,
+		EnableIngress:    ingress,
+		EnableEgress:     egress,
+		Debug:            debug,
+		Sampling:         cfg.Sampling,
+		CacheMaxSize:     cfg.CacheMaxFlows,
+		PktDrops:         cfg.EnablePktDrops,
+		DNSTracker:       cfg.EnableDNSTracking,
+		EnableRTT:        cfg.EnableRTT,
+		EnableFlowFilter: cfg.EnableFlowFilter,
+		FlowFilterConfig: &ebpf.FlowFilterConfig{
+			FlowFilterAction:          cfg.FlowFilterAction,
+			FlowFilterDirection:       cfg.FlowFilterDirection,
+			FlowFilterIPCIDR:          cfg.FlowFilterIPCIDR,
+			FlowFilterProtocol:        cfg.FlowFilterProtocol,
+			FlowFilterPeerIP:          cfg.FlowFilterPeerIP,
+			FlowFilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterDestinationPort, cfg.FlowFilterDestinationPortRange),
+			FlowFilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterSourcePort, cfg.FlowFilterSourcePortRange),
+			FlowFilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterPort, cfg.FlowFilterPortRange),
+		},
 	}
 
 	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)

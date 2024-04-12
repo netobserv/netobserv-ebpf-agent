@@ -49,7 +49,7 @@ static inline int trace_pkt_drop(void *ctx, u8 state,
     }
 
     long ret = 0;
-    for (direction_t dir = INGRESS; dir < MAX_DIRECTION; dir++) {
+    for (direction dir = INGRESS; dir < MAX_DIRECTION; dir++) {
         id.direction = dir;
         ret = pkt_drop_lookup_and_update_flow(skb, &id, state, flags, reason);
         if (ret == 0) {

@@ -41,7 +41,16 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
     __type(key, u32);
     __type(value, u32);
-    __uint(max_entries, 1);
+    __uint(max_entries, MAX_DROPPED_FLOWS_KEY);
 } global_counters SEC(".maps");
+
+// LPM trie map used to filter traffic by IP address CIDR and direction
+struct {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __type(key, struct filter_key_t);
+    __type(value, struct filter_value_t);
+    __uint(max_entries, MAX_FILTER_ENTRIES);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+} filter_map SEC(".maps");
 
 #endif //__MAPS_DEFINITION_H__

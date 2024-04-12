@@ -71,11 +71,34 @@ The following environment variables are available to configure the NetObserv eBF
   If it is not set, profile is disabled.
 * `ENABLE_RTT` (default: `false` disabled). If `true` enables RTT calculations for the captured flows in the ebpf agent.
   See [docs](./rtt_calculations.md) for more details on this feature.
+* `ENABLE_PKT_DROPS` (default: `false` disabled). If `true` enables packet drops eBPF hook to be able to capture drops flows in the ebpf agent.
+* `ENABLE_DNS_TRACKING` (default: `false` disabled). If `true` enables DNS tracking to calculate DNS latency for the captured flows in the ebpf agent.
 * `ENABLE_PCA` (default: `false` disabled). If `true` enables Packet Capture Agent. 
 * `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
   `PCA_FILTER=tcp,22`.
 * `PCA_SERVER_PORT` (default: 0). Works only when `ENABLE_PCA` is set. Agent opens PCA Server at this port. A collector can connect to it and recieve filtered packets as pcap stream. The filter is set using `PCA_FILTER`.
 * `FLP_CONFIG`: [flowlogs-pipeline](https://github.com/netobserv/flowlogs-pipeline) configuration as YAML or JSON, used when `EXPORT` is `direct-flp`. The ingest stage must be omitted from this configuration, since it is handled internally by the agent. The first stage should follow "preset-ingester". E.g, for a minimal configuration printing on terminal: `{"pipeline":[{"name": "writer","follows": "preset-ingester"}],"parameters":[{"name": "writer","write": {"type": "stdout"}}]}`. Refer to flowlogs-pipeline documentation for more options.
+* `METRICS_ENABLED` (default: `false`). If `true`, the agent will export metrics to the configured `EXPORT` endpoint.
+  * `METRICS_SERVER_ADDRESS` Address of the server where the metrics will be exported.
+  * `METRICS_SERVER_PORT` (default: 9090). Port of the server where the metrics will be exported.
+  * `METRICS_TLS_CERT_PATH` (default: unset). Path to the certificate file for the TLS connection.
+  * `METRICS_TLS_KEY_PATH` (default: unset). Path to the private key file for the TLS connection.
+  * `METRICS_PREFIX` (default: `ebpf-agent`). Prefix for the exported metrics.
+* `ENABLE_FLOW_FILTER` (default: `false`). If `true`, the agent will filter flows based on the configured `FLOW_FILTER`.
+  See [docs](./flow_filtering.md) for more details on this feature.
+  * `FLOW_FILTER_DIRECTION` (default: unset). Direction of the flows to be filtered. Accepted values are `ingress`, `egress`, this is optional configuration.
+  * `FLOW_FILTER_IP_CIDR` (default: unset). IP CIDR to be filtered. Accepted format: `192.168.1.0/24` this field is mandatory.
+  * `FLOW_FILTER_PROTOCOL` (default: unset). Protocol to be filtered. Accepted values are `TCP`, `UDP`, `SCTP`, `ICMP`, `ICMPv6`, this is optional configuration.
+  * `FLOW_FILTER_SOURCE_PORT` (default: unset). Source port to be filtered. Accepted format: `80` this field is optional.
+  * `FLOW_FILTER_DESTINATION_PORT` (default: unset). Destination port to be filtered. Accepted format: `80` this field is optional.
+  * `FLOW_FILTER_PORT` (default: unset). Port to be filtered can be either source or dst port. Accepted format: `80` this field is optional.
+  * `FLOW_FILTER_SOURCE_PORT_RANGE` (default: unset). Source port range to be filtered. Accepted format: `80-90` this field is optional.
+  * `FLOW_FILTER_DESTINATION_PORT_RANGE` (default: unset). Destination port range to be filtered. Accepted format: `80-90` this field is optional.
+  * `FLOW_FILTER_PORT_RANGE` (default: unset). Port range to be filtered can be either source or dst port. Accepted format: `80-90` this field
+  * `FLOW_FILTER_ICMP_TYPE` (default: unset). ICMP type to be filtered. Accepted format: `8` this field is optional.
+  * `FLOW_FILTER_ICMP_CODE` (default: unset). ICMP code to be filtered. Accepted format: `8` this field is optional.
+  * `FLOW_FILTER_PEER_IP` (default: unset). Peer IP address to be filtered. Accepted format: `192.168.1.1` this field is optional.
+  * `FLOW_FILTER_ACTION` (default: unset). Action to be taken when the flow is filtered. Accepted values are `Accept`, `Reject`.
 
 
 ## Development-only variables

@@ -27,7 +27,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64,ppc64le,s390x -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t -type global_counters_key_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
+//go:generate bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS -target amd64,arm64,ppc64le,s390x -type flow_metrics_t -type flow_id_t -type flow_record_t -type pkt_drops_t -type dns_record_t -type global_counters_key_t -type direction_t -type filter_action_t Bpf ../../bpf/flows.c -- -I../../bpf/headers
 
 const (
 	qdiscType = "clsact"
@@ -35,14 +35,15 @@ const (
 	aggregatedFlowsMap = "aggregated_flows"
 	dnsLatencyMap      = "dns_flows"
 	// constants defined in flows.c as "volatile const"
-	constSampling          = "sampling"
-	constTraceMessages     = "trace_messages"
-	constEnableRtt         = "enable_rtt"
-	constEnableDNSTracking = "enable_dns_tracking"
-	pktDropHook            = "kfree_skb"
-	constPcaPort           = "pca_port"
-	constPcaProto          = "pca_proto"
-	pcaRecordsMap          = "packet_record"
+	constSampling            = "sampling"
+	constTraceMessages       = "trace_messages"
+	constEnableRtt           = "enable_rtt"
+	constEnableDNSTracking   = "enable_dns_tracking"
+	constEnableFlowFiltering = "enable_flows_filtering"
+	pktDropHook              = "kfree_skb"
+	constPcaPort             = "pca_port"
+	constPcaProto            = "pca_proto"
+	pcaRecordsMap            = "packet_record"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -68,14 +69,16 @@ type FlowFetcher struct {
 }
 
 type FlowFetcherConfig struct {
-	EnableIngress bool
-	EnableEgress  bool
-	Debug         bool
-	Sampling      int
-	CacheMaxSize  int
-	PktDrops      bool
-	DNSTracker    bool
-	EnableRTT     bool
+	EnableIngress    bool
+	EnableEgress     bool
+	Debug            bool
+	Sampling         int
+	CacheMaxSize     int
+	PktDrops         bool
+	DNSTracker       bool
+	EnableRTT        bool
+	EnableFlowFilter bool
+	FlowFilterConfig *FlowFilterConfig
 }
 
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
@@ -111,11 +114,17 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		spec.Maps[dnsLatencyMap].MaxEntries = 1
 	}
 
+	enableFlowFiltering := 0
+	if cfg.EnableFlowFilter {
+		enableFlowFiltering = 1
+	}
+
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:          uint32(cfg.Sampling),
-		constTraceMessages:     uint8(traceMsgs),
-		constEnableRtt:         uint8(enableRtt),
-		constEnableDNSTracking: uint8(enableDNSTracking),
+		constSampling:            uint32(cfg.Sampling),
+		constTraceMessages:       uint8(traceMsgs),
+		constEnableRtt:           uint8(enableRtt),
+		constEnableDNSTracking:   uint8(enableDNSTracking),
+		constEnableFlowFiltering: uint8(enableFlowFiltering),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -127,6 +136,13 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	objects, err := kernelSpecificLoadAndAssign(oldKernel, spec)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.EnableFlowFilter {
+		f := NewFlowFilter(&objects, cfg.FlowFilterConfig)
+		if err := f.ProgramFlowFilter(); err != nil {
+			return nil, fmt.Errorf("programming flow filter: %w", err)
+		}
 	}
 
 	log.Debugf("Deleting specs for PCA")
@@ -346,6 +362,9 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.GlobalCounters.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.FilterMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -455,18 +474,29 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[BpfFlowId][]B
 	return flows
 }
 
-// ReadGlobalCounter reads the global counter and updates hashmap update error counter metrics
+// ReadGlobalCounter reads the global counter and updates drop flows counter metrics
 func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
-	key := BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY
-
-	if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
-		log.WithError(err).Warnf("couldn't read global counter")
-		return
+	reasons := []string{
+		"CannotUpdateHashMapCounter",
+		"FlowFilterRejectCounter",
+		"FlowFilterAcceptCounter",
+		"FlowFilterNoMatchCounter",
 	}
-	// aggregate all the counters
-	for _, counter := range allCPUValue {
-		met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateHashMapCounter").Add(float64(counter))
+
+	for key := BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY; key < BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY; key++ {
+		if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
+			log.WithError(err).Warnf("couldn't read global counter")
+			return
+		}
+		// aggregate all the counters
+		for _, counter := range allCPUValue {
+			if key == BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY {
+				met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
+			} else {
+				met.FilteredFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
+			}
+		}
 	}
 }
 
@@ -601,6 +631,7 @@ func NewPacketFetcher(
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)
+	delete(spec.Programs, constEnableFlowFiltering)
 
 	pcaPort := 0
 	pcaProto := 0
