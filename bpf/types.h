@@ -23,20 +23,20 @@
 #define FIN_ACK_FLAG 0x200
 #define RST_ACK_FLAG 0x400
 
-#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&                                 \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define bpf_ntohs(x)        __builtin_bswap16(x)
-#define bpf_htons(x)        __builtin_bswap16(x)
-#define bpf_ntohl(x)        __builtin_bswap32(x)
-#define bpf_htonl(x)        __builtin_bswap32(x)
-#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
+#define bpf_ntohs(x) __builtin_bswap16(x)
+#define bpf_htons(x) __builtin_bswap16(x)
+#define bpf_ntohl(x) __builtin_bswap32(x)
+#define bpf_htonl(x) __builtin_bswap32(x)
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                  \
     __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#define bpf_ntohs(x)        (x)
-#define bpf_htons(x)        (x)
-#define bpf_ntohl(x)        (x)
-#define bpf_htonl(x)        (x)
+#define bpf_ntohs(x) (x)
+#define bpf_htons(x) (x)
+#define bpf_ntohl(x) (x)
+#define bpf_htonl(x) (x)
 #else
-# error "Endianness detection needs to be set up for your compiler?!"
+#error "Endianness detection needs to be set up for your compiler?!"
 #endif
 
 typedef __u8 u8;
@@ -44,7 +44,7 @@ typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
 
-#define AF_INET  2
+#define AF_INET 2
 #define AF_INET6 10
 #define ETH_ALEN 6
 #define ETH_P_IP 0x0800
@@ -59,9 +59,9 @@ typedef __u64 u64;
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
-    INGRESS         = 0,
-    EGRESS          = 1,
-    MAX_DIRECTION   = 2,
+    INGRESS = 0,
+    EGRESS = 1,
+    MAX_DIRECTION = 2,
 } direction;
 // Force emitting enum direction_t into the ELF.
 const enum direction_t *unused8 __attribute__((unused));
@@ -122,8 +122,8 @@ typedef struct flow_id_t {
     u16 dst_port;
     u8 transport_protocol;
     // ICMP protocol
-    u8  icmp_type;
-    u8  icmp_code;
+    u8 icmp_type;
+    u8 icmp_code;
     // OS interface index
     u32 if_index;
 } __attribute__((packed)) flow_id;
@@ -161,7 +161,7 @@ typedef struct pkt_info_t {
 typedef struct payload_meta_t {
     u32 if_index;
     u32 pkt_len;
-    u64 timestamp;  // timestamp when packet received by ebpf
+    u64 timestamp; // timestamp when packet received by ebpf
 } __attribute__((packed)) payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response
@@ -176,11 +176,11 @@ typedef struct dns_flow_id_t {
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
-    HASHMAP_FLOWS_DROPPED_KEY   = 0,
-    FILTER_FLOWS_REJECT_KEY     = 1,
-    FILTER_FLOWS_ACCEPT_KEY     = 2,
-    FILTER_FLOWS_NOMATCH_KEY    = 3,
-    MAX_DROPPED_FLOWS_KEY       = 4,
+    HASHMAP_FLOWS_DROPPED_KEY = 0,
+    FILTER_FLOWS_REJECT_KEY = 1,
+    FILTER_FLOWS_ACCEPT_KEY = 2,
+    FILTER_FLOWS_NOMATCH_KEY = 3,
+    MAX_DROPPED_FLOWS_KEY = 4,
 } global_counters_key;
 
 // Force emitting enum global_counters_key_t into the ELF.
@@ -196,8 +196,8 @@ const struct filter_key_t *unused6 __attribute__((unused));
 
 // Enum to define filter action
 typedef enum filter_action_t {
-    ACCEPT         = 0,
-    REJECT         = 1,
+    ACCEPT = 0,
+    REJECT = 1,
     MAX_FILTER_ACTIONS = 2,
 } filter_action;
 // Force emitting enum direction_t into the ELF.
@@ -221,6 +221,4 @@ struct filter_value_t {
 // Force emitting struct filter_value_t into the ELF.
 const struct filter_value_t *unused9 __attribute__((unused));
 
-
 #endif /* __TYPES_H__ */
-

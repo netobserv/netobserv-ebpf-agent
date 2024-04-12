@@ -72,9 +72,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     // check if this packet need to be filtered if filtering feature is enabled
     if (enable_flows_filtering) {
-        u32* filter_counter_p = NULL;
+        u32 *filter_counter_p = NULL;
         u32 initVal = 1, key = 0;
-        if (is_flow_filtered(&id, &action) != 0 && action !=  MAX_FILTER_ACTIONS) {
+        if (is_flow_filtered(&id, &action) != 0 && action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases
             u32 reject_key = FILTER_FLOWS_REJECT_KEY, accept_key = FILTER_FLOWS_ACCEPT_KEY;
@@ -116,7 +116,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
                 return TC_ACT_OK;
             } else {
-            // we have reject rule and no match so we can add the flows to the hashmap table.
+                // we have reject rule and no match so we can add the flows to the hashmap table.
             }
         }
     }
@@ -197,7 +197,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             }
 
             new_flow.errno = -ret;
-            flow_record *record = (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
+            flow_record *record =
+                (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
             if (!record) {
                 if (trace_messages) {
                     bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
@@ -223,4 +224,3 @@ int egress_flow_parse(struct __sk_buff *skb) {
 }
 
 char _license[] SEC("license") = "GPL";
-

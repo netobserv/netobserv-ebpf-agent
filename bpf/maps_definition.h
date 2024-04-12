@@ -21,8 +21,8 @@ struct {
 //PerfEvent Array for Packet Payloads
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-	__type(key, u32);
-	__type(value, u32);
+    __type(key, u32);
+    __type(value, u32);
     __uint(max_entries, 256);
 } packet_record SEC(".maps");
 
@@ -30,7 +30,7 @@ struct {
 // to allow calculating latency in ebpf agent directly
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1 << 20);   // Will take around 64MB of space.
+    __uint(max_entries, 1 << 20); // Will take around 64MB of space.
     __type(key, dns_flow_id);
     __type(value, u64);
     __uint(map_flags, BPF_F_NO_PREALLOC);
