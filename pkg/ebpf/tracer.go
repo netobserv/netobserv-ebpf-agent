@@ -483,7 +483,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		"FlowFilterAcceptCounter",
 		"FlowFilterNoMatchCounter",
 	}
-
+	zeroCounters := make([]uint32, ebpf.MustPossibleCPU())
 	for key := BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY; key < BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY; key++ {
 		if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
 			log.WithError(err).Warnf("couldn't read global counter")
@@ -496,6 +496,11 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 			} else {
 				met.FilteredFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
 			}
+		}
+		// reset the global counter map entry
+		if err := m.objects.GlobalCounters.Put(key, zeroCounters); err != nil {
+			log.WithError(err).Warnf("coudn't reset global counter")
+			return
 		}
 	}
 }
