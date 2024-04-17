@@ -17,7 +17,7 @@ type ClientConnection struct {
 func ConnectClient(hostIP string, hostPort int) (*ClientConnection, error) {
 	// TODO: allow configuring some options (keepalive, backoff...)
 	socket := utils.GetSocket(hostIP, hostPort)
-	conn, err := grpc.Dial(socket,
+	conn, err := grpc.NewClient(socket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
