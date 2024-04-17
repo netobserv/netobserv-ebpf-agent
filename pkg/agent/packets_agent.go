@@ -40,7 +40,7 @@ type Packets struct {
 type ebpfPacketFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
-
+	AttachTCX(iface ifaces.Interface) error
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }
@@ -246,10 +246,14 @@ func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	plog.WithField("[PCA]interface", iface).Info("interface detected. Registering packets ebpfFetcher")
-	if err := p.ebpf.Register(iface); err != nil {
+	plog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
+	if err := p.ebpf.AttachTCX(iface); err != nil {
 		plog.WithField("[PCA]interface", iface).WithError(err).
-			Warn("can't register packet ebpfFetcher. Ignoring")
-		return
+			Info("can't attach to TCx hook packet ebpfFetcher. fall back to use legacy TC hook")
+		if err := p.ebpf.Register(iface); err != nil {
+			plog.WithField("[PCA]interface", iface).WithError(err).
+				Warn("can't register packet ebpfFetcher. Ignoring")
+			return
+		}
 	}
 }

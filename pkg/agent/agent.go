@@ -125,6 +125,7 @@ type Flows struct {
 type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
+	AttachTCX(iface ifaces.Interface) error
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
@@ -509,10 +510,14 @@ func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	alog.WithField("interface", iface).Info("interface detected. Registering flow ebpfFetcher")
-	if err := f.ebpf.Register(iface); err != nil {
+	alog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
+	if err := f.ebpf.AttachTCX(iface); err != nil {
 		alog.WithField("interface", iface).WithError(err).
-			Warn("can't register flow ebpfFetcher. Ignoring")
-		return
+			Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
+		if err := f.ebpf.Register(iface); err != nil {
+			alog.WithField("interface", iface).WithError(err).
+				Warn("can't register flow ebpfFetcher. Ignoring")
+			return
+		}
 	}
 }
