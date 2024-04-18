@@ -43,7 +43,6 @@
 #include "flows_filter.h"
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
-    filter_action action = ACCEPT;
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
         return TC_ACT_OK;
@@ -71,54 +70,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     id.direction = direction;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    if (enable_flows_filtering) {
-        u32 *filter_counter_p = NULL;
-        u32 initVal = 1, key = 0;
-        if (is_flow_filtered(&id, &action) != 0 && action != MAX_FILTER_ACTIONS) {
-            // we have matching rules follow through the actions to decide if we should accept or reject the flow
-            // and update global counter for both cases
-            u32 reject_key = FILTER_FLOWS_REJECT_KEY, accept_key = FILTER_FLOWS_ACCEPT_KEY;
-            bool skip = false;
-
-            switch (action) {
-            case REJECT:
-                key = reject_key;
-                skip = true;
-                break;
-            case ACCEPT:
-                key = accept_key;
-                break;
-            // should never come here
-            case MAX_FILTER_ACTIONS:
-                return TC_ACT_OK;
-            }
-
-            // update global counter for flows dropped by filter
-            filter_counter_p = bpf_map_lookup_elem(&global_counters, &key);
-            if (!filter_counter_p) {
-                bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
-            } else {
-                __sync_fetch_and_add(filter_counter_p, 1);
-            }
-            if (skip) {
-                return TC_ACT_OK;
-            }
-        } else {
-            // we have no matching rules so we update global counter for flows that are not matched by any rule
-            key = FILTER_FLOWS_NOMATCH_KEY;
-            filter_counter_p = bpf_map_lookup_elem(&global_counters, &key);
-            if (!filter_counter_p) {
-                bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
-            } else {
-                __sync_fetch_and_add(filter_counter_p, 1);
-            }
-            // we have accept rule but no match so we can't let mismatched flows in the hashmap table.
-            if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
-                return TC_ACT_OK;
-            } else {
-                // we have reject rule and no match so we can add the flows to the hashmap table.
-            }
-        }
+    bool skip = check_and_do_flow_filtering(&id);
+    if (skip) {
+        return TC_ACT_OK;
     }
 
     int dns_errno = 0;

@@ -124,6 +124,12 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     rtt = BPF_CORE_READ(ts, srtt_us) >> 3;
     rtt *= 1000u;
 
+    // check if this packet need to be filtered if filtering feature is enabled
+    bool skip = check_and_do_flow_filtering(&id);
+    if (skip) {
+        return 0;
+    }
+
     // update flow with rtt info
     id.direction = INGRESS;
     ret = rtt_lookup_and_update_flow(&id, flags, rtt);
