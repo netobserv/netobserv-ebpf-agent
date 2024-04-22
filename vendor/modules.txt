@@ -32,7 +32,7 @@ github.com/cenkalti/backoff/v4
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/cilium/ebpf v0.14.0
+# github.com/cilium/ebpf v0.15.0
 ## explicit; go 1.21.0
 github.com/cilium/ebpf
 github.com/cilium/ebpf/asm
