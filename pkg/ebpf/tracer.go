@@ -606,10 +606,16 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		// Here we define another structure similar to the bpf2go created one but w/o the hooks that does not exist in older kernel
 		// Note: if new hooks are added in the future we need to update the following structures manually
 		type NewBpfPrograms struct {
-			TcEgressFlowParse  *ebpf.Program `ebpf:"egress_flow_parse"`
-			TcIngressFlowParse *ebpf.Program `ebpf:"ingress_flow_parse"`
-			TCPRcvFentry       *ebpf.Program `ebpf:"tcp_rcv_fentry"`
-			TCPRcvKprobe       *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
+			TcEgressFlowParse   *ebpf.Program `ebpf:"tc_egress_flow_parse"`
+			TcIngressFlowParse  *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
+			TcxEgressFlowParse  *ebpf.Program `ebpf:"tcx_egress_flow_parse"`
+			TcxIngressFlowParse *ebpf.Program `ebpf:"tcx_ingress_flow_parse"`
+			TcEgressPcaParse    *ebpf.Program `ebpf:"tc_egress_pca_parse"`
+			TcIngressPcaParse   *ebpf.Program `ebpf:"tc_ingress_pca_parse"`
+			TcxEgressPcaParse   *ebpf.Program `ebpf:"tcx_egress_pca_parse"`
+			TcxIngressPcaParse  *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
+			TCPRcvFentry        *ebpf.Program `ebpf:"tcp_rcv_fentry"`
+			TCPRcvKprobe        *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 		}
 		type NewBpfObjects struct {
 			NewBpfPrograms
@@ -634,6 +640,12 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.AggregatedFlows = newObjects.AggregatedFlows
 		objects.TcEgressFlowParse = newObjects.TcEgressFlowParse
 		objects.TcIngressFlowParse = newObjects.TcIngressFlowParse
+		objects.TcxEgressFlowParse = newObjects.TcxEgressFlowParse
+		objects.TcxIngressFlowParse = newObjects.TcxIngressFlowParse
+		objects.TcEgressPcaParse = newObjects.TcEgressPcaParse
+		objects.TcIngressPcaParse = newObjects.TcIngressPcaParse
+		objects.TcxEgressPcaParse = newObjects.TcxEgressPcaParse
+		objects.TcxIngressPcaParse = newObjects.TcxIngressPcaParse
 		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
 		objects.GlobalCounters = newObjects.GlobalCounters
@@ -873,7 +885,7 @@ func fetchEgressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebpf
 }
 
 func (p *PacketFetcher) registerEgress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.TcEgressPcaParse, "egress_pca_parse")
+	egressFilter, err := fetchEgressEvents(iface, ipvlan, p.objects.TcEgressPcaParse, "tc_egress_pca_parse")
 	if err != nil {
 		return err
 	}
@@ -912,7 +924,7 @@ func fetchIngressEvents(iface ifaces.Interface, ipvlan netlink.Link, parser *ebp
 }
 
 func (p *PacketFetcher) registerIngress(iface ifaces.Interface, ipvlan netlink.Link) error {
-	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.TcIngressPcaParse, "ingress_pca_parse")
+	ingressFilter, err := fetchIngressEvents(iface, ipvlan, p.objects.TcIngressPcaParse, "tc_ingress_pca_parse")
 	if err != nil {
 		return err
 	}
