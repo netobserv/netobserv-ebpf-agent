@@ -102,7 +102,7 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
                 bpf_map_delete_elem(&dns_flows, &dns_req);
             }
         } // end of dns response
-    }     // end of dns port check
+    } // end of dns port check
     return 0;
 }
 
