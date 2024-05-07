@@ -25,7 +25,7 @@ require (
 	github.com/vmware/go-ipfix v0.9.0
 	golang.org/x/sys v0.20.0
 	google.golang.org/grpc v1.63.0
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.29.4
 	k8s.io/apimachinery v0.29.4
