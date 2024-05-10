@@ -638,6 +638,9 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		// Note for any future maps or programs make sure to copy them manually here
 		objects.DirectFlows = newObjects.DirectFlows
 		objects.AggregatedFlows = newObjects.AggregatedFlows
+		objects.DnsFlows = newObjects.DnsFlows
+		objects.FilterMap = newObjects.FilterMap
+		objects.GlobalCounters = newObjects.GlobalCounters
 		objects.TcEgressFlowParse = newObjects.TcEgressFlowParse
 		objects.TcIngressFlowParse = newObjects.TcIngressFlowParse
 		objects.TcxEgressFlowParse = newObjects.TcxEgressFlowParse
@@ -648,7 +651,6 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.TcxIngressPcaParse = newObjects.TcxIngressPcaParse
 		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
-		objects.GlobalCounters = newObjects.GlobalCounters
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
