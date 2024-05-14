@@ -357,7 +357,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 	if err != nil {
 		return fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
 	}
-	defer handle.Delete()
+	defer handle.Close()
 
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	ipvlan, err := handle.LinkByIndex(iface.Index)
@@ -886,7 +886,7 @@ func registerInterface(iface ifaces.Interface) (*netlink.GenericQdisc, netlink.L
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
 	}
-	defer handle.Delete()
+	defer handle.Close()
 
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	ipvlan, err := handle.LinkByIndex(iface.Index)

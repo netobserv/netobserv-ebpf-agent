@@ -19,6 +19,7 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
+	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/sirupsen/logrus"
@@ -317,7 +318,15 @@ func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
+	var s *ovnobserv.SampleDecoder
+	var err error
+	if cfg.EnableOVSMonitoring {
+		if s, err = ovnobserv.NewSampleDecoder(context.Background()); err != nil {
+			alog.Warnf("failed to create OVS sample decoder: %v", err)
+			return nil, fmt.Errorf("failed to create OVS sample decoder: %w", err)
+		}
+	}
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m, s)
 	if err != nil {
 		return nil, err
 	}

@@ -50,7 +50,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 	klog.Debugf("sending %d records", len(records))
 	msgs := make([]kafkago.Message, 0, len(records))
 	for _, record := range records {
-		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record))
+		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record, nil))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			kp.Metrics.Errors.WithErrorName(componentKafka, "CannotEncodeMessage").Inc()
