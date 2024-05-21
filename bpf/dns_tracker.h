@@ -97,10 +97,10 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
             u64 *value = bpf_map_lookup_elem(&dns_flows, &dns_req);
             if (value != NULL) {
                 pkt->dns_latency = ts - *value;
-                pkt->dns_id = dns_id;
-                pkt->dns_flags = flags;
                 bpf_map_delete_elem(&dns_flows, &dns_req);
             }
+            pkt->dns_id = dns_id;
+            pkt->dns_flags = flags;
         } // end of dns response
     }
     return 0;
