@@ -1,6 +1,7 @@
 module github.com/netobserv/netobserv-ebpf-agent
 
 go 1.21.0
+toolchain go1.22.3
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
@@ -25,8 +26,8 @@ require (
 	google.golang.org/grpc v1.63.0
 	google.golang.org/protobuf v1.34.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.29.4
-	k8s.io/apimachinery v0.29.4
+	k8s.io/api v0.30.1
+	k8s.io/apimachinery v0.30.1
 	k8s.io/client-go v0.29.4
 	sigs.k8s.io/e2e-framework v0.3.0
 )
@@ -123,8 +124,8 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/klog/v2 v2.110.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
+	k8s.io/klog/v2 v2.120.1 // indirect
+	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
 	sigs.k8s.io/controller-runtime v0.15.1 // indirect
