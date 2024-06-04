@@ -45,9 +45,10 @@
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
+        do_sampling = 0;
         return TC_ACT_OK;
     }
-
+    do_sampling = 1;
     pkt_info pkt;
     __builtin_memset(&pkt, 0, sizeof(pkt));
 
