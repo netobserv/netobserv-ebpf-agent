@@ -5,6 +5,8 @@
 #include "maps_definition.h"
 #include "flows_filter.h"
 
+static u8 do_sampling = 0;
+
 // sets the TCP header flags for connection information
 static inline void set_flags(struct tcphdr *th, u16 *flags) {
     //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake.
