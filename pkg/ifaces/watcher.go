@@ -50,8 +50,7 @@ func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 		go w.sendUpdates(ctx, netns.None(), out)
 	} else {
 		for _, nsh := range nsHandles {
-			nsHandle := nsh
-			go w.sendUpdates(ctx, nsHandle, out)
+			go w.sendUpdates(ctx, nsh, out)
 		}
 	}
 	// register to get notification when netns is created or deleted and register for link update for new netns
