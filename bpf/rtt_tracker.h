@@ -157,7 +157,7 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
 
 SEC("fentry/tcp_rcv_established")
 int BPF_PROG(tcp_rcv_fentry, struct sock *sk, struct sk_buff *skb) {
-    if (sk == NULL || skb == NULL) {
+    if (sk == NULL || skb == NULL || do_sampling == 0) {
         return 0;
     }
     return calculate_flow_rtt_tcp(sk, skb);
@@ -165,7 +165,7 @@ int BPF_PROG(tcp_rcv_fentry, struct sock *sk, struct sk_buff *skb) {
 
 SEC("kprobe/tcp_rcv_established")
 int BPF_KPROBE(tcp_rcv_kprobe, struct sock *sk, struct sk_buff *skb) {
-    if (sk == NULL || skb == NULL) {
+    if (sk == NULL || skb == NULL || do_sampling == 0) {
         return 0;
     }
     return calculate_flow_rtt_tcp(sk, skb);
