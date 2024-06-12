@@ -112,7 +112,7 @@ static inline int trace_ovs_dp(struct sk_buff *skb, struct psample_metadata *md)
 SEC("kprobe/psample_sample_packet")
 int BPF_KPROBE(ovs_dp_monitor, void *group, struct sk_buff *skb, u32 sample_rate,
                struct psample_metadata *md) {
-    if (enable_ovs_monitoring == 0) {
+    if (enable_ovs_monitoring == 0 || do_sampling == 0) {
         return 0;
     }
     if (skb == NULL || md == NULL) {
