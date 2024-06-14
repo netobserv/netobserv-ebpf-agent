@@ -91,15 +91,9 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	if debugging {
 		m.stats.logRingBufferFlows(mapFullError)
 	}
-	// if the flow was received due to lack of space in the eBPF map
-	// forces a flow's eviction to leave room for new flows in the ebpf cache
-	var reason string
-	if mapFullError {
-		m.mapFlusher.Flush()
-		reason = "mapfull"
-	}
+	errno := syscall.Errno(readFlow.Metrics.Errno)
 	// In ringbuffer, a "flow" is a 1-packet flow, it hasn't gone through aggregation yet. So we use the packet counter metric.
-	m.metrics.EvictedPacketsCounter.WithSourceAndReason("ringbuffer", reason).Inc()
+	m.metrics.EvictedPacketsCounter.WithSourceAndReason("ringbuffer", errno.Error()).Inc()
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
 	return nil
