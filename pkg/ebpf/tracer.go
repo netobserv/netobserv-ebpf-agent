@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -42,8 +40,7 @@ const (
 	constEnableDNSTracking   = "enable_dns_tracking"
 	constEnableFlowFiltering = "enable_flows_filtering"
 	pktDropHook              = "kfree_skb"
-	constPcaPort             = "pca_port"
-	constPcaProto            = "pca_proto"
+	constPcaEnable           = "enable_pca"
 	pcaRecordsMap            = "packet_record"
 )
 
@@ -81,7 +78,8 @@ type FlowFetcherConfig struct {
 	DNSTracker       bool
 	EnableRTT        bool
 	EnableFlowFilter bool
-	FlowFilterConfig *FlowFilterConfig
+	EnablePCA        bool
+	FilterConfig     *FilterConfig
 }
 
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
@@ -142,8 +140,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	if cfg.EnableFlowFilter {
-		f := NewFlowFilter(&objects, cfg.FlowFilterConfig)
-		if err := f.ProgramFlowFilter(); err != nil {
+		f := NewFilter(&objects, cfg.FilterConfig)
+		if err := f.ProgramFilter(); err != nil {
 			return nil, fmt.Errorf("programming flow filter: %w", err)
 		}
 	}
@@ -155,8 +153,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	objects.TcxEgressPcaParse = nil
 	objects.TcIngressPcaParse = nil
-	delete(spec.Programs, constPcaPort)
-	delete(spec.Programs, constPcaProto)
+	delete(spec.Programs, constPcaEnable)
 
 	var pktDropsLink link.Link
 	if cfg.PktDrops && !oldKernel {
@@ -550,9 +547,9 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
 	reasons := []string{
 		"CannotUpdateHashMapCounter",
-		"FlowFilterRejectCounter",
-		"FlowFilterAcceptCounter",
-		"FlowFilterNoMatchCounter",
+		"FilterRejectCounter",
+		"FilterAcceptCounter",
+		"FilterNoMatchCounter",
 	}
 	zeroCounters := make([]uint32, ebpf.MustPossibleCPU())
 	for key := BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY; key < BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY; key++ {
@@ -568,7 +565,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 				met.FilteredFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
 			}
 		}
-		// reset the global counter map entry
+		// reset the global counter-map entry
 		if err := m.objects.GlobalCounters.Put(key, zeroCounters); err != nil {
 			log.WithError(err).Warnf("coudn't reset global counter")
 			return
@@ -698,11 +695,7 @@ type PacketFetcher struct {
 	lookupAndDeleteSupported bool
 }
 
-func NewPacketFetcher(
-	cacheMaxSize int,
-	pcaFilters string,
-	ingress, egress bool,
-) (*PacketFetcher, error) {
+func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
@@ -714,7 +707,7 @@ func NewPacketFetcher(
 		return nil, err
 	}
 
-	// Removing Specs for flows agent
+	// Removing Specs for flow agent
 	objects.TcEgressFlowParse = nil
 	objects.TcIngressFlowParse = nil
 	objects.TcxEgressFlowParse = nil
@@ -727,28 +720,16 @@ func NewPacketFetcher(
 	delete(spec.Programs, constEnableDNSTracking)
 	delete(spec.Programs, constEnableFlowFiltering)
 
-	pcaPort := 0
-	pcaProto := 0
-	filters := strings.Split(strings.ToLower(pcaFilters), ",")
-	if filters[0] == "tcp" {
-		pcaProto = syscall.IPPROTO_TCP
-	} else if filters[0] == "udp" {
-		pcaProto = syscall.IPPROTO_UDP
-	} else {
-		return nil, fmt.Errorf("pca protocol %s not supported. Please use tcp or udp", filters[0])
-	}
-	pcaPort, err = strconv.Atoi(filters[1])
-	if err != nil {
-		return nil, err
+	pcaEnable := 0
+	if cfg.EnablePCA {
+		pcaEnable = 1
 	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constPcaPort:  uint16(pcaPort),
-		constPcaProto: uint8(pcaProto),
+		constPcaEnable: uint8(pcaEnable),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
-	plog.Infof("PCA Filter- Protocol: %d, Port: %d", pcaProto, pcaPort)
 
 	if err := spec.LoadAndAssign(&objects, nil); err != nil {
 		var ve *ebpf.VerifierError
@@ -758,6 +739,11 @@ func NewPacketFetcher(
 			plog.Infof("Verifier error: %+v", ve)
 		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+
+	f := NewFilter(&objects, cfg.FilterConfig)
+	if err := f.ProgramFilter(); err != nil {
+		return nil, fmt.Errorf("programming flow filter: %w", err)
 	}
 
 	// read packets from igress+egress perf array
@@ -772,9 +758,9 @@ func NewPacketFetcher(
 		egressFilters:            map[ifaces.Interface]*netlink.BpfFilter{},
 		ingressFilters:           map[ifaces.Interface]*netlink.BpfFilter{},
 		qdiscs:                   map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:             cacheMaxSize,
-		enableIngress:            ingress,
-		enableEgress:             egress,
+		cacheMaxSize:             cfg.CacheMaxSize,
+		enableIngress:            cfg.EnableIngress,
+		enableEgress:             cfg.EnableEgress,
 		egressTCXLink:            map[ifaces.Interface]link.Link{},
 		ingressTCXLink:           map[ifaces.Interface]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported

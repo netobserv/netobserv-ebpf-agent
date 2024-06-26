@@ -57,31 +57,31 @@ func TestGetPortsFromString(t *testing.T) {
 	}
 }
 
-func TestFlowFilter_getFlowFilterKey(t *testing.T) {
-	f := FlowFilter{}
-	config := &FlowFilterConfig{
-		FlowFilterIPCIDR: "192.168.1.0/24",
+func TestFilter_getFlowFilterKey(t *testing.T) {
+	f := Filter{}
+	config := &FilterConfig{
+		FilterIPCIDR: "192.168.1.0/24",
 	}
 	expectedIP := net.ParseIP("192.168.1.0").To4()
 	expectedPrefixLen := uint32(24)
 
-	key, err := f.getFlowFilterKey(config)
+	key, err := f.getFilterKey(config)
 
 	assert.Nil(t, err)
 	assert.Equal(t, []uint8(expectedIP), key.IpData[:4])
 	assert.Equal(t, expectedPrefixLen, key.PrefixLen)
 }
 
-func TestFlowFilter_getFlowFilterValue(t *testing.T) {
-	f := FlowFilter{}
-	config := &FlowFilterConfig{
-		FlowFilterDirection:       "Ingress",
-		FlowFilterProtocol:        "TCP",
-		FlowFilterSourcePort:      intstr.FromInt32(8080),
-		FlowFilterDestinationPort: intstr.FromString("8000-9000"),
+func TestFilter_getFlowFilterValue(t *testing.T) {
+	f := Filter{}
+	config := &FilterConfig{
+		FilterDirection:       "Ingress",
+		FilterProtocol:        "TCP",
+		FilterSourcePort:      intstr.FromInt32(8080),
+		FilterDestinationPort: intstr.FromString("8000-9000"),
 	}
 
-	value, err := f.getFlowFilterValue(config)
+	value, err := f.getFilterValue(config)
 
 	assert.Nil(t, err)
 	assert.Equal(t, BpfDirectionTINGRESS, value.Direction)
@@ -93,8 +93,8 @@ func TestFlowFilter_getFlowFilterValue(t *testing.T) {
 }
 
 func TestGetSrcPorts(t *testing.T) {
-	config := &FlowFilterConfig{
-		FlowFilterSourcePort: intstr.FromString("8000-9000"),
+	config := &FilterConfig{
+		FilterSourcePort: intstr.FromString("8000-9000"),
 	}
 	start, end := getSrcPorts(config)
 
@@ -103,8 +103,8 @@ func TestGetSrcPorts(t *testing.T) {
 }
 
 func TestGetDstPorts(t *testing.T) {
-	config := &FlowFilterConfig{
-		FlowFilterDestinationPort: intstr.FromInt32(8080),
+	config := &FilterConfig{
+		FilterDestinationPort: intstr.FromInt32(8080),
 	}
 	start, end := getDstPorts(config)
 

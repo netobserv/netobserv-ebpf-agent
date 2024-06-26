@@ -14,6 +14,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 
 	"github.com/cilium/ebpf/perf"
+	"github.com/sirupsen/logrus"
 )
 
 // Packets reporting agent
@@ -68,8 +69,29 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 	}
 
 	ingress, egress := flowDirections(cfg)
+	debug := false
+	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
+		debug = true
+	}
+	ebpfConfig := &ebpf.FlowFetcherConfig{
+		EnableIngress: ingress,
+		EnableEgress:  egress,
+		Debug:         debug,
+		CacheMaxSize:  cfg.CacheMaxFlows,
+		EnablePCA:     cfg.EnablePCA,
+		FilterConfig: &ebpf.FilterConfig{
+			FilterAction:          cfg.FilterAction,
+			FilterDirection:       cfg.FilterDirection,
+			FilterIPCIDR:          cfg.FilterIPCIDR,
+			FilterProtocol:        cfg.FilterProtocol,
+			FilterPeerIP:          cfg.FilterPeerIP,
+			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange),
+			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange),
+			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange),
+		},
+	}
 
-	fetcher, err := ebpf.NewPacketFetcher(cfg.CacheMaxFlows, cfg.PCAFilters, ingress, egress)
+	fetcher, err := ebpf.NewPacketFetcher(ebpfConfig)
 	if err != nil {
 		return nil, err
 	}
