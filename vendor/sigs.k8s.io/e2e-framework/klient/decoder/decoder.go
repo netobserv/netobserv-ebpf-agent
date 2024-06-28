@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
@@ -125,6 +125,12 @@ func DecodeEach(ctx context.Context, manifest io.Reader, handlerFn HandlerFunc, 
 		}
 		obj, err := DecodeAny(bytes.NewReader(b), options...)
 		if err != nil {
+			// Skip the Missing Kind entries. This will avoid unwanted failures of the yaml apply workflow in cases
+			// if the file has an empty item with just comments in it.
+			if runtime.IsMissingKind(err) {
+				klog.V(2).InfoS("Skipping document with missing Kind", "document", strings.TrimSpace(string(b)))
+				continue
+			}
 			return err
 		}
 		if err := handlerFn(ctx, obj); err != nil {
@@ -254,7 +260,7 @@ func MutateAnnotations(overrides map[string]string) DecodeOption {
 		annotations := obj.GetAnnotations()
 		if annotations == nil {
 			annotations = make(map[string]string)
-			obj.SetLabels(annotations)
+			obj.SetAnnotations(annotations)
 		}
 		for key, value := range overrides {
 			annotations[key] = value
