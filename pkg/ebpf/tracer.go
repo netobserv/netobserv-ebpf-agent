@@ -726,6 +726,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
+		constSampling:  uint32(cfg.Sampling),
 		constPcaEnable: uint8(pcaEnable),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)

@@ -77,6 +77,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 		EnableIngress: ingress,
 		EnableEgress:  egress,
 		Debug:         debug,
+		Sampling:      cfg.Sampling,
 		CacheMaxSize:  cfg.CacheMaxFlows,
 		EnablePCA:     cfg.EnablePCA,
 		FilterConfig: &ebpf.FilterConfig{

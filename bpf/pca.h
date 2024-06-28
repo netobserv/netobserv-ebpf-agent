@@ -66,6 +66,11 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
 }
 
 static inline int export_packet_payload(struct __sk_buff *skb, direction dir) {
+    // If sampling is defined, will only parse 1 out of "sampling" flows
+    if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
+        return 0;
+    }
+
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
 
