@@ -28,11 +28,16 @@ type encodeNone struct {
 
 type Encoder interface {
 	Encode(in config.GenericMap)
+	Update(config.StageParam)
 }
 
 // Encode encodes a flow before being stored
 func (t *encodeNone) Encode(in config.GenericMap) {
 	t.prevRecord = in
+}
+
+func (t *encodeNone) Update(_ config.StageParam) {
+	log.Warn("Encode None, update not supported")
 }
 
 // NewEncodeNone create a new encode
