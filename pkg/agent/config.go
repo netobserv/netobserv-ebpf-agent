@@ -164,11 +164,8 @@ type Config struct {
 	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
 	// before being deleted, default is 5 seconds.
 	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
-	// EnablePCA enables Packet Capture Agent (PCA). By default PCA is off.
+	// EnablePCA enables Packet Capture Agent (PCA). By default, PCA is off.
 	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
-	// PCAFilters set the filters to determine packets to filter using Packet Capture Agent (PCA). It is a comma separated set.
-	// The format is [protocol], [port number] Example: PCA_FILTER = "tcp,80". Currently, we support 'tcp','udp','sctp' for protocol.
-	PCAFilters string `env:"PCA_FILTER"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.
@@ -184,40 +181,40 @@ type Config struct {
 
 	// EnableFlowFilter enables flow filter, default is false.
 	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
-	// FlowFilterDirection is the direction of the flow filter.
+	// FilterDirection is the direction of the flow filter.
 	// Possible values are "Ingress" or "Egress".
-	FlowFilterDirection string `env:"FLOW_FILTER_DIRECTION"`
-	// FlowFilterIPCIDR is the IP CIDR to filter flows.
+	FilterDirection string `env:"FILTER_DIRECTION"`
+	// FilterIPCIDR is the IP CIDR to filter flows.
 	// Example: 10.10.10.0/24 or 100:100:100:100::/64
-	FlowFilterIPCIDR string `env:"FLOW_FILTER_IP_CIDR"`
-	// FlowFilterProtocol is the protocol to filter flows.
+	FilterIPCIDR string `env:"FILTER_IP_CIDR"`
+	// FilterProtocol is the protocol to filter flows.
 	// Example: TCP, UDP, SCTP, ICMP, ICMPv6
-	FlowFilterProtocol string `env:"FLOW_FILTER_PROTOCOL"`
-	// FlowFilterSourcePort is the source port to filter flows.
-	FlowFilterSourcePort int32 `env:"FLOW_FILTER_SOURCE_PORT"`
-	// FlowFilterDestinationPort is the destination port to filter flows.
-	FlowFilterDestinationPort int32 `env:"FLOW_FILTER_DESTINATION_PORT"`
-	// FlowFilterPort is the port to filter flows, can be use for either source or destination port.
-	FlowFilterPort int32 `env:"FLOW_FILTER_PORT"`
-	// FlowFilterSourcePortRange is the source port range to filter flows.
+	FilterProtocol string `env:"FILTER_PROTOCOL"`
+	// FilterSourcePort is the source port to filter flows.
+	FilterSourcePort int32 `env:"FILTER_SOURCE_PORT"`
+	// FilterDestinationPort is the destination port to filter flows.
+	FilterDestinationPort int32 `env:"FILTER_DESTINATION_PORT"`
+	// FilterPort is the port to filter flows, can be use for either source or destination port.
+	FilterPort int32 `env:"FILTER_PORT"`
+	// FilterSourcePortRange is the source port range to filter flows.
 	// Example: 8000-8010
-	FlowFilterSourcePortRange string `env:"FLOW_FILTER_SOURCE_PORT_RANGE"`
-	// FlowFilterDestinationPortRange is the destination port range to filter flows.
+	FilterSourcePortRange string `env:"FILTER_SOURCE_PORT_RANGE"`
+	// FilterDestinationPortRange is the destination port range to filter flows.
 	// Example: 8000-8010
-	FlowFilterDestinationPortRange string `env:"FLOW_FILTER_DESTINATION_PORT_RANGE"`
-	// FlowFilterPortRange is the port range to filter flows, can be used for either source or destination port.
+	FilterDestinationPortRange string `env:"FILTER_DESTINATION_PORT_RANGE"`
+	// FilterPortRange is the port range to filter flows, can be used for either source or destination port.
 	// Example: 8000-8010
-	FlowFilterPortRange string `env:"FLOW_FILTER_PORT_RANGE"`
-	// FlowFilterICMPType is the ICMP type to filter flows.
-	FlowFilterICMPType int `env:"FLOW_FILTER_ICMP_TYPE"`
-	// FlowFilterICMPCode is the ICMP code to filter flows.
-	FlowFilterICMPCode int `env:"FLOW_FILTER_ICMP_CODE"`
-	// FlowFilterPeerIP is the IP to filter flows.
+	FilterPortRange string `env:"FILTER_PORT_RANGE"`
+	// FilterICMPType is the ICMP type to filter flows.
+	FilterICMPType int `env:"FILTER_ICMP_TYPE"`
+	// FilterICMPCode is the ICMP code to filter flows.
+	FilterICMPCode int `env:"FILTER_ICMP_CODE"`
+	// FilterPeerIP is the IP to filter flows.
 	// Example: 10.10.10.10
-	FlowFilterPeerIP string `env:"FLOW_FILTER_PEER_IP"`
-	// FlowFilterAction is the action to filter flows.
+	FilterPeerIP string `env:"FILTER_PEER_IP"`
+	// FilterAction is the action to filter flows.
 	// Possible values are "Accept" or "Reject".
-	FlowFilterAction string `env:"FLOW_FILTER_ACTION"`
+	FilterAction string `env:"FILTER_ACTION"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
