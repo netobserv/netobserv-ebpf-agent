@@ -23,14 +23,16 @@ import (
 	"fmt"
 	"regexp"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"testing"
 
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/featuregate"
 	"sigs.k8s.io/e2e-framework/pkg/features"
-	"sigs.k8s.io/e2e-framework/pkg/internal/types"
+	"sigs.k8s.io/e2e-framework/pkg/types"
 )
 
 type (
@@ -204,6 +206,10 @@ func (e *testEnv) processTestActions(ctx context.Context, t *testing.T, actions 
 // workflow of orchestrating the feature execution be running the action configured by BeforeEachFeature /
 // AfterEachFeature.
 func (e *testEnv) processTestFeature(ctx context.Context, t *testing.T, featureName string, feature types.Feature) context.Context {
+	skipped, message := e.requireFeatureProcessing(feature)
+	if skipped {
+		t.Skipf(message)
+	}
 	// execute beforeEachFeature actions
 	ctx = e.processFeatureActions(ctx, t, feature, e.getBeforeFeatureActions())
 
@@ -338,7 +344,7 @@ func (e *testEnv) Finish(funcs ...Func) types.Environment {
 // package.  This method will all Env.Setup operations prior to
 // starting the tests and run all Env.Finish operations after
 // before completing the suite.
-func (e *testEnv) Run(m *testing.M) int {
+func (e *testEnv) Run(m *testing.M) (exitCode int) {
 	e.panicOnMissingContext()
 	ctx := e.ctx
 
@@ -355,6 +361,9 @@ func (e *testEnv) Run(m *testing.M) int {
 				panic(rErr)
 			}
 			klog.Errorf("Recovering from panic and running finish actions: %s, stack: %s", rErr, string(debug.Stack()))
+			// Set this exit code value to non 0 to indicate that the test suite has failed
+			// Not doing this will mark the test suite as passed even though there was a panic
+			exitCode = 1
 		}
 
 		finishes := e.getFinishActions()
@@ -372,7 +381,8 @@ func (e *testEnv) Run(m *testing.M) int {
 	for _, setup := range setups {
 		// context passed down to each setup
 		if ctx, err = setup.run(ctx, e.cfg); err != nil {
-			klog.Fatalf("%s failure: %s", setup.role, err)
+			klog.Errorf("%s failure: %s", setup.role, err)
+			break
 		}
 	}
 	e.ctx = ctx
@@ -417,7 +427,13 @@ func (e *testEnv) getAfterTestActions() []action {
 }
 
 func (e *testEnv) getFinishActions() []action {
-	return e.getActionsByRole(roleFinish)
+	finishAction := e.getActionsByRole(roleFinish)
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.ReverseTestFinishExecutionOrder) {
+		sort.Slice(finishAction, func(i, j int) bool {
+			return i > j
+		})
+	}
+	return finishAction
 }
 
 func (e *testEnv) executeSteps(ctx context.Context, t *testing.T, steps []types.Step) context.Context {
@@ -433,11 +449,6 @@ func (e *testEnv) executeSteps(ctx context.Context, t *testing.T, steps []types.
 func (e *testEnv) execFeature(ctx context.Context, t *testing.T, featName string, f types.Feature) context.Context {
 	// feature-level subtest
 	t.Run(featName, func(newT *testing.T) {
-		skipped, message := e.requireFeatureProcessing(f)
-		if skipped {
-			newT.Skipf(message)
-		}
-
 		if fDescription, ok := f.(types.DescribableFeature); ok && fDescription.Description() != "" {
 			t.Logf("Processing Feature: %s", fDescription.Description())
 		}
@@ -458,17 +469,27 @@ func (e *testEnv) execFeature(ctx context.Context, t *testing.T, featName string
 			if assessName == "" {
 				assessName = fmt.Sprintf("Assessment-%d", i+1)
 			}
+			// shouldFailNow catches whether t.FailNow() is called in the assessment.
+			// If it is, we won't proceed with the next assessment.
+			var shouldFailNow bool
 			newT.Run(assessName, func(internalT *testing.T) {
 				skipped, message := e.requireAssessmentProcessing(assess, i+1)
 				if skipped {
 					internalT.Skipf(message)
 				}
+				// Set shouldFailNow to true before actually running the assessment, because if the assessment
+				// calls t.FailNow(), the function will be abruptly stopped in the middle of `e.executeSteps()`.
+				shouldFailNow = true
 				ctx = e.executeSteps(ctx, internalT, []types.Step{assess})
+				// If we reach this point, it means the assessment did not call t.FailNow().
+				shouldFailNow = false
 			})
-			// Check if the Test assessment under question performed a `t.Fail()` or `t.Failed()` invocation.
-			// We need to track that and stop the next set of assessment in the feature under test from getting
-			// executed
-			if e.cfg.FailFast() && newT.Failed() {
+			// Check if the Test assessment under question performed either 2 things:
+			// - a t.FailNow() invocation
+			// - a `t.Fail()` or `t.Failed()` invocation
+			// In one of those cases, we need to track that and stop the next set of assessment in the feature
+			// under test from getting executed.
+			if shouldFailNow || (e.cfg.FailFast() && newT.Failed()) {
 				failed = true
 				break
 			}
