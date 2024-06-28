@@ -3,9 +3,8 @@ package ifaces
 import (
 	"context"
 	"fmt"
-	"net"
-
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
 
@@ -49,14 +48,22 @@ type Informer interface {
 	Subscribe(ctx context.Context) (<-chan Event, error)
 }
 
-func netInterfaces() ([]Interface, error) {
-	ifs, err := net.Interfaces()
+func netInterfaces(nsh netns.NsHandle) ([]Interface, error) {
+	handle, err := netlink.NewHandleAt(nsh)
 	if err != nil {
-		return nil, fmt.Errorf("can't fetch interfaces: %w", err)
+		return nil, fmt.Errorf("failed to create handle for netns (%s): %w", nsh.String(), err)
 	}
-	names := make([]Interface, len(ifs))
-	for i, ifc := range ifs {
-		names[i] = Interface{Name: ifc.Name, Index: ifc.Index, NetNS: netns.None()}
+	defer handle.Delete()
+
+	// Get a list of interfaces in the namespace
+	links, err := handle.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list interfaces in netns (%s): %w", nsh.String(), err)
+	}
+
+	names := make([]Interface, len(links))
+	for i, link := range links {
+		names[i] = Interface{Name: link.Attrs().Name, Index: link.Attrs().Index, NetNS: nsh}
 	}
 	return names, nil
 }
