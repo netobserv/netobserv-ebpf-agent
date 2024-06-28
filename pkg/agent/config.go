@@ -186,7 +186,7 @@ type Config struct {
 	FilterDirection string `env:"FILTER_DIRECTION"`
 	// FilterIPCIDR is the IP CIDR to filter flows.
 	// Example: 10.10.10.0/24 or 100:100:100:100::/64
-	FilterIPCIDR string `env:"FILTER_IP_CIDR"`
+	FilterIPCIDR string `env:"FILTER_IP_CIDR" envDefault:"0.0.0.0/0"`
 	// FilterProtocol is the protocol to filter flows.
 	// Example: TCP, UDP, SCTP, ICMP, ICMPv6
 	FilterProtocol string `env:"FILTER_PROTOCOL"`
@@ -214,7 +214,7 @@ type Config struct {
 	FilterPeerIP string `env:"FILTER_PEER_IP"`
 	// FilterAction is the action to filter flows.
 	// Possible values are "Accept" or "Reject".
-	FilterAction string `env:"FILTER_ACTION"`
+	FilterAction string `env:"FILTER_ACTION" envDefault:"Accept"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
