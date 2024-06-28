@@ -208,6 +208,16 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
+		originalNs, err := netns.Get()
+		if err != nil {
+			return fmt.Errorf("failed to get current netns: %w", err)
+		}
+		defer func() {
+			if err := netns.Set(originalNs); err != nil {
+				ilog.WithError(err).Error("failed to set netns back")
+			}
+			originalNs.Close()
+		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
 			return fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err)
 		}
@@ -823,6 +833,16 @@ func (p *PacketFetcher) Register(iface ifaces.Interface) error {
 func (p *PacketFetcher) AttachTCX(iface ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
+		originalNs, err := netns.Get()
+		if err != nil {
+			return fmt.Errorf("PCA failed to get current netns: %w", err)
+		}
+		defer func() {
+			if err := netns.Set(originalNs); err != nil {
+				ilog.WithError(err).Error("PCA failed to set netns back")
+			}
+			originalNs.Close()
+		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
 			return fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err)
 		}

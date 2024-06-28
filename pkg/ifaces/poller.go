@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netns"
 )
 
 // Poller periodically looks for the network interfaces in the system and forwards Event
@@ -12,7 +13,7 @@ import (
 type Poller struct {
 	period     time.Duration
 	current    map[Interface]struct{}
-	interfaces func() ([]Interface, error)
+	interfaces func(handle netns.NsHandle) ([]Interface, error)
 	bufLen     int
 }
 
@@ -26,30 +27,52 @@ func NewPoller(period time.Duration, bufLen int) *Poller {
 }
 
 func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
+
+	out := make(chan Event, np.bufLen)
+	netns, err := getNetNS()
+	if err != nil {
+		go np.pollForEvents(ctx, "", out)
+	} else {
+		for _, n := range netns {
+			go np.pollForEvents(ctx, n, out)
+		}
+	}
+	return out, nil
+}
+
+func (np *Poller) pollForEvents(ctx context.Context, ns string, out chan Event) {
 	log := logrus.WithField("component", "ifaces.Poller")
 	log.WithField("period", np.period).Debug("subscribing to Interface events")
-	out := make(chan Event, np.bufLen)
-	go func() {
-		ticker := time.NewTicker(np.period)
-		defer ticker.Stop()
-		for {
-			if ifaces, err := np.interfaces(); err != nil {
-				log.WithError(err).Warn("fetching interface names")
-			} else {
-				log.WithField("names", ifaces).Debug("fetched interface names")
-				np.diffNames(out, ifaces)
-			}
-			select {
-			case <-ctx.Done():
-				log.Debug("stopped")
-				close(out)
-				return
-			case <-ticker.C:
-				// continue after period
-			}
+	ticker := time.NewTicker(np.period)
+	var netnsHandle netns.NsHandle
+	var err error
+
+	if ns == "" {
+		netnsHandle = netns.None()
+	} else {
+		netnsHandle, err = netns.GetFromName(ns)
+		if err != nil {
+			return
 		}
-	}()
-	return out, nil
+	}
+
+	defer ticker.Stop()
+	for {
+		if ifaces, err := np.interfaces(netnsHandle); err != nil {
+			log.WithError(err).Warn("fetching interface names")
+		} else {
+			log.WithField("names", ifaces).Debug("fetched interface names")
+			np.diffNames(out, ifaces)
+		}
+		select {
+		case <-ctx.Done():
+			log.Debug("stopped")
+			close(out)
+			return
+		case <-ticker.C:
+			// continue after a period
+		}
+	}
 }
 
 // diffNames compares and updates the internal account of interfaces with the latest list of
