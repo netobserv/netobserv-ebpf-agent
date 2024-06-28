@@ -105,9 +105,9 @@ type BpfGlobalCountersKeyT uint32
 
 const (
 	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY BpfGlobalCountersKeyT = 0
-	BpfGlobalCountersKeyTFILTER_FLOWS_REJECT_KEY   BpfGlobalCountersKeyT = 1
-	BpfGlobalCountersKeyTFILTER_FLOWS_ACCEPT_KEY   BpfGlobalCountersKeyT = 2
-	BpfGlobalCountersKeyTFILTER_FLOWS_NOMATCH_KEY  BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTFILTER_REJECT_KEY         BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTFILTER_ACCEPT_KEY         BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_NOMATCH_KEY        BpfGlobalCountersKeyT = 3
 	BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY     BpfGlobalCountersKeyT = 4
 )
 

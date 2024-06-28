@@ -187,15 +187,15 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		DNSTracker:       cfg.EnableDNSTracking,
 		EnableRTT:        cfg.EnableRTT,
 		EnableFlowFilter: cfg.EnableFlowFilter,
-		FlowFilterConfig: &ebpf.FlowFilterConfig{
-			FlowFilterAction:          cfg.FlowFilterAction,
-			FlowFilterDirection:       cfg.FlowFilterDirection,
-			FlowFilterIPCIDR:          cfg.FlowFilterIPCIDR,
-			FlowFilterProtocol:        cfg.FlowFilterProtocol,
-			FlowFilterPeerIP:          cfg.FlowFilterPeerIP,
-			FlowFilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterDestinationPort, cfg.FlowFilterDestinationPortRange),
-			FlowFilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterSourcePort, cfg.FlowFilterSourcePortRange),
-			FlowFilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FlowFilterPort, cfg.FlowFilterPortRange),
+		FilterConfig: &ebpf.FilterConfig{
+			FilterAction:          cfg.FilterAction,
+			FilterDirection:       cfg.FilterDirection,
+			FilterIPCIDR:          cfg.FilterIPCIDR,
+			FilterProtocol:        cfg.FilterProtocol,
+			FilterPeerIP:          cfg.FilterPeerIP,
+			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange),
+			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange),
+			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange),
 		},
 	}
 

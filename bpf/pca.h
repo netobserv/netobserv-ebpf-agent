@@ -36,93 +36,72 @@ static int attach_packet_payload(void *data, void *data_end, struct __sk_buff *s
     return TC_ACT_UNSPEC;
 }
 
-static inline bool validate_pca_filter(u8 ipproto, void *ipheaderend, void *data_end) {
-    // If filters: pca_proto and pca_port are not specified, export packet
-    if (pca_proto == 0 && pca_port == 0)
-        return true;
+static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
+    pkt_info pkt;
+    __builtin_memset(&pkt, 0, sizeof(pkt));
+    flow_id id;
+    __builtin_memset(&id, 0, sizeof(id));
 
-    //Only export packets with protocol set by ENV var PCA_FILTER
-    u16 sourcePort, destPort;
-    if (ipproto != pca_proto) {
-        return false;
-    }
+    pkt.id = &id;
 
-    if (ipproto == IPPROTO_TCP) {
-        struct tcphdr *tcp_header = ipheaderend;
-        if ((void *)tcp_header + sizeof(*tcp_header) > data_end) {
-            return false;
-        }
-        sourcePort = tcp_header->source;
-        destPort = tcp_header->dest;
-    } else if (ipproto == IPPROTO_UDP) {
-        struct udphdr *udp_header = ipheaderend;
-        if ((void *)udp_header + sizeof(*udp_header) > data_end) {
-            return false;
-        }
-        sourcePort = udp_header->source;
-        destPort = udp_header->dest;
-    } else if (ipproto == IPPROTO_SCTP) {
-        struct sctphdr *sctp_header = ipheaderend;
-        if ((void *)sctp_header + sizeof(*sctp_header) > data_end) {
-            return false;
-        }
-        sourcePort = sctp_header->source;
-        destPort = sctp_header->dest;
-    } else {
-        return false;
-    }
-    u16 pca_port_end = bpf_htons(pca_port);
-    if (sourcePort == pca_port_end || destPort == pca_port_end) {
-        return true;
-    }
-    return false;
-}
-
-static inline int export_packet_payload(struct __sk_buff *skb) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
-    struct ethhdr *eth = data;
-    struct iphdr *ip;
+    struct ethhdr *eth = (struct ethhdr *)data;
 
-    if ((void *)eth + sizeof(*eth) > data_end) {
-        return TC_ACT_UNSPEC;
+    if (fill_ethhdr(eth, data_end, &pkt) == DISCARD) {
+        return false;
     }
 
-    // Only IPv4 and IPv6 packets captured
-    u16 ethType = bpf_ntohs(eth->h_proto);
-    if (ethType != ETH_P_IP && ethType != ETH_P_IPV6) {
-        return TC_ACT_UNSPEC;
+    //Set extra fields
+    id.if_index = skb->ifindex;
+    id.direction = dir;
+
+    // check if this packet need to be filtered if filtering feature is enabled
+    bool skip = check_and_do_flow_filtering(&id);
+    if (skip) {
+        return false;
     }
 
-    ip = data + sizeof(*eth);
-    if ((void *)ip + sizeof(*ip) > data_end) {
-        return TC_ACT_UNSPEC;
+    return true;
+}
+
+static inline int export_packet_payload(struct __sk_buff *skb, direction dir) {
+    // If sampling is defined, will only parse 1 out of "sampling" flows
+    if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
+        return 0;
     }
 
-    if (validate_pca_filter(ip->protocol, (void *)ip + sizeof(*ip), data_end)) {
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
+
+    if (validate_pca_filter(skb, dir)) {
         return attach_packet_payload(data, data_end, skb);
     }
-    return TC_ACT_UNSPEC;
+    return 0;
 }
 
 SEC("tc_pca_ingress")
 int tc_ingress_pca_parse(struct __sk_buff *skb) {
-    return export_packet_payload(skb);
+    export_packet_payload(skb, INGRESS);
+    return TC_ACT_OK;
 }
 
 SEC("tc_pca_egress")
 int tc_egress_pca_parse(struct __sk_buff *skb) {
-    return export_packet_payload(skb);
+    export_packet_payload(skb, EGRESS);
+    return TC_ACT_OK;
 }
 
 SEC("tcx_pca_ingress")
 int tcx_ingress_pca_parse(struct __sk_buff *skb) {
-    return export_packet_payload(skb);
+    export_packet_payload(skb, INGRESS);
+    return TCX_NEXT;
 }
 
 SEC("tcx_pca_egress")
 int tcx_egress_pca_parse(struct __sk_buff *skb) {
-    return export_packet_payload(skb);
+    export_packet_payload(skb, EGRESS);
+    return TCX_NEXT;
 }
 
 #endif /* __PCA_H__ */

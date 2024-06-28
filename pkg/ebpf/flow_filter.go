@@ -11,58 +11,58 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type FlowFilterConfig struct {
-	FlowFilterDirection       string
-	FlowFilterIPCIDR          string
-	FlowFilterProtocol        string
-	FlowFilterSourcePort      intstr.IntOrString
-	FlowFilterDestinationPort intstr.IntOrString
-	FlowFilterPort            intstr.IntOrString
-	FlowFilterIcmpType        int
-	FlowFilterIcmpCode        int
-	FlowFilterPeerIP          string
-	FlowFilterAction          string
+type FilterConfig struct {
+	FilterDirection       string
+	FilterIPCIDR          string
+	FilterProtocol        string
+	FilterSourcePort      intstr.IntOrString
+	FilterDestinationPort intstr.IntOrString
+	FilterPort            intstr.IntOrString
+	FilterIcmpType        int
+	FilterIcmpCode        int
+	FilterPeerIP          string
+	FilterAction          string
 }
 
-type FlowFilter struct {
+type Filter struct {
 	// eBPF objs to create/update eBPF maps
 	objects *BpfObjects
-	config  *FlowFilterConfig
+	config  *FilterConfig
 }
 
-func NewFlowFilter(objects *BpfObjects, cfg *FlowFilterConfig) *FlowFilter {
-	return &FlowFilter{
+func NewFilter(objects *BpfObjects, cfg *FilterConfig) *Filter {
+	return &Filter{
 		objects: objects,
 		config:  cfg,
 	}
 }
 
-func (f *FlowFilter) ProgramFlowFilter() error {
+func (f *Filter) ProgramFilter() error {
 	log.Infof("Flow filter config: %v", f.config)
-	key, err := f.getFlowFilterKey(f.config)
+	key, err := f.getFilterKey(f.config)
 	if err != nil {
-		return fmt.Errorf("failed to get flow filter key: %w", err)
+		return fmt.Errorf("failed to get filter key: %w", err)
 	}
 
-	val, err := f.getFlowFilterValue(f.config)
+	val, err := f.getFilterValue(f.config)
 	if err != nil {
-		return fmt.Errorf("failed to get flow filter value: %w", err)
+		return fmt.Errorf("failed to get filter value: %w", err)
 	}
 
 	err = f.objects.FilterMap.Update(key, val, ebpf.UpdateAny)
 	if err != nil {
-		return fmt.Errorf("failed to update flow filter map: %w", err)
+		return fmt.Errorf("failed to update filter map: %w", err)
 	}
 
-	log.Infof("Programmed flow filter with key: %v, value: %v", key, val)
+	log.Infof("Programmed filter with key: %v, value: %v", key, val)
 
 	return nil
 }
 
-func (f *FlowFilter) getFlowFilterKey(config *FlowFilterConfig) (BpfFilterKeyT, error) {
+func (f *Filter) getFilterKey(config *FilterConfig) (BpfFilterKeyT, error) {
 	key := BpfFilterKeyT{}
 
-	ip, ipNet, err := net.ParseCIDR(config.FlowFilterIPCIDR)
+	ip, ipNet, err := net.ParseCIDR(config.FilterIPCIDR)
 	if err != nil {
 		return key, fmt.Errorf("failed to parse FlowFilterIPCIDR: %w", err)
 	}
@@ -77,10 +77,10 @@ func (f *FlowFilter) getFlowFilterKey(config *FlowFilterConfig) (BpfFilterKeyT, 
 	return key, nil
 }
 
-func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValueT, error) {
+func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 	val := BpfFilterValueT{}
 
-	switch config.FlowFilterDirection {
+	switch config.FilterDirection {
 	case "Ingress":
 		val.Direction = BpfDirectionTINGRESS
 	case "Egress":
@@ -89,7 +89,7 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 		val.Direction = BpfDirectionTMAX_DIRECTION
 	}
 
-	switch config.FlowFilterAction {
+	switch config.FilterAction {
 	case "Reject":
 		val.Action = BpfFilterActionTREJECT
 	case "Accept":
@@ -98,7 +98,7 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 		val.Action = BpfFilterActionTMAX_FILTER_ACTIONS
 	}
 
-	switch config.FlowFilterProtocol {
+	switch config.FilterProtocol {
 	case "TCP":
 		val.Protocol = syscall.IPPROTO_TCP
 		val.DstPortStart, val.DstPortEnd = getDstPorts(config)
@@ -116,16 +116,16 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 		val.PortStart, val.PortEnd = getPorts(config)
 	case "ICMP":
 		val.Protocol = syscall.IPPROTO_ICMP
-		val.IcmpType = uint8(config.FlowFilterIcmpType)
-		val.IcmpCode = uint8(config.FlowFilterIcmpCode)
+		val.IcmpType = uint8(config.FilterIcmpType)
+		val.IcmpCode = uint8(config.FilterIcmpCode)
 	case "ICMPv6":
 		val.Protocol = syscall.IPPROTO_ICMPV6
-		val.IcmpType = uint8(config.FlowFilterIcmpType)
-		val.IcmpCode = uint8(config.FlowFilterIcmpCode)
+		val.IcmpType = uint8(config.FilterIcmpType)
+		val.IcmpCode = uint8(config.FilterIcmpCode)
 	}
 
-	if config.FlowFilterPeerIP != "" {
-		ip := net.ParseIP(config.FlowFilterPeerIP)
+	if config.FilterPeerIP != "" {
+		ip := net.ParseIP(config.FilterPeerIP)
 		if ip.To4() != nil {
 			copy(val.Ip[:], ip.To4())
 		} else {
@@ -135,33 +135,33 @@ func (f *FlowFilter) getFlowFilterValue(config *FlowFilterConfig) (BpfFilterValu
 	return val, nil
 }
 
-func getSrcPorts(config *FlowFilterConfig) (uint16, uint16) {
-	if config.FlowFilterSourcePort.Type == intstr.Int {
-		return uint16(config.FlowFilterSourcePort.IntVal), 0
+func getSrcPorts(config *FilterConfig) (uint16, uint16) {
+	if config.FilterSourcePort.Type == intstr.Int {
+		return uint16(config.FilterSourcePort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FlowFilterSourcePort.String())
+	start, end, err := getPortsFromString(config.FilterSourcePort.String())
 	if err != nil {
 		return 0, 0
 	}
 	return start, end
 }
 
-func getDstPorts(config *FlowFilterConfig) (uint16, uint16) {
-	if config.FlowFilterDestinationPort.Type == intstr.Int {
-		return uint16(config.FlowFilterDestinationPort.IntVal), 0
+func getDstPorts(config *FilterConfig) (uint16, uint16) {
+	if config.FilterDestinationPort.Type == intstr.Int {
+		return uint16(config.FilterDestinationPort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FlowFilterDestinationPort.String())
+	start, end, err := getPortsFromString(config.FilterDestinationPort.String())
 	if err != nil {
 		return 0, 0
 	}
 	return start, end
 }
 
-func getPorts(config *FlowFilterConfig) (uint16, uint16) {
-	if config.FlowFilterDestinationPort.Type == intstr.Int {
-		return uint16(config.FlowFilterPort.IntVal), 0
+func getPorts(config *FilterConfig) (uint16, uint16) {
+	if config.FilterDestinationPort.Type == intstr.Int {
+		return uint16(config.FilterPort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FlowFilterPort.String())
+	start, end, err := getPortsFromString(config.FilterPort.String())
 	if err != nil {
 		return 0, 0
 	}
