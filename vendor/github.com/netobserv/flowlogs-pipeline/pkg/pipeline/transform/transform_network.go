@@ -37,12 +37,12 @@ var log = logrus.WithField("component", "transform.Network")
 
 type Network struct {
 	api.TransformNetwork
-	svcNames   *netdb.ServiceNames
-	categories []subnetCategory
-	ipCatCache *utils.TimedCache
+	svcNames     *netdb.ServiceNames
+	snLabels     []subnetLabel
+	ipLabelCache *utils.TimedCache
 }
 
-type subnetCategory struct {
+type subnetLabel struct {
 	cidrs []*net.IPNet
 	name  string
 }
@@ -120,18 +120,22 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			kubernetes.EnrichLayer(outputEntry, rule.KubernetesInfra)
 		case api.NetworkReinterpretDirection:
 			reinterpretDirection(outputEntry, &n.DirectionInfo)
-		case api.NetworkAddIPCategory:
-			if rule.AddIPCategory == nil {
-				logrus.Error("AddIPCategory rule: Missing configuration ")
+		case api.NetworkAddSubnetLabel:
+			if rule.AddSubnetLabel == nil {
+				logrus.Error("AddSubnetLabel rule: Missing configuration ")
 				continue
 			}
-			if strIP, ok := outputEntry[rule.AddIPCategory.Input].(string); ok {
-				cat, ok := n.ipCatCache.GetCacheEntry(strIP)
-				if !ok {
-					cat = n.categorizeIP(net.ParseIP(strIP))
-					n.ipCatCache.UpdateCacheEntry(strIP, cat)
+			if anyIP, ok := outputEntry[rule.AddSubnetLabel.Input]; ok {
+				if strIP, ok := anyIP.(string); ok {
+					lbl, ok := n.ipLabelCache.GetCacheEntry(strIP)
+					if !ok {
+						lbl = n.applySubnetLabel(strIP)
+						n.ipLabelCache.UpdateCacheEntry(strIP, lbl)
+					}
+					if lbl != "" {
+						outputEntry[rule.AddSubnetLabel.Output] = lbl
+					}
 				}
-				outputEntry[rule.AddIPCategory.Output] = cat
 			}
 
 		default:
@@ -142,9 +146,10 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 	return outputEntry, true
 }
 
-func (n *Network) categorizeIP(ip net.IP) string {
+func (n *Network) applySubnetLabel(strIP string) string {
+	ip := net.ParseIP(strIP)
 	if ip != nil {
-		for _, subnetCat := range n.categories {
+		for _, subnetCat := range n.snLabels {
 			for _, cidr := range subnetCat.cidrs {
 				if cidr.Contains(ip) {
 					return subnetCat.name
@@ -181,9 +186,9 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 			if err := validateReinterpretDirectionConfig(&jsonNetworkTransform.DirectionInfo); err != nil {
 				return nil, err
 			}
-		case api.NetworkAddIPCategory:
-			if len(jsonNetworkTransform.IPCategories) == 0 {
-				return nil, fmt.Errorf("a rule '%s' was found, but there are no IP categories configured", api.NetworkAddIPCategory)
+		case api.NetworkAddSubnetLabel:
+			if len(jsonNetworkTransform.SubnetLabels) == 0 {
+				return nil, fmt.Errorf("a rule '%s' was found, but there are no subnet labels configured", api.NetworkAddSubnetLabel)
 			}
 		case api.NetworkAddSubnet:
 		}
@@ -223,8 +228,8 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 		}
 	}
 
-	var subnetCats []subnetCategory
-	for _, category := range jsonNetworkTransform.IPCategories {
+	var subnetCats []subnetLabel
+	for _, category := range jsonNetworkTransform.SubnetLabels {
 		var cidrs []*net.IPNet
 		for _, cidr := range category.CIDRs {
 			_, parsed, err := net.ParseCIDR(cidr)
@@ -234,7 +239,7 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 			cidrs = append(cidrs, parsed)
 		}
 		if len(cidrs) > 0 {
-			subnetCats = append(subnetCats, subnetCategory{name: category.Name, cidrs: cidrs})
+			subnetCats = append(subnetCats, subnetLabel{name: category.Name, cidrs: cidrs})
 		}
 	}
 
@@ -243,8 +248,8 @@ func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 			Rules:         jsonNetworkTransform.Rules,
 			DirectionInfo: jsonNetworkTransform.DirectionInfo,
 		},
-		svcNames:   servicesDB,
-		categories: subnetCats,
-		ipCatCache: utils.NewQuietExpiringTimedCache(2 * time.Minute),
+		svcNames:     servicesDB,
+		snLabels:     subnetCats,
+		ipLabelCache: utils.NewQuietExpiringTimedCache(2 * time.Minute),
 	}, nil
 }

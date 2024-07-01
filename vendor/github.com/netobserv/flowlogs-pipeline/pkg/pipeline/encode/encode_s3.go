@@ -109,6 +109,10 @@ func (s *encodeS3) GenerateStoreHeader(flows []config.GenericMap, startTime time
 	return object
 }
 
+func (s *encodeS3) Update(_ config.StageParam) {
+	log.Warn("Encode S3 Writer, update not supported")
+}
+
 func (s *encodeS3) createObjectTimeoutLoop() {
 	log.Debugf("entering createObjectTimeoutLoop")
 	ticker := time.NewTicker(s.s3Params.WriteTimeout.Duration)
@@ -214,4 +218,8 @@ func (e *encodeS3Writer) putObject(bucket string, objectName string, object map[
 	uploadInfo, err := e.s3Client.PutObject(context.Background(), bucket, objectName, b, int64(b.Len()), minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	log.Debugf("uploadInfo = %v", uploadInfo)
 	return err
+}
+
+func (e *encodeS3Writer) Update(_ config.StageParam) {
+	log.Warn("Encode S3 Writer, update not supported")
 }
