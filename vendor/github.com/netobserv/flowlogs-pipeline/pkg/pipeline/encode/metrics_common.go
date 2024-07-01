@@ -37,10 +37,10 @@ type mInfoStruct struct {
 }
 
 type MetricsCommonStruct struct {
-	gauges           []mInfoStruct
-	counters         []mInfoStruct
-	histos           []mInfoStruct
-	aggHistos        []mInfoStruct
+	gauges           map[string]mInfoStruct
+	counters         map[string]mInfoStruct
+	histos           map[string]mInfoStruct
+	aggHistos        map[string]mInfoStruct
 	mCache           *putils.TimedCache
 	mChacheLenMetric prometheus.Gauge
 	metricsProcessed prometheus.Counter
@@ -85,24 +85,24 @@ var (
 	)
 )
 
-func (m *MetricsCommonStruct) AddCounter(g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddCounter(name string, g interface{}, info *MetricInfo) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
-	m.counters = append(m.counters, mStruct)
+	m.counters[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddGauge(g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddGauge(name string, g interface{}, info *MetricInfo) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
-	m.gauges = append(m.gauges, mStruct)
+	m.gauges[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddHist(g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddHist(name string, g interface{}, info *MetricInfo) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
-	m.histos = append(m.histos, mStruct)
+	m.histos[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddAggHist(g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddAggHist(name string, g interface{}, info *MetricInfo) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
-	m.aggHistos = append(m.aggHistos, mStruct)
+	m.aggHistos[name] = mStruct
 }
 
 func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, metricRecord config.GenericMap) {
@@ -228,7 +228,7 @@ func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *
 	}
 	val, found := flow[info.ValueKey]
 	if !found {
-		m.errorsCounter.WithLabelValues("RecordKeyMissing", info.Name, info.ValueKey).Inc()
+		// No value might mean 0 for counters, to keep storage lightweight - it can safely be ignored
 		return nil
 	}
 	return val
@@ -273,6 +273,10 @@ func NewMetricsCommonStruct(opMetrics *operational.Metrics, maxCacheEntries int,
 		errorsCounter:    opMetrics.NewCounterVec(&encodePromErrors),
 		expiryTime:       expiryTime.Duration,
 		exitChan:         putils.ExitChannel(),
+		gauges:           map[string]mInfoStruct{},
+		counters:         map[string]mInfoStruct{},
+		histos:           map[string]mInfoStruct{},
+		aggHistos:        map[string]mInfoStruct{},
 	}
 	go m.cleanupExpiredEntriesLoop(callback)
 	return m

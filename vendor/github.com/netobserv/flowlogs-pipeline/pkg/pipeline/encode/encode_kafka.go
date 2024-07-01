@@ -66,6 +66,10 @@ func (r *encodeKafka) Encode(entry config.GenericMap) {
 	}
 }
 
+func (r *encodeKafka) Update(_ config.StageParam) {
+	log.Warn("Encode Kafka, update not supported")
+}
+
 // NewEncodeKafka create a new writer to kafka
 func NewEncodeKafka(opMetrics *operational.Metrics, params config.StageParam) (Encoder, error) {
 	log.Debugf("entering NewEncodeKafka")
