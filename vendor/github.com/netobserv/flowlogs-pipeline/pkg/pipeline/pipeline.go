@@ -38,13 +38,15 @@ const (
 
 // Pipeline manager
 type Pipeline struct {
-	startNodes    []*node.Start[config.GenericMap]
-	terminalNodes []*node.Terminal[config.GenericMap]
-	IsRunning     bool
+	startNodes       []*node.Start[config.GenericMap]
+	terminalNodes    []*node.Terminal[config.GenericMap]
+	pipelineEntryMap map[string]*pipelineEntry
+	IsRunning        bool
 	// TODO: this field is only used for test verification. We should rewrite the build process
 	// to be able to remove it from here
 	pipelineStages []*pipelineEntry
 	Metrics        *operational.Metrics
+	configWatcher  *pipelineConfigWatcher
 }
 
 // NewPipeline defines the pipeline elements
@@ -66,7 +68,12 @@ func newPipelineFromIngester(cfg *config.ConfigFileStruct, ing ingest.Ingester) 
 	if err := builder.readStages(); err != nil {
 		return nil, err
 	}
-	return builder.build()
+	pipeline, err := builder.build()
+	if err != nil {
+		return nil, err
+	}
+	pipeline.configWatcher, err = newPipelineConfigWatcher(cfg, pipeline.pipelineEntryMap)
+	return pipeline, err
 }
 
 func (p *Pipeline) Run() {
@@ -75,6 +82,10 @@ func (p *Pipeline) Run() {
 		s.Start()
 	}
 	p.IsRunning = true
+
+	if p.configWatcher != nil {
+		go p.configWatcher.Run()
+	}
 
 	// blocking the execution until the graph terminal stages end
 	for _, t := range p.terminalNodes {

@@ -91,6 +91,10 @@ OUTER:
 	}
 }
 
+func (e *EncodeOtlpTrace) Update(_ config.StageParam) {
+	log.Warn("EncodeOtlpTrace, update not supported")
+}
+
 func NewEncodeOtlpTraces(_ *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
 	log.Tracef("entering NewEncodeOtlpTraces \n")
 	cfg := api.EncodeOtlpTraces{}
