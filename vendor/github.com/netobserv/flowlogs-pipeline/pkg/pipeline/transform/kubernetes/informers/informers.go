@@ -20,11 +20,10 @@ package informers
 import (
 	"fmt"
 	"net"
-	"os"
-	"path"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/sirupsen/logrus"
 
 	v1 "k8s.io/api/core/v1"
@@ -34,9 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/metadata/metadatainformer"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -339,7 +336,7 @@ func (k *Informers) InitFromConfig(kubeConfigPath string) error {
 	k.stopChan = make(chan struct{})
 	k.mdStopChan = make(chan struct{})
 
-	config, err := loadConfig(kubeConfigPath)
+	config, err := utils.LoadK8sConfig(kubeConfigPath)
 	if err != nil {
 		return err
 	}
@@ -360,33 +357,6 @@ func (k *Informers) InitFromConfig(kubeConfigPath string) error {
 	}
 
 	return nil
-}
-
-func loadConfig(kubeConfigPath string) (*rest.Config, error) {
-	// if no config path is provided, load it from the env variable
-	if kubeConfigPath == "" {
-		kubeConfigPath = os.Getenv(kubeConfigEnvVariable)
-	}
-	// otherwise, load it from the $HOME/.kube/config file
-	if kubeConfigPath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("can't get user home dir: %w", err)
-		}
-		kubeConfigPath = path.Join(homeDir, ".kube", "config")
-	}
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-	if err == nil {
-		return config, nil
-	}
-	// fallback: use in-cluster config
-	config, err = rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("can't access kubenetes. Tried using config from: "+
-			"config parameter, %s env, homedir and InClusterConfig. Got: %w",
-			kubeConfigEnvVariable, err)
-	}
-	return config, nil
 }
 
 func (k *Informers) initInformers(client kubernetes.Interface, metaClient metadata.Interface) error {

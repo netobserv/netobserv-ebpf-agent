@@ -20,6 +20,10 @@ No Logs Pull Requests are currently being accepted.
 This project will be deprecated once official [opentelemetry-go](https://github.com/open-telemetry/opentelemetry-go)
 repository Logs module will have status "Stable".
 
+## Compatibility 
+
+Minimal supported go version `1.21`
+
 ## Project packages
 
 | Packages                         | Description                                                                |
@@ -29,7 +33,7 @@ repository Logs module will have status "Stable".
 | [exporters/otlp](./exporters)    | OTLP format exporter                                                       |
 | [exporters/stdout](./exporters)  | Console exporter                                                           |                                                            
 
-## Quick start
+## Getting Started
 
 This is an implementation of [Logs Bridge API](https://opentelemetry.io/docs/specs/otel/logs/bridge-api/) and not
 intended to use by developers directly. It is provided for logging library authors to build log appenders, which use
@@ -43,7 +47,7 @@ package myInstrumentedLogger
 import (
 	otel "github.com/agoda-com/opentelemetry-logs-go"
 	"github.com/agoda-com/opentelemetry-logs-go/logs"
-	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
 const (
@@ -82,7 +86,7 @@ import (
 	"github.com/agoda-com/opentelemetry-logs-go/exporters/otlp/otlplogs"
 	"github.com/agoda-com/opentelemetry-logs-go/exporters/otlp/otlplogs/otlplogshttp"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	sdk "github.com/agoda-com/opentelemetry-logs-go/sdk/logs"
 )
 
