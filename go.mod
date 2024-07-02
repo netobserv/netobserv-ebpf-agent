@@ -14,12 +14,13 @@ require (
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/netobserv/flowlogs-pipeline v1.6.1-crc0
 	github.com/netobserv/gopipes v0.3.0
+	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-00010101000000-000000000000
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
-	github.com/vishvananda/netlink v1.1.0
+	github.com/vishvananda/netlink v1.2.1-beta.2.0.20231024175852-77df5d35f725
 	github.com/vishvananda/netns v0.0.4
 	github.com/vladimirvivien/gexe v0.3.0
 	github.com/vmware/go-ipfix v0.9.0
@@ -40,6 +41,8 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/cenkalti/hub v1.0.1 // indirect
+	github.com/cenkalti/rpc2 v0.0.0-20210604223624-c1acbc6ec984 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -84,6 +87,7 @@ require (
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/netobserv/loki-client-go v0.0.0-20220927092034-f37122a54500 // indirect
 	github.com/netsampler/goflow2 v1.3.7 // indirect
+	github.com/ovn-org/libovsdb v0.6.1-0.20240125124854-03f787b1a892 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pion/dtls/v2 v2.2.4 // indirect
 	github.com/pion/logging v0.2.2 // indirect
@@ -136,3 +140,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+// HACK: manually replace ovn-kubernetes to intg with ovnobserv lib
+replace github.com/ovn-org/ovn-kubernetes/go-controller => github.com/npinaeva/ovn-kubernetes/go-controller v0.0.0-20240603103941-4a9a2a74a3cb

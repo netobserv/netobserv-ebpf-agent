@@ -52,8 +52,9 @@ type Record struct {
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
-	TimeFlowRtt time.Duration
-	DupList     []map[string]uint8
+	TimeFlowRtt  time.Duration
+	DupList      []map[string]uint8
+	OvsMonitorMD []string
 }
 
 func NewRecord(
@@ -80,6 +81,7 @@ func NewRecord(
 		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
 	record.DupList = make([]map[string]uint8, 0)
+	record.OvsMonitorMD = make([]string, 0)
 	return &record
 }
 
@@ -121,6 +123,12 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if src.DnsRecord.Errno != 0 {
 		r.DnsRecord.Errno = src.DnsRecord.Errno
 	}
+
+	for i, md := range src.OvsDpKeys {
+		if !AllZerosMetaData(md) {
+			r.OvsDpKeys[i] = md
+		}
+	}
 }
 
 // IP returns the net.IP equivalent object
@@ -159,4 +167,13 @@ func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	var fr RawRecord
 	err := binary.Read(reader, binary.LittleEndian, &fr)
 	return &fr, err
+}
+
+func AllZerosMetaData(s [8]uint8) bool {
+	for _, v := range s {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
 }

@@ -178,7 +178,6 @@ type Config struct {
 	MetricsTLSKeyPath string `env:"METRICS_TLS_KEY_PATH"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
-
 	// EnableFlowFilter enables flow filter, default is false.
 	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
 	// FilterDirection is the direction of the flow filter.
@@ -215,6 +214,8 @@ type Config struct {
 	// FilterAction is the action to filter flows.
 	// Possible values are "Accept" or "Reject".
 	FilterAction string `env:"FILTER_ACTION" envDefault:"Accept"`
+	// EnableOVSMonitoring enables monitoring of OVS flows, default is false.
+	EnableOVSMonitoring bool `env:"ENABLE_OVS_MONITORING" envDefault:"false"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details

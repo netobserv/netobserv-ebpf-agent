@@ -56,6 +56,8 @@ typedef __u64 u64;
 #define MIN_RTT 10000u //10us
 
 #define MAX_FILTER_ENTRIES 1 // we have only one global filter
+#define MAX_OVS_MD 8
+#define MAX_OVS_EVENTS 4
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
@@ -97,6 +99,8 @@ typedef struct flow_metrics_t {
         u8 errno;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
+    u8 ovs_dp_event_idx;
+    u8 ovs_dp_keys[MAX_OVS_EVENTS][MAX_OVS_MD];
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct pkt_drops into the ELF.

@@ -94,6 +94,8 @@ type BpfFlowMetricsT struct {
 	PktDrops        BpfPktDropsT
 	DnsRecord       BpfDnsRecordT
 	FlowRtt         uint64
+	OvsDpEventIdx   uint8
+	OvsDpKeys       [4][8]uint8
 }
 
 type BpfFlowRecordT struct {
@@ -161,6 +163,7 @@ type BpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
 	KfreeSkb            *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	OvsDpMonitor        *ebpf.ProgramSpec `ebpf:"ovs_dp_monitor"`
 	TcEgressFlowParse   *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse    *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse  *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
@@ -228,6 +231,7 @@ func (m *BpfMaps) Close() error {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
 	KfreeSkb            *ebpf.Program `ebpf:"kfree_skb"`
+	OvsDpMonitor        *ebpf.Program `ebpf:"ovs_dp_monitor"`
 	TcEgressFlowParse   *ebpf.Program `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse    *ebpf.Program `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse  *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
@@ -243,6 +247,7 @@ type BpfPrograms struct {
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.KfreeSkb,
+		p.OvsDpMonitor,
 		p.TcEgressFlowParse,
 		p.TcEgressPcaParse,
 		p.TcIngressFlowParse,

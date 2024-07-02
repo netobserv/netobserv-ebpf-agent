@@ -9,4 +9,5 @@ volatile const u8 enable_rtt = 0;
 volatile const u8 enable_pca = 0;
 volatile const u8 enable_dns_tracking = 0;
 volatile const u8 enable_flows_filtering = 0;
+volatile const u8 enable_ovs_monitoring = 0;
 #endif //__CONFIGS_H__
