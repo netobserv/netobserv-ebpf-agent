@@ -233,7 +233,12 @@ func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
 			Interface: iface.Index,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to attach TCX egress: %w", err)
+			if errors.Is(err, fs.ErrExist) {
+				// The interface already has a TCX egress hook
+				log.WithField("iface", iface.Name).Debug("interface already has a TCX egress hook ignore")
+			} else {
+				return fmt.Errorf("failed to attach TCX egress: %w", err)
+			}
 		}
 		m.egressTCXLink[iface] = egrLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach egressTCX hook")
@@ -246,7 +251,12 @@ func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
 			Interface: iface.Index,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to attach TCX ingress: %w", err)
+			if errors.Is(err, fs.ErrExist) {
+				// The interface already has a TCX ingress hook
+				log.WithField("iface", iface.Name).Debug("interface already has a TCX ingress hook ignore")
+			} else {
+				return fmt.Errorf("failed to attach TCX ingress: %w", err)
+			}
 		}
 		m.ingressTCXLink[iface] = ingLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach ingressTCX hook")
@@ -941,7 +951,12 @@ func (p *PacketFetcher) AttachTCX(iface ifaces.Interface) error {
 			Interface: iface.Index,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to attach PCA TCX egress: %w", err)
+			if errors.Is(err, fs.ErrExist) {
+				// The interface already has a TCX egress hook
+				log.WithField("iface", iface.Name).Debug("interface already has a TCX PCA egress hook ignore")
+			} else {
+				return fmt.Errorf("failed to attach PCA TCX egress: %w", err)
+			}
 		}
 		p.egressTCXLink[iface] = egrLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA egressTCX hook")
@@ -954,7 +969,12 @@ func (p *PacketFetcher) AttachTCX(iface ifaces.Interface) error {
 			Interface: iface.Index,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to attach PCA TCX ingress: %w", err)
+			if errors.Is(err, fs.ErrExist) {
+				// The interface already has a TCX ingress hook
+				log.WithField("iface", iface.Name).Debug("interface already has a TCX PCA ingress hook ignore")
+			} else {
+				return fmt.Errorf("failed to attach PCA TCX ingress: %w", err)
+			}
 		}
 		p.ingressTCXLink[iface] = ingLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA ingressTCX hook")
