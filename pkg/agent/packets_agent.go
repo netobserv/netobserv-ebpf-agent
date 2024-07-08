@@ -175,9 +175,19 @@ func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], 
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCPacketExporter(cfg)
+	case "direct-flp":
+		return buildPacketDirectFLPExporter(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported packet export type %s", cfg.Export)
 	}
+}
+
+func buildPacketDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
+	if err != nil {
+		return nil, err
+	}
+	return flpExporter.ExportPackets, nil
 }
 
 // Run a Packets agent. The function will keep running in the same thread

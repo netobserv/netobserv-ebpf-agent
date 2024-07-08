@@ -45,6 +45,18 @@ func (d *DirectFLP) ExportFlows(input <-chan []*flow.Record) {
 	}
 }
 
+// ExportPackets accepts slices of *flow.PacketRecord by its input channel, converts them
+// to *pbflow.Records instances, and submits them to the collector.
+func (d *DirectFLP) ExportPackets(input <-chan []*flow.PacketRecord) {
+	for inputPackets := range input {
+		for _, packet := range inputPackets {
+			if len(packet.Stream) != 0 {
+				d.fwd <- decode.PacketToMap(packet)
+			}
+		}
+	}
+}
+
 func (d *DirectFLP) Close() {
 	close(d.fwd)
 }

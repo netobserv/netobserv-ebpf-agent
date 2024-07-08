@@ -1,8 +1,9 @@
-package exporter
+package utils
 
 import (
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -37,4 +38,24 @@ func GetPacketHeader(ci gopacket.CaptureInfo) ([]byte, error) {
 	binary.LittleEndian.PutUint32(buf[8:12], uint32(ci.CaptureLength))
 	binary.LittleEndian.PutUint32(buf[12:16], uint32(ci.Length))
 	return buf[:], nil
+}
+
+func GetPacketBytesWithHeader(time time.Time, data []byte) ([]byte, error) {
+	ci := gopacket.CaptureInfo{
+		Timestamp:     time,
+		CaptureLength: len(data),
+		Length:        len(data),
+	}
+	if ci.CaptureLength != len(data) {
+		return nil, fmt.Errorf("capture length %d does not match data length %d", ci.CaptureLength, len(data))
+	}
+	if ci.CaptureLength > ci.Length {
+		return nil, fmt.Errorf("invalid capture info %+v:  capture length > length", ci)
+	}
+	b, err := GetPacketHeader(ci)
+	if err != nil {
+		return nil, fmt.Errorf("error writing packet header: %w", err)
+	}
+	// append 16 byte packet header & data all at once
+	return append(b, data...), nil
 }

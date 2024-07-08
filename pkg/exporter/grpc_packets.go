@@ -2,13 +2,13 @@ package exporter
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
-	"github.com/google/gopacket"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -22,22 +22,14 @@ type GRPCPacketProto struct {
 var gplog = logrus.WithField("component", "packet/GRPCPackets")
 
 // WritePacket writes the given packet data out to gRPC.
-func writeGRPCPacket(ci gopacket.CaptureInfo, data []byte, conn *grpc.ClientConnection) error {
-	if ci.CaptureLength != len(data) {
-		return fmt.Errorf("capture length %d does not match data length %d", ci.CaptureLength, len(data))
-	}
-	if ci.CaptureLength > ci.Length {
-		return fmt.Errorf("invalid capture info %+v:  capture length > length", ci)
-	}
-	gplog.Debugf("Sending Packet to client. Length: %d", len(data))
-	b, err := GetPacketHeader(ci)
+func writeGRPCPacket(time time.Time, data []byte, conn *grpc.ClientConnection) error {
+	bytes, err := utils.GetPacketBytesWithHeader(time, data)
 	if err != nil {
-		return fmt.Errorf("error writing packet header: %w", err)
+		return err
 	}
-	// write 16 byte packet header & data all at once
 	_, err = conn.Client().Send(context.TODO(), &pbpacket.Packet{
 		Pcap: &anypb.Any{
-			Value: append(b, data...),
+			Value: bytes,
 		},
 	})
 	return err
@@ -59,15 +51,8 @@ func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*flow.PacketRecord) {
 	for packetRecord := range in {
 		var errs []error
 		for _, packet := range packetRecord {
-			packetStream := packet.Stream
-			packetTimestamp := packet.Time
-			if len(packetStream) != 0 {
-				captureInfo := gopacket.CaptureInfo{
-					Timestamp:     packetTimestamp,
-					CaptureLength: len(packetStream),
-					Length:        len(packetStream),
-				}
-				if err := writeGRPCPacket(captureInfo, packetStream, p.clientConn); err != nil {
+			if len(packet.Stream) != 0 {
+				if err := writeGRPCPacket(packet.Time, packet.Stream, p.clientConn); err != nil {
 					errs = append(errs, err)
 				}
 			}
