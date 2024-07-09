@@ -164,6 +164,10 @@ func PacketToMap(pr *flow.PacketRecord) config.GenericMap {
 		udp, _ := udpLayer.(*layers.UDP)
 		out["SrcPort"] = udp.SrcPort.String()
 		out["DstPort"] = udp.DstPort.String()
+	} else if sctpLayer := packet.Layer(layers.LayerTypeSCTP); sctpLayer != nil {
+		sctp, _ := sctpLayer.(*layers.SCTP)
+		out["SrcPort"] = sctp.SrcPort.String()
+		out["DstPort"] = sctp.DstPort.String()
 	}
 
 	if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
