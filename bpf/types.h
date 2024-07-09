@@ -10,18 +10,22 @@
 #define SUBMIT 0
 
 // Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
-#define FIN_FLAG 0x01
-#define SYN_FLAG 0x02
-#define RST_FLAG 0x04
-#define PSH_FLAG 0x08
-#define ACK_FLAG 0x10
-#define URG_FLAG 0x20
-#define ECE_FLAG 0x40
-#define CWR_FLAG 0x80
-// Custom flags exported
-#define SYN_ACK_FLAG 0x100
-#define FIN_ACK_FLAG 0x200
-#define RST_ACK_FLAG 0x400
+typedef enum tcp_flags_t {
+    FIN_FLAG = 0x01,
+    SYN_FLAG = 0x02,
+    RST_FLAG = 0x04,
+    PSH_FLAG = 0x08,
+    ACK_FLAG = 0x10,
+    URG_FLAG = 0x20,
+    ECE_FLAG = 0x40,
+    CWR_FLAG = 0x80,
+    // Custom flags exported
+    SYN_ACK_FLAG = 0x100,
+    FIN_ACK_FLAG = 0x200,
+    RST_ACK_FLAG = 0x400,
+} tcp_flags;
+// Force emitting enum tcp_flags_t into the ELF.
+const enum tcp_flags_t *unused10 __attribute__((unused));
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&                                 \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -216,6 +220,7 @@ struct filter_value_t {
     u8 icmpCode;
     direction direction;
     filter_action action;
+    tcp_flags tcpFlags;
     u8 ip[IP_MAX_LEN];
 } __attribute__((packed));
 // Force emitting struct filter_value_t into the ELF.
