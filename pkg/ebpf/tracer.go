@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -133,7 +133,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 
-	oldKernel := utils.IsKernelOlderThan("5.14.0")
+	oldKernel := kernel.IsKernelOlderThan("5.14.0")
 	if oldKernel {
 		log.Infof("kernel older than 5.14.0 detected: not all hooks are supported")
 	}
