@@ -45,6 +45,7 @@ const (
 	pcaRecordsMap            = "packet_record"
 	tcEgressFilterName       = "tc/tc_egress_flow_parse"
 	tcIngressFilterName      = "tc/tc_ingress_flow_parse"
+	tcpFentryHook            = "tcp_rcv_fentry"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -85,6 +86,7 @@ type FlowFetcherConfig struct {
 	FilterConfig     *FilterConfig
 }
 
+// nolint:cyclop
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
@@ -168,19 +170,26 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	var rttFentryLink, rttKprobeLink link.Link
 	if cfg.EnableRTT {
-		rttFentryLink, err = link.AttachTracing(link.TracingOptions{
-			Program: objects.BpfPrograms.TcpRcvFentry,
-		})
-		if err != nil {
-			log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
-			// try to use kprobe for older kernels
-			rttKprobeLink, err = link.Kprobe("tcp_rcv_established", objects.TcpRcvKprobe, nil)
+		if !oldKernel {
+			rttFentryLink, err = link.AttachTracing(link.TracingOptions{
+				Program: objects.BpfPrograms.TcpRcvFentry,
+			})
+			if err == nil {
+				goto next
+			}
 			if err != nil {
-				return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveKprobe: %w", err)
+				log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
+				// Fall through to use kprobe
 			}
 		}
+		// try to use kprobe for older kernels
+		rttKprobeLink, err = link.Kprobe("tcp_rcv_established", objects.TcpRcvKprobe, nil)
+		if err != nil {
+			log.Warningf("failed to attach the BPF program to kprobe: %v", err)
+			return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveKprobe: %w", err)
+		}
 	}
-
+next:
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -717,7 +726,6 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 			TcIngressPcaParse   *ebpf.Program `ebpf:"tc_ingress_pca_parse"`
 			TcxEgressPcaParse   *ebpf.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
-			TCPRcvFentry        *ebpf.Program `ebpf:"tcp_rcv_fentry"`
 			TCPRcvKprobe        *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
 		}
 		type NewBpfObjects struct {
@@ -727,6 +735,8 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		var newObjects NewBpfObjects
 		// remove pktdrop hook from the spec
 		delete(spec.Programs, pktDropHook)
+		// remove fentry hook from the spec
+		delete(spec.Programs, tcpFentryHook)
 		newObjects.NewBpfPrograms = NewBpfPrograms{}
 		if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
 			var ve *ebpf.VerifierError
@@ -752,8 +762,8 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.TcIngressPcaParse = newObjects.TcIngressPcaParse
 		objects.TcxEgressPcaParse = newObjects.TcxEgressPcaParse
 		objects.TcxIngressPcaParse = newObjects.TcxIngressPcaParse
-		objects.TcpRcvFentry = newObjects.TCPRcvFentry
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
+		objects.TcpRcvFentry = nil
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
