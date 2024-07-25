@@ -23,9 +23,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/google/gopacket/layers"
 )
@@ -67,7 +67,7 @@ func main() {
 			os.Exit(1)
 		}
 		// write pcap file header
-		_, err = f.Write(exporter.GetPCAPFileHeader(snapshotlen, layers.LinkTypeEthernet))
+		_, err = f.Write(utils.GetPCAPFileHeader(snapshotlen, layers.LinkTypeEthernet))
 		if err != nil {
 			fmt.Println("Write file header failed:", err.Error())
 			os.Exit(1)

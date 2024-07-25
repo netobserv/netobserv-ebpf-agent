@@ -305,7 +305,7 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 	case "ipfix+tcp":
 		return buildIPFIXExporter(cfg, "tcp")
 	case "direct-flp":
-		return buildDirectFLPExporter(cfg)
+		return buildFlowDirectFLPExporter(cfg)
 	default:
 		return nil, fmt.Errorf("wrong flow export type %s", cfg.Export)
 	}
@@ -323,7 +323,7 @@ func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*fl
 	return grpcExporter.ExportFlows, nil
 }
 
-func buildDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
 	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
 	if err != nil {
 		return nil, err
