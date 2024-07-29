@@ -185,6 +185,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		CacheMaxSize:     cfg.CacheMaxFlows,
 		PktDrops:         cfg.EnablePktDrops,
 		DNSTracker:       cfg.EnableDNSTracking,
+		DNSTrackerPort:   cfg.DNSTrackingPort,
 		EnableRTT:        cfg.EnableRTT,
 		EnableFlowFilter: cfg.EnableFlowFilter,
 		FilterConfig: &ebpf.FilterConfig{
