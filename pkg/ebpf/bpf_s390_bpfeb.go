@@ -61,6 +61,7 @@ type BpfFilterValueT struct {
 	IcmpCode     uint8
 	Direction    BpfDirectionT
 	Action       BpfFilterActionT
+	TcpFlags     BpfTcpFlagsT
 	Ip           [16]uint8
 }
 
@@ -118,6 +119,22 @@ type BpfPktDropsT struct {
 	LatestState     uint8
 	LatestDropCause uint32
 }
+
+type BpfTcpFlagsT uint32
+
+const (
+	BpfTcpFlagsTFIN_FLAG     BpfTcpFlagsT = 1
+	BpfTcpFlagsTSYN_FLAG     BpfTcpFlagsT = 2
+	BpfTcpFlagsTRST_FLAG     BpfTcpFlagsT = 4
+	BpfTcpFlagsTPSH_FLAG     BpfTcpFlagsT = 8
+	BpfTcpFlagsTACK_FLAG     BpfTcpFlagsT = 16
+	BpfTcpFlagsTURG_FLAG     BpfTcpFlagsT = 32
+	BpfTcpFlagsTECE_FLAG     BpfTcpFlagsT = 64
+	BpfTcpFlagsTCWR_FLAG     BpfTcpFlagsT = 128
+	BpfTcpFlagsTSYN_ACK_FLAG BpfTcpFlagsT = 256
+	BpfTcpFlagsTFIN_ACK_FLAG BpfTcpFlagsT = 512
+	BpfTcpFlagsTRST_ACK_FLAG BpfTcpFlagsT = 1024
+)
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
 func LoadBpf() (*ebpf.CollectionSpec, error) {

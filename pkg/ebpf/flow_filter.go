@@ -22,6 +22,7 @@ type FilterConfig struct {
 	FilterIcmpCode        int
 	FilterPeerIP          string
 	FilterAction          string
+	FilterTCPFLags        string
 }
 
 type Filter struct {
@@ -77,6 +78,7 @@ func (f *Filter) getFilterKey(config *FilterConfig) (BpfFilterKeyT, error) {
 	return key, nil
 }
 
+// nolint:cyclop
 func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 	val := BpfFilterValueT{}
 
@@ -132,6 +134,32 @@ func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 			copy(val.Ip[:], ip.To16())
 		}
 	}
+
+	switch config.FilterTCPFLags {
+	case "SYN":
+		val.TcpFlags = BpfTcpFlagsTSYN_FLAG
+	case "SYN-ACK":
+		val.TcpFlags = BpfTcpFlagsTSYN_ACK_FLAG
+	case "ACK":
+		val.TcpFlags = BpfTcpFlagsTACK_FLAG
+	case "FIN":
+		val.TcpFlags = BpfTcpFlagsTFIN_FLAG
+	case "RST":
+		val.TcpFlags = BpfTcpFlagsTRST_FLAG
+	case "PUSH":
+		val.TcpFlags = BpfTcpFlagsTPSH_FLAG
+	case "URG":
+		val.TcpFlags = BpfTcpFlagsTURG_FLAG
+	case "ECE":
+		val.TcpFlags = BpfTcpFlagsTECE_FLAG
+	case "CWR":
+		val.TcpFlags = BpfTcpFlagsTCWR_FLAG
+	case "FIN-ACK":
+		val.TcpFlags = BpfTcpFlagsTFIN_ACK_FLAG
+	case "RST-ACK":
+		val.TcpFlags = BpfTcpFlagsTRST_ACK_FLAG
+	}
+
 	return val, nil
 }
 

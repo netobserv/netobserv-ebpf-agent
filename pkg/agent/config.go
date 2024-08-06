@@ -215,6 +215,9 @@ type Config struct {
 	// FilterAction is the action to filter flows.
 	// Possible values are "Accept" or "Reject".
 	FilterAction string `env:"FILTER_ACTION" envDefault:"Accept"`
+	// FilterTCPFlags is the TCP flags to filter flows.
+	// possible values are: SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST-ACK
+	FilterTCPFlags string `env:"FILTER_TCP_FLAGS"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
