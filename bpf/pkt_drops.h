@@ -48,7 +48,7 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id);
+    bool skip = check_and_do_flow_filtering(&id, flags);
     if (skip) {
         return 0;
     }

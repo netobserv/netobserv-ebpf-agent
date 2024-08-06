@@ -26,11 +26,12 @@ Rule-base filtering is a method to control the flow of packets cached in the eBP
 - `FILTER_SOURCE_PORT_RANGE` - Source port range of the flow filter rule. using "80-100" format.
 - `FILTER_DESTINATION_PORT` - Single Destination port of the flow filter rule.
 - `FILTER_DESTINATION_PORT_RANGE` - Destination port range of the flow filter rule. using "80-100" format.
-- `FILTER_PORT` - Single L4 port of the flow filter rule, can be either source or destination port.
-- `FILTER_PORT_RANGE` - L4 port range of the flow filter rule. using "80-100" format can be either source or destination ports range.
+- `FILTER_PORT` - Single L4 port of the flow filter rule can be either source or destination port.
+- `FILTER_PORT_RANGE` - L4 port range of the flow filter rule. using "80–100" format can be either a source or destination ports range.
 - `FILTER_ICMP_TYPE` - ICMP type of the flow filter rule.
 - `FILTER_ICMP_CODE` - ICMP code of the flow filter rule.
 - `FILTER_PEER_IP` - Specific Peer IP address of the flow filter rule.
+- `FILTER_TCP_FLAGS` - Filter based on TCP flags Possible values are SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST_ACK
 
 Note: 
 - for L4 ports configuration, you can use either single port config options or the range but not both.

@@ -196,6 +196,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange),
 			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange),
 			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange),
+			FilterTCPFLags:        cfg.FilterTCPFlags,
 		},
 	}
 
