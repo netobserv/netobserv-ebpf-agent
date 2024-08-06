@@ -39,6 +39,8 @@ const (
 	constTraceMessages       = "trace_messages"
 	constEnableRtt           = "enable_rtt"
 	constEnableDNSTracking   = "enable_dns_tracking"
+	constDNSTrackingPort     = "dns_port"
+	dnsDefaultPort           = 53
 	constEnableFlowFiltering = "enable_flows_filtering"
 	pktDropHook              = "kfree_skb"
 	constPcaEnable           = "enable_pca"
@@ -80,6 +82,7 @@ type FlowFetcherConfig struct {
 	CacheMaxSize     int
 	PktDrops         bool
 	DNSTracker       bool
+	DNSTrackerPort   int
 	EnableRTT        bool
 	EnableFlowFilter bool
 	EnablePCA        bool
@@ -112,8 +115,12 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 
 	enableDNSTracking := 0
+	dnsTrackerPort := dnsDefaultPort
 	if cfg.DNSTracker {
 		enableDNSTracking = 1
+		if cfg.DNSTrackerPort != 0 {
+			dnsTrackerPort = cfg.DNSTrackerPort
+		}
 	}
 
 	if enableDNSTracking == 0 {
@@ -130,6 +137,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		constTraceMessages:       uint8(traceMsgs),
 		constEnableRtt:           uint8(enableRtt),
 		constEnableDNSTracking:   uint8(enableDNSTracking),
+		constDNSTrackingPort:     uint32(dnsTrackerPort),
 		constEnableFlowFiltering: uint8(enableFlowFiltering),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
