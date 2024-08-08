@@ -35,19 +35,24 @@ const (
 	aggregatedFlowsMap = "aggregated_flows"
 	dnsLatencyMap      = "dns_flows"
 	// constants defined in flows.c as "volatile const"
-	constSampling            = "sampling"
-	constTraceMessages       = "trace_messages"
-	constEnableRtt           = "enable_rtt"
-	constEnableDNSTracking   = "enable_dns_tracking"
-	constDNSTrackingPort     = "dns_port"
-	dnsDefaultPort           = 53
-	constEnableFlowFiltering = "enable_flows_filtering"
-	pktDropHook              = "kfree_skb"
-	constPcaEnable           = "enable_pca"
-	pcaRecordsMap            = "packet_record"
-	tcEgressFilterName       = "tc/tc_egress_flow_parse"
-	tcIngressFilterName      = "tc/tc_ingress_flow_parse"
-	tcpFentryHook            = "tcp_rcv_fentry"
+	constSampling                       = "sampling"
+	constTraceMessages                  = "trace_messages"
+	constEnableRtt                      = "enable_rtt"
+	constEnableDNSTracking              = "enable_dns_tracking"
+	constDNSTrackingPort                = "dns_port"
+	dnsDefaultPort                      = 53
+	constEnableFlowFiltering            = "enable_flows_filtering"
+	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
+	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
+	pktDropHook                         = "kfree_skb"
+	constPcaEnable                      = "enable_pca"
+	pcaRecordsMap                       = "packet_record"
+	tcEgressFilterName                  = "tc/tc_egress_flow_parse"
+	tcIngressFilterName                 = "tc/tc_ingress_flow_parse"
+	tcpFentryHook                       = "tcp_rcv_fentry"
+	rhNetworkEventsMonitoringHook       = "rh_psample_sample_packet"
+	networkEventsMonitoringHook         = "psample_sample_packet"
+	defaultNetworkEventsGroupID         = 10
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -58,38 +63,41 @@ var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects                  *BpfObjects
-	qdiscs                   map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters            map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters           map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader            *ringbuf.Reader
-	cacheMaxSize             int
-	enableIngress            bool
-	enableEgress             bool
-	pktDropsTracePoint       link.Link
-	rttFentryLink            link.Link
-	rttKprobeLink            link.Link
-	egressTCXLink            map[ifaces.Interface]link.Link
-	ingressTCXLink           map[ifaces.Interface]link.Link
-	lookupAndDeleteSupported bool
+	objects                     *BpfObjects
+	qdiscs                      map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters               map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters              map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader               *ringbuf.Reader
+	cacheMaxSize                int
+	enableIngress               bool
+	enableEgress                bool
+	pktDropsTracePoint          link.Link
+	rttFentryLink               link.Link
+	rttKprobeLink               link.Link
+	egressTCXLink               map[ifaces.Interface]link.Link
+	ingressTCXLink              map[ifaces.Interface]link.Link
+	networkEventsMonitoringLink link.Link
+	lookupAndDeleteSupported    bool
 }
 
 type FlowFetcherConfig struct {
-	EnableIngress    bool
-	EnableEgress     bool
-	Debug            bool
-	Sampling         int
-	CacheMaxSize     int
-	PktDrops         bool
-	DNSTracker       bool
-	DNSTrackerPort   int
-	EnableRTT        bool
-	EnableFlowFilter bool
-	EnablePCA        bool
-	FilterConfig     *FilterConfig
+	EnableIngress                  bool
+	EnableEgress                   bool
+	Debug                          bool
+	Sampling                       int
+	CacheMaxSize                   int
+	PktDrops                       bool
+	DNSTracker                     bool
+	DNSTrackerPort                 int
+	EnableRTT                      bool
+	EnableNetworkEventsMonitoring  bool
+	NetworkEventsMonitoringGroupID int
+	EnableFlowFilter               bool
+	EnablePCA                      bool
+	FilterConfig                   *FilterConfig
 }
 
-// nolint:cyclop
+// nolint:golint,cyclop
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.WithError(err).
@@ -131,14 +139,24 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	if cfg.EnableFlowFilter {
 		enableFlowFiltering = 1
 	}
+	enableNetworkEventsMonitoring := 0
+	if cfg.EnableNetworkEventsMonitoring {
+		enableNetworkEventsMonitoring = 1
+	}
+	networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
+	if cfg.NetworkEventsMonitoringGroupID > 0 {
+		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
+	}
 
 	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:            uint32(cfg.Sampling),
-		constTraceMessages:       uint8(traceMsgs),
-		constEnableRtt:           uint8(enableRtt),
-		constEnableDNSTracking:   uint8(enableDNSTracking),
-		constDNSTrackingPort:     uint32(dnsTrackerPort),
-		constEnableFlowFiltering: uint8(enableFlowFiltering),
+		constSampling:                       uint32(cfg.Sampling),
+		constTraceMessages:                  uint8(traceMsgs),
+		constEnableRtt:                      uint8(enableRtt),
+		constEnableDNSTracking:              uint8(enableDNSTracking),
+		constDNSTrackingPort:                uint32(dnsTrackerPort),
+		constEnableFlowFiltering:            uint8(enableFlowFiltering),
+		constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
+		constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -176,6 +194,25 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
+	var networkEventsMonitoringLink link.Link
+	if cfg.EnableNetworkEventsMonitoring && !oldKernel {
+		if !kernel.IsKernelOlderThan("5.16.0") {
+			//revive:disable
+			/*
+				networkEventsMonitoringLink, err = link.Kprobe(networkEventsMonitoringHook, objects.NetworkEventsMonitoring, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
+				}
+			*/
+		} else {
+			log.Infof("kernel older than 5.16.0 detected: use custom network_events_monitoring kprobe hook")
+			networkEventsMonitoringLink, err = link.Kprobe(rhNetworkEventsMonitoringHook, objects.RhNetworkEventsMonitoring, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
+			}
+		}
+	}
+
 	var rttFentryLink, rttKprobeLink link.Link
 	if cfg.EnableRTT {
 		if !oldKernel {
@@ -205,20 +242,21 @@ next:
 	}
 
 	return &FlowFetcher{
-		objects:                  &objects,
-		ringbufReader:            flows,
-		egressFilters:            map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:           map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                   map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:             cfg.CacheMaxSize,
-		enableIngress:            cfg.EnableIngress,
-		enableEgress:             cfg.EnableEgress,
-		pktDropsTracePoint:       pktDropsLink,
-		rttFentryLink:            rttFentryLink,
-		rttKprobeLink:            rttKprobeLink,
-		egressTCXLink:            map[ifaces.Interface]link.Link{},
-		ingressTCXLink:           map[ifaces.Interface]link.Link{},
-		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
+		objects:                     &objects,
+		ringbufReader:               flows,
+		egressFilters:               map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:              map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:                      map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:                cfg.CacheMaxSize,
+		enableIngress:               cfg.EnableIngress,
+		enableEgress:                cfg.EnableEgress,
+		pktDropsTracePoint:          pktDropsLink,
+		rttFentryLink:               rttFentryLink,
+		rttKprobeLink:               rttKprobeLink,
+		egressTCXLink:               map[ifaces.Interface]link.Link{},
+		ingressTCXLink:              map[ifaces.Interface]link.Link{},
+		networkEventsMonitoringLink: networkEventsMonitoringLink,
+		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 	}, nil
 }
 
@@ -365,7 +403,7 @@ func (m *FlowFetcher) Register(iface ifaces.Interface) error {
 	if err != nil {
 		return fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
 	}
-	defer handle.Delete()
+	defer handle.Close()
 
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	ipvlan, err := handle.LinkByIndex(iface.Index)
@@ -494,6 +532,11 @@ func (m *FlowFetcher) Close() error {
 	}
 	if m.rttKprobeLink != nil {
 		if err := m.rttKprobeLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if m.networkEventsMonitoringLink != nil {
+		if err := m.networkEventsMonitoringLink.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -772,6 +815,8 @@ func kernelSpecificLoadAndAssign(oldKernel bool, spec *ebpf.CollectionSpec) (Bpf
 		objects.TcxIngressPcaParse = newObjects.TcxIngressPcaParse
 		objects.TcpRcvKprobe = newObjects.TCPRcvKprobe
 		objects.TcpRcvFentry = nil
+		objects.RhNetworkEventsMonitoring = nil
+		//objects.NetworkEventsMonitoring = nil
 		objects.KfreeSkb = nil
 	} else {
 		if err := spec.LoadAndAssign(&objects, nil); err != nil {
@@ -833,6 +878,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)
 	delete(spec.Programs, constEnableFlowFiltering)
+	delete(spec.Programs, constEnableNetworkEventsMonitoring)
+	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
 
 	pcaEnable := 0
 	if cfg.EnablePCA {
@@ -888,7 +935,7 @@ func registerInterface(iface ifaces.Interface) (*netlink.GenericQdisc, netlink.L
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err)
 	}
-	defer handle.Delete()
+	defer handle.Close()
 
 	// Load pre-compiled programs and maps into the kernel, and rewrites the configuration
 	ipvlan, err := handle.LinkByIndex(iface.Index)

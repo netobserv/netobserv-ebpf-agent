@@ -7,6 +7,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
+	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -23,8 +24,9 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer  kafkaWriter
-	Metrics *metrics.Metrics
+	Writer        kafkaWriter
+	Metrics       *metrics.Metrics
+	SampleDecoder *ovnobserv.SampleDecoder
 }
 
 func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
@@ -50,7 +52,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 	klog.Debugf("sending %d records", len(records))
 	msgs := make([]kafkago.Message, 0, len(records))
 	for _, record := range records {
-		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record))
+		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record, kp.SampleDecoder))
 		if err != nil {
 			klog.WithError(err).Debug("can't encode protobuf message. Ignoring")
 			kp.Metrics.Errors.WithErrorName(componentKafka, "CannotEncodeMessage").Inc()

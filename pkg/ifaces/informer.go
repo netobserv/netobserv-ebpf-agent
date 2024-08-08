@@ -53,7 +53,7 @@ func netInterfaces(nsh netns.NsHandle) ([]Interface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create handle for netns (%s): %w", nsh.String(), err)
 	}
-	defer handle.Delete()
+	defer handle.Close()
 
 	// Get a list of interfaces in the namespace
 	links, err := handle.LinkList()

@@ -144,14 +144,14 @@ func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetric
 		return &ebpf.BpfFlowMetrics{}
 	}
 	aggr := &ebpf.BpfFlowMetrics{}
-	for _, mt := range metrics {
+	for i := range metrics {
 		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
 		// might receive entries from previous collect-eviction timeslots.
 		// We need to check the flow time and discard old flows.
-		if mt.StartMonoTimeTs <= m.lastEvictionNs || mt.EndMonoTimeTs <= m.lastEvictionNs {
+		if metrics[i].StartMonoTimeTs <= m.lastEvictionNs || metrics[i].EndMonoTimeTs <= m.lastEvictionNs {
 			continue
 		}
-		Accumulate(aggr, &mt)
+		Accumulate(aggr, &metrics[i])
 	}
 	return aggr
 }
