@@ -59,9 +59,11 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 case IPPROTO_UDP:
                 case IPPROTO_SCTP:
                     // dstPort matching
-                    if (rule->dstPortStart != 0 && rule->dstPortEnd == 0) {
-                        if (rule->dstPortStart == id->dst_port) {
-                            BPF_PRINTK("dstPortStart matched\n");
+                    if ((rule->dstPortStart != 0 && rule->dstPortEnd == 0) || rule->dstPort1 != 0 ||
+                        rule->dstPort2 != 0) {
+                        if (rule->dstPortStart == id->dst_port || rule->dstPort1 == id->dst_port ||
+                            rule->dstPort2 == id->dst_port) {
+                            BPF_PRINTK("dstPort matched\n");
                             result++;
                         } else {
                             result = 0;
@@ -78,9 +80,11 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                         }
                     }
                     // srcPort matching
-                    if (rule->srcPortStart != 0 && rule->srcPortEnd == 0) {
-                        if (rule->srcPortStart == id->src_port) {
-                            BPF_PRINTK("srcPortStart matched\n");
+                    if ((rule->srcPortStart != 0 && rule->srcPortEnd == 0) || rule->srcPort1 != 0 ||
+                        rule->srcPort2 != 0) {
+                        if (rule->srcPortStart == id->src_port || rule->srcPort1 == id->src_port ||
+                            rule->srcPort2 == id->src_port) {
+                            BPF_PRINTK("srcPort matched\n");
                             result++;
                         } else {
                             result = 0;
@@ -97,9 +101,12 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                         }
                     }
                     // Generic port matching check for either src or dst port
-                    if (rule->portStart != 0 && rule->portEnd == 0) {
-                        if (rule->portStart == id->src_port || rule->portStart == id->dst_port) {
-                            BPF_PRINTK("portStart matched\n");
+                    if ((rule->portStart != 0 && rule->portEnd == 0) || rule->port1 != 0 ||
+                        rule->port2 != 0) {
+                        if (rule->portStart == id->src_port || rule->portStart == id->dst_port ||
+                            rule->port1 == id->src_port || rule->port1 == id->dst_port ||
+                            rule->port2 == id->src_port || rule->port2 == id->dst_port) {
+                            BPF_PRINTK("port matched\n");
                             result++;
                         } else {
                             result = 0;

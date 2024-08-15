@@ -101,19 +101,28 @@ func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 	switch config.FilterProtocol {
 	case "TCP":
 		val.Protocol = syscall.IPPROTO_TCP
-		val.DstPortStart, val.DstPortEnd = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPorts(config)
+		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
+		val.DstPort1, val.DstPort2 = getDstPorts(config)
+		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
+		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
+		val.PortStart, val.PortEnd = getPortsRange(config)
+		val.Port1, val.Port2 = getPorts(config)
 	case "UDP":
 		val.Protocol = syscall.IPPROTO_UDP
-		val.DstPortStart, val.DstPortEnd = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPorts(config)
+		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
+		val.DstPort1, val.DstPort2 = getDstPorts(config)
+		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
+		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
+		val.PortStart, val.PortEnd = getPortsRange(config)
+		val.Port1, val.Port2 = getPorts(config)
 	case "SCTP":
 		val.Protocol = syscall.IPPROTO_SCTP
-		val.DstPortStart, val.DstPortEnd = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPorts(config)
+		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
+		val.DstPort1, val.DstPort2 = getDstPorts(config)
+		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
+		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
+		val.PortStart, val.PortEnd = getPortsRange(config)
+		val.Port1, val.Port2 = getPorts(config)
 	case "ICMP":
 		val.Protocol = syscall.IPPROTO_ICMP
 		val.IcmpType = uint8(config.FilterIcmpType)
@@ -135,11 +144,30 @@ func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 	return val, nil
 }
 
-func getSrcPorts(config *FilterConfig) (uint16, uint16) {
+func getSrcPortsRange(config *FilterConfig) (uint16, uint16) {
 	if config.FilterSourcePort.Type == intstr.Int {
 		return uint16(config.FilterSourcePort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FilterSourcePort.String())
+	start, end, err := getPortsFromString(config.FilterSourcePort.String(), "-")
+	if err != nil {
+		return 0, 0
+	}
+	return start, end
+}
+
+func getSrcPorts(config *FilterConfig) (uint16, uint16) {
+	port1, port2, err := getPortsFromString(config.FilterSourcePort.String(), ",")
+	if err != nil {
+		return 0, 0
+	}
+	return port1, port2
+}
+
+func getDstPortsRange(config *FilterConfig) (uint16, uint16) {
+	if config.FilterDestinationPort.Type == intstr.Int {
+		return uint16(config.FilterDestinationPort.IntVal), 0
+	}
+	start, end, err := getPortsFromString(config.FilterDestinationPort.String(), "-")
 	if err != nil {
 		return 0, 0
 	}
@@ -147,10 +175,18 @@ func getSrcPorts(config *FilterConfig) (uint16, uint16) {
 }
 
 func getDstPorts(config *FilterConfig) (uint16, uint16) {
-	if config.FilterDestinationPort.Type == intstr.Int {
-		return uint16(config.FilterDestinationPort.IntVal), 0
+	port1, port2, err := getPortsFromString(config.FilterDestinationPort.String(), ",")
+	if err != nil {
+		return 0, 0
 	}
-	start, end, err := getPortsFromString(config.FilterDestinationPort.String())
+	return port1, port2
+}
+
+func getPortsRange(config *FilterConfig) (uint16, uint16) {
+	if config.FilterDestinationPort.Type == intstr.Int {
+		return uint16(config.FilterPort.IntVal), 0
+	}
+	start, end, err := getPortsFromString(config.FilterPort.String(), "-")
 	if err != nil {
 		return 0, 0
 	}
@@ -158,20 +194,17 @@ func getDstPorts(config *FilterConfig) (uint16, uint16) {
 }
 
 func getPorts(config *FilterConfig) (uint16, uint16) {
-	if config.FilterDestinationPort.Type == intstr.Int {
-		return uint16(config.FilterPort.IntVal), 0
-	}
-	start, end, err := getPortsFromString(config.FilterPort.String())
+	port1, port2, err := getPortsFromString(config.FilterPort.String(), ",")
 	if err != nil {
 		return 0, 0
 	}
-	return start, end
+	return port1, port2
 }
 
-func getPortsFromString(s string) (uint16, uint16, error) {
-	ps := strings.SplitN(s, "-", 2)
+func getPortsFromString(s, sep string) (uint16, uint16, error) {
+	ps := strings.SplitN(s, sep, 2)
 	if len(ps) != 2 {
-		return 0, 0, fmt.Errorf("invalid ports range. Expected two integers separated by hyphen but found %s", s)
+		return 0, 0, fmt.Errorf("invalid ports range. Expected two integers separated by %s but found %s", sep, s)
 	}
 	startPort, err := strconv.ParseUint(ps[0], 10, 16)
 	if err != nil {
@@ -181,11 +214,11 @@ func getPortsFromString(s string) (uint16, uint16, error) {
 	if err != nil {
 		return 0, 0, fmt.Errorf("invalid end port number %w", err)
 	}
-	if startPort > endPort {
+	if sep == "-" && startPort > endPort {
 		return 0, 0, fmt.Errorf("invalid port range. Start port is greater than end port")
 	}
 	if startPort == endPort {
-		return 0, 0, fmt.Errorf("invalid port range. Start and end port are equal. Remove the hyphen and enter a single port")
+		return 0, 0, fmt.Errorf("invalid port range. Start and end port are equal. Remove the %s and enter a single port", sep)
 	}
 	if startPort == 0 {
 		return 0, 0, fmt.Errorf("invalid start port 0")
@@ -193,9 +226,12 @@ func getPortsFromString(s string) (uint16, uint16, error) {
 	return uint16(startPort), uint16(endPort), nil
 }
 
-func ConvertFilterPortsToInstr(intPort int32, rangePorts string) intstr.IntOrString {
-	if rangePorts == "" {
-		return intstr.FromInt32(intPort)
+func ConvertFilterPortsToInstr(intPort int32, rangePorts, ports string) intstr.IntOrString {
+	if rangePorts != "" {
+		return intstr.FromString(rangePorts)
 	}
-	return intstr.FromString(rangePorts)
+	if ports != "" {
+		return intstr.FromString(ports)
+	}
+	return intstr.FromInt32(intPort)
 }

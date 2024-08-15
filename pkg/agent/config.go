@@ -202,12 +202,21 @@ type Config struct {
 	// FilterSourcePortRange is the source port range to filter flows.
 	// Example: 8000-8010
 	FilterSourcePortRange string `env:"FILTER_SOURCE_PORT_RANGE"`
+	// FilterSourcePorts is two source ports to filter flows.
+	// Example: 8000,8010
+	FilterSourcePorts string `env:"FILTER_SOURCE_PORTS"`
 	// FilterDestinationPortRange is the destination port range to filter flows.
 	// Example: 8000-8010
 	FilterDestinationPortRange string `env:"FILTER_DESTINATION_PORT_RANGE"`
+	// FilterDestinationPorts is two destination ports to filter flows.
+	// Example: 8000,8010
+	FilterDestinationPorts string `env:"FILTER_DESTINATION_PORTS"`
 	// FilterPortRange is the port range to filter flows, can be used for either source or destination port.
 	// Example: 8000-8010
 	FilterPortRange string `env:"FILTER_PORT_RANGE"`
+	// FilterPorts is two ports option to filter flows, can be used for either source or destination port.
+	// Example: 8000,8010
+	FilterPorts string `env:"FILTER_PORTS"`
 	// FilterICMPType is the ICMP type to filter flows.
 	FilterICMPType int `env:"FILTER_ICMP_TYPE"`
 	// FilterICMPCode is the ICMP code to filter flows.
