@@ -24,10 +24,13 @@ Rule-base filtering is a method to control the flow of packets cached in the eBP
 - `FILTER_PROTOCOL` - Protocol of the flow filter rule. Possible values are `TCP`, `UDP`, `SCTP`, `ICMP`, `ICMPv6`.
 - `FILTER_SOURCE_PORT` - Single Source port of the flow filter rule.
 - `FILTER_SOURCE_PORT_RANGE` - Source port range of the flow filter rule. using "80-100" format.
+- `FILTER_SOURCE_PORTS` - Source port two values of the flow filter rule. using "80,100" format.
 - `FILTER_DESTINATION_PORT` - Single Destination port of the flow filter rule.
 - `FILTER_DESTINATION_PORT_RANGE` - Destination port range of the flow filter rule. using "80-100" format.
+- `FILTER_DESTINATION_PORTS` - Destination port two values of the flow filter rule. using "80,100" format.
 - `FILTER_PORT` - Single L4 port of the flow filter rule can be either source or destination port.
 - `FILTER_PORT_RANGE` - L4 port range of the flow filter rule. using "80–100" format can be either a source or destination ports range.
+- `FILTER_PORTS` - Two ports values of the flow filter rule. using "80,100" format can be either two ports for src or two ports for destination.
 - `FILTER_ICMP_TYPE` - ICMP type of the flow filter rule.
 - `FILTER_ICMP_CODE` - ICMP code of the flow filter rule.
 - `FILTER_PEER_IP` - Specific Peer IP address of the flow filter rule.
