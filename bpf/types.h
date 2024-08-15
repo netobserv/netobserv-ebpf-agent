@@ -208,10 +208,16 @@ struct filter_value_t {
     u8 protocol;
     u16 dstPortStart;
     u16 dstPortEnd;
+    u16 dstPort1;
+    u16 dstPort2;
     u16 srcPortStart;
     u16 srcPortEnd;
+    u16 srcPort1;
+    u16 srcPort2;
     u16 portStart;
     u16 portEnd;
+    u16 port1;
+    u16 port2;
     u8 icmpType;
     u8 icmpCode;
     direction direction;

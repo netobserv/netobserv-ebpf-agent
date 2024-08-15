@@ -53,10 +53,16 @@ type BpfFilterValueT struct {
 	Protocol     uint8
 	DstPortStart uint16
 	DstPortEnd   uint16
+	DstPort1     uint16
+	DstPort2     uint16
 	SrcPortStart uint16
 	SrcPortEnd   uint16
+	SrcPort1     uint16
+	SrcPort2     uint16
 	PortStart    uint16
 	PortEnd      uint16
+	Port1        uint16
+	Port2        uint16
 	IcmpType     uint8
 	IcmpCode     uint8
 	Direction    BpfDirectionT
