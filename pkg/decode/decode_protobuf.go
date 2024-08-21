@@ -1,7 +1,10 @@
 package decode
 
 import (
+	"encoding/base64"
 	"fmt"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"syscall"
 	"time"
 
@@ -139,8 +142,6 @@ func RecordToMap(fr *flow.Record) config.GenericMap {
 	return out
 }
 
-<<<<<<< HEAD
-=======
 func PacketToMap(pr *flow.PacketRecord) config.GenericMap {
 	out := config.GenericMap{}
 
@@ -206,7 +207,6 @@ func PacketToMap(pr *flow.PacketRecord) config.GenericMap {
 	return out
 }
 
->>>>>>> b39afec8 (added sctp parsing)
 // TCPStateToStr is based on kernel TCP state definition
 // https://elixir.bootlin.com/linux/v6.3/source/include/net/tcp_states.h#L12
 func TCPStateToStr(state uint32) string {
