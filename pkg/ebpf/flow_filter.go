@@ -101,37 +101,24 @@ func (f *Filter) getFilterValue(config *FilterConfig) (BpfFilterValueT, error) {
 	switch config.FilterProtocol {
 	case "TCP":
 		val.Protocol = syscall.IPPROTO_TCP
-		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
-		val.DstPort1, val.DstPort2 = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
-		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPortsRange(config)
-		val.Port1, val.Port2 = getPorts(config)
 	case "UDP":
 		val.Protocol = syscall.IPPROTO_UDP
-		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
-		val.DstPort1, val.DstPort2 = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
-		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPortsRange(config)
-		val.Port1, val.Port2 = getPorts(config)
 	case "SCTP":
 		val.Protocol = syscall.IPPROTO_SCTP
-		val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
-		val.DstPort1, val.DstPort2 = getDstPorts(config)
-		val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
-		val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
-		val.PortStart, val.PortEnd = getPortsRange(config)
-		val.Port1, val.Port2 = getPorts(config)
 	case "ICMP":
 		val.Protocol = syscall.IPPROTO_ICMP
-		val.IcmpType = uint8(config.FilterIcmpType)
-		val.IcmpCode = uint8(config.FilterIcmpCode)
 	case "ICMPv6":
 		val.Protocol = syscall.IPPROTO_ICMPV6
-		val.IcmpType = uint8(config.FilterIcmpType)
-		val.IcmpCode = uint8(config.FilterIcmpCode)
 	}
+
+	val.DstPortStart, val.DstPortEnd = getDstPortsRange(config)
+	val.DstPort1, val.DstPort2 = getDstPorts(config)
+	val.SrcPortStart, val.SrcPortEnd = getSrcPortsRange(config)
+	val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
+	val.PortStart, val.PortEnd = getPortsRange(config)
+	val.Port1, val.Port2 = getPorts(config)
+	val.IcmpType = uint8(config.FilterIcmpType)
+	val.IcmpCode = uint8(config.FilterIcmpCode)
 
 	if config.FilterPeerIP != "" {
 		ip := net.ParseIP(config.FilterPeerIP)
