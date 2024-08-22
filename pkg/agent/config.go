@@ -161,6 +161,9 @@ type Config struct {
 	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
+	// DNSTrackingPort used to define which port the DNS service is mapped to at the pod level,
+	// so we can track DNS at the pod level
+	DNSTrackingPort uint16 `env:"DNS_TRACKING_PORT" envDefault:"53"`
 	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
 	// before being deleted, default is 5 seconds.
 	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
@@ -199,12 +202,21 @@ type Config struct {
 	// FilterSourcePortRange is the source port range to filter flows.
 	// Example: 8000-8010
 	FilterSourcePortRange string `env:"FILTER_SOURCE_PORT_RANGE"`
+	// FilterSourcePorts is two source ports to filter flows.
+	// Example: 8000,8010
+	FilterSourcePorts string `env:"FILTER_SOURCE_PORTS"`
 	// FilterDestinationPortRange is the destination port range to filter flows.
 	// Example: 8000-8010
 	FilterDestinationPortRange string `env:"FILTER_DESTINATION_PORT_RANGE"`
+	// FilterDestinationPorts is two destination ports to filter flows.
+	// Example: 8000,8010
+	FilterDestinationPorts string `env:"FILTER_DESTINATION_PORTS"`
 	// FilterPortRange is the port range to filter flows, can be used for either source or destination port.
 	// Example: 8000-8010
 	FilterPortRange string `env:"FILTER_PORT_RANGE"`
+	// FilterPorts is two ports option to filter flows, can be used for either source or destination port.
+	// Example: 8000,8010
+	FilterPorts string `env:"FILTER_PORTS"`
 	// FilterICMPType is the ICMP type to filter flows.
 	FilterICMPType int `env:"FILTER_ICMP_TYPE"`
 	// FilterICMPCode is the ICMP code to filter flows.

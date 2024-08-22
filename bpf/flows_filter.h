@@ -49,98 +49,96 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
             *action = rule->action;
             result++;
         }
-
-        if (rule->protocol != 0) {
-            if (rule->protocol == id->transport_protocol) {
-                BPF_PRINTK("protocol matched\n");
-                result++;
-                switch (rule->protocol) {
-                case IPPROTO_TCP:
-                case IPPROTO_UDP:
-                case IPPROTO_SCTP:
-                    // dstPort matching
-                    if (rule->dstPortStart != 0 && rule->dstPortEnd == 0) {
-                        if (rule->dstPortStart == id->dst_port) {
-                            BPF_PRINTK("dstPortStart matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
-                    } else if (rule->dstPortStart != 0 && rule->dstPortEnd != 0) {
-                        if (rule->dstPortStart <= id->dst_port &&
-                            id->dst_port <= rule->dstPortEnd) {
-                            BPF_PRINTK("dstPortStart and dstPortEnd matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
+        // match specific rule protocol or use wildcard protocol
+        if (rule->protocol == id->transport_protocol || rule->protocol == 0) {
+            switch (id->transport_protocol) {
+            case IPPROTO_TCP:
+            case IPPROTO_UDP:
+            case IPPROTO_SCTP:
+                // dstPort matching
+                if ((rule->dstPortStart != 0 && rule->dstPortEnd == 0) || rule->dstPort1 != 0 ||
+                    rule->dstPort2 != 0) {
+                    if (rule->dstPortStart == id->dst_port || rule->dstPort1 == id->dst_port ||
+                        rule->dstPort2 == id->dst_port) {
+                        BPF_PRINTK("dstPort matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
                     }
-                    // srcPort matching
-                    if (rule->srcPortStart != 0 && rule->srcPortEnd == 0) {
-                        if (rule->srcPortStart == id->src_port) {
-                            BPF_PRINTK("srcPortStart matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
-                    } else if (rule->srcPortStart != 0 && rule->srcPortEnd != 0) {
-                        if (rule->srcPortStart <= id->src_port &&
-                            id->src_port <= rule->srcPortEnd) {
-                            BPF_PRINTK("srcPortStart and srcPortEnd matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
+                } else if (rule->dstPortStart != 0 && rule->dstPortEnd != 0) {
+                    if (rule->dstPortStart <= id->dst_port && id->dst_port <= rule->dstPortEnd) {
+                        BPF_PRINTK("dstPortStart and dstPortEnd matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
                     }
-                    // Generic port matching check for either src or dst port
-                    if (rule->portStart != 0 && rule->portEnd == 0) {
-                        if (rule->portStart == id->src_port || rule->portStart == id->dst_port) {
-                            BPF_PRINTK("portStart matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
-                    } else if (rule->portStart != 0 && rule->portEnd != 0) {
-                        if ((rule->portStart <= id->src_port && id->src_port <= rule->portEnd) ||
-                            (rule->portStart <= id->dst_port && id->dst_port <= rule->portEnd)) {
-                            BPF_PRINTK("portStart and portEnd matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
-                    }
-                    break;
-                case IPPROTO_ICMP:
-                case IPPROTO_ICMPV6:
-                    if (rule->icmpType != 0) {
-                        if (rule->icmpType == id->icmp_type) {
-                            BPF_PRINTK("icmpType matched\n");
-                            result++;
-                        } else {
-                            result = 0;
-                            goto end;
-                        }
-                        if (rule->icmpCode != 0) {
-                            if (rule->icmpCode == id->icmp_code) {
-                                BPF_PRINTK("icmpCode matched\n");
-                                result++;
-                            } else {
-                                result = 0;
-                                goto end;
-                            }
-                        }
-                    }
-                    break;
                 }
-            } else {
-                result = 0;
-                goto end;
+                // srcPort matching
+                if ((rule->srcPortStart != 0 && rule->srcPortEnd == 0) || rule->srcPort1 != 0 ||
+                    rule->srcPort2 != 0) {
+                    if (rule->srcPortStart == id->src_port || rule->srcPort1 == id->src_port ||
+                        rule->srcPort2 == id->src_port) {
+                        BPF_PRINTK("srcPort matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
+                    }
+                } else if (rule->srcPortStart != 0 && rule->srcPortEnd != 0) {
+                    if (rule->srcPortStart <= id->src_port && id->src_port <= rule->srcPortEnd) {
+                        BPF_PRINTK("srcPortStart and srcPortEnd matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
+                    }
+                }
+                // Generic port matching check for either src or dst port
+                if ((rule->portStart != 0 && rule->portEnd == 0) || rule->port1 != 0 ||
+                    rule->port2 != 0) {
+                    if (rule->portStart == id->src_port || rule->portStart == id->dst_port ||
+                        rule->port1 == id->src_port || rule->port1 == id->dst_port ||
+                        rule->port2 == id->src_port || rule->port2 == id->dst_port) {
+                        BPF_PRINTK("port matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
+                    }
+                } else if (rule->portStart != 0 && rule->portEnd != 0) {
+                    if ((rule->portStart <= id->src_port && id->src_port <= rule->portEnd) ||
+                        (rule->portStart <= id->dst_port && id->dst_port <= rule->portEnd)) {
+                        BPF_PRINTK("portStart and portEnd matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
+                    }
+                }
+                break;
+            case IPPROTO_ICMP:
+            case IPPROTO_ICMPV6:
+                if (rule->icmpType != 0) {
+                    if (rule->icmpType == id->icmp_type) {
+                        BPF_PRINTK("icmpType matched\n");
+                        result++;
+                    } else {
+                        result = 0;
+                        goto end;
+                    }
+                    if (rule->icmpCode != 0) {
+                        if (rule->icmpCode == id->icmp_code) {
+                            BPF_PRINTK("icmpCode matched\n");
+                            result++;
+                        } else {
+                            result = 0;
+                            goto end;
+                        }
+                    }
+                }
+                break;
             }
         }
 
