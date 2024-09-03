@@ -117,11 +117,7 @@ func RecordToMap(fr *flow.Record) config.GenericMap {
 			out["DnsId"] = dnsID
 			out["DnsFlags"] = fr.Metrics.DnsRecord.Flags
 			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.DnsRecord.Flags) & 0xF)
-			if fr.Metrics.DnsRecord.Latency != 0 {
-				out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
-			}
-			// Not sure about the logic here, why erasing errno?
-			out["DnsErrno"] = uint32(0)
+			out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
 		}
 	}
 
