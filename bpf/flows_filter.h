@@ -140,6 +140,9 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 }
                 break;
             }
+        } else {
+            result = 0;
+            goto end;
         }
 
         if (!is_zero_ip(rule->ip, len)) {
