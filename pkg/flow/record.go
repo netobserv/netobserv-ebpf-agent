@@ -105,7 +105,6 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	r.DnsRecord.Flags |= src.DnsRecord.Flags
 	if src.DnsRecord.Id != 0 {
 		r.DnsRecord.Id = src.DnsRecord.Id
-		r.DnsRecord.Errno = src.DnsRecord.Errno
 	}
 	if r.DnsRecord.Errno != src.DnsRecord.Errno {
 		r.DnsRecord.Errno = src.DnsRecord.Errno
