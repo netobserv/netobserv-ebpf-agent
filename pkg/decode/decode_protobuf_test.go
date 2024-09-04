@@ -101,7 +101,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"DnsId":                  uint16(1),
 		"DnsFlags":               uint16(0x80),
 		"DnsFlagsResponseCode":   "NoError",
-		"DnsErrno":               uint32(0),
+		"DnsErrno":               uint8(0),
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
 	}, out)
 

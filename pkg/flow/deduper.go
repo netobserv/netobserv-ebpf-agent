@@ -88,6 +88,7 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 			fEntry.dnsRecord.Flags = r.Metrics.DnsRecord.Flags
 			fEntry.dnsRecord.Id = r.Metrics.DnsRecord.Id
 			fEntry.dnsRecord.Latency = r.Metrics.DnsRecord.Latency
+			fEntry.dnsRecord.Errno = r.Metrics.DnsRecord.Errno
 		}
 		// If the new flow has flowRTT then enrich the flow in the case with the same RTT and mark it duplicate
 		if r.Metrics.FlowRtt != 0 && *fEntry.flowRTT == 0 {
