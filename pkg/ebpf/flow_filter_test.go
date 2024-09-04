@@ -13,31 +13,31 @@ import (
 
 func TestGetPortsFromString(t *testing.T) {
 	testCases := []struct {
-		input         string
+		portsRange    string
 		expectedStart uint16
 		expectedEnd   uint16
 		expectedError error
 	}{
 		{
-			input:         "80-90",
+			portsRange:    "80-90",
 			expectedStart: 80,
 			expectedEnd:   90,
 			expectedError: nil,
 		},
 		{
-			input:         "90-80",
+			portsRange:    "90-80",
 			expectedStart: 0,
 			expectedEnd:   0,
 			expectedError: fmt.Errorf("invalid port range. Start port is greater than end port"),
 		},
 		{
-			input:         "80",
+			portsRange:    "80",
 			expectedStart: 0,
 			expectedEnd:   0,
-			expectedError: fmt.Errorf("invalid ports range. Expected two integers separated by hyphen but found 80"),
+			expectedError: fmt.Errorf("invalid ports range. Expected two integers separated by - but found 80"),
 		},
 		{
-			input:         "80000-8080",
+			portsRange:    "80000-8080",
 			expectedStart: 0,
 			expectedEnd:   0,
 			expectedError: fmt.Errorf("invalid start port number strconv.ParseUint: parsing \"80000\": value out of range"),
@@ -45,7 +45,7 @@ func TestGetPortsFromString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		start, end, err := getPortsFromString(tc.input)
+		start, end, err := getPortsFromString(tc.portsRange, "-")
 		if tc.expectedError != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.expectedError.Error(), err.Error())
@@ -79,6 +79,7 @@ func TestFilter_getFlowFilterValue(t *testing.T) {
 		FilterProtocol:        "TCP",
 		FilterSourcePort:      intstr.FromInt32(8080),
 		FilterDestinationPort: intstr.FromString("8000-9000"),
+		FilterPort:            intstr.FromString("3000,4000"),
 	}
 
 	value, err := f.getFilterValue(config)
@@ -90,40 +91,66 @@ func TestFilter_getFlowFilterValue(t *testing.T) {
 	assert.Equal(t, uint16(0), value.SrcPortEnd)
 	assert.Equal(t, uint16(8000), value.DstPortStart)
 	assert.Equal(t, uint16(9000), value.DstPortEnd)
+	assert.Equal(t, uint16(3000), value.Port1)
+	assert.Equal(t, uint16(4000), value.Port2)
 }
 
-func TestGetSrcPorts(t *testing.T) {
+func TestGetSrcPortsRange(t *testing.T) {
 	config := &FilterConfig{
 		FilterSourcePort: intstr.FromString("8000-9000"),
 	}
-	start, end := getSrcPorts(config)
+	start, end := getSrcPortsRange(config)
 
 	assert.Equal(t, uint16(8000), start)
 	assert.Equal(t, uint16(9000), end)
 }
 
-func TestGetDstPorts(t *testing.T) {
+func TestGetSrcPorts(t *testing.T) {
+	config := &FilterConfig{
+		FilterSourcePort: intstr.FromString("8000,9000"),
+	}
+	p1, p2 := getSrcPorts(config)
+
+	assert.Equal(t, uint16(8000), p1)
+	assert.Equal(t, uint16(9000), p2)
+}
+
+func TestGetDstPortsRange(t *testing.T) {
 	config := &FilterConfig{
 		FilterDestinationPort: intstr.FromInt32(8080),
 	}
-	start, end := getDstPorts(config)
+	start, end := getDstPortsRange(config)
 
 	assert.Equal(t, uint16(8080), start)
 	assert.Equal(t, uint16(0), end)
+}
+
+func TestGetDstPorts(t *testing.T) {
+	config := &FilterConfig{
+		FilterDestinationPort: intstr.FromString("8080,9000"),
+	}
+	p1, p2 := getDstPorts(config)
+
+	assert.Equal(t, uint16(8080), p1)
+	assert.Equal(t, uint16(9000), p2)
 }
 
 func TestConvertFilterPortsToInstr(t *testing.T) {
 
 	t.Run("converts int port", func(t *testing.T) {
 		port := int32(80)
-		result := ConvertFilterPortsToInstr(port, "")
+		result := ConvertFilterPortsToInstr(port, "", "")
 		require.Equal(t, intstr.FromInt32(port), result)
 	})
 
 	t.Run("converts string range", func(t *testing.T) {
 		rangeStr := "80-90"
-		result := ConvertFilterPortsToInstr(0, rangeStr)
+		result := ConvertFilterPortsToInstr(0, rangeStr, "")
 		require.Equal(t, intstr.FromString(rangeStr), result)
 	})
-
+	t.Run("converts string ports", func(t *testing.T) {
+		portsStr := "80,90"
+		result := ConvertFilterPortsToInstr(0, "", portsStr)
+		require.Equal(t, intstr.FromString(portsStr), result)
+	})
 }

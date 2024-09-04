@@ -86,9 +86,9 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 			FilterIPCIDR:          cfg.FilterIPCIDR,
 			FilterProtocol:        cfg.FilterProtocol,
 			FilterPeerIP:          cfg.FilterPeerIP,
-			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange),
-			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange),
-			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange),
+			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange, cfg.FilterDestinationPorts),
+			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange, cfg.FilterSourcePorts),
+			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange, cfg.FilterPorts),
 		},
 	}
 
