@@ -6,10 +6,11 @@
 #define __DNS_TRACKER_H__
 #include "utils.h"
 
+#define DNS_DEFAULT_PORT 53
 #define DNS_QR_FLAG 0x8000
 #define UDP_MAXMSG 512
 #define EINVAL 22
-#define DNS_DEFAULT_PORT 53
+#define ENOENT 2
 
 struct dns_header {
     u16 id;
@@ -67,6 +68,7 @@ static __always_inline u8 calc_dns_header_offset(pkt_info *pkt, void *data_end) 
 
 static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt) {
     void *data_end = (void *)(long)skb->data_end;
+    int ret = 0;
     if (pkt->id->dst_port == dns_port || pkt->id->src_port == dns_port ||
         pkt->id->dst_port == DNS_DEFAULT_PORT || pkt->id->src_port == DNS_DEFAULT_PORT) {
         dns_flow_id dns_req;
@@ -77,7 +79,6 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
         }
 
         struct dns_header dns;
-        int ret;
         u32 dns_offset = (long)pkt->l4_hdr - (long)skb->data + len;
 
         if ((ret = bpf_skb_load_bytes(skb, dns_offset, &dns, sizeof(dns))) < 0) {
@@ -99,12 +100,14 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
             if (value != NULL) {
                 pkt->dns_latency = ts - *value;
                 bpf_map_delete_elem(&dns_flows, &dns_req);
+            } else {
+                ret = ENOENT;
             }
             pkt->dns_id = dns_id;
             pkt->dns_flags = flags;
         } // end of dns response
     }
-    return 0;
+    return ret;
 }
 
 #endif // __DNS_TRACKER_H__

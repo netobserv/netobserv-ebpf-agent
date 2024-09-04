@@ -106,6 +106,9 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	if src.DnsRecord.Id != 0 {
 		r.DnsRecord.Id = src.DnsRecord.Id
 	}
+	if r.DnsRecord.Errno != src.DnsRecord.Errno {
+		r.DnsRecord.Errno = src.DnsRecord.Errno
+	}
 	if r.DnsRecord.Latency < src.DnsRecord.Latency {
 		r.DnsRecord.Latency = src.DnsRecord.Latency
 	}
@@ -116,10 +119,6 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 	// Accumulate DSCP
 	if src.Dscp != 0 {
 		r.Dscp = src.Dscp
-	}
-	// Accumulate DNSErrno
-	if src.DnsRecord.Errno != 0 {
-		r.DnsRecord.Errno = src.DnsRecord.Errno
 	}
 }
 
