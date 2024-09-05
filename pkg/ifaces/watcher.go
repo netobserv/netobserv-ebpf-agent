@@ -82,6 +82,9 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"netnsHandle": netnsHandle.String(),
 				"error":       err,
 			}).Debug("linkSubscribe failed retry")
+			if err := netnsHandle.Close(); err != nil {
+				log.WithError(err).Warn("netnsHandle close failed")
+			}
 			return false, nil
 		}
 
