@@ -41,7 +41,9 @@ type Packets struct {
 type ebpfPacketFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
+	UnRegister(iface ifaces.Interface) error
 	AttachTCX(iface ifaces.Interface) error
+	DetachTCX(iface ifaces.Interface) error
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }
@@ -267,7 +269,7 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 	return export, nil
 }
 
-func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
+func (p *Packets) onInterfaceAdded(iface ifaces.Interface, add bool) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	allowed, err := p.filter.Allowed(iface.Name)
 	if err != nil {
@@ -279,14 +281,28 @@ func (p *Packets) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	plog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
-	if err := p.ebpf.AttachTCX(iface); err != nil {
-		plog.WithField("[PCA]interface", iface).WithError(err).
-			Info("can't attach to TCx hook packet ebpfFetcher. fall back to use legacy TC hook")
-		if err := p.ebpf.Register(iface); err != nil {
+	if add {
+		plog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
+		if err := p.ebpf.AttachTCX(iface); err != nil {
 			plog.WithField("[PCA]interface", iface).WithError(err).
-				Warn("can't register packet ebpfFetcher. Ignoring")
-			return
+				Info("can't attach to TCx hook packet ebpfFetcher. fall back to use legacy TC hook")
+			if err := p.ebpf.Register(iface); err != nil {
+				plog.WithField("[PCA]interface", iface).WithError(err).
+					Warn("can't register packet ebpfFetcher. Ignoring")
+				return
+			}
 		}
+	} else {
+		plog.WithField("interface", iface).Info("interface deleted. trying to detach TCX hook")
+		if err := p.ebpf.DetachTCX(iface); err != nil {
+			plog.WithField("[PCA]interface", iface).WithError(err).
+				Info("can't detach from TCx hook packet ebpfFetcher. check if there is any legacy TC hook")
+			if err := p.ebpf.UnRegister(iface); err != nil {
+				plog.WithField("[PCA]interface", iface).WithError(err).
+					Warn("can't unregister packet ebpfFetcher. Ignoring")
+				return
+			}
+		}
+
 	}
 }
