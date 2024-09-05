@@ -75,7 +75,7 @@ func configureInformer(cfg *Config, log *logrus.Entry) ifaces.Informer {
 
 }
 
-func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, eventAdded func(iface ifaces.Interface)) {
+func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, processEvent func(iface ifaces.Interface, add bool)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -85,10 +85,9 @@ func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slo
 			slog.WithField("event", event).Debug("received event")
 			switch event.Type {
 			case ifaces.EventAdded:
-				eventAdded(event.Interface)
+				processEvent(event.Interface, true)
 			case ifaces.EventDeleted:
-				// qdiscs, ingress and egress filters are automatically deleted so we don't need to
-				// specifically detach them from the ebpfFetcher
+				processEvent(event.Interface, false)
 			default:
 				slog.WithField("event", event).Warn("unknown event type")
 			}
@@ -125,7 +124,9 @@ type Flows struct {
 type ebpfFlowFetcher interface {
 	io.Closer
 	Register(iface ifaces.Interface) error
+	UnRegister(iface ifaces.Interface) error
 	AttachTCX(iface ifaces.Interface) error
+	DetachTCX(iface ifaces.Interface) error
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
 	DeleteMapsStaleEntries(timeOut time.Duration)
@@ -432,7 +433,7 @@ func (f *Flows) Status() Status {
 
 // interfacesManager uses an informer to check new/deleted network interfaces. For each running
 // interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
-// TODO: consider move this method and "onInterfaceAdded" to another type
+// TODO: consider move this method and "onInterfaceEvent" to another type
 func (f *Flows) interfacesManager(ctx context.Context) error {
 	slog := alog.WithField("function", "interfacesManager")
 
@@ -442,7 +443,7 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 		return fmt.Errorf("instantiating interfaces' informer: %w", err)
 	}
 
-	go interfaceListener(ctx, ifaceEvents, slog, f.onInterfaceAdded)
+	go interfaceListener(ctx, ifaceEvents, slog, f.onInterfaceEvent)
 
 	return nil
 }
@@ -498,7 +499,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*fl
 	return export, nil
 }
 
-func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
+func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	allowed, err := f.filter.Allowed(iface.Name)
 	if err != nil {
@@ -510,14 +511,28 @@ func (f *Flows) onInterfaceAdded(iface ifaces.Interface) {
 			Debug("interface does not match the allow/exclusion filters. Ignoring")
 		return
 	}
-	alog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
-	if err := f.ebpf.AttachTCX(iface); err != nil {
-		alog.WithField("interface", iface).WithError(err).
-			Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-		if err := f.ebpf.Register(iface); err != nil {
+	if add {
+		alog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
+		if err := f.ebpf.AttachTCX(iface); err != nil {
 			alog.WithField("interface", iface).WithError(err).
-				Warn("can't register flow ebpfFetcher. Ignoring")
-			return
+				Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
+			if err := f.ebpf.Register(iface); err != nil {
+				alog.WithField("interface", iface).WithError(err).
+					Warn("can't register flow ebpfFetcher. Ignoring")
+				return
+			}
 		}
+	} else {
+		alog.WithField("interface", iface).Info("interface deleted. trying to detach TCX hook")
+		if err := f.ebpf.DetachTCX(iface); err != nil {
+			alog.WithField("interface", iface).WithError(err).
+				Info("can't detach from TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
+			if err := f.ebpf.UnRegister(iface); err != nil {
+				alog.WithField("interface", iface).WithError(err).
+					Warn("can't unregister flow ebpfFetcher. Ignoring")
+				return
+			}
+		}
+
 	}
 }
