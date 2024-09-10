@@ -20,7 +20,8 @@ func ConnectClient(hostIP string, hostPort int) (*ClientConnection, error) {
 	flag.Parse()
 	// Set up a connection to the server.
 	socket := utils.GetSocket(hostIP, hostPort)
-	conn, err := grpc.Dial(socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

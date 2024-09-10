@@ -165,6 +165,27 @@ func (b *PipelineBuilderStage) EncodeS3(name string, s3 api.EncodeS3) PipelineBu
 	return b.next(name, NewEncodeS3Params(name, s3))
 }
 
+// EncodeOtelLogs chains the current stage with an EncodeOtelLogs stage (writing logs to open telemetry) and returns that new stage
+//
+//nolint:golint,gocritic
+func (b *PipelineBuilderStage) EncodeOtelLogs(name string, logs api.EncodeOtlpLogs) PipelineBuilderStage {
+	return b.next(name, NewEncodeOtelLogsParams(name, logs))
+}
+
+// EncodeOtelMetrics chains the current stage with an EncodeOtelMetrics stage (writing metrics to open telemetry) and returns that new stage
+//
+//nolint:golint,gocritic
+func (b *PipelineBuilderStage) EncodeOtelMetrics(name string, metrics api.EncodeOtlpMetrics) PipelineBuilderStage {
+	return b.next(name, NewEncodeOtelMetricsParams(name, metrics))
+}
+
+// EncodeOtelTraces chains the current stage with an EncodeOtelTraces stage (writing traces to open telemetry) and returns that new stage
+//
+//nolint:golint,gocritic
+func (b *PipelineBuilderStage) EncodeOtelTraces(name string, traces api.EncodeOtlpTraces) PipelineBuilderStage {
+	return b.next(name, NewEncodeOtelTracesParams(name, traces))
+}
+
 // WriteStdout chains the current stage with a WriteStdout stage and returns that new stage
 func (b *PipelineBuilderStage) WriteStdout(name string, stdout api.WriteStdout) PipelineBuilderStage {
 	return b.next(name, NewWriteStdoutParams(name, stdout))
@@ -190,6 +211,33 @@ func (b *PipelineBuilderStage) GetStages() []Stage {
 // GetStageParams returns the current pipeline stage params. It can be called from any of the stages, they share the same pipeline reference.
 func (b *PipelineBuilderStage) GetStageParams() []StageParam {
 	return b.pipeline.config
+}
+
+func isStaticParam(param StageParam) bool {
+	if param.Encode != nil && param.Encode.Type == api.PromType {
+		return false
+	}
+	return true
+}
+
+func (b *PipelineBuilderStage) GetStaticStageParams() []StageParam {
+	res := []StageParam{}
+	for _, param := range b.pipeline.config {
+		if isStaticParam(param) {
+			res = append(res, param)
+		}
+	}
+	return res
+}
+
+func (b *PipelineBuilderStage) GetDynamicStageParams() []StageParam {
+	res := []StageParam{}
+	for _, param := range b.pipeline.config {
+		if !isStaticParam(param) {
+			res = append(res, param)
+		}
+	}
+	return res
 }
 
 // IntoConfigFileStruct injects the current pipeline and params in the provided ConfigFileStruct object.

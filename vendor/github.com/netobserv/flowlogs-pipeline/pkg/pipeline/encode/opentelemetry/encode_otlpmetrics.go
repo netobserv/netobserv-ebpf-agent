@@ -45,6 +45,10 @@ type EncodeOtlpMetrics struct {
 	metricCommon *encode.MetricsCommonStruct
 }
 
+func (e *EncodeOtlpMetrics) Update(_ config.StageParam) {
+	log.Warn("EncodeOtlpMetrics, update not supported")
+}
+
 // Encode encodes a metric to be exported
 func (e *EncodeOtlpMetrics) Encode(metricRecord config.GenericMap) {
 	log.Tracef("entering EncodeOtlpMetrics. entry = %v", metricRecord)
@@ -140,7 +144,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 				log.Errorf("error during counter creation: %v", err)
 				return nil, err
 			}
-			metricCommon.AddCounter(counter, mInfo)
+			metricCommon.AddCounter(fullMetricName, counter, mInfo)
 		case api.MetricGauge:
 			// at implementation time, only asynchronous gauges are supported by otel in golang
 			obs := Float64Gauge{observations: make(map[string]Float64GaugeEntry)}
@@ -152,7 +156,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 				log.Errorf("error during gauge creation: %v", err)
 				return nil, err
 			}
-			metricCommon.AddGauge(gauge, mInfo)
+			metricCommon.AddGauge(fullMetricName, gauge, mInfo)
 		case api.MetricHistogram:
 			var histo metric.Float64Histogram
 			if len(mCfg.Buckets) == 0 {
@@ -167,7 +171,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 				log.Errorf("error during histogram creation: %v", err)
 				return nil, err
 			}
-			metricCommon.AddHist(histo, mInfo)
+			metricCommon.AddHist(fullMetricName, histo, mInfo)
 		case api.MetricAggHistogram:
 			fallthrough
 		default:

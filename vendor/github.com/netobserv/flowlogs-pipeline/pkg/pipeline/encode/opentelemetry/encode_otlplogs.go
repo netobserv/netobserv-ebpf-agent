@@ -42,6 +42,10 @@ func (e *EncodeOtlpLogs) Encode(entry config.GenericMap) {
 	e.LogWrite(entry)
 }
 
+func (e *EncodeOtlpLogs) Update(_ config.StageParam) {
+	log.Warn("EncodeOtlpLogs, update not supported")
+}
+
 func NewEncodeOtlpLogs(_ *operational.Metrics, params config.StageParam) (encode.Encoder, error) {
 	log.Tracef("entering NewEncodeOtlpLogs \n")
 	cfg := api.EncodeOtlpLogs{}
