@@ -16,3 +16,5 @@ LABEL io.openshift.tags="network-observability-ebpf-agent"
 LABEL upstream-vcs-ref="${COMMIT}"
 LABEL upstream-vcs-type="git"
 EOF
+
+sed -i 's/\(FROM.*\)docker.io\/library\/golang:1.22\(.*\)/\1brew.registry.redhat.io\/rh-osbs\/openshift-golang-builder:v1.22.5-202407301806.g4c8b32d.el9\2/g' ./Dockerfile
