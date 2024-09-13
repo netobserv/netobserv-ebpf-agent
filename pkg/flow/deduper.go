@@ -27,12 +27,13 @@ type deduperCache struct {
 }
 
 type entry struct {
-	key        *ebpf.BpfFlowId
-	dnsRecord  *ebpf.BpfDnsRecordT
-	flowRTT    *uint64
-	ifIndex    uint32
-	expiryTime time.Time
-	dupList    *[]map[string]uint8
+	key           *ebpf.BpfFlowId
+	dnsRecord     *ebpf.BpfDnsRecordT
+	flowRTT       *uint64
+	networkEvents *[4][8]uint8
+	ifIndex       uint32
+	expiryTime    time.Time
+	dupList       *[]map[string]uint8
 }
 
 // Dedupe receives flows and filters these belonging to duplicate interfaces. It will forward
@@ -94,6 +95,12 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 		if r.Metrics.FlowRtt != 0 && *fEntry.flowRTT == 0 {
 			*fEntry.flowRTT = r.Metrics.FlowRtt
 		}
+		// If the new flows have network events, then enrich the flow in the cache and mark the flow as duplicate
+		for i, md := range r.Metrics.NetworkEvents {
+			if !AllZerosMetaData(md) && AllZerosMetaData(fEntry.networkEvents[i]) {
+				copy(fEntry.networkEvents[i][:], md[:])
+			}
+		}
 		if fEntry.ifIndex != r.Id.IfIndex {
 			if justMark {
 				r.Duplicate = true
@@ -120,11 +127,12 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 	// The flow has not been accounted previously (or was forgotten after expiration)
 	// so we register it for that concrete interface
 	e := entry{
-		key:        &rk,
-		dnsRecord:  &r.Metrics.DnsRecord,
-		flowRTT:    &r.Metrics.FlowRtt,
-		ifIndex:    r.Id.IfIndex,
-		expiryTime: timeNow().Add(c.expire),
+		key:           &rk,
+		dnsRecord:     &r.Metrics.DnsRecord,
+		flowRTT:       &r.Metrics.FlowRtt,
+		networkEvents: &r.Metrics.NetworkEvents,
+		ifIndex:       r.Id.IfIndex,
+		expiryTime:    timeNow().Add(c.expire),
 	}
 	if mergeDup {
 		ifName := ifaceNamer(int(r.Id.IfIndex))

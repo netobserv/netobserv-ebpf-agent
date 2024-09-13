@@ -210,7 +210,7 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 			{Name: "foo", Index: 3},
 			{Name: "bar", Index: 4},
 		}, ebpfTracer, export.Export,
-		net.ParseIP(agentIP))
+		net.ParseIP(agentIP), nil)
 	require.NoError(t, err)
 
 	go func() {

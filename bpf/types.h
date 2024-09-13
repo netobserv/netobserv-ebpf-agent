@@ -60,11 +60,13 @@ typedef __u64 u64;
 #define MIN_RTT 10000u //10us
 
 #define MAX_FILTER_ENTRIES 1 // we have only one global filter
+#define MAX_EVENT_MD 8
+#define MAX_NETWORK_EVENTS 4
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
-    INGRESS = 0,
-    EGRESS = 1,
+    INGRESS,
+    EGRESS,
     MAX_DIRECTION = 2,
 } direction;
 // Force emitting enum direction_t into the ELF.
@@ -101,6 +103,8 @@ typedef struct flow_metrics_t {
         u8 errno;
     } __attribute__((packed)) dns_record;
     u64 flow_rtt;
+    u8 network_events_idx;
+    u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct pkt_drops into the ELF.
@@ -180,11 +184,15 @@ typedef struct dns_flow_id_t {
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
-    HASHMAP_FLOWS_DROPPED_KEY = 0,
-    FILTER_REJECT_KEY = 1,
-    FILTER_ACCEPT_KEY = 2,
-    FILTER_NOMATCH_KEY = 3,
-    MAX_DROPPED_FLOWS_KEY = 4,
+    HASHMAP_FLOWS_DROPPED_KEY,
+    FILTER_REJECT_KEY,
+    FILTER_ACCEPT_KEY,
+    FILTER_NOMATCH_KEY,
+    NETWORK_EVENTS_ERR_KEY,
+    NETWORK_EVENTS_ERR_GROUPID_MISMATCH,
+    NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS,
+    NETWORK_EVENTS_GOOD,
+    MAX_DROPPED_FLOWS_KEY,
 } global_counters_key;
 
 // Force emitting enum global_counters_key_t into the ELF.
@@ -200,9 +208,9 @@ const struct filter_key_t *unused6 __attribute__((unused));
 
 // Enum to define filter action
 typedef enum filter_action_t {
-    ACCEPT = 0,
-    REJECT = 1,
-    MAX_FILTER_ACTIONS = 2,
+    ACCEPT,
+    REJECT,
+    MAX_FILTER_ACTIONS,
 } filter_action;
 // Force emitting enum direction_t into the ELF.
 const enum filter_action_t *unused7 __attribute__((unused));

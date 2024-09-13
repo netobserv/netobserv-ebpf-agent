@@ -53,6 +53,7 @@ func PBFlowToMap(pb *pbflow.Record) config.GenericMap {
 }
 
 // RecordToMap converts the flow from Agent inner model into FLP GenericMap model
+// nolint:golint,cyclop
 func RecordToMap(fr *flow.Record) config.GenericMap {
 	if fr == nil {
 		return config.GenericMap{}
@@ -134,6 +135,16 @@ func RecordToMap(fr *flow.Record) config.GenericMap {
 
 	if fr.TimeFlowRtt != 0 {
 		out["TimeFlowRttNs"] = fr.TimeFlowRtt.Nanoseconds()
+	}
+
+	if len(fr.NetworkMonitorEventsMD) != 0 {
+		var metadata []string
+		for _, md := range fr.NetworkMonitorEventsMD {
+			if md != "" {
+				metadata = append(metadata, md)
+			}
+		}
+		out["NetworkEvents"] = metadata
 	}
 	return out
 }
