@@ -2,20 +2,23 @@ package pbflow
 
 import (
 	"encoding/binary"
-	"net"
-
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"net"
 )
+
+var protoLog = logrus.WithField("component", "pbflow")
 
 // FlowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
-func FlowsToPB(inputRecords []*flow.Record, maxLen int) []*Records {
+func FlowsToPB(inputRecords []*flow.Record, maxLen int, s *ovnobserv.SampleDecoder) []*Records {
 	entries := make([]*Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
-		entries = append(entries, FlowToPB(record))
+		entries = append(entries, FlowToPB(record, s))
 	}
 	var records []*Records
 	for len(entries) > 0 {
@@ -31,7 +34,7 @@ func FlowsToPB(inputRecords []*flow.Record, maxLen int) []*Records {
 
 // FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
-func FlowToPB(fr *flow.Record) *Record {
+func FlowToPB(fr *flow.Record, s *ovnobserv.SampleDecoder) *Record {
 	var pbflowRecord = Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   Direction(fr.Id.Direction),
@@ -94,6 +97,22 @@ func FlowToPB(fr *flow.Record) *Record {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.SrcIp)}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.DstIp)}}
 	}
+	if s != nil {
+		seen := make(map[string]bool)
+		for _, metadata := range fr.Metrics.NetworkEvents {
+			if !flow.AllZerosMetaData(metadata) {
+				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
+					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v", metadata, md)
+					if !seen[md] {
+						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, md)
+						seen[md] = true
+					}
+				} else {
+					protoLog.Errorf("unable to decode Network events cookie: %v", err)
+				}
+			}
+		}
+	}
 	return &pbflowRecord
 }
 
@@ -151,6 +170,10 @@ func PBToFlow(pb *Record) *flow.Record {
 			dir := uint8(entry.Direction)
 			out.DupList = append(out.DupList, map[string]uint8{intf: dir})
 		}
+	}
+	if len(pb.GetNetworkEventsMetadata()) != 0 {
+		out.NetworkMonitorEventsMD = append(out.NetworkMonitorEventsMD, pb.GetNetworkEventsMetadata()...)
+		protoLog.Debugf("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
 	}
 	return &out
 }

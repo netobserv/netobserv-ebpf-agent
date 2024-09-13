@@ -442,7 +442,7 @@ func TestConversions(t *testing.T) {
 		delete(outDirect, "TimeReceived")
 
 		// Generate the same using protobuf
-		tmpPB := pbflow.FlowToPB(tt.flow)
+		tmpPB := pbflow.FlowToPB(tt.flow, nil)
 		rawPB, err := proto.Marshal(tmpPB)
 		require.NoError(t, err)
 		outPB, err := decoder.Decode(rawPB)

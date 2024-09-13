@@ -5,71 +5,9 @@
 #ifndef __RTT_TRACKER_H__
 #define __RTT_TRACKER_H__
 
-#include <bpf_core_read.h>
 #include <bpf_tracing.h>
 #include "utils.h"
 #include "maps_definition.h"
-
-static inline void rtt_fill_in_l2(struct sk_buff *skb, flow_id *id) {
-    struct ethhdr eth;
-
-    __builtin_memset(&eth, 0, sizeof(eth));
-
-    u8 *skb_head = BPF_CORE_READ(skb, head);
-    u16 skb_mac_header = BPF_CORE_READ(skb, mac_header);
-
-    bpf_probe_read(&eth, sizeof(eth), (struct ethhdr *)(skb_head + skb_mac_header));
-    __builtin_memcpy(id->dst_mac, eth.h_dest, ETH_ALEN);
-    __builtin_memcpy(id->src_mac, eth.h_source, ETH_ALEN);
-    id->eth_protocol = bpf_ntohs(eth.h_proto);
-}
-
-static inline void rtt_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family, u8 *dscp) {
-    u16 skb_network_header = BPF_CORE_READ(skb, network_header);
-    u8 *skb_head = BPF_CORE_READ(skb, head);
-
-    switch (family) {
-    case AF_INET: {
-        struct iphdr ip;
-        __builtin_memset(&ip, 0, sizeof(ip));
-        bpf_probe_read(&ip, sizeof(ip), (struct iphdr *)(skb_head + skb_network_header));
-        __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
-        __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
-        __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip.saddr, sizeof(ip.saddr));
-        __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip.daddr, sizeof(ip.daddr));
-        *dscp = ipv4_get_dscp(&ip);
-        break;
-    }
-    case AF_INET6: {
-        struct ipv6hdr ip;
-        __builtin_memset(&ip, 0, sizeof(ip));
-        bpf_probe_read(&ip, sizeof(ip), (struct ipv6hdr *)(skb_head + skb_network_header));
-        __builtin_memcpy(id->src_ip, ip.saddr.in6_u.u6_addr8, IP_MAX_LEN);
-        __builtin_memcpy(id->dst_ip, ip.daddr.in6_u.u6_addr8, IP_MAX_LEN);
-        *dscp = ipv6_get_dscp(&ip);
-        break;
-    }
-    default:
-        return;
-    }
-}
-
-static inline void rtt_fill_in_tcp(struct sk_buff *skb, flow_id *id, u16 *flags) {
-    u16 skb_transport_header = BPF_CORE_READ(skb, transport_header);
-    u8 *skb_head = BPF_CORE_READ(skb, head);
-    struct tcphdr tcp;
-    u16 sport, dport;
-
-    __builtin_memset(&tcp, 0, sizeof(tcp));
-
-    bpf_probe_read(&tcp, sizeof(tcp), (struct tcphdr *)(skb_head + skb_transport_header));
-    sport = bpf_ntohs(tcp.source);
-    dport = bpf_ntohs(tcp.dest);
-    id->src_port = sport;
-    id->dst_port = dport;
-    set_flags(&tcp, flags);
-    id->transport_protocol = IPPROTO_TCP;
-}
 
 static inline int rtt_lookup_and_update_flow(flow_id *id, u16 flags, u64 rtt) {
     flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
@@ -89,12 +27,12 @@ static inline int rtt_lookup_and_update_flow(flow_id *id, u16 flags, u64 rtt) {
 }
 
 static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
+    u8 dscp = 0, protocol = 0;
     struct tcp_sock *ts;
-    u16 family, flags = 0;
+    u16 family = 0, flags = 0;
     u64 rtt = 0, len;
     int ret = 0;
     flow_id id;
-    u8 dscp = 0;
 
     if (!enable_rtt) {
         return 0;
@@ -109,15 +47,17 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     len = BPF_CORE_READ(skb, len);
 
     // read L2 info
-    rtt_fill_in_l2(skb, &id);
-
-    family = BPF_CORE_READ(sk, __sk_common.skc_family);
+    core_fill_in_l2(skb, &id, &family);
 
     // read L3 info
-    rtt_fill_in_l3(skb, &id, family, &dscp);
+    core_fill_in_l3(skb, &id, family, &protocol, &dscp);
+
+    if (protocol != IPPROTO_TCP) {
+        return 0;
+    }
 
     // read TCP info
-    rtt_fill_in_tcp(skb, &id, &flags);
+    core_fill_in_tcp(skb, &id, &flags);
 
     // read TCP socket rtt and store it in nanoseconds
     ts = (struct tcp_sock *)(sk);

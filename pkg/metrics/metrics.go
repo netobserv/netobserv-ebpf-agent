@@ -92,6 +92,13 @@ var (
 		"source",
 		"reason",
 	)
+	networkEvents = defineMetric(
+		"network_events_total",
+		"Number of Network Events flows",
+		TypeCounter,
+		"source",
+		"reason",
+	)
 	bufferSize = defineMetric(
 		"buffer_size",
 		"Buffer size",
@@ -144,6 +151,7 @@ type Metrics struct {
 	EvictedPacketsCounter *EvictionCounter
 	DroppedFlowsCounter   *EvictionCounter
 	FilteredFlowsCounter  *EvictionCounter
+	NetworkEventsCounter  *EvictionCounter
 	BufferSizeGauge       *BufferSizeGauge
 	Errors                *ErrorCounter
 }
@@ -157,6 +165,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.EvictedPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedPktTotal)}
 	m.DroppedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&droppedFlows)}
 	m.FilteredFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&filterFlows)}
+	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.BufferSizeGauge = &BufferSizeGauge{vec: m.NewGaugeVec(&bufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	return m

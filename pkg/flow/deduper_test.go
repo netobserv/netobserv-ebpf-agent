@@ -65,6 +65,19 @@ var (
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
 	}}, Interface: "123456789", TimeFlowRtt: 100}
+	// another flow from 2 different interfaces and directions with NetworkEvents set on the latest
+	fiveIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 1, SrcPort: 633, DstPort: 456,
+		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+	}, Metrics: ebpf.BpfFlowMetrics{
+		Packets: 2, Bytes: 456, Flags: 1,
+	}}, Interface: "eth0"}
+	fiveIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+		EthProtocol: 1, Direction: 0, SrcPort: 633, DstPort: 456,
+		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+	}, Metrics: ebpf.BpfFlowMetrics{
+		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
+	}}, Interface: "123456789", NetworkMonitorEventsMD: []string{"test netpol1"}}
 )
 
 func TestDedupe(t *testing.T) {
@@ -84,9 +97,11 @@ func TestDedupe(t *testing.T) {
 		threeIf2, // record 2 is duplicate of record1 and have DNS info , should not be accepted
 		fourIf1,  // record 1 has no RTT so it get enriched with RTT from the following record
 		fourIf2,  // record 2 is duplicate of record1 and have RTT , should not be accepted
+		fiveIf1,  // record 1 has no NetworkEvents so it get enriched with NetworkEvents from the following record
+		fiveIf2,  // record 2 is duplicate of record1 and have NetworkEvents, should not be accepted
 	}
 	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, threeIf1, fourIf1}, deduped)
+	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, threeIf1, fourIf1, fiveIf1}, deduped)
 
 	// should still accept records with same key, same interface,
 	// and discard these with same key, different interface
@@ -101,6 +116,9 @@ func TestDedupe(t *testing.T) {
 
 	// make sure flow with no RTT get enriched from the dup flow with RTT
 	assert.Equal(t, fourIf1.Metrics.FlowRtt, fourIf2.Metrics.FlowRtt)
+
+	// make sure flow with no NetworkEvents gets enriched from dup flow with NetworkEvents
+	assert.Equal(t, fiveIf1.Metrics.NetworkEvents, fiveIf2.Metrics.NetworkEvents)
 }
 
 func TestDedupe_EvictFlows(t *testing.T) {
