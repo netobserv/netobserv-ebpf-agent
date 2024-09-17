@@ -1085,22 +1085,6 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Removing Specs for flow agent
-	objects.TcEgressFlowParse = nil
-	objects.TcIngressFlowParse = nil
-	objects.TcxEgressFlowParse = nil
-	objects.TcxIngressFlowParse = nil
-	objects.DirectFlows = nil
-	objects.AggregatedFlows = nil
-	delete(spec.Programs, aggregatedFlowsMap)
-	delete(spec.Programs, constSampling)
-	delete(spec.Programs, constTraceMessages)
-	delete(spec.Programs, constEnableDNSTracking)
-	delete(spec.Programs, constEnableFlowFiltering)
-	delete(spec.Programs, constEnableNetworkEventsMonitoring)
-	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
-
 	pcaEnable := 0
 	if cfg.EnablePCA {
 		pcaEnable = 1
@@ -1113,7 +1097,32 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 
-	if err := spec.LoadAndAssign(&objects, nil); err != nil {
+	type pcaBpfPrograms struct {
+		TcEgressPcaParse   *ebpf.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse  *ebpf.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse  *ebpf.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
+	}
+	type newBpfObjects struct {
+		pcaBpfPrograms
+		BpfMaps
+	}
+	var newObjects newBpfObjects
+	delete(spec.Programs, pktDropHook)
+	delete(spec.Programs, rhNetworkEventsMonitoringHook)
+	delete(spec.Programs, tcpRcvKprobe)
+	delete(spec.Programs, tcpFentryHook)
+	delete(spec.Programs, aggregatedFlowsMap)
+	delete(spec.Programs, constSampling)
+	delete(spec.Programs, constTraceMessages)
+	delete(spec.Programs, constEnableDNSTracking)
+	delete(spec.Programs, constDNSTrackingPort)
+	delete(spec.Programs, constEnableRtt)
+	delete(spec.Programs, constEnableFlowFiltering)
+	delete(spec.Programs, constEnableNetworkEventsMonitoring)
+	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
+
+	if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
 		var ve *ebpf.VerifierError
 		if errors.As(err, &ve) {
 			// Using %+v will print the whole verifier error, not just the last
@@ -1121,6 +1130,27 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			plog.Infof("Verifier error: %+v", ve)
 		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+
+	objects = BpfObjects{
+		BpfPrograms: BpfPrograms{
+			TcEgressPcaParse:          newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:         newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
+			TcEgressFlowParse:         nil,
+			TcIngressFlowParse:        nil,
+			TcxEgressFlowParse:        nil,
+			TcxIngressFlowParse:       nil,
+			TcpRcvFentry:              nil,
+			TcpRcvKprobe:              nil,
+			KfreeSkb:                  nil,
+			RhNetworkEventsMonitoring: nil,
+		},
+		BpfMaps: BpfMaps{
+			PacketRecord: newObjects.PacketRecord,
+			FilterMap:    newObjects.FilterMap,
+		},
 	}
 
 	f := NewFilter(&objects, cfg.FilterConfig)
