@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,7 @@ func TestCapacityLimiter_NoDrop(t *testing.T) {
 
 	// WHEN it buffers less elements than it's maximum capacity
 	for i := 0; i < 33; i++ {
-		pipeIn <- []*Record{{Interface: strconv.Itoa(i)}}
+		pipeIn <- []*model.Record{{Interface: strconv.Itoa(i)}}
 	}
 
 	// THEN it is able to retrieve all the buffered elements
@@ -44,7 +45,7 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	// WHEN it receives more elements than its maximum capacity
 	// (it's not blocking)
 	for i := 0; i < limiterLen*2; i++ {
-		pipeIn <- []*Record{{Interface: strconv.Itoa(i)}}
+		pipeIn <- []*model.Record{{Interface: strconv.Itoa(i)}}
 	}
 
 	// THEN it is only able to retrieve all the nth first buffered elements
@@ -64,16 +65,16 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	}
 }
 
-func capacityLimiterPipe() (in chan<- []*Record, out <-chan []*Record) {
-	inCh, outCh := make(chan []*Record), make(chan []*Record)
+func capacityLimiterPipe() (in chan<- []*model.Record, out <-chan []*model.Record) {
+	inCh, outCh := make(chan []*model.Record), make(chan []*model.Record)
 
-	init := node.AsInit(func(initOut chan<- []*Record) {
+	init := node.AsInit(func(initOut chan<- []*model.Record) {
 		for i := range inCh {
 			initOut <- i
 		}
 	})
 	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NewMetrics(&metrics.Settings{}))).Limit)
-	term := node.AsTerminal(func(termIn <-chan []*Record) {
+	term := node.AsTerminal(func(termIn <-chan []*model.Record) {
 		for i := range termIn {
 			outCh <- i
 		}

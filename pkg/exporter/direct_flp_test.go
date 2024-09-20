@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,9 +41,9 @@ parameters:
 	}()
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*flow.Record, 10)
+	flows := make(chan []*model.Record, 10)
 	go flp.ExportFlows(flows)
-	flows <- []*flow.Record{
+	flows <- []*model.Record{
 		{AgentIP: net.ParseIP("10.9.8.7")},
 	}
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
 var dlog = logrus.WithField("component", "flow/Deduper")
@@ -41,16 +42,16 @@ type entry struct {
 // (no activity for it during the expiration time)
 // The justMark argument tells that the deduper should not drop the duplicate flows but
 // set their Duplicate field.
-func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer InterfaceNamer, m *metrics.Metrics) func(in <-chan []*Record, out chan<- []*Record) {
+func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer InterfaceNamer, m *metrics.Metrics) func(in <-chan []*model.Record, out chan<- []*model.Record) {
 	cache := &deduperCache{
 		expire:  expireTime,
 		entries: list.New(),
 		ifaces:  map[ebpf.BpfFlowId]*list.Element{},
 	}
-	return func(in <-chan []*Record, out chan<- []*Record) {
+	return func(in <-chan []*model.Record, out chan<- []*model.Record) {
 		for records := range in {
 			cache.removeExpired()
-			fwd := make([]*Record, 0, len(records))
+			fwd := make([]*model.Record, 0, len(records))
 			for _, record := range records {
 				cache.checkDupe(record, justMark, mergeDup, &fwd, ifaceNamer)
 			}
@@ -66,13 +67,13 @@ func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer Interf
 }
 
 // checkDupe check current record if its already available nad if not added to fwd records list
-func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Record, ifaceNamer InterfaceNamer) {
+func (c *deduperCache) checkDupe(r *model.Record, justMark, mergeDup bool, fwd *[]*model.Record, ifaceNamer InterfaceNamer) {
 	mergeEntry := make(map[string]uint8)
 	rk := r.Id
 	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IfIndex = 0
-	rk.SrcMac = [MacLen]uint8{0, 0, 0, 0, 0, 0}
-	rk.DstMac = [MacLen]uint8{0, 0, 0, 0, 0, 0}
+	rk.SrcMac = [model.MacLen]uint8{0, 0, 0, 0, 0, 0}
+	rk.DstMac = [model.MacLen]uint8{0, 0, 0, 0, 0, 0}
 	rk.Direction = 0
 	// If a flow has been accounted previously, whatever its interface was,
 	// it updates the expiry time for that flow
@@ -97,7 +98,7 @@ func (c *deduperCache) checkDupe(r *Record, justMark, mergeDup bool, fwd *[]*Rec
 		}
 		// If the new flows have network events, then enrich the flow in the cache and mark the flow as duplicate
 		for i, md := range r.Metrics.NetworkEvents {
-			if !AllZerosMetaData(md) && AllZerosMetaData(fEntry.networkEvents[i]) {
+			if !model.AllZerosMetaData(md) && model.AllZerosMetaData(fEntry.networkEvents[i]) {
 				copy(fEntry.networkEvents[i][:], md[:])
 			}
 		}

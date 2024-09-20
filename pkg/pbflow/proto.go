@@ -2,20 +2,21 @@ package pbflow
 
 import (
 	"encoding/binary"
+	"net"
+
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"net"
 )
 
 var protoLog = logrus.WithField("component", "pbflow")
 
 // FlowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
-func FlowsToPB(inputRecords []*flow.Record, maxLen int, s *ovnobserv.SampleDecoder) []*Records {
+func FlowsToPB(inputRecords []*model.Record, maxLen int, s *ovnobserv.SampleDecoder) []*Records {
 	entries := make([]*Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
 		entries = append(entries, FlowToPB(record, s))
@@ -34,7 +35,7 @@ func FlowsToPB(inputRecords []*flow.Record, maxLen int, s *ovnobserv.SampleDecod
 
 // FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
-func FlowToPB(fr *flow.Record, s *ovnobserv.SampleDecoder) *Record {
+func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	var pbflowRecord = Record{
 		EthProtocol: uint32(fr.Id.EthProtocol),
 		Direction:   Direction(fr.Id.Direction),
@@ -90,17 +91,17 @@ func FlowToPB(fr *flow.Record, s *ovnobserv.SampleDecoder) *Record {
 			}
 		}
 	}
-	if fr.Id.EthProtocol == flow.IPv6Type {
+	if fr.Id.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.SrcIp[:]}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.DstIp[:]}}
 	} else {
-		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.SrcIp)}}
-		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: flow.IntEncodeV4(fr.Id.DstIp)}}
+		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.SrcIp)}}
+		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.DstIp)}}
 	}
 	if s != nil {
 		seen := make(map[string]bool)
 		for _, metadata := range fr.Metrics.NetworkEvents {
-			if !flow.AllZerosMetaData(metadata) {
+			if !model.AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
 					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v", metadata, md)
 					if !seen[md] {
@@ -116,12 +117,12 @@ func FlowToPB(fr *flow.Record, s *ovnobserv.SampleDecoder) *Record {
 	return &pbflowRecord
 }
 
-func PBToFlow(pb *Record) *flow.Record {
+func PBToFlow(pb *Record) *model.Record {
 	if pb == nil {
 		return nil
 	}
-	out := flow.Record{
-		RawRecord: flow.RawRecord{
+	out := model.Record{
+		RawRecord: model.RawRecord{
 			Id: ebpf.BpfFlowId{
 				Direction:         uint8(pb.Direction),
 				EthProtocol:       uint16(pb.EthProtocol),
@@ -180,7 +181,7 @@ func PBToFlow(pb *Record) *flow.Record {
 
 // Mac bytes are encoded in the same order as in the array. This is, a Mac
 // like 11:22:33:44:55:66 will be encoded as 0x112233445566
-func macToUint64(m *[flow.MacLen]uint8) uint64 {
+func macToUint64(m *[model.MacLen]uint8) uint64 {
 	return uint64(m[5]) |
 		(uint64(m[4]) << 8) |
 		(uint64(m[3]) << 16) |
@@ -209,8 +210,8 @@ func pbIPToNetIP(ip *IP) net.IP {
 		byte(n&0xFF))
 }
 
-func ipToIPAddr(ip *IP) flow.IPAddr {
-	return flow.IPAddrFromNetIP(pbIPToNetIP(ip))
+func ipToIPAddr(ip *IP) model.IPAddr {
+	return model.IPAddrFromNetIP(pbIPToNetIP(ip))
 }
 
 func macToUint8(mac uint64) [6]uint8 {

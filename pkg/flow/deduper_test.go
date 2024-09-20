@@ -9,84 +9,85 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
 var (
 	// the same flow from 2 different interfaces
-	oneIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	oneIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
-		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	oneIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	oneIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
-		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "123456789"}
 	// another flow from 2 different interfaces and directions
-	twoIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	twoIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 333, DstPort: 456,
-		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	twoIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	twoIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 0, SrcPort: 333, DstPort: 456,
-		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "123456789"}
 	// another flow from 2 different interfaces and directions with DNS latency set on the latest
-	threeIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	threeIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 433, DstPort: 456,
-		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	threeIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	threeIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 0, SrcPort: 433, DstPort: 456,
-		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 		DnsRecord: ebpf.BpfDnsRecordT{Id: 1, Flags: 100, Latency: 1000},
 	}}, Interface: "123456789", DNSLatency: time.Millisecond}
 	// another flow from 2 different interfaces and directions with RTT set on the latest
-	fourIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	fourIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 533, DstPort: 456,
-		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	fourIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	fourIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 0, SrcPort: 533, DstPort: 456,
-		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
 	}}, Interface: "123456789", TimeFlowRtt: 100}
 	// another flow from 2 different interfaces and directions with NetworkEvents set on the latest
-	fiveIf1 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	fiveIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 1, SrcPort: 633, DstPort: 456,
-		DstMac: MacAddr{0x1}, SrcMac: MacAddr{0x1}, IfIndex: 1,
+		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1,
 	}}, Interface: "eth0"}
-	fiveIf2 = &Record{RawRecord: RawRecord{Id: ebpf.BpfFlowId{
+	fiveIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
 		EthProtocol: 1, Direction: 0, SrcPort: 633, DstPort: 456,
-		DstMac: MacAddr{0x2}, SrcMac: MacAddr{0x2}, IfIndex: 2,
+		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
 	}}, Interface: "123456789", NetworkMonitorEventsMD: []string{"test netpol1"}}
 )
 
 func TestDedupe(t *testing.T) {
-	input := make(chan []*Record, 100)
-	output := make(chan []*Record, 100)
+	input := make(chan []*model.Record, 100)
+	output := make(chan []*model.Record, 100)
 
 	go Dedupe(time.Minute, false, false, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
-	input <- []*Record{
+	input <- []*model.Record{
 		oneIf2,   // record 1 at interface 2: should be accepted
 		twoIf1,   // record 2 at interface 1: should be accepted
 		oneIf1,   // record 1 duplicate at interface 1: should NOT be accepted
@@ -101,13 +102,13 @@ func TestDedupe(t *testing.T) {
 		fiveIf2,  // record 2 is duplicate of record1 and have NetworkEvents, should not be accepted
 	}
 	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2, twoIf1, oneIf2, threeIf1, fourIf1, fiveIf1}, deduped)
+	assert.Equal(t, []*model.Record{oneIf2, twoIf1, oneIf2, threeIf1, fourIf1, fiveIf1}, deduped)
 
 	// should still accept records with same key, same interface,
 	// and discard these with same key, different interface
-	input <- []*Record{oneIf1, oneIf2}
+	input <- []*model.Record{oneIf1, oneIf2}
 	deduped = receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2}, deduped)
+	assert.Equal(t, []*model.Record{oneIf2}, deduped)
 
 	// make sure flow with no DNS get enriched with the DNS record
 	assert.Equal(t, threeIf1.Metrics.DnsRecord.Id, threeIf2.Metrics.DnsRecord.Id)
@@ -124,52 +125,52 @@ func TestDedupe(t *testing.T) {
 func TestDedupe_EvictFlows(t *testing.T) {
 	tm := &timerMock{now: time.Now()}
 	timeNow = tm.Now
-	input := make(chan []*Record, 100)
-	output := make(chan []*Record, 100)
+	input := make(chan []*model.Record, 100)
+	output := make(chan []*model.Record, 100)
 
 	go Dedupe(15*time.Second, false, false, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
 	// Should only accept records 1 and 2, at interface 1
-	input <- []*Record{oneIf1, twoIf1, oneIf2}
-	assert.Equal(t, []*Record{oneIf1, twoIf1},
+	input <- []*model.Record{oneIf1, twoIf1, oneIf2}
+	assert.Equal(t, []*model.Record{oneIf1, twoIf1},
 		receiveTimeout(t, output))
 
 	tm.now = tm.now.Add(10 * time.Second)
 
 	// After 10 seconds, it still filters existing flows from different interfaces
-	input <- []*Record{oneIf2}
+	input <- []*model.Record{oneIf2}
 	time.Sleep(100 * time.Millisecond)
 	requireNoEviction(t, output)
 
 	tm.now = tm.now.Add(10 * time.Second)
 
-	// Record 2 hasn't been accounted for >expiryTime, so it will accept the it again
+	// model.Record 2 hasn't been accounted for >expiryTime, so it will accept the it again
 	// whatever the interface.
 	// Since record 1 was accessed 10 seconds ago (<expiry time) it will filter it
-	input <- []*Record{oneIf2, twoIf2, twoIf1}
-	assert.Equal(t, []*Record{twoIf2},
+	input <- []*model.Record{oneIf2, twoIf2, twoIf1}
+	assert.Equal(t, []*model.Record{twoIf2},
 		receiveTimeout(t, output))
 
 	tm.now = tm.now.Add(20 * time.Second)
 
 	// when all the records expire, the deduper is reset for that flow
-	input <- []*Record{oneIf2, twoIf2}
-	assert.Equal(t, []*Record{oneIf2, twoIf2},
+	input <- []*model.Record{oneIf2, twoIf2}
+	assert.Equal(t, []*model.Record{oneIf2, twoIf2},
 		receiveTimeout(t, output))
 }
 
 func TestDedupeMerge(t *testing.T) {
-	input := make(chan []*Record, 100)
-	output := make(chan []*Record, 100)
+	input := make(chan []*model.Record, 100)
+	output := make(chan []*model.Record, 100)
 
 	go Dedupe(time.Minute, false, true, interfaceNamer, metrics.NewMetrics(&metrics.Settings{}))(input, output)
 
-	input <- []*Record{
+	input <- []*model.Record{
 		oneIf2, // record 1 at interface 2: should be accepted
 		oneIf1,
 	}
 	deduped := receiveTimeout(t, output)
-	assert.Equal(t, []*Record{oneIf2}, deduped)
+	assert.Equal(t, []*model.Record{oneIf2}, deduped)
 	assert.Equal(t, 2, len(oneIf2.DupList))
 
 	expectedMap := []map[string]uint8{

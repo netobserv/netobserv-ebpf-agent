@@ -9,8 +9,8 @@ import (
 	"github.com/gavv/monotime"
 	test2 "github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,7 +76,7 @@ func TestFlowsAgent_Deduplication(t *testing.T) {
 
 	receivedKeys := map[ebpf.BpfFlowId]struct{}{}
 
-	var key1Flows []*flow.Record
+	var key1Flows []*model.Record
 	for _, f := range exported {
 		require.NotContains(t, receivedKeys, f.Id)
 		receivedKeys[f.Id] = struct{}{}
@@ -153,7 +153,7 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 	assert.Len(t, exported, 3)
 	receivedKeys := map[ebpf.BpfFlowId]struct{}{}
 
-	var key1Flows []*flow.Record
+	var key1Flows []*model.Record
 	for _, f := range exported {
 		require.NotContains(t, receivedKeys, f.Id)
 		receivedKeys[f.Id] = struct{}{}

@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 
 	"github.com/cilium/ebpf/ringbuf"
 )
@@ -70,7 +70,7 @@ func (m *TracerFake) AppendLookupResults(results map[ebpf.BpfFlowId][]ebpf.BpfFl
 }
 
 //nolint:gocritic // we don't care about efficiency of a large argument in test fakes
-func (m *TracerFake) AppendRingBufEvent(flow flow.RawRecord) error {
+func (m *TracerFake) AppendRingBufEvent(flow model.RawRecord) error {
 	encodedRecord := bytes.Buffer{}
 	if err := binary.Write(&encodedRecord, binary.LittleEndian, flow); err != nil {
 		return err

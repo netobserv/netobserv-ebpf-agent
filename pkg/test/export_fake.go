@@ -4,20 +4,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
 type ExporterFake struct {
-	messages chan []*flow.Record
+	messages chan []*model.Record
 }
 
 func NewExporterFake() *ExporterFake {
 	return &ExporterFake{
-		messages: make(chan []*flow.Record, 100),
+		messages: make(chan []*model.Record, 100),
 	}
 }
 
-func (ef *ExporterFake) Export(in <-chan []*flow.Record) {
+func (ef *ExporterFake) Export(in <-chan []*model.Record) {
 	for i := range in {
 		if len(i) > 0 {
 			ef.messages <- i
@@ -25,7 +25,7 @@ func (ef *ExporterFake) Export(in <-chan []*flow.Record) {
 	}
 }
 
-func (ef *ExporterFake) Get(t *testing.T, timeout time.Duration) []*flow.Record {
+func (ef *ExporterFake) Get(t *testing.T, timeout time.Duration) []*model.Record {
 	t.Helper()
 	select {
 	case <-time.After(timeout):

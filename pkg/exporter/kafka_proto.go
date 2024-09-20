@@ -3,8 +3,8 @@ package exporter
 import (
 	"context"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
@@ -29,14 +29,14 @@ type KafkaProto struct {
 	SampleDecoder *ovnobserv.SampleDecoder
 }
 
-func (kp *KafkaProto) ExportFlows(input <-chan []*flow.Record) {
+func (kp *KafkaProto) ExportFlows(input <-chan []*model.Record) {
 	klog.Info("starting Kafka exporter")
 	for records := range input {
 		kp.batchAndSubmit(records)
 	}
 }
 
-func getFlowKey(record *flow.Record) []byte {
+func getFlowKey(record *model.Record) []byte {
 	// We are sorting IP address so flows from on ip to a second IP get the same key whatever the direction is
 	for k := range record.Id.SrcIp {
 		if record.Id.SrcIp[k] < record.Id.DstIp[k] {
@@ -48,7 +48,7 @@ func getFlowKey(record *flow.Record) []byte {
 	return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
 }
 
-func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
+func (kp *KafkaProto) batchAndSubmit(records []*model.Record) {
 	klog.Debugf("sending %d records", len(records))
 	msgs := make([]kafkago.Message, 0, len(records))
 	for _, record := range records {
@@ -70,7 +70,7 @@ func (kp *KafkaProto) batchAndSubmit(records []*flow.Record) {
 }
 
 type JSONRecord struct {
-	*flow.Record
+	*model.Record
 	TimeFlowStart   int64
 	TimeFlowEnd     int64
 	TimeFlowStartMs int64
