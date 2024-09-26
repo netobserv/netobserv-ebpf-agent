@@ -135,6 +135,26 @@ func TestGetDstPorts(t *testing.T) {
 	assert.Equal(t, uint16(9000), p2)
 }
 
+func TestGetPortsRange(t *testing.T) {
+	config := &FilterConfig{
+		FilterPort: intstr.FromString("8080-9000"),
+	}
+	start, end := getPortsRange(config)
+
+	assert.Equal(t, uint16(8080), start)
+	assert.Equal(t, uint16(9000), end)
+}
+
+func TestGetPorts(t *testing.T) {
+	config := &FilterConfig{
+		FilterPort: intstr.FromString("7000,8000"),
+	}
+	p1, p2 := getPorts(config)
+
+	assert.Equal(t, uint16(7000), p1)
+	assert.Equal(t, uint16(8000), p2)
+}
+
 func TestConvertFilterPortsToInstr(t *testing.T) {
 
 	t.Run("converts int port", func(t *testing.T) {

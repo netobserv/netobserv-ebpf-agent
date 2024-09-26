@@ -80,6 +80,12 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
         fill_in_others_protocol(&id, protocol);
     }
 
+    // check if this packet need to be filtered if filtering feature is enabled
+    bool skip = check_and_do_flow_filtering(&id, flags);
+    if (skip) {
+        return 0;
+    }
+
     for (direction dir = INGRESS; dir < MAX_DIRECTION; dir++) {
         id.direction = dir;
         flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
