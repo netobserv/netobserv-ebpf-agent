@@ -24,6 +24,7 @@ type FilterConfig struct {
 	FilterPeerIP          string
 	FilterAction          string
 	FilterTCPFLags        string
+	FilterDrops           bool
 }
 
 type Filter struct {
@@ -157,6 +158,9 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 		val.TcpFlags = ebpf.BpfTcpFlagsTRST_ACK_FLAG
 	}
 
+	if config.FilterDrops {
+		val.FilterDrops = 1
+	}
 	return val, nil
 }
 

@@ -68,6 +68,7 @@ type BpfFilterValueT struct {
 	Direction    BpfDirectionT
 	Action       BpfFilterActionT
 	TcpFlags     BpfTcpFlagsT
+	FilterDrops  uint8
 	Ip           [16]uint8
 }
 
