@@ -74,7 +74,7 @@ const (
 
 const (
 	agentContainerName = "localhost/ebpf-agent:test"
-	kindImage          = "kindest/node:v1.27.3"
+	kindImage          = "kindest/node:v1.28.13"
 	namespace          = "default"
 	logsSubDir         = "e2e-logs"
 	localArchiveName   = "ebpf-agent.tar"
