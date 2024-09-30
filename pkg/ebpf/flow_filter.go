@@ -198,7 +198,7 @@ func getDstPorts(config *FilterConfig) (uint16, uint16) {
 }
 
 func getPortsRange(config *FilterConfig) (uint16, uint16) {
-	if config.FilterDestinationPort.Type == intstr.Int {
+	if config.FilterPort.Type == intstr.Int {
 		return uint16(config.FilterPort.IntVal), 0
 	}
 	start, end, err := getPortsFromString(config.FilterPort.String(), "-")
