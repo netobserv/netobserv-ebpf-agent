@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
 	kafkago "github.com/segmentio/kafka-go"
@@ -27,14 +27,14 @@ func TestProtoConversion(t *testing.T) {
 	m := metrics.NewMetrics(&metrics.Settings{})
 
 	kj := KafkaProto{Writer: &wc, Metrics: m}
-	input := make(chan []*flow.Record, 11)
-	record := flow.Record{}
+	input := make(chan []*model.Record, 11)
+	record := model.Record{}
 	record.Id.EthProtocol = 3
 	record.Id.Direction = 1
 	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
 	record.Id.SrcPort = 4321
 	record.Id.DstPort = 1234
 	record.Id.IcmpType = 8
@@ -46,7 +46,7 @@ func TestProtoConversion(t *testing.T) {
 	record.Metrics.Flags = uint16(1)
 	record.Interface = "veth0"
 
-	input <- []*flow.Record{&record}
+	input <- []*model.Record{&record}
 	close(input)
 	kj.ExportFlows(input)
 
@@ -76,13 +76,13 @@ func TestProtoConversion(t *testing.T) {
 }
 
 func TestIdenticalKeys(t *testing.T) {
-	record := flow.Record{}
+	record := model.Record{}
 	record.Id.EthProtocol = 3
 	record.Id.Direction = 1
 	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
 	record.Id.SrcPort = 4321
 	record.Id.DstPort = 1234
 	record.Id.IcmpType = 8
@@ -96,8 +96,8 @@ func TestIdenticalKeys(t *testing.T) {
 
 	key1 := getFlowKey(&record)
 
-	record.Id.SrcIp = flow.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.DstIp = flow.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
 	key2 := getFlowKey(&record)
 
 	// Both keys should be identical

@@ -7,11 +7,12 @@ import (
 	"net"
 
 	"github.com/netobserv/gopipes/pkg/node"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/sirupsen/logrus"
@@ -29,7 +30,7 @@ type Packets struct {
 	// processing nodes to be wired in the buildAndStartPipeline method
 	perfTracer   *flow.PerfTracer
 	packetbuffer *flow.PerfBuffer
-	exporter     node.TerminalFunc[[]*flow.PacketRecord]
+	exporter     node.TerminalFunc[[]*model.PacketRecord]
 
 	// elements used to decorate flows with extra information
 	interfaceNamer flow.InterfaceNamer
@@ -75,27 +76,27 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
 		debug = true
 	}
-	ebpfConfig := &ebpf.FlowFetcherConfig{
+	ebpfConfig := &tracer.FlowFetcherConfig{
 		EnableIngress: ingress,
 		EnableEgress:  egress,
 		Debug:         debug,
 		Sampling:      cfg.Sampling,
 		CacheMaxSize:  cfg.CacheMaxFlows,
 		EnablePCA:     cfg.EnablePCA,
-		FilterConfig: &ebpf.FilterConfig{
+		FilterConfig: &tracer.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,
 			FilterIPCIDR:          cfg.FilterIPCIDR,
 			FilterProtocol:        cfg.FilterProtocol,
 			FilterPeerIP:          cfg.FilterPeerIP,
-			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange, cfg.FilterDestinationPorts),
-			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange, cfg.FilterSourcePorts),
-			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange, cfg.FilterPorts),
+			FilterDestinationPort: tracer.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange, cfg.FilterDestinationPorts),
+			FilterSourcePort:      tracer.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange, cfg.FilterSourcePorts),
+			FilterPort:            tracer.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange, cfg.FilterPorts),
 			FilterTCPFLags:        cfg.FilterTCPFlags,
 		},
 	}
 
-	fetcher, err := ebpf.NewPacketFetcher(ebpfConfig)
+	fetcher, err := tracer.NewPacketFetcher(ebpfConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 func packetsAgent(cfg *Config,
 	informer ifaces.Informer,
 	fetcher ebpfPacketFetcher,
-	packetexporter node.TerminalFunc[[]*flow.PacketRecord],
+	packetexporter node.TerminalFunc[[]*model.PacketRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
 	var filter InterfaceFilter
@@ -160,7 +161,7 @@ func packetsAgent(cfg *Config,
 	}, nil
 }
 
-func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -174,7 +175,7 @@ func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecor
 	return pcapStreamer.ExportGRPCPackets, nil
 }
 
-func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCPacketExporter(cfg)
@@ -185,7 +186,7 @@ func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], 
 	}
 }
 
-func buildPacketDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.PacketRecord], error) {
+func buildPacketDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
 	if err != nil {
 		return nil, err
@@ -239,7 +240,7 @@ func (p *Packets) interfacesManager(ctx context.Context) error {
 	return nil
 }
 
-func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*flow.PacketRecord], error) {
+func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
 
 	plog.Debug("registering interfaces' listener in background")
 	err := p.interfacesManager(ctx)

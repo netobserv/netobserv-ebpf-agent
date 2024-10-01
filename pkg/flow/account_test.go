@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,13 +15,13 @@ import (
 const timeout = 5 * time.Second
 
 var (
-	srcAddr1 = IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+	srcAddr1 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
 		0x12, 0x34, 0x56, 0x78}
-	srcAddr2 = IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+	srcAddr2 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
 		0xaa, 0xbb, 0xcc, 0xdd}
-	dstAddr1 = IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+	dstAddr1 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
 		0x43, 0x21, 0x00, 0xff}
-	dstAddr2 = IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+	dstAddr2 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
 		0x11, 0x22, 0x33, 0x44}
 )
 
@@ -53,27 +54,27 @@ func TestEvict_MaxEntries(t *testing.T) {
 	}, metrics.NewMetrics(&metrics.Settings{}))
 
 	// WHEN it starts accounting new records
-	inputs := make(chan *RawRecord, 20)
-	evictor := make(chan []*Record, 20)
+	inputs := make(chan *model.RawRecord, 20)
+	evictor := make(chan []*model.Record, 20)
 
 	go acc.Account(inputs, evictor)
 
 	// THEN It does not evict anything until it surpasses the maximum size
 	// or the eviction period is reached
 	requireNoEviction(t, evictor)
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 123, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
 		},
 	}
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k2,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 		},
 	}
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 321, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
@@ -82,7 +83,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 	requireNoEviction(t, evictor)
 
 	// WHEN a new record surpasses the maximum number of records
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k3,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 111, Packets: 1, StartMonoTimeTs: 888, EndMonoTimeTs: 888, Flags: 1,
@@ -90,7 +91,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 	}
 
 	// THEN the old records are evicted
-	received := map[ebpf.BpfFlowId]Record{}
+	received := map[ebpf.BpfFlowId]model.Record{}
 	r := receiveTimeout(t, evictor)
 	require.Len(t, r, 2)
 	received[r[0].Id] = *r[0]
@@ -100,9 +101,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 
 	// AND the returned records summarize the number of bytes and packages
 	// of each flow
-	assert.Equal(t, map[ebpf.BpfFlowId]Record{
+	assert.Equal(t, map[ebpf.BpfFlowId]model.Record{
 		k1: {
-			RawRecord: RawRecord{
+			RawRecord: model.RawRecord{
 				Id: k1,
 				Metrics: ebpf.BpfFlowMetrics{
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
@@ -114,7 +115,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			NetworkMonitorEventsMD: make([]string, 0),
 		},
 		k2: {
-			RawRecord: RawRecord{
+			RawRecord: model.RawRecord{
 				Id: k2,
 				Metrics: ebpf.BpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
@@ -138,23 +139,23 @@ func TestEvict_Period(t *testing.T) {
 	}, metrics.NewMetrics(&metrics.Settings{}))
 
 	// WHEN it starts accounting new records
-	inputs := make(chan *RawRecord, 20)
-	evictor := make(chan []*Record, 20)
+	inputs := make(chan *model.RawRecord, 20)
+	evictor := make(chan []*model.Record, 20)
 	go acc.Account(inputs, evictor)
 
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
 		},
 	}
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 		},
 	}
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
@@ -162,13 +163,13 @@ func TestEvict_Period(t *testing.T) {
 	}
 	// Forcing at least one eviction here
 	time.Sleep(30 * time.Millisecond)
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1123, EndMonoTimeTs: 1123, Flags: 1,
 		},
 	}
-	inputs <- &RawRecord{
+	inputs <- &model.RawRecord{
 		Id: k1,
 		Metrics: ebpf.BpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1456, EndMonoTimeTs: 1456, Flags: 1,
@@ -179,8 +180,8 @@ func TestEvict_Period(t *testing.T) {
 	// has not reached the maximum size
 	records := receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
-	assert.Equal(t, Record{
-		RawRecord: RawRecord{
+	assert.Equal(t, model.Record{
+		RawRecord: model.RawRecord{
 			Id: k1,
 			Metrics: ebpf.BpfFlowMetrics{
 				Bytes:           30,
@@ -197,8 +198,8 @@ func TestEvict_Period(t *testing.T) {
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
-	assert.Equal(t, Record{
-		RawRecord: RawRecord{
+	assert.Equal(t, model.Record{
+		RawRecord: model.RawRecord{
 			Id: k1,
 			Metrics: ebpf.BpfFlowMetrics{
 				Bytes:           20,
@@ -219,7 +220,7 @@ func TestEvict_Period(t *testing.T) {
 	requireNoEviction(t, evictor)
 }
 
-func receiveTimeout(t *testing.T, evictor <-chan []*Record) []*Record {
+func receiveTimeout(t *testing.T, evictor <-chan []*model.Record) []*model.Record {
 	t.Helper()
 	select {
 	case r := <-evictor:
@@ -230,7 +231,7 @@ func receiveTimeout(t *testing.T, evictor <-chan []*Record) []*Record {
 	return nil
 }
 
-func requireNoEviction(t *testing.T, evictor <-chan []*Record) {
+func requireNoEviction(t *testing.T, evictor <-chan []*model.Record) {
 	t.Helper()
 	select {
 	case r := <-evictor:

@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils/packets"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -23,7 +23,7 @@ var gplog = logrus.WithField("component", "packet/GRPCPackets")
 
 // WritePacket writes the given packet data out to gRPC.
 func writeGRPCPacket(time time.Time, data []byte, conn *grpc.ClientConnection) error {
-	bytes, err := utils.GetPacketBytesWithHeader(time, data)
+	bytes, err := packets.GetPacketBytesWithHeader(time, data)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func StartGRPCPacketSend(hostIP string, hostPort int) (*GRPCPacketProto, error) 
 	}, nil
 }
 
-func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*flow.PacketRecord) {
+func (p *GRPCPacketProto) ExportGRPCPackets(in <-chan []*model.PacketRecord) {
 	for packetRecord := range in {
 		var errs []error
 		for _, packet := range packetRecord {
