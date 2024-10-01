@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/gopipes/pkg/node"
@@ -53,8 +54,8 @@ func NewRingBufTracer(reader ringBufReader, flusher mapFlusher, logTimeout time.
 	}
 }
 
-func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord] {
-	return func(out chan<- *RawRecord) {
+func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*model.RawRecord] {
+	return func(out chan<- *model.RawRecord) {
 		debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
 		for {
 			select {
@@ -75,14 +76,14 @@ func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*RawRecord
 	}
 }
 
-func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh chan<- *RawRecord) error {
+func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh chan<- *model.RawRecord) error {
 	event, err := m.ringBuffer.ReadRingBuf()
 	if err != nil {
 		m.metrics.Errors.WithErrorName("ringbuffer", "CannotReadRingbuffer").Inc()
 		return fmt.Errorf("reading from ring buffer: %w", err)
 	}
 	// Parses the ringbuf event entry into an Event structure.
-	readFlow, err := ReadFrom(bytes.NewBuffer(event.RawSample))
+	readFlow, err := model.ReadFrom(bytes.NewBuffer(event.RawSample))
 	if err != nil {
 		m.metrics.Errors.WithErrorName("ringbuffer", "CannotParseRingbuffer").Inc()
 		return fmt.Errorf("parsing data received from the ring buffer: %w", err)

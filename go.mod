@@ -9,7 +9,7 @@ require (
 	github.com/cilium/ebpf v0.16.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
-	github.com/google/gopacket v1.1.19
+	github.com/gopacket/gopacket v1.2.0
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/netobserv/flowlogs-pipeline v1.6.1-crc0
@@ -126,12 +126,12 @@ require (
 	go.opentelemetry.io/otel/trace v1.26.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.2.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
-	golang.org/x/crypto v0.24.0 // indirect
+	golang.org/x/crypto v0.26.0 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
-	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/oauth2 v0.21.0 // indirect
-	golang.org/x/term v0.21.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect

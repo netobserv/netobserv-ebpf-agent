@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,12 +33,12 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*flow.Record, 10)
-	flows <- []*flow.Record{
+	flows := make(chan []*model.Record, 10)
+	flows <- []*model.Record{
 		{AgentIP: net.ParseIP("10.9.8.7")},
 	}
-	flows <- []*flow.Record{
-		{RawRecord: flow.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: flow.IPv6Type}},
+	flows <- []*model.Record{
+		{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("8888::1111")},
 	}
 	go exporter.ExportFlows(flows)
@@ -75,12 +75,12 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*flow.Record, 10)
-	flows <- []*flow.Record{
+	flows := make(chan []*model.Record, 10)
+	flows <- []*model.Record{
 		{AgentIP: net.ParseIP("10.11.12.13")},
 	}
-	flows <- []*flow.Record{
-		{RawRecord: flow.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: flow.IPv6Type}},
+	flows <- []*model.Record{
+		{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("9999::2222")},
 	}
 	go exporter.ExportFlows(flows)
@@ -118,11 +118,11 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send a message much longer than the limit length
-	flows := make(chan []*flow.Record, 10)
-	var input []*flow.Record
+	flows := make(chan []*model.Record, 10)
+	var input []*model.Record
 	for i := 0; i < 25000; i++ {
-		input = append(input, &flow.Record{RawRecord: flow.RawRecord{Id: ebpf.BpfFlowId{
-			EthProtocol: flow.IPv6Type,
+		input = append(input, &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
+			EthProtocol: model.IPv6Type,
 		}}, AgentIP: net.ParseIP("1111::1111"), Interface: "12345678"})
 	}
 	flows <- input

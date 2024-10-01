@@ -3,7 +3,7 @@ package exporter
 import (
 	"net"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/vmware/go-ipfix/pkg/entities"
@@ -269,7 +269,7 @@ func setIPv4Address(ieValPtr *entities.InfoElementWithValue, ipAddress net.IP) {
 		ieVal.SetIPAddressValue(ipAddress)
 	}
 }
-func setIERecordValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
+func setIERecordValue(record *model.Record, ieValPtr *entities.InfoElementWithValue) {
 	ieVal := *ieValPtr
 	switch ieVal.GetName() {
 	case "octetDeltaCount":
@@ -290,7 +290,7 @@ func setIERecordValue(record *flow.Record, ieValPtr *entities.InfoElementWithVal
 		ieVal.SetStringValue(record.Interface)
 	}
 }
-func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
+func setIEValue(record *model.Record, ieValPtr *entities.InfoElementWithValue) {
 	ieVal := *ieValPtr
 	switch ieVal.GetName() {
 	case "ethernetType":
@@ -302,9 +302,9 @@ func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 	case "destinationMacAddress":
 		ieVal.SetMacAddressValue(record.Id.DstMac[:])
 	case "sourceIPv4Address":
-		setIPv4Address(ieValPtr, flow.IP(record.Id.SrcIp).To4())
+		setIPv4Address(ieValPtr, model.IP(record.Id.SrcIp).To4())
 	case "destinationIPv4Address":
-		setIPv4Address(ieValPtr, flow.IP(record.Id.DstIp).To4())
+		setIPv4Address(ieValPtr, model.IP(record.Id.DstIp).To4())
 	case "sourceIPv6Address":
 		ieVal.SetIPAddressValue(record.Id.SrcIp[:])
 	case "destinationIPv6Address":
@@ -321,13 +321,13 @@ func setIEValue(record *flow.Record, ieValPtr *entities.InfoElementWithValue) {
 		ieVal.SetUnsigned8Value(record.Id.IcmpCode)
 	}
 }
-func setEntities(record *flow.Record, elements *[]entities.InfoElementWithValue) {
+func setEntities(record *model.Record, elements *[]entities.InfoElementWithValue) {
 	for _, ieVal := range *elements {
 		setIEValue(record, &ieVal)
 		setIERecordValue(record, &ieVal)
 	}
 }
-func (ipf *IPFIX) sendDataRecord(_ *logrus.Entry, record *flow.Record, v6 bool) error {
+func (ipf *IPFIX) sendDataRecord(_ *logrus.Entry, record *model.Record, v6 bool) error {
 	dataSet := entities.NewSet(false)
 	var templateID uint16
 	if v6 {
@@ -359,14 +359,14 @@ func (ipf *IPFIX) sendDataRecord(_ *logrus.Entry, record *flow.Record, v6 bool) 
 	return nil
 }
 
-// ExportFlows accepts slices of *flow.Record by its input channel, converts them
+// ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to IPFIX Records, and submits them to the collector.
-func (ipf *IPFIX) ExportFlows(input <-chan []*flow.Record) {
+func (ipf *IPFIX) ExportFlows(input <-chan []*model.Record) {
 	socket := utils.GetSocket(ipf.hostIP, ipf.hostPort)
 	log := ilog.WithField("collector", socket)
 	for inputRecords := range input {
 		for _, record := range inputRecords {
-			if record.Id.EthProtocol == flow.IPv6Type {
+			if record.Id.EthProtocol == model.IPv6Type {
 				err := ipf.sendDataRecord(log, record, true)
 				if err != nil {
 					log.WithError(err).Error("Failed in send IPFIX data record")

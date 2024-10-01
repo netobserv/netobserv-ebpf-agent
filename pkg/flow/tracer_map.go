@@ -8,6 +8,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 
 	"github.com/gavv/monotime"
 	"github.com/netobserv/gopipes/pkg/node"
@@ -18,7 +19,7 @@ import (
 var mtlog = logrus.WithField("component", "flow.MapTracer")
 
 // MapTracer accesses a mapped source of flows (the eBPF PerCPU HashMap), deserializes it into
-// a flow Record structure, and performs the accumulation of each perCPU-record into a single flow
+// a flow model.Record structure, and performs the accumulation of each perCPU-record into a single flow
 type MapTracer struct {
 	mapFetcher               mapFetcher
 	evictionTimeout          time.Duration
@@ -53,8 +54,8 @@ func (m *MapTracer) Flush() {
 	m.evictionCond.Broadcast()
 }
 
-func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*Record] {
-	return func(out chan<- []*Record) {
+func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[[]*model.Record] {
+	return func(out chan<- []*model.Record) {
 		evictionTicker := time.NewTicker(m.evictionTimeout)
 		go m.evictionSynchronization(ctx, forceGC, out)
 		for {
@@ -74,7 +75,7 @@ func (m *MapTracer) TraceLoop(ctx context.Context, forceGC bool) node.StartFunc[
 // evictionSynchronization loop just waits for the evictionCond to happen
 // and triggers the actual eviction. It makes sure that only one eviction
 // is being triggered at the same time
-func (m *MapTracer) evictionSynchronization(ctx context.Context, forceGC bool, out chan<- []*Record) {
+func (m *MapTracer) evictionSynchronization(ctx context.Context, forceGC bool, out chan<- []*model.Record) {
 	// flow eviction loop. It just keeps waiting for eviction until someone triggers the
 	// evictionCond.Broadcast signal
 	for {
@@ -94,12 +95,12 @@ func (m *MapTracer) evictionSynchronization(ctx context.Context, forceGC bool, o
 	}
 }
 
-func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows chan<- []*Record) {
+func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows chan<- []*model.Record) {
 	// it's important that this monotonic timer reports same or approximate values as kernel-side bpf_ktime_get_ns()
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
 
-	var forwardingFlows []*Record
+	var forwardingFlows []*model.Record
 	laterFlowNs := uint64(0)
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
@@ -113,7 +114,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 		if aggregatedMetrics.EndMonoTimeTs > laterFlowNs {
 			laterFlowNs = aggregatedMetrics.EndMonoTimeTs
 		}
-		forwardingFlows = append(forwardingFlows, NewRecord(
+		forwardingFlows = append(forwardingFlows, model.NewRecord(
 			flowKey,
 			aggregatedMetrics,
 			currentTime,
@@ -151,7 +152,7 @@ func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetric
 		if metrics[i].StartMonoTimeTs <= m.lastEvictionNs || metrics[i].EndMonoTimeTs <= m.lastEvictionNs {
 			continue
 		}
-		Accumulate(aggr, &metrics[i])
+		model.Accumulate(aggr, &metrics[i])
 	}
 	return aggr
 }

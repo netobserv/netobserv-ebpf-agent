@@ -5,6 +5,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 
 	"github.com/sirupsen/logrus"
 )
@@ -46,7 +47,7 @@ func NewAccounter(
 // Account runs in a new goroutine. It reads all the records from the input channel
 // and accumulate their metrics internally. Once the metrics have reached their max size
 // or the eviction times out, it evicts all the accumulated flows by the returned channel.
-func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
+func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Record) {
 	evictTick := time.NewTicker(c.evictTimeout)
 	defer evictTick.Stop()
 	for {
@@ -71,7 +72,7 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 				return
 			}
 			if stored, ok := c.entries[record.Id]; ok {
-				Accumulate(stored, &record.Metrics)
+				model.Accumulate(stored, &record.Metrics)
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
@@ -90,12 +91,12 @@ func (c *Accounter) Account(in <-chan *RawRecord, out chan<- []*Record) {
 	}
 }
 
-func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*Record, reason string) {
+func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*model.Record, reason string) {
 	now := c.clock()
 	monotonicNow := uint64(c.monoClock())
-	records := make([]*Record, 0, len(entries))
+	records := make([]*model.Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, NewRecord(key, metrics, now, monotonicNow))
+		records = append(records, model.NewRecord(key, metrics, now, monotonicNow))
 	}
 	c.metrics.EvictionCounter.WithSourceAndReason("accounter", reason).Inc()
 	c.metrics.EvictedFlowsCounter.WithSourceAndReason("accounter", reason).Add(float64(len(records)))
