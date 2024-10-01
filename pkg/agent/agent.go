@@ -16,7 +16,9 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
@@ -116,8 +118,8 @@ type Flows struct {
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
 	limiter   *flow.CapacityLimiter
-	deduper   node.MiddleFunc[[]*flow.Record, []*flow.Record]
-	exporter  node.TerminalFunc[[]*flow.Record]
+	deduper   node.MiddleFunc[[]*model.Record, []*model.Record]
+	exporter  node.TerminalFunc[[]*model.Record]
 
 	// elements used to decorate flows with extra information
 	interfaceNamer flow.InterfaceNamer
@@ -198,7 +200,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		debug = true
 	}
 
-	ebpfConfig := &ebpf.FlowFetcherConfig{
+	ebpfConfig := &tracer.FlowFetcherConfig{
 		EnableIngress:                  ingress,
 		EnableEgress:                   egress,
 		Debug:                          debug,
@@ -211,20 +213,20 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
 		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
 		EnableFlowFilter:               cfg.EnableFlowFilter,
-		FilterConfig: &ebpf.FilterConfig{
+		FilterConfig: &tracer.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,
 			FilterIPCIDR:          cfg.FilterIPCIDR,
 			FilterProtocol:        cfg.FilterProtocol,
 			FilterPeerIP:          cfg.FilterPeerIP,
-			FilterDestinationPort: ebpf.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange, cfg.FilterDestinationPorts),
-			FilterSourcePort:      ebpf.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange, cfg.FilterSourcePorts),
-			FilterPort:            ebpf.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange, cfg.FilterPorts),
+			FilterDestinationPort: tracer.ConvertFilterPortsToInstr(cfg.FilterDestinationPort, cfg.FilterDestinationPortRange, cfg.FilterDestinationPorts),
+			FilterSourcePort:      tracer.ConvertFilterPortsToInstr(cfg.FilterSourcePort, cfg.FilterSourcePortRange, cfg.FilterSourcePorts),
+			FilterPort:            tracer.ConvertFilterPortsToInstr(cfg.FilterPort, cfg.FilterPortRange, cfg.FilterPorts),
 			FilterTCPFLags:        cfg.FilterTCPFlags,
 		},
 	}
 
-	fetcher, err := ebpf.NewFlowFetcher(ebpfConfig)
+	fetcher, err := tracer.NewFlowFetcher(ebpfConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +238,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 func flowsAgent(cfg *Config, m *metrics.Metrics,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
-	exporter node.TerminalFunc[[]*flow.Record],
+	exporter node.TerminalFunc[[]*model.Record],
 	agentIP net.IP,
 	s *ovnobserv.SampleDecoder,
 ) (*Flows, error) {
@@ -284,7 +286,7 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
 	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
 	limiter := flow.NewCapacityLimiter(m)
-	var deduper node.MiddleFunc[[]*flow.Record, []*flow.Record]
+	var deduper node.MiddleFunc[[]*model.Record, []*model.Record]
 	if cfg.Deduper == DeduperFirstCome {
 		deduper = flow.Dedupe(cfg.DeduperFCExpiry, cfg.DeduperJustMark, cfg.DeduperMerge, interfaceNamer, m)
 	}
@@ -321,7 +323,7 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCExporter(cfg, m, s)
@@ -338,7 +340,7 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecod
 	}
 }
 
-func buildGRPCExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
+func buildGRPCExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -350,7 +352,7 @@ func buildGRPCExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecod
 	return grpcExporter.ExportFlows, nil
 }
 
-func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record], error) {
+func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.Record], error) {
 	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
 	if err != nil {
 		return nil, err
@@ -358,7 +360,7 @@ func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*flow.Record],
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*flow.Record], error) {
+func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -409,7 +411,7 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDeco
 	}).ExportFlows, nil
 }
 
-func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*flow.Record], error) {
+func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*model.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -480,7 +482,7 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
-func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*flow.Record], error) {
+func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.Record], error) {
 
 	alog.Debug("registering interfaces' listener in background")
 	err := f.interfacesManager(ctx)

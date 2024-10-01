@@ -12,18 +12,18 @@ flowchart TD
     style E fill:#990
 
     E --> |"polls<br/>PerCPUHashMap"| M(flow.MapTracer)
-    RB --> |chan *flow.Record| ACC(flow.Accounter)
+    RB --> |chan *model.Record| ACC(flow.Accounter)
     RB -.-> |flushes| M
-    ACC --> |"chan []*flow.Record"| DD(flow.Deduper)
-    M --> |"chan []*flow.Record"| DD
+    ACC --> |"chan []*model.Record"| DD(flow.Deduper)
+    M --> |"chan []*model.Record"| DD
 
     subgraph Optional
         DD
     end
 
-    DD --> |"chan []*flow.Record"| CL(flow.CapacityLimiter)
+    DD --> |"chan []*model.Record"| CL(flow.CapacityLimiter)
 
-    CL --> |"chan []*flow.Record"| DC(flow.Decorator)
+    CL --> |"chan []*model.Record"| DC(flow.Decorator)
     
-    DC --> |"chan []*flow.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
+    DC --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
 ```

@@ -3,9 +3,9 @@ package exporter
 import (
 	"context"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
@@ -18,7 +18,7 @@ var glog = logrus.WithField("component", "exporter/GRPCProto")
 
 const componentGRPC = "grpc"
 
-// GRPCProto flow exporter. Its ExportFlows method accepts slices of *flow.Record
+// GRPCProto flow exporter. Its ExportFlows method accepts slices of *model.Record
 // by its input channel, converts them to *pbflow.Records instances, and submits
 // them to the collector.
 type GRPCProto struct {
@@ -50,9 +50,9 @@ func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int, m *metr
 	}, nil
 }
 
-// ExportFlows accepts slices of *flow.Record by its input channel, converts them
+// ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (g *GRPCProto) ExportFlows(input <-chan []*flow.Record) {
+func (g *GRPCProto) ExportFlows(input <-chan []*model.Record) {
 	socket := utils.GetSocket(g.hostIP, g.hostPort)
 	log := glog.WithField("collector", socket)
 	for inputRecords := range input {

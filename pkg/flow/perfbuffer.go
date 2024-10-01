@@ -3,13 +3,16 @@ package flow
 import (
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
+
+var plog = logrus.WithField("component", "packet/PerfBuffer")
 
 type PerfBuffer struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      [](*PacketRecord)
+	entries      [](*model.PacketRecord)
 }
 
 func NewPerfBuffer(
@@ -18,11 +21,11 @@ func NewPerfBuffer(
 	return &PerfBuffer{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      []*PacketRecord{},
+		entries:      []*model.PacketRecord{},
 	}
 }
 
-func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord) {
+func (c *PerfBuffer) PBuffer(in <-chan *model.PacketRecord, out chan<- []*model.PacketRecord) {
 	evictTick := time.NewTicker(c.evictTimeout)
 	defer evictTick.Stop()
 	ind := 0
@@ -33,7 +36,7 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = []*PacketRecord{}
+			c.entries = []*model.PacketRecord{}
 			logrus.WithField("packets", len(evictingEntries)).
 				Debug("evicting packets from userspace  on timeout")
 			c.evict(evictingEntries, out)
@@ -46,21 +49,21 @@ func (c *PerfBuffer) PBuffer(in <-chan *PacketRecord, out chan<- []*PacketRecord
 			}
 			if len(c.entries) >= c.maxEntries {
 				evictingEntries := c.entries
-				c.entries = []*PacketRecord{}
+				c.entries = []*model.PacketRecord{}
 				logrus.WithField("packets", len(evictingEntries)).
 					Debug("evicting packets from userspace accounter after reaching cache max length")
 				c.evict(evictingEntries, out)
 			}
-			c.entries = append(c.entries, NewPacketRecord(packet.Stream, (uint32)(len(packet.Stream)), packet.Time))
+			c.entries = append(c.entries, model.NewPacketRecord(packet.Stream, (uint32)(len(packet.Stream)), packet.Time))
 			ind++
 		}
 	}
 }
 
-func (c *PerfBuffer) evict(entries [](*PacketRecord), evictor chan<- []*PacketRecord) {
-	packets := make([]*PacketRecord, 0, len(entries))
+func (c *PerfBuffer) evict(entries [](*model.PacketRecord), evictor chan<- []*model.PacketRecord) {
+	packets := make([]*model.PacketRecord, 0, len(entries))
 	for _, payload := range entries {
-		packets = append(packets, NewPacketRecord(payload.Stream, (uint32)(len(payload.Stream)), payload.Time))
+		packets = append(packets, model.NewPacketRecord(payload.Stream, (uint32)(len(payload.Stream)), payload.Time))
 	}
 	alog.WithField("numEntries", len(packets)).Debug("packets evicted from userspace accounter")
 	evictor <- packets
