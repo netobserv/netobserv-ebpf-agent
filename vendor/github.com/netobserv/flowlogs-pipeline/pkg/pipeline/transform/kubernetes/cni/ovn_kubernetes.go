@@ -30,7 +30,11 @@ const (
 	ovnSubnetAnnotation = "k8s.ovn.org/node-subnets"
 )
 
-func AddOvnIPs(ips []string, node *v1.Node) []string {
+type OVNPlugin struct {
+	Plugin
+}
+
+func (o *OVNPlugin) GetNodeIPs(node *v1.Node) []string {
 	// Add IP that is used in OVN for some traffic on mp0 interface
 	// (no IP / error returned when not using ovn-k)
 	ip, err := findOvnMp0IP(node.Annotations)
@@ -38,12 +42,12 @@ func AddOvnIPs(ips []string, node *v1.Node) []string {
 		// Log the error as Info, do not block other ips indexing
 		log.Infof("failed to index OVN mp0 IP: %v", err)
 	} else if ip != "" {
-		return append(ips, ip)
+		return []string{ip}
 	}
-	return ips
+	return nil
 }
 
-func unmarshalAnnotation(annot []byte) (string, error) {
+func unmarshalOVNAnnotation(annot []byte) (string, error) {
 	// Depending on OVN (OCP) version, the annotation might be JSON-encoded as a string (legacy), or an array of strings
 	var subnetsAsArray map[string][]string
 	err := json.Unmarshal(annot, &subnetsAsArray)
@@ -70,7 +74,7 @@ func unmarshalAnnotation(annot []byte) (string, error) {
 
 func findOvnMp0IP(annotations map[string]string) (string, error) {
 	if subnetsJSON, ok := annotations[ovnSubnetAnnotation]; ok {
-		subnet, err := unmarshalAnnotation([]byte(subnetsJSON))
+		subnet, err := unmarshalOVNAnnotation([]byte(subnetsJSON))
 		if err != nil {
 			return "", err
 		}
