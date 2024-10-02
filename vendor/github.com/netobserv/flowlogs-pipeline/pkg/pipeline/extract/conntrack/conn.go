@@ -162,12 +162,12 @@ func (c *connType) isMatchSelector(selector map[string]interface{}) bool {
 				return false
 			}
 		case string:
-			selectorValue := fmt.Sprintf("%v", v)
+			selectorValue := utils.ConvertToString(v)
 			if connValue != selectorValue {
 				return false
 			}
 		default:
-			connValue = fmt.Sprintf("%v", connValue)
+			connValue = utils.ConvertToString(connValue)
 			selectorValue := fmt.Sprintf("%v", v)
 			if connValue != selectorValue {
 				return false
