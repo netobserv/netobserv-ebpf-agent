@@ -3,9 +3,22 @@ package informers
 import (
 	"errors"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/api"
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
 	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
+)
+
+var (
+	secondaryNetConfig = []api.SecondaryNetwork{
+		{
+			Name:  "my-network",
+			Index: map[string]any{"mac": nil},
+		},
+	}
 )
 
 type Mock struct {
@@ -15,12 +28,12 @@ type Mock struct {
 
 func NewInformersMock() *Mock {
 	inf := new(Mock)
-	inf.On("InitFromConfig", mock.Anything).Return(nil)
+	inf.On("InitFromConfig", mock.Anything, mock.Anything).Return(nil)
 	return inf
 }
 
-func (o *Mock) InitFromConfig(kubeConfigPath string) error {
-	args := o.Called(kubeConfigPath)
+func (o *Mock) InitFromConfig(cfg api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
+	args := o.Called(cfg, opMetrics)
 	return args.Error(0)
 }
 
@@ -55,7 +68,7 @@ func (m *InformerMock) GetIndexer() cache.Indexer {
 	return args.Get(0).(cache.Indexer)
 }
 
-func (m *IndexerMock) MockPod(ip, name, namespace, nodeIP string, owner *Owner) {
+func (m *IndexerMock) MockPod(ip, mac, intf, name, namespace, nodeIP string, owner *Owner) {
 	var ownerRef []metav1.OwnerReference
 	if owner != nil {
 		ownerRef = []metav1.OwnerReference{{
@@ -63,21 +76,37 @@ func (m *IndexerMock) MockPod(ip, name, namespace, nodeIP string, owner *Owner) 
 			Name: owner.Name,
 		}}
 	}
-	m.On("ByIndex", IndexIP, ip).Return([]interface{}{&Info{
+	info := Info{
 		Type: "Pod",
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            name,
 			Namespace:       namespace,
 			OwnerReferences: ownerRef,
 		},
-		HostIP: nodeIP,
-	}}, nil)
+		HostIP:           nodeIP,
+		ips:              []string{},
+		secondaryNetKeys: []string{},
+	}
+	if len(mac) > 0 {
+		nsi := cni.NetStatItem{
+			Interface: intf,
+			MAC:       mac,
+			IPs:       []string{ip},
+		}
+		info.secondaryNetKeys = nsi.Keys(secondaryNetConfig[0])
+		m.On("ByIndex", IndexCustom, info.secondaryNetKeys[0]).Return([]interface{}{&info}, nil)
+	}
+	if len(ip) > 0 {
+		info.ips = []string{ip}
+		m.On("ByIndex", IndexIP, ip).Return([]interface{}{&info}, nil)
+	}
 }
 
 func (m *IndexerMock) MockNode(ip, name string) {
 	m.On("ByIndex", IndexIP, ip).Return([]interface{}{&Info{
 		Type:       "Node",
 		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ips:        []string{ip},
 	}}, nil)
 }
 
@@ -85,6 +114,7 @@ func (m *IndexerMock) MockService(ip, name, namespace string) {
 	m.On("ByIndex", IndexIP, ip).Return([]interface{}{&Info{
 		Type:       "Service",
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ips:        []string{ip},
 	}}, nil)
 }
 
@@ -128,27 +158,41 @@ func SetupIndexerMocks(kd *Informers) (pods, nodes, svc, rs *IndexerMock) {
 
 type FakeInformers struct {
 	InformersInterface
-	info  map[string]*Info
-	nodes map[string]*Info
+	ipInfo         map[string]*Info
+	customKeysInfo map[string]*Info
+	nodes          map[string]*Info
 }
 
-func SetupStubs(info map[string]*Info, nodes map[string]*Info) *FakeInformers {
+func SetupStubs(ipInfo map[string]*Info, customKeysInfo map[string]*Info, nodes map[string]*Info) *FakeInformers {
 	return &FakeInformers{
-		info:  info,
-		nodes: nodes,
+		ipInfo:         ipInfo,
+		customKeysInfo: customKeysInfo,
+		nodes:          nodes,
 	}
 }
 
-func (f *FakeInformers) InitFromConfig(_ string) error {
+func (f *FakeInformers) InitFromConfig(_ api.NetworkTransformKubeConfig, _ *operational.Metrics) error {
 	return nil
 }
 
-func (f *FakeInformers) GetInfo(n string) (*Info, error) {
-	i := f.info[n]
+func (f *FakeInformers) GetInfo(keys []cni.SecondaryNetKey, ip string) (*Info, error) {
+	if len(keys) > 0 {
+		i := f.customKeysInfo[keys[0].Key]
+		if i != nil {
+			return i, nil
+		}
+	}
+
+	i := f.ipInfo[ip]
 	if i != nil {
 		return i, nil
 	}
 	return nil, errors.New("notFound")
+}
+
+func (f *FakeInformers) BuildSecondaryNetworkKeys(flow config.GenericMap, rule *api.K8sRule) []cni.SecondaryNetKey {
+	m := cni.MultusHandler{}
+	return m.BuildKeys(flow, rule, secondaryNetConfig)
 }
 
 func (f *FakeInformers) GetNodeInfo(n string) (*Info, error) {

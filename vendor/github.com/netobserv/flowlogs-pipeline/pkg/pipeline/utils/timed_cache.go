@@ -87,7 +87,7 @@ func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) bool {
 			key:             key,
 			SourceEntry:     entry,
 		}
-		uclog.Debugf("adding entry: %#v", cEntry)
+		uclog.Tracef("adding entry: %#v", cEntry)
 		// place at end of list
 		cEntry.e = tc.cacheList.PushBack(cEntry)
 		tc.cacheMap[key] = cEntry
@@ -141,7 +141,9 @@ func (tc *TimedCache) CleanupExpiredEntries(expiry time.Duration, callback Cache
 			return
 		}
 		deleted++
-		callback(pCacheInfo.SourceEntry)
+		if callback != nil {
+			callback(pCacheInfo.SourceEntry)
+		}
 		delete(tc.cacheMap, pCacheInfo.key)
 		tc.cacheList.Remove(listEntry)
 		if tc.cacheLenMetric != nil {

@@ -29,6 +29,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
+	util "github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -152,7 +153,7 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 		if operationKey != "" {
 			value, ok := entry[operationKey]
 			if ok {
-				valueString := fmt.Sprintf("%v", value)
+				valueString := util.ConvertToString(value)
 				if valueFloat64, err := strconv.ParseFloat(valueString, 64); err != nil {
 					// Log as debug to avoid performance impact
 					log.Debugf("UpdateByEntry error when parsing float '%s': %v", valueString, err)
