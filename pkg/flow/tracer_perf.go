@@ -9,6 +9,7 @@ import (
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,8 +36,8 @@ func NewPerfTracer(
 	}
 }
 
-func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*PacketRecord] {
-	return func(out chan<- *PacketRecord) {
+func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*model.PacketRecord] {
+	return func(out chan<- *model.PacketRecord) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -57,13 +58,13 @@ func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*PacketRecord
 	}
 }
 
-func (m *PerfTracer) listenAndForwardPerf(forwardCh chan<- *PacketRecord) error {
+func (m *PerfTracer) listenAndForwardPerf(forwardCh chan<- *model.PacketRecord) error {
 	event, err := m.perfArray.ReadPerf()
 	if err != nil {
 		return fmt.Errorf("reading from perf event array: %w", err)
 	}
 	// Parses the perf event entry into an Event structure.
-	readFlow, err := ReadRawPacket(bytes.NewBuffer(event.RawSample))
+	readFlow, err := model.ReadRawPacket(bytes.NewBuffer(event.RawSample))
 	if err != nil {
 		return fmt.Errorf("parsing data received from the perf event array: %w", err)
 	}

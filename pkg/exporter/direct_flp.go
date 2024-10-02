@@ -6,7 +6,8 @@ import (
 	flpconfig "github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode/packets"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"gopkg.in/yaml.v2"
 )
 
@@ -35,9 +36,9 @@ func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
 	return &DirectFLP{fwd: fwd}, nil
 }
 
-// ExportFlows accepts slices of *flow.Record by its input channel, converts them
+// ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (d *DirectFLP) ExportFlows(input <-chan []*flow.Record) {
+func (d *DirectFLP) ExportFlows(input <-chan []*model.Record) {
 	for inputRecords := range input {
 		for _, rec := range inputRecords {
 			d.fwd <- decode.RecordToMap(rec)
@@ -45,13 +46,13 @@ func (d *DirectFLP) ExportFlows(input <-chan []*flow.Record) {
 	}
 }
 
-// ExportPackets accepts slices of *flow.PacketRecord by its input channel, converts them
+// ExportPackets accepts slices of *model.PacketRecord by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (d *DirectFLP) ExportPackets(input <-chan []*flow.PacketRecord) {
+func (d *DirectFLP) ExportPackets(input <-chan []*model.PacketRecord) {
 	for inputPackets := range input {
 		for _, packet := range inputPackets {
 			if len(packet.Stream) != 0 {
-				d.fwd <- decode.PacketToMap(packet)
+				d.fwd <- packets.PacketToMap(packet)
 			}
 		}
 	}

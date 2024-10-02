@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 
@@ -24,7 +25,7 @@ func NewCapacityLimiter(m *metrics.Metrics) *CapacityLimiter {
 	return &CapacityLimiter{metrics: m}
 }
 
-func (c *CapacityLimiter) Limit(in <-chan []*Record, out chan<- []*Record) {
+func (c *CapacityLimiter) Limit(in <-chan []*model.Record, out chan<- []*model.Record) {
 	go c.logDroppedFlows()
 	for i := range in {
 		if len(out) < cap(out) || cap(out) == 0 {

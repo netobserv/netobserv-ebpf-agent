@@ -275,19 +275,45 @@ func obtainAttributesFromEntry(entry config.GenericMap) *[]attribute.KeyValue {
 	var att = make([]attribute.KeyValue, len(entry))
 	index := 0
 	for k, v := range entry {
-		switch v.(type) {
+		switch v := v.(type) {
+		case []string:
+			att[index] = attribute.StringSlice(k, v)
 		case string:
-			valString := v
-			att[index] = attribute.String(k, valString.(string))
-		case int, int32, int64, int16, uint, uint8, uint16, uint32, uint64:
+			att[index] = attribute.String(k, v)
+		case []int:
+			att[index] = attribute.IntSlice(k, v)
+		case []int32:
+			valInt64Slice := []int64{}
+			for _, valInt32 := range v {
+				valInt64, _ := utils.ConvertToInt64(valInt32)
+				valInt64Slice = append(valInt64Slice, valInt64)
+			}
+			att[index] = attribute.Int64Slice(k, valInt64Slice)
+		case []int64:
+			att[index] = attribute.Int64Slice(k, v)
+		case int:
+			att[index] = attribute.Int(k, v)
+		case int32, int64, int16, uint, uint8, uint16, uint32, uint64:
 			valInt, _ := utils.ConvertToInt64(v)
 			att[index] = attribute.Int64(k, valInt)
-		case float32, float64:
+		case []float32:
+			valFloat64Slice := []float64{}
+			for _, valFloat32 := range v {
+				valFloat64, _ := utils.ConvertToFloat64(valFloat32)
+				valFloat64Slice = append(valFloat64Slice, valFloat64)
+			}
+			att[index] = attribute.Float64Slice(k, valFloat64Slice)
+		case []float64:
+			att[index] = attribute.Float64Slice(k, v)
+		case float32:
 			valFloat, _ := utils.ConvertToFloat64(v)
 			att[index] = attribute.Float64(k, valFloat)
+		case float64:
+			att[index] = attribute.Float64(k, v)
+		case []bool:
+			att[index] = attribute.BoolSlice(k, v)
 		case bool:
-			valBool := v
-			att[index] = attribute.Bool(k, valBool.(bool))
+			att[index] = attribute.Bool(k, v)
 		case nil:
 			// skip this field
 			continue

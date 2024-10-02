@@ -34,7 +34,7 @@ var errNonPositiveDuration = fmt.Errorf("non-positive duration")
 // start of bi-directional control flow.
 //
 // Typically, push-based exporters that are periodic will
-// implement PeroidicExporter themselves and construct a
+// implement PeriodicExporter themselves and construct a
 // PeriodicReader to satisfy this interface.
 //
 // Pull-based exporters will typically implement Register
@@ -148,7 +148,7 @@ func DefaultAggregationSelector(ik InstrumentKind) Aggregation {
 	switch ik {
 	case InstrumentKindCounter, InstrumentKindUpDownCounter, InstrumentKindObservableCounter, InstrumentKindObservableUpDownCounter:
 		return AggregationSum{}
-	case InstrumentKindObservableGauge:
+	case InstrumentKindObservableGauge, InstrumentKindGauge:
 		return AggregationLastValue{}
 	case InstrumentKindHistogram:
 		return AggregationExplicitBucketHistogram{
@@ -166,7 +166,7 @@ type ReaderOption interface {
 	ManualReaderOption
 }
 
-// WithProducers registers producers as an external Producer of metric data
+// WithProducer registers producers as an external Producer of metric data
 // for this Reader.
 func WithProducer(p Producer) ReaderOption {
 	return producerOption{p: p}
