@@ -57,7 +57,7 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
     id.direction = dir;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, pkt.flags);
+    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0);
     if (skip) {
         return false;
     }

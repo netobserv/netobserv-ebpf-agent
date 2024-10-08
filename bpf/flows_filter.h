@@ -37,7 +37,7 @@ static __always_inline int is_equal_ip(u8 *ip1, u8 *ip2, u8 len) {
 
 static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_t *key,
                                                  filter_action *action, u8 len, u8 offset,
-                                                 u16 flags) {
+                                                 u16 flags, u32 drop_reason) {
     int result = 0;
 
     struct filter_value_t *rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, key);
@@ -50,6 +50,7 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
             *action = rule->action;
             result++;
         }
+
         // match specific rule protocol or use wildcard protocol
         if (rule->protocol == id->transport_protocol || rule->protocol == 0) {
             switch (id->transport_protocol) {
@@ -188,6 +189,16 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 goto end;
             }
         }
+
+        if (rule->filter_drops) {
+            if (drop_reason != 0) {
+                BPF_PRINTK("drop filter matched\n");
+                result++;
+            } else {
+                result = 0;
+                goto end;
+            }
+        }
     }
 end:
     BPF_PRINTK("result: %d action %d\n", result, *action);
@@ -224,7 +235,8 @@ static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filt
 /*
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
-static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, u16 flags) {
+static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, u16 flags,
+                                            u32 drop_reason) {
     struct filter_key_t key;
     u8 len, offset;
     int result = 0;
@@ -238,7 +250,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
         return result;
     }
 
-    result = do_flow_filter_lookup(id, &key, action, len, offset, flags);
+    result = do_flow_filter_lookup(id, &key, action, len, offset, flags, drop_reason);
     // we have a match so return
     if (result > 0) {
         return result;
@@ -250,7 +262,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
         return result;
     }
 
-    return do_flow_filter_lookup(id, &key, action, len, offset, flags);
+    return do_flow_filter_lookup(id, &key, action, len, offset, flags, drop_reason);
 }
 
 #endif //__FLOWS_FILTER_H__
