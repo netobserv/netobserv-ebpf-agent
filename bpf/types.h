@@ -235,6 +235,7 @@ struct filter_value_t {
     direction direction;
     filter_action action;
     tcp_flags tcpFlags;
+    u8 filter_drops;
     u8 ip[IP_MAX_LEN];
 } __attribute__((packed));
 // Force emitting struct filter_value_t into the ELF.

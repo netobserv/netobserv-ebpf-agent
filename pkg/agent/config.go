@@ -229,6 +229,8 @@ type Config struct {
 	// FilterTCPFlags is the TCP flags to filter flows.
 	// possible values are: SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST-ACK
 	FilterTCPFlags string `env:"FILTER_TCP_FLAGS"`
+	// FilterDrops allow filtering flows with packet drops, default is false.
+	FilterDrops bool `env:"FILTER_DROPS" envDefault:"false"`
 	// EnableNetworkEventsMonitoring enables monitoring network plugin events, default is false.
 	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
 	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest

@@ -80,7 +80,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     id.direction = direction;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, pkt.flags);
+    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0);
     if (skip) {
         return TC_ACT_OK;
     }

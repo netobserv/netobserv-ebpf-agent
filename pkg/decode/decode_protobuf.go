@@ -329,6 +329,16 @@ func PktDropCauseToStr(dropCause uint32) string {
 		return "SKB_DROP_REASON_IPV6_NDISC_BAD_OPTIONS"
 	case skbDropReasonSubSysCore + 75:
 		return "SKB_DROP_REASON_IPV6_NDISC_NS_OTHERHOST"
+	case skbDropReasonSubSysCore + 76:
+		return "SKB_DROP_REASON_QUEUE_PURGE"
+	case skbDropReasonSubSysCore + 77:
+		return "SKB_DROP_REASON_TC_COOKIE_ERROR"
+	case skbDropReasonSubSysCore + 78:
+		return "SKB_DROP_REASON_PACKET_SOCK_ERROR"
+	case skbDropReasonSubSysCore + 79:
+		return "SKB_DROP_REASON_TC_CHAIN_NOTFOUND"
+	case skbDropReasonSubSysCore + 80:
+		return "SKB_DROP_REASON_TC_RECLASSIFY_LOOP"
 
 	// ovs drop causes
 	// https://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git/tree/net/openvswitch/drop.h

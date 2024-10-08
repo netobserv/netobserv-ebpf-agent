@@ -35,6 +35,7 @@ Rule-base filtering is a method to control the flow of packets cached in the eBP
 - `FILTER_ICMP_CODE` - ICMP code of the flow filter rule.
 - `FILTER_PEER_IP` - Specific Peer IP address of the flow filter rule.
 - `FILTER_TCP_FLAGS` - Filter based on TCP flags Possible values are SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST_ACK
+- `FILTER_DROPS` - Filter flows when packets drop feature is enabled to filter only flows with drop cause not 0.
 
 Note: 
 - for L4 ports configuration, you can use either single port config options or the range but not both.
