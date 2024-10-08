@@ -434,7 +434,7 @@ func getWriter(opMetrics *operational.Metrics, params config.StageParam) (write.
 	return writer, err
 }
 
-func getTransformer(opMetrics *operational.Metrics, params config.StageParam) (transform.Transformer, error) {
+func getTransformer(_ *operational.Metrics, params config.StageParam) (transform.Transformer, error) {
 	var transformer transform.Transformer
 	var err error
 	switch params.Transform.Type {
@@ -443,7 +443,7 @@ func getTransformer(opMetrics *operational.Metrics, params config.StageParam) (t
 	case api.FilterType:
 		transformer, err = transform.NewTransformFilter(params)
 	case api.NetworkType:
-		transformer, err = transform.NewTransformNetwork(params, opMetrics)
+		transformer, err = transform.NewTransformNetwork(params)
 	case api.NoneType:
 		transformer, err = transform.NewTransformNone()
 	default:

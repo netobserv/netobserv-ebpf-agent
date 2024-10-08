@@ -26,12 +26,10 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/location"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/netdb"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
-	util "github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -54,6 +52,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 	// copy input entry before transform to avoid alteration on parallel stages
 	outputEntry := inputEntry.Copy()
 
+	// TODO: for efficiency and maintainability, maybe each case in the switch below should be an individual implementation of Transformer
 	for _, rule := range n.Rules {
 		switch rule.Type {
 		case api.NetworkAddSubnet:
@@ -61,21 +60,19 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 				log.Errorf("Missing add subnet configuration")
 				continue
 			}
-			if v, ok := outputEntry.LookupString(rule.AddSubnet.Input); ok {
-				_, ipv4Net, err := net.ParseCIDR(v + rule.AddSubnet.SubnetMask)
-				if err != nil {
-					log.Warningf("Can't find subnet for IP %v and prefix length %s - err %v", v, rule.AddSubnet.SubnetMask, err)
-					continue
-				}
-				outputEntry[rule.AddSubnet.Output] = ipv4Net.String()
+			_, ipv4Net, err := net.ParseCIDR(fmt.Sprintf("%v%s", outputEntry[rule.AddSubnet.Input], rule.AddSubnet.SubnetMask))
+			if err != nil {
+				log.Warningf("Can't find subnet for IP %v and prefix length %s - err %v", outputEntry[rule.AddSubnet.Input], rule.AddSubnet.SubnetMask, err)
+				continue
 			}
+			outputEntry[rule.AddSubnet.Output] = ipv4Net.String()
 		case api.NetworkAddLocation:
 			if rule.AddLocation == nil {
 				log.Errorf("Missing add location configuration")
 				continue
 			}
 			var locationInfo *location.Info
-			locationInfo, err := location.GetLocation(util.ConvertToString(outputEntry[rule.AddLocation.Input]))
+			locationInfo, err := location.GetLocation(fmt.Sprintf("%s", outputEntry[rule.AddLocation.Input]))
 			if err != nil {
 				log.Warningf("Can't find location for IP %v err %v", outputEntry[rule.AddLocation.Input], err)
 				continue
@@ -91,7 +88,6 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 				log.Errorf("Missing add service configuration")
 				continue
 			}
-			// Should be optimized (unused in netobserv)
 			protocol := fmt.Sprintf("%v", outputEntry[rule.AddService.Protocol])
 			portNumber, err := strconv.Atoi(fmt.Sprintf("%v", outputEntry[rule.AddService.Input]))
 			if err != nil {
@@ -115,7 +111,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 			outputEntry[rule.AddService.Output] = serviceName
 		case api.NetworkAddKubernetes:
-			kubernetes.Enrich(outputEntry, rule.Kubernetes)
+			kubernetes.Enrich(outputEntry, *rule.Kubernetes)
 		case api.NetworkAddKubernetesInfra:
 			if rule.KubernetesInfra == nil {
 				logrus.Error("transformation rule: Missing configuration ")
@@ -167,7 +163,7 @@ func (n *Network) applySubnetLabel(strIP string) string {
 // NewTransformNetwork create a new transform
 //
 //nolint:cyclop
-func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metrics) (Transformer, error) {
+func NewTransformNetwork(params config.StageParam) (Transformer, error) {
 	var needToInitLocationDB = false
 	var needToInitKubeData = false
 	var needToInitNetworkServices = false
@@ -206,7 +202,7 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 	}
 
 	if needToInitKubeData {
-		err := kubernetes.InitFromConfig(jsonNetworkTransform.KubeConfig, opMetrics)
+		err := kubernetes.InitFromConfig(jsonNetworkTransform.KubeConfigPath)
 		if err != nil {
 			return nil, err
 		}

@@ -133,8 +133,9 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 	for i := range cfg.Metrics {
 		mCfg := &cfg.Metrics[i]
 		fullMetricName := cfg.Prefix + mCfg.Name
+		labels := mCfg.Labels
 		log.Debugf("fullMetricName = %v", fullMetricName)
-		log.Debugf("Labels = %v", mCfg.Labels)
+		log.Debugf("Labels = %v", labels)
 		mInfo := encode.CreateMetricInfo(mCfg)
 		switch mCfg.Type {
 		case api.MetricCounter:

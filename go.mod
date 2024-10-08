@@ -12,7 +12,7 @@ require (
 	github.com/gopacket/gopacket v1.2.0
 	github.com/mariomac/guara v0.0.0-20220523124851-5fc279816f1f
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
-	github.com/netobserv/flowlogs-pipeline v1.6.1-crc0.0.20240930010330-bc3d4ebb4a88
+	github.com/netobserv/flowlogs-pipeline v1.6.2-community
 	github.com/netobserv/gopipes v0.3.0
 	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20240902083137-5d2310e77f87
 	github.com/paulbellamy/ratecounter v0.2.0

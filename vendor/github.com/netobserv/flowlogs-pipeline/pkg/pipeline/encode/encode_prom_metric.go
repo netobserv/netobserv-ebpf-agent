@@ -16,20 +16,6 @@ var variableExtractor, _ = regexp.Compile(`\$\(([^\)]+)\)`)
 type MetricInfo struct {
 	*api.MetricsItem
 	FilterPredicates []Predicate
-	MappedLabels     []MappedLabel
-}
-
-type MappedLabel struct {
-	Source string
-	Target string
-}
-
-func (m *MetricInfo) TargetLabels() []string {
-	var targetLabels []string
-	for _, l := range m.MappedLabels {
-		targetLabels = append(targetLabels, l.Target)
-	}
-	return targetLabels
 }
 
 func Presence(filter api.MetricsFilter) Predicate {
@@ -135,13 +121,6 @@ func injectVars(flow config.GenericMap, filterValue string, varLookups [][]strin
 func CreateMetricInfo(def *api.MetricsItem) *MetricInfo {
 	mi := MetricInfo{
 		MetricsItem: def,
-	}
-	for _, l := range def.Labels {
-		ml := MappedLabel{Source: l, Target: l}
-		if as := def.Remap[l]; as != "" {
-			ml.Target = as
-		}
-		mi.MappedLabels = append(mi.MappedLabels, ml)
 	}
 	for _, f := range def.Filters {
 		mi.FilterPredicates = append(mi.FilterPredicates, filterToPredicate(f))

@@ -1,11 +1,11 @@
 package kubernetes
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	inf "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
 	"github.com/sirupsen/logrus"
 )
@@ -17,19 +17,14 @@ func MockInformers() {
 	informers = inf.NewInformersMock()
 }
 
-func InitFromConfig(config api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
-	return informers.InitFromConfig(config, opMetrics)
+func InitFromConfig(kubeConfigPath string) error {
+	return informers.InitFromConfig(kubeConfigPath)
 }
 
-func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
-	ip, ok := outputEntry.LookupString(rule.IPField)
-	if !ok {
-		return
-	}
-	potentialKeys := informers.BuildSecondaryNetworkKeys(outputEntry, rule)
-	kubeInfo, err := informers.GetInfo(potentialKeys, ip)
+func Enrich(outputEntry config.GenericMap, rule api.K8sRule) {
+	kubeInfo, err := informers.GetInfo(fmt.Sprintf("%s", outputEntry[rule.Input]))
 	if err != nil {
-		logrus.WithError(err).Tracef("can't find kubernetes info for keys %v and IP %s", potentialKeys, ip)
+		logrus.WithError(err).Tracef("can't find kubernetes info for IP %v", outputEntry[rule.Input])
 		return
 	}
 	if rule.Assignee != "otel" {
@@ -42,7 +37,6 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 		outputEntry[rule.Output+"_Type"] = kubeInfo.Type
 		outputEntry[rule.Output+"_OwnerName"] = kubeInfo.Owner.Name
 		outputEntry[rule.Output+"_OwnerType"] = kubeInfo.Owner.Type
-		outputEntry[rule.Output+"_NetworkName"] = kubeInfo.NetworkName
 		if rule.LabelsPrefix != "" {
 			for labelKey, labelValue := range kubeInfo.Labels {
 				outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
@@ -94,7 +88,7 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 
 const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
-func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *inf.Info, zonePrefix string) {
+func fillInK8sZone(outputEntry config.GenericMap, rule api.K8sRule, kubeInfo *inf.Info, zonePrefix string) {
 	if !rule.AddZone {
 		//Nothing to do
 		return
@@ -128,27 +122,36 @@ func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *i
 
 func EnrichLayer(outputEntry config.GenericMap, rule *api.K8sInfraRule) {
 	outputEntry[rule.Output] = "infra"
-	for _, nsnameFields := range rule.NamespaceNameFields {
-		if namespace, _ := outputEntry.LookupString(nsnameFields.Namespace); namespace != "" {
-			name, _ := outputEntry.LookupString(nsnameFields.Name)
-			if objectIsApp(namespace, name, rule) {
-				outputEntry[rule.Output] = "app"
-				return
-			}
+	for _, input := range rule.Inputs {
+		if objectIsApp(fmt.Sprintf("%s", outputEntry[input]), rule) {
+			outputEntry[rule.Output] = "app"
+			return
 		}
 	}
 }
 
-func objectIsApp(namespace, name string, rule *api.K8sInfraRule) bool {
+func objectIsApp(addr string, rule *api.K8sInfraRule) bool {
+	obj, err := informers.GetInfo(addr)
+	if err != nil {
+		logrus.WithError(err).Tracef("can't find kubernetes info for IP %s", addr)
+		return false
+	}
+	if len(obj.Namespace) == 0 {
+		return false
+	}
 	for _, prefix := range rule.InfraPrefixes {
-		if strings.HasPrefix(namespace, prefix) {
+		if strings.HasPrefix(obj.Namespace, prefix) {
 			return false
 		}
 	}
 	for _, ref := range rule.InfraRefs {
-		if namespace == ref.Namespace && name == ref.Name {
+		if obj.Namespace == ref.Namespace && obj.Name == ref.Name {
 			return false
 		}
+	}
+	//Special case with openshift and kubernetes service in default namespace
+	if obj.Namespace == "default" && (obj.Name == "kubernetes" || obj.Name == "openshift") {
+		return false
 	}
 	return true
 }

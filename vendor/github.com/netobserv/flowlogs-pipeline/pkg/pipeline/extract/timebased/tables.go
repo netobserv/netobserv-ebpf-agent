@@ -40,8 +40,10 @@ func AddEntryToTables(indexKeyStructs map[string]*IndexKeyTable, entry config.Ge
 				b.WriteRune(',')
 			}
 			if val, ok := entry[key]; ok {
-				valStr := utils.ConvertToString(val)
-				if len(valStr) > 0 {
+				valStr, err := utils.ConvertToString(val)
+				if err != nil {
+					log.Errorf("Cannot convert value to string %v : %v", val, err)
+				} else if len(valStr) > 0 {
 					b.WriteString(valStr)
 					validValuesCount++
 				}

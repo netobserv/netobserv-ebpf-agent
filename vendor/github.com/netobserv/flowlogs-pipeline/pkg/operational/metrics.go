@@ -80,15 +80,6 @@ var (
 		TypeHistogram,
 		"stage",
 	)
-	indexerHit = DefineMetric(
-		"secondary_network_indexer_hit",
-		"Counter of hits per secondary network index for Kubernetes enrichment",
-		TypeCounter,
-		"kind",
-		"namespace",
-		"network",
-		"warning",
-	)
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -248,10 +239,6 @@ func (o *Metrics) GetOrCreateStageDurationHisto() *prometheus.HistogramVec {
 		o.stageDurationHisto = o.NewHistogramVec(&stageDuration, []float64{.001, .01, .1, 1, 10, 100, 1000, 10000})
 	}
 	return o.stageDurationHisto
-}
-
-func (o *Metrics) CreateIndexerHitCounter() *prometheus.CounterVec {
-	return o.NewCounterVec(&indexerHit)
 }
 
 func GetDocumentation() string {

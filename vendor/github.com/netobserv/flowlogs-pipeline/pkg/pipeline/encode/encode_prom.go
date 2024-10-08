@@ -27,10 +27,8 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	promserver "github.com/netobserv/flowlogs-pipeline/pkg/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
-
-var plog = logrus.WithField("component", "encode.Prometheus")
 
 const defaultExpiryTime = time.Duration(2 * time.Minute)
 
@@ -40,17 +38,11 @@ type EncodeProm struct {
 	registerer   prometheus.Registerer
 	metricCommon *MetricsCommonStruct
 	updateChan   chan config.StageParam
-	server       *promserver.PromServer
-	regName      string
-}
-
-func (e *EncodeProm) Gatherer() prometheus.Gatherer {
-	return e.server
 }
 
 // Encode encodes a metric before being stored; the heavy work is done by the MetricCommonEncode
 func (e *EncodeProm) Encode(metricRecord config.GenericMap) {
-	plog.Tracef("entering EncodeMetric. metricRecord = %v", metricRecord)
+	log.Tracef("entering EncodeMetric. metricRecord = %v", metricRecord)
 	e.metricCommon.MetricCommonEncode(e, metricRecord)
 	e.checkConfUpdate()
 }
@@ -114,34 +106,45 @@ func (e *EncodeProm) Cleanup(cleanupFunc interface{}) {
 	cleanupFunc.(func())()
 }
 
-func (e *EncodeProm) addCounter(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
-	counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
+func (e *EncodeProm) addCounter(fullMetricName string, mInfo *MetricInfo) {
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, mInfo.Labels)
+	err := e.registerer.Register(counter)
+	if err != nil {
+		log.Errorf("error during prometheus.Register: %v", err)
+	}
 	e.metricCommon.AddCounter(fullMetricName, counter, mInfo)
-	return counter
 }
 
-func (e *EncodeProm) addGauge(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
-	gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
+func (e *EncodeProm) addGauge(fullMetricName string, mInfo *MetricInfo) {
+	gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, mInfo.Labels)
+	err := e.registerer.Register(gauge)
+	if err != nil {
+		log.Errorf("error during prometheus.Register: %v", err)
+	}
 	e.metricCommon.AddGauge(fullMetricName, gauge, mInfo)
-	return gauge
 }
-
-func (e *EncodeProm) addHistogram(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
-	histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
+func (e *EncodeProm) addHistogram(fullMetricName string, mInfo *MetricInfo) {
+	histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.Labels)
+	err := e.registerer.Register(histogram)
+	if err != nil {
+		log.Errorf("error during prometheus.Register: %v", err)
+	}
 	e.metricCommon.AddHist(fullMetricName, histogram, mInfo)
-	return histogram
 }
-
-func (e *EncodeProm) addAgghistogram(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
-	agghistogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
+func (e *EncodeProm) addAgghistogram(fullMetricName string, mInfo *MetricInfo) {
+	agghistogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.Labels)
+	err := e.registerer.Register(agghistogram)
+	if err != nil {
+		log.Errorf("error during prometheus.Register: %v", err)
+	}
 	e.metricCommon.AddAggHist(fullMetricName, agghistogram, mInfo)
-	return agghistogram
 }
 
 func (e *EncodeProm) unregisterMetric(c interface{}) {
 	if c, ok := c.(prometheus.Collector); ok {
 		e.registerer.Unregister(c)
 	}
+
 }
 
 func (e *EncodeProm) cleanDeletedGeneric(newCfg api.PromEncode, metrics map[string]mInfoStruct) {
@@ -175,38 +178,6 @@ func (e *EncodeProm) cleanDeletedMetrics(newCfg api.PromEncode) {
 	e.cleanDeletedGeneric(newCfg, e.metricCommon.aggHistos)
 }
 
-// returns true if a registry restart is needed
-func (e *EncodeProm) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, store map[string]mInfoStruct, createMetric func(string, *MetricInfo) prometheus.Collector) bool {
-	fullMetricName := prefix + apiItem.Name
-	plog.Debugf("Checking metric: %s", fullMetricName)
-	mInfo := CreateMetricInfo(apiItem)
-	if oldMetric, ok := store[fullMetricName]; ok {
-		if !reflect.DeepEqual(mInfo.TargetLabels(), oldMetric.info.TargetLabels()) {
-			plog.Debug("Changes detected in labels")
-			return true
-		}
-		if !reflect.DeepEqual(mInfo.MetricsItem, oldMetric.info.MetricsItem) {
-			plog.Debug("Changes detected: unregistering and replacing")
-			e.unregisterMetric(oldMetric.genericMetric)
-			c := createMetric(fullMetricName, mInfo)
-			err := e.registerer.Register(c)
-			if err != nil {
-				plog.Errorf("error in prometheus.Register: %v", err)
-			}
-		} else {
-			plog.Debug("No changes found")
-		}
-	} else {
-		plog.Debug("New metric")
-		c := createMetric(fullMetricName, mInfo)
-		err := e.registerer.Register(c)
-		if err != nil {
-			plog.Errorf("error in prometheus.Register: %v", err)
-		}
-	}
-	return false
-}
-
 func (e *EncodeProm) checkConfUpdate() {
 	select {
 	case stage := <-e.updateChan:
@@ -214,73 +185,63 @@ func (e *EncodeProm) checkConfUpdate() {
 		if stage.Encode != nil && stage.Encode.Prom != nil {
 			cfg = *stage.Encode.Prom
 		}
-		plog.Infof("Received config update: %v", cfg)
 
 		e.cleanDeletedMetrics(cfg)
 
-		needNewRegistry := false
 		for i := range cfg.Metrics {
+			fullMetricName := cfg.Prefix + cfg.Metrics[i].Name
+			mInfo := CreateMetricInfo(&cfg.Metrics[i])
 			switch cfg.Metrics[i].Type {
 			case api.MetricCounter:
-				needNewRegistry = e.checkMetricUpdate(cfg.Prefix, &cfg.Metrics[i], e.metricCommon.counters, e.addCounter)
+				if oldMetric, ok := e.metricCommon.counters[fullMetricName]; ok {
+					if !reflect.DeepEqual(mInfo.MetricsItem, oldMetric.info.MetricsItem) {
+						e.unregisterMetric(oldMetric.genericMetric)
+						e.addCounter(fullMetricName, mInfo)
+					}
+				} else {
+					// New metric
+					e.addCounter(fullMetricName, mInfo)
+				}
 			case api.MetricGauge:
-				needNewRegistry = e.checkMetricUpdate(cfg.Prefix, &cfg.Metrics[i], e.metricCommon.gauges, e.addGauge)
+				if oldMetric, ok := e.metricCommon.gauges[fullMetricName]; ok {
+					if !reflect.DeepEqual(mInfo.MetricsItem, oldMetric.info.MetricsItem) {
+						e.unregisterMetric(oldMetric.genericMetric)
+						e.addGauge(fullMetricName, mInfo)
+					}
+				} else {
+					// New metric
+					e.addGauge(fullMetricName, mInfo)
+				}
 			case api.MetricHistogram:
-				needNewRegistry = e.checkMetricUpdate(cfg.Prefix, &cfg.Metrics[i], e.metricCommon.histos, e.addHistogram)
+				if oldMetric, ok := e.metricCommon.histos[fullMetricName]; ok {
+					if !reflect.DeepEqual(mInfo.MetricsItem, oldMetric.info.MetricsItem) {
+						e.unregisterMetric(oldMetric.genericMetric)
+						e.addHistogram(fullMetricName, mInfo)
+					}
+				} else {
+					// New metric
+					e.addHistogram(fullMetricName, mInfo)
+				}
 			case api.MetricAggHistogram:
-				needNewRegistry = e.checkMetricUpdate(cfg.Prefix, &cfg.Metrics[i], e.metricCommon.aggHistos, e.addAgghistogram)
+				if oldMetric, ok := e.metricCommon.aggHistos[fullMetricName]; ok {
+					if !reflect.DeepEqual(mInfo.MetricsItem, oldMetric.info.MetricsItem) {
+						e.unregisterMetric(oldMetric.genericMetric)
+						e.addAgghistogram(fullMetricName, mInfo)
+					}
+				} else {
+					// New metric
+					e.addAgghistogram(fullMetricName, mInfo)
+				}
 			case "default":
-				plog.Errorf("invalid metric type = %v, skipping", cfg.Metrics[i].Type)
+				log.Errorf("invalid metric type = %v, skipping", cfg.Metrics[i].Type)
 				continue
 			}
-			if needNewRegistry {
-				break
-			}
-		}
-		e.cfg = &cfg
-		if needNewRegistry {
-			// cf https://pkg.go.dev/github.com/prometheus/client_golang@v1.19.0/prometheus#Registerer.Unregister
-			plog.Info("Changes detected on labels: need registry reset.")
-			e.resetRegistry()
-			break
+
 		}
 	default:
 		//Nothing to do
 		return
 	}
-}
-
-func (e *EncodeProm) resetRegistry() {
-	e.metricCommon.cleanupInfoStructs()
-	reg := prometheus.NewRegistry()
-	e.registerer = reg
-	for i := range e.cfg.Metrics {
-		mCfg := &e.cfg.Metrics[i]
-		fullMetricName := e.cfg.Prefix + mCfg.Name
-		mInfo := CreateMetricInfo(mCfg)
-		plog.Debugf("Create metric: %s, Labels: %v", fullMetricName, mInfo.TargetLabels())
-		var m prometheus.Collector
-		switch mCfg.Type {
-		case api.MetricCounter:
-			m = e.addCounter(fullMetricName, mInfo)
-		case api.MetricGauge:
-			m = e.addGauge(fullMetricName, mInfo)
-		case api.MetricHistogram:
-			m = e.addHistogram(fullMetricName, mInfo)
-		case api.MetricAggHistogram:
-			m = e.addAgghistogram(fullMetricName, mInfo)
-		case "default":
-			plog.Errorf("invalid metric type = %v, skipping", mCfg.Type)
-			continue
-		}
-		if m != nil {
-			err := e.registerer.Register(m)
-			if err != nil {
-				plog.Errorf("error in prometheus.Register: %v", err)
-			}
-		}
-	}
-	e.server.SetRegistry(e.regName, reg)
 }
 
 func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (Encoder, error) {
@@ -293,29 +254,73 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 	if expiryTime.Duration == 0 {
 		expiryTime.Duration = defaultExpiryTime
 	}
-	plog.Debugf("expiryTime = %v", expiryTime)
+	log.Debugf("expiryTime = %v", expiryTime)
 
-	registry := prometheus.NewRegistry()
-
-	w := &EncodeProm{
-		cfg:        &cfg,
-		registerer: registry,
-		updateChan: make(chan config.StageParam),
-		server:     promserver.SharedServer,
-		regName:    params.Name,
-	}
+	var registerer prometheus.Registerer
 
 	if cfg.PromConnectionInfo != nil {
-		// Start new server
-		w.server = promserver.StartServerAsync(cfg.PromConnectionInfo, params.Name, registry)
+		registry := prometheus.NewRegistry()
+		registerer = registry
+		promserver.StartServerAsync(cfg.PromConnectionInfo, nil)
+	} else {
+		registerer = prometheus.DefaultRegisterer
+	}
+	w := &EncodeProm{
+		cfg:        params.Encode.Prom,
+		registerer: registerer,
+		updateChan: make(chan config.StageParam),
 	}
 
 	metricCommon := NewMetricsCommonStruct(opMetrics, cfg.MaxMetrics, params.Name, expiryTime, w.Cleanup)
 	w.metricCommon = metricCommon
 
-	// Init metrics
-	w.resetRegistry()
-
+	for i := range cfg.Metrics {
+		mCfg := &cfg.Metrics[i]
+		fullMetricName := cfg.Prefix + mCfg.Name
+		labels := mCfg.Labels
+		log.Debugf("fullMetricName = %v", fullMetricName)
+		log.Debugf("Labels = %v", labels)
+		mInfo := CreateMetricInfo(mCfg)
+		switch mCfg.Type {
+		case api.MetricCounter:
+			counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, labels)
+			err := registerer.Register(counter)
+			if err != nil {
+				log.Errorf("error during prometheus.Register: %v", err)
+				return nil, err
+			}
+			metricCommon.AddCounter(fullMetricName, counter, mInfo)
+		case api.MetricGauge:
+			gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, labels)
+			err := registerer.Register(gauge)
+			if err != nil {
+				log.Errorf("error during prometheus.Register: %v", err)
+				return nil, err
+			}
+			metricCommon.AddGauge(fullMetricName, gauge, mInfo)
+		case api.MetricHistogram:
+			log.Debugf("buckets = %v", mCfg.Buckets)
+			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
+			err := registerer.Register(hist)
+			if err != nil {
+				log.Errorf("error during prometheus.Register: %v", err)
+				return nil, err
+			}
+			metricCommon.AddHist(fullMetricName, hist, mInfo)
+		case api.MetricAggHistogram:
+			log.Debugf("buckets = %v", mCfg.Buckets)
+			hist := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: "", Buckets: mCfg.Buckets}, labels)
+			err := registerer.Register(hist)
+			if err != nil {
+				log.Errorf("error during prometheus.Register: %v", err)
+				return nil, err
+			}
+			metricCommon.AddAggHist(fullMetricName, hist, mInfo)
+		case "default":
+			log.Errorf("invalid metric type = %v, skipping", mCfg.Type)
+			continue
+		}
+	}
 	return w, nil
 }
 

@@ -274,8 +274,8 @@ github.com/mwitkow/go-conntrack
 # github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 ## explicit
 github.com/mxk/go-flowrate/flowrate
-# github.com/netobserv/flowlogs-pipeline v1.6.1-crc0.0.20240930010330-bc3d4ebb4a88
-## explicit; go 1.22.3
+# github.com/netobserv/flowlogs-pipeline v1.6.2-community
+## explicit; go 1.21.0
 github.com/netobserv/flowlogs-pipeline/pkg/api
 github.com/netobserv/flowlogs-pipeline/pkg/config
 github.com/netobserv/flowlogs-pipeline/pkg/operational
