@@ -39,6 +39,8 @@ CILIUM_EBPF_VERSION := v0.16.0
 GOLANGCI_LINT_VERSION = v1.54.2
 GO_VERSION = "1.22.4"
 PROTOC_VERSION = "3.19.4"
+PROTOC_GEN_GO_VERSION="v1.35.1"
+PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS ?= linux
@@ -98,8 +100,8 @@ prereqs: ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
 	GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
-	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
+	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
 	test -f $(shell go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
 	test "$(shell PATH="$$(pwd)/protoc/bin:$$PATH" && protoc --version)" = "libprotoc $(PROTOC_VERSION)" || $(MAKE) install-protoc
 
