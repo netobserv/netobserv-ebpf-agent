@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/dtls/v2"
@@ -55,10 +56,12 @@ type ExportingProcess struct {
 	seqNumber       uint32
 	templateID      uint16
 	templatesMap    map[uint16]templateValue
-	templateRefCh   chan struct{}
 	templateMutex   sync.Mutex
 	sendJSONRecord  bool
 	jsonBufferLen   int
+	wg              sync.WaitGroup
+	isClosed        atomic.Bool
+	stopCh          chan struct{}
 }
 
 type ExporterTLSClientConfig struct {
@@ -93,7 +96,7 @@ type ExporterInput struct {
 // InitExportingProcess takes in collector address(net.Addr format), obsID(observation ID)
 // and tempRefTimeout(template refresh timeout). tempRefTimeout is applicable only
 // for collectors listening over UDP; unit is seconds. For TCP, you can pass any
-// value. For UDP, if 0 is passed, consider 1800s as default.
+// value and it will be ignored. For UDP, if 0 is passed, 600s is used as the default.
 //
 // PathMTU is recommended for UDP transport. If not given a valid value, i.e., either
 // 0 or a value more than 1500, we consider a default value of 512B as per RFC7011.
@@ -154,27 +157,32 @@ func InitExportingProcess(input ExporterInput) (*ExportingProcess, error) {
 		seqNumber:       0,
 		templateID:      startTemplateID,
 		templatesMap:    make(map[uint16]templateValue),
-		templateRefCh:   make(chan struct{}),
 		sendJSONRecord:  input.SendJSONRecord,
+		wg:              sync.WaitGroup{},
+		stopCh:          make(chan struct{}),
 	}
 
-	// Start a goroutine for checking whether connection to collector is still open
+	// Start a goroutine to check whether the collector has already closed the TCP connection.
 	if input.CollectorProtocol == "tcp" {
 		interval := input.CheckConnInterval
 		if interval == 0 {
 			interval = defaultCheckConnInterval
 		}
+		expProc.wg.Add(1)
 		go func() {
+			defer expProc.wg.Done()
 			ticker := time.NewTicker(interval)
 			oneByteForRead := make([]byte, 1)
 			defer ticker.Stop()
 			for {
 				select {
+				case <-expProc.stopCh:
+					return
 				case <-ticker.C:
 					isConnected := expProc.checkConnToCollector(oneByteForRead)
 					if !isConnected {
-						expProc.CloseConnToCollector()
-						klog.Error("Error when connecting to collector because connection is closed.")
+						klog.Error("Connector has closed its side of the TCP connection, closing our side")
+						expProc.closeConnToCollector()
 						return
 					}
 				}
@@ -188,20 +196,24 @@ func InitExportingProcess(input ExporterInput) (*ExportingProcess, error) {
 			// Default value
 			input.TempRefTimeout = entities.TemplateRefreshTimeOut
 		}
+		expProc.wg.Add(1)
 		go func() {
+			defer expProc.wg.Done()
 			ticker := time.NewTicker(time.Duration(input.TempRefTimeout) * time.Second)
 			defer ticker.Stop()
 			for {
 				select {
-				case <-expProc.templateRefCh:
-					break
+				case <-expProc.stopCh:
+					return
 				case <-ticker.C:
+					klog.V(2).Info("Sending refreshed templates to the collector")
 					err := expProc.sendRefreshedTemplates()
 					if err != nil {
-						// Other option is sending messages through channel to library consumers
-						klog.Errorf("Error when sending refreshed templates: %v. Closing the connection to IPFIX controller", err)
-						expProc.CloseConnToCollector()
+						klog.Errorf("Error when sending refreshed templates, closing the connection to the collector: %v", err)
+						expProc.closeConnToCollector()
+						return
 					}
+					klog.V(2).Info("Sent refreshed templates to the collector")
 				}
 			}
 		}()
@@ -254,15 +266,26 @@ func (ep *ExportingProcess) GetMsgSizeLimit() int {
 	return entities.MaxSocketMsgSize
 }
 
+// CloseConnToCollector closes the connection to the collector.
+// It can safely be closed more than once, and subsequent calls will be no-ops.
 func (ep *ExportingProcess) CloseConnToCollector() {
-	if !isChanClosed(ep.templateRefCh) {
-		close(ep.templateRefCh) // Close template refresh channel
+	ep.closeConnToCollector()
+	ep.wg.Wait()
+}
+
+// closeConnToCollector is the internal version of CloseConnToCollector. It closes all the resources
+// but does not wait for the ep.wg counter to get to 0. Goroutines which need to terminate in order
+// for ep.wg to be decremented can safely call closeConnToCollector.
+func (ep *ExportingProcess) closeConnToCollector() {
+	if ep.isClosed.Swap(true) {
+		return
 	}
-	err := ep.connToCollector.Close()
-	// Just log the error that happened when closing the connection. Not returning error as we do not expect library
-	// consumers to exit their programs with this error.
-	if err != nil {
-		klog.Errorf("Error when closing connection to collector: %v", err)
+	klog.Info("Closing connection to the collector")
+	close(ep.stopCh)
+	if err := ep.connToCollector.Close(); err != nil {
+		// Just log the error that happened when closing the connection. Not returning error
+		// as we do not expect library consumers to exit their programs with this error.
+		klog.Errorf("Error when closing connection to the collector: %v", err)
 	}
 }
 
@@ -448,15 +471,6 @@ func (ep *ExportingProcess) dataRecSanityCheck(rec entities.Record) error {
 		return fmt.Errorf("process: Data Record does not pass the min required length (%d) check for template ID %d", ep.templatesMap[templateID].minDataRecLen, templateID)
 	}
 	return nil
-}
-
-func isChanClosed(ch <-chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-	}
-	return false
 }
 
 func createClientConfig(config *ExporterTLSClientConfig) (*tls.Config, error) {
