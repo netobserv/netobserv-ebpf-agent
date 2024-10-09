@@ -23,8 +23,11 @@ import (
 
 const (
 	// TemplateRefreshTimeOut is the template refresh time out for exporting process
-	TemplateRefreshTimeOut uint32 = 1800
+	// The default is based on https://datatracker.ietf.org/doc/html/rfc5153#section-6.2
+	// and https://datatracker.ietf.org/doc/html/rfc6728#section-4.4.2
+	TemplateRefreshTimeOut uint32 = 600
 	// TemplateTTL is the template time to live for collecting process
+	// See https://datatracker.ietf.org/doc/html/rfc6728#section-4.5.2
 	TemplateTTL = TemplateRefreshTimeOut * 3
 	// TemplateSetID is the setID for template record
 	TemplateSetID uint16 = 2
