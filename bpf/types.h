@@ -121,6 +121,14 @@ typedef struct additional_metrics_t {
     u64 flow_rtt;
     u8 network_events_idx;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
+    struct translated_flow_t {
+        u8 saddr[IP_MAX_LEN];
+        u8 daddr[IP_MAX_LEN];
+        u16 sport;
+        u16 dport;
+        u16 zone_id;
+        u8 icmp_id;
+    } translated_flow;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
@@ -131,6 +139,9 @@ const struct dns_record_t *unused4 __attribute__((unused));
 
 // Force emitting enums/structs into the ELF
 const struct pkt_drops_t *unused5 __attribute__((unused));
+
+// Force emitting struct translated_flow_t into the ELF.
+const struct translated_flow_t *unused6 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
@@ -209,7 +220,7 @@ typedef enum global_counters_key_t {
 } global_counters_key;
 
 // Force emitting enums/structs into the ELF
-const enum global_counters_key_t *unused12 __attribute__((unused));
+const enum global_counters_key_t *unused9 __attribute__((unused));
 
 // filter key used as key to LPM map to filter out flows that are not interesting for the user
 struct filter_key_t {
@@ -255,6 +266,6 @@ struct filter_value_t {
 } __attribute__((packed));
 
 // Force emitting enums/structs into the ELF
-const struct filter_value_t *unused6 __attribute__((unused));
+const struct filter_value_t *unused12 __attribute__((unused));
 
 #endif /* __TYPES_H__ */

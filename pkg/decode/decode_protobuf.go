@@ -131,6 +131,15 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 			out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestState))
 			out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause)
 		}
+		if !model.AllZeroIP(model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr)) &&
+			!model.AllZeroIP(model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr)) {
+			out["ZoneId"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId
+			out["XlatSrcPort"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport
+			out["XlatDstPort"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport
+			out["XlatSrcAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr).String()
+			out["XlatDstAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr).String()
+			out["XlatIcmpId"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.IcmpId
+		}
 	}
 
 	if fr.TimeFlowRtt != 0 {
@@ -140,6 +149,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	if len(fr.NetworkMonitorEventsMD) != 0 {
 		out["NetworkEvents"] = fr.NetworkMonitorEventsMD
 	}
+
 	return out
 }
 

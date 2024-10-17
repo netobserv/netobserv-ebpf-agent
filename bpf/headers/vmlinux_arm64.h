@@ -22582,10 +22582,17 @@ union nf_conntrack_proto {
 
 struct nf_ct_ext;
 
+struct nf_conntrack_zone {
+	u16 id;
+	u8 flags;
+	u8 dir;
+};
+
 struct nf_conn {
 	struct nf_conntrack ct_general;
 	spinlock_t lock;
 	u32 timeout;
+	struct nf_conntrack_zone zone;
 	struct nf_conntrack_tuple_hash tuplehash[2];
 	long unsigned int status;
 	possible_net_t ct_net;
@@ -22595,12 +22602,6 @@ struct nf_conn {
 	u_int32_t mark;
 	struct nf_ct_ext *ext;
 	union nf_conntrack_proto proto;
-};
-
-struct nf_conntrack_zone {
-	u16 id;
-	u8 flags;
-	u8 dir;
 };
 
 struct icmphdr {
