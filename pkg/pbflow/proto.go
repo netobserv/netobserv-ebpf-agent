@@ -2,6 +2,7 @@ package pbflow
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
@@ -78,6 +79,12 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
 		DnsErrno:               uint32(fr.Metrics.DnsRecord.Errno),
 		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
+		Xlat: &Xlat{
+			SrcPort: uint32(fr.Metrics.TranslatedFlow.Sport),
+			DstPort: uint32(fr.Metrics.TranslatedFlow.Dport),
+			ZoneId:  uint32(fr.Metrics.TranslatedFlow.ZoneId),
+			IcmpId:  uint32(fr.Metrics.TranslatedFlow.IcmpId),
+		},
 	}
 	if fr.Metrics.DnsRecord.Latency != 0 {
 		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
@@ -96,9 +103,13 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	if fr.Id.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.SrcIp[:]}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.DstIp[:]}}
+		pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.TranslatedFlow.Saddr[:]}}
+		pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.TranslatedFlow.Daddr[:]}}
 	} else {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.SrcIp)}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.DstIp)}}
+		pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.TranslatedFlow.Saddr)}}
+		pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.TranslatedFlow.Daddr)}}
 	}
 	if s != nil {
 		seen := make(map[string]bool)
@@ -135,6 +146,17 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 				} else {
 					protoLog.Errorf("unable to decode Network events cookie: %v", err)
 				}
+			}
+		}
+		zoneIDtoUdnIDMap, err := s.GetConntrackZoneToUDN()
+		if err != nil {
+			protoLog.Errorf("unable to get zoneIDtoUdnIdMap: %v", err)
+		} else {
+			if udnID, ok := zoneIDtoUdnIDMap[fmt.Sprint(fr.Metrics.TranslatedFlow.ZoneId)]; ok {
+				pbflowRecord.Xlat.UdnId = udnID
+				protoLog.Debugf("Packet Xlation zoneID %d mapped to udnID %s", fr.Metrics.TranslatedFlow.ZoneId, udnID)
+			} else {
+				protoLog.Errorf("unable to find zoneId %d in ZoneID2UdnID map", fr.Metrics.TranslatedFlow.ZoneId)
 			}
 		}
 	}
@@ -178,6 +200,14 @@ func PBToFlow(pb *Record) *model.Record {
 					Errno:   uint8(pb.DnsErrno),
 					Latency: uint64(pb.DnsLatency.AsDuration()),
 				},
+				TranslatedFlow: ebpf.BpfTranslatedFlowT{
+					Saddr:  ipToIPAddr(pb.Xlat.GetSrcAddr()),
+					Daddr:  ipToIPAddr(pb.Xlat.GetDstAddr()),
+					Sport:  uint16(pb.Xlat.GetSrcPort()),
+					Dport:  uint16(pb.Xlat.GetDstPort()),
+					ZoneId: uint16(pb.Xlat.GetZoneId()),
+					IcmpId: uint8(pb.Xlat.GetIcmpId()),
+				},
 			},
 		},
 		TimeFlowStart: pb.TimeFlowStart.AsTime(),
@@ -205,6 +235,10 @@ func PBToFlow(pb *Record) *model.Record {
 			out.NetworkMonitorEventsMD = append(out.NetworkMonitorEventsMD, m)
 		}
 		protoLog.Debugf("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
+	}
+
+	if len(pb.GetXlat().UdnId) != 0 {
+		out.UdnID = pb.GetXlat().UdnId
 	}
 	return &out
 }

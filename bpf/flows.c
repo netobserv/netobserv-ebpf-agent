@@ -51,6 +51,11 @@
  */
 #include "network_events_monitoring.h"
 
+/*
+ * Defines packets transformation tracker
+ */
+#include "pkt_transformation.h"
+
 static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, int dns_errno,
                                         u64 len) {
     aggregate_flow->packets += 1;

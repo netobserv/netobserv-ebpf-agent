@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"strings"
 
 	"github.com/ovn-org/libovsdb/client"
@@ -290,4 +291,48 @@ func (d *SampleDecoder) DeleteCollector(collectorID int) error {
 	res, err := d.ovsdbClient.Transact(context.Background(), ops...)
 	fmt.Println("res: ", res)
 	return err
+}
+
+// TODO check start with [prefix]udnName
+var ctPrefixes = sets.New("GR_", "breth0_", "cr-rtos-", "etor-GR_", "ext_", "jtor-GR_", "k8s-", "rtoe-GR_", "rtoj-GR_")
+
+func (d *SampleDecoder) GetConntrackZoneToUDN() (map[string]string, error) {
+	res := map[string]string{}
+	bridges := []*ovsdb.Bridge{}
+	err := d.ovsdbClient.WhereCache(func(item *ovsdb.Bridge) bool {
+		return item.Name == bridgeName
+	}).List(context.Background(), &bridges)
+	if err != nil || len(bridges) != 1 {
+		return nil, fmt.Errorf("failed finding br-int: %w", err)
+	}
+	udns := sets.New[string]()
+	// node names can only have - or . and alphanumerics
+	for ctName := range bridges[0].ExternalIDs {
+		if strings.HasPrefix(ctName, "ct-zone-GR_") && strings.HasSuffix(ctName, "_dnat") {
+			// remove "ct-zone-GR_" prefix
+			s := ctName[11 : len(ctName)-5]
+			// format is [<network name>_]<nodeName>
+			if i := strings.Index(s, "_"); i != -1 {
+				udns.Insert(s[:i])
+			}
+		}
+	}
+	//fmt.Println("udns: ", udns)
+
+	for ctName, ctZone := range bridges[0].ExternalIDs {
+		if strings.HasPrefix(ctName, "ct-zone-") {
+			foundUDN := false
+			for udn := range udns {
+				if strings.Contains(ctName, udn) {
+					res[ctZone] = udn
+					foundUDN = true
+					break
+				}
+			}
+			if !foundUDN {
+				res[ctZone] = "default"
+			}
+		}
+	}
+	return res, nil
 }

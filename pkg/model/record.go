@@ -61,6 +61,7 @@ type Record struct {
 	TimeFlowRtt            time.Duration
 	DupList                []map[string]uint8
 	NetworkMonitorEventsMD []config.GenericMap
+	UdnID                  string
 }
 
 func NewRecord(
@@ -135,6 +136,10 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 			r.NetworkEventsIdx = (r.NetworkEventsIdx + 1) % maxNetworkEvents
 		}
 	}
+
+	if !AllZeroIP(IP(src.TranslatedFlow.Saddr)) && !AllZeroIP(IP(src.TranslatedFlow.Daddr)) {
+		r.TranslatedFlow = src.TranslatedFlow
+	}
 }
 
 func networkEventsMDExist(events [maxNetworkEvents][networkEventsMaxEventsMD]uint8, md [networkEventsMaxEventsMD]uint8) bool {
@@ -191,4 +196,11 @@ func AllZerosMetaData(s [networkEventsMaxEventsMD]uint8) bool {
 		}
 	}
 	return true
+}
+
+func AllZeroIP(ip net.IP) bool {
+	if ip.Equal(net.IPv4zero) || ip.Equal(net.IPv6zero) {
+		return true
+	}
+	return false
 }
