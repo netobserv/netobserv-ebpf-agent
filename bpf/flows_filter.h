@@ -122,7 +122,7 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 // for TCP only check TCP flags if its set
                 if (id->transport_protocol == IPPROTO_TCP) {
                     if (rule->tcpFlags != 0) {
-                        if (rule->tcpFlags == flags) {
+                        if (rule->tcpFlags & flags) {
                             BPF_PRINTK("tcpFlags matched\n");
                             result++;
                         } else {
