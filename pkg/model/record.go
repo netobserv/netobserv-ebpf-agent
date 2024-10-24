@@ -134,6 +134,8 @@ func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
 			r.NetworkEventsIdx = (r.NetworkEventsIdx + 1) % maxNetworkEvents
 		}
 	}
+
+	r.TranslatedFlow = src.TranslatedFlow
 }
 
 func networkEventsMDExist(events [maxNetworkEvents][networkEventsMaxEventsMD]uint8, md [networkEventsMaxEventsMD]uint8) bool {

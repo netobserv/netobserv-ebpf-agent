@@ -42,6 +42,7 @@ const (
 	constEnableFlowFiltering            = "enable_flows_filtering"
 	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
+	constEnablePktTransformation        = "enable_pkt_transformation_tracking"
 	pktDropHook                         = "kfree_skb"
 	constPcaEnable                      = "enable_pca"
 	pcaRecordsMap                       = "packet_record"
@@ -76,6 +77,7 @@ type FlowFetcher struct {
 	egressTCXLink               map[ifaces.Interface]link.Link
 	ingressTCXLink              map[ifaces.Interface]link.Link
 	networkEventsMonitoringLink link.Link
+	nfNatManIPLink              link.Link
 	lookupAndDeleteSupported    bool
 }
 
@@ -93,6 +95,7 @@ type FlowFetcherConfig struct {
 	NetworkEventsMonitoringGroupID int
 	EnableFlowFilter               bool
 	EnablePCA                      bool
+	EnablePktTransformation        bool
 	FilterConfig                   *FilterConfig
 }
 
@@ -147,6 +150,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
 	}
 
+	enablePktTransformation := 0
+	if cfg.EnablePktTransformation {
+		enablePktTransformation = 1
+	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:                       uint32(cfg.Sampling),
 		constTraceMessages:                  uint8(traceMsgs),
@@ -156,6 +163,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		constEnableFlowFiltering:            uint8(enableFlowFiltering),
 		constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
 		constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
+		constEnablePktTransformation:        uint8(enablePktTransformation),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -246,6 +254,14 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 next:
+	var nfNatManIPLink link.Link
+	if cfg.EnablePktTransformation {
+		nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
+		if err != nil {
+			log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
+			return nil, fmt.Errorf("failed to attach the BPF program to nat_manip kprobe: %w", err)
+		}
+	}
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -264,6 +280,7 @@ next:
 		pktDropsTracePoint:          pktDropsLink,
 		rttFentryLink:               rttFentryLink,
 		rttKprobeLink:               rttKprobeLink,
+		nfNatManIPLink:              nfNatManIPLink,
 		egressTCXLink:               map[ifaces.Interface]link.Link{},
 		ingressTCXLink:              map[ifaces.Interface]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
@@ -596,6 +613,11 @@ func (m *FlowFetcher) Close() error {
 	}
 	if m.networkEventsMonitoringLink != nil {
 		if err := m.networkEventsMonitoringLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if m.nfNatManIPLink != nil {
+		if err := m.nfNatManIPLink.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}

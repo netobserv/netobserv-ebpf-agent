@@ -235,6 +235,8 @@ type Config struct {
 	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
 	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest
 	NetworkEventsMonitoringGroupID int `env:"NETWORK_EVENTS_MONITORING_GROUP_ID" envDefault:"10"`
+	// EnablePktTransformationTracking allow tracking packets after transformation for example NAT, default is false.
+	EnablePktTransformationTracking bool `env:"ENABLE_PKT_TRANSFORMATION" envDefault:"false"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details

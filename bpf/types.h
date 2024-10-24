@@ -105,6 +105,13 @@ typedef struct flow_metrics_t {
     u64 flow_rtt;
     u8 network_events_idx;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
+    struct translated_flow_t {
+        u8 saddr[IP_MAX_LEN];
+        u8 daddr[IP_MAX_LEN];
+        u16 sport;
+        u16 dport;
+        u16 zone_id;
+    } __attribute__((packed)) translated_flow;
 } __attribute__((packed)) flow_metrics;
 
 // Force emitting struct pkt_drops into the ELF.
@@ -240,5 +247,8 @@ struct filter_value_t {
 } __attribute__((packed));
 // Force emitting struct filter_value_t into the ELF.
 const struct filter_value_t *unused9 __attribute__((unused));
+
+// Force emitting struct translated_flow_t into the ELF.
+const struct translated_flow_t *unused11 __attribute__((unused));
 
 #endif /* __TYPES_H__ */

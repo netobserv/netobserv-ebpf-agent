@@ -213,6 +213,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
 		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
 		EnableFlowFilter:               cfg.EnableFlowFilter,
+		EnablePktTransformation:        cfg.EnablePktTransformationTracking,
 		FilterConfig: &tracer.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,

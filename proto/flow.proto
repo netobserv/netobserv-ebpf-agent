@@ -61,6 +61,7 @@ message Record {
   uint32 dns_errno = 25;
   repeated DupMapEntry dup_list = 26;
   repeated string network_events_metadata = 27;
+  Xlat xlat = 28;
 }
 
 message DataLink {
@@ -94,4 +95,12 @@ message Transport {
 enum Direction {
   INGRESS = 0;
   EGRESS = 1;
+}
+
+message Xlat {
+  IP src_addr = 1;
+  IP dst_addr = 2;
+  uint32 src_port = 3;
+  uint32 dst_port = 4;
+  uint32 zone_id = 5;
 }
