@@ -33,6 +33,8 @@ jobs:
           registry: quay.io
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: build and push bytecode image
+        run: make build-and-push-bc-image
       - name: build and push manifest with images
         run: |
           MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} CLEAN_BUILD=1 make images
