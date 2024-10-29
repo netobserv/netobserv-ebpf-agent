@@ -27,6 +27,7 @@ struct {
     __type(value, additional_metrics);
     __uint(max_entries, 1 << 24);
     __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } additional_flow_metrics SEC(".maps");
 
 //PerfEvent Array for Packet Payloads

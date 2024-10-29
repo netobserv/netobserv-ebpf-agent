@@ -288,6 +288,12 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
+		log.Info("BPFManager mode: loading additional flow metrics pinned maps")
+		mPath = path.Join(pinDir, "additional_flow_metrics")
+		objects.BpfMaps.AdditionalFlowMetrics, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
 		log.Info("BPFManager mode: loading direct flows pinned maps")
 		mPath = path.Join(pinDir, "direct_flows")
 		objects.BpfMaps.DirectFlows, err = cilium.LoadPinnedMap(mPath, opts)
