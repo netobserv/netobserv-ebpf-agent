@@ -7,6 +7,7 @@
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } direct_flows SEC(".maps");
 
 // Key: the flow identifier. Value: the flow metrics for that identifier.
@@ -16,6 +17,7 @@ struct {
     __type(value, flow_metrics);
     __uint(max_entries, 1 << 24);
     __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows SEC(".maps");
 
 //PerfEvent Array for Packet Payloads
@@ -24,6 +26,7 @@ struct {
     __type(key, u32);
     __type(value, u32);
     __uint(max_entries, 256);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } packet_record SEC(".maps");
 
 // DNS tracking flow based hashmap used to correlate query and responses
@@ -34,6 +37,7 @@ struct {
     __type(key, dns_flow_id);
     __type(value, u64);
     __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } dns_flows SEC(".maps");
 
 // Global counter for hashmap update errors
@@ -42,6 +46,7 @@ struct {
     __type(key, u32);
     __type(value, u32);
     __uint(max_entries, MAX_COUNTERS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } global_counters SEC(".maps");
 
 // LPM trie map used to filter traffic by IP address CIDR and direction
@@ -51,6 +56,7 @@ struct {
     __type(value, struct filter_value_t);
     __uint(max_entries, MAX_FILTER_ENTRIES);
     __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } filter_map SEC(".maps");
 
 #endif //__MAPS_DEFINITION_H__
