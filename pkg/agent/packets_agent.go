@@ -77,12 +77,13 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 		debug = true
 	}
 	ebpfConfig := &tracer.FlowFetcherConfig{
-		EnableIngress: ingress,
-		EnableEgress:  egress,
-		Debug:         debug,
-		Sampling:      cfg.Sampling,
-		CacheMaxSize:  cfg.CacheMaxFlows,
-		EnablePCA:     cfg.EnablePCA,
+		EnableIngress:  ingress,
+		EnableEgress:   egress,
+		Debug:          debug,
+		Sampling:       cfg.Sampling,
+		CacheMaxSize:   cfg.CacheMaxFlows,
+		EnablePCA:      cfg.EnablePCA,
+		UseEbpfManager: cfg.EbpfProgramManagerMode,
 		FilterConfig: &tracer.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,
@@ -243,12 +244,13 @@ func (p *Packets) interfacesManager(ctx context.Context) error {
 
 func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
 
-	plog.Debug("registering interfaces' listener in background")
-	err := p.interfacesManager(ctx)
-	if err != nil {
-		return nil, err
+	if !p.cfg.EbpfProgramManagerMode {
+		plog.Debug("registering interfaces' listener in background")
+		err := p.interfacesManager(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	plog.Debug("connecting packets' processing graph")
 
 	perfTracer := node.AsStart(p.perfTracer.TraceLoop(ctx))
