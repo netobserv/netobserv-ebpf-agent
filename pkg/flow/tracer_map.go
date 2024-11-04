@@ -26,7 +26,6 @@ type MapTracer struct {
 	staleEntriesEvictTimeout time.Duration
 	// manages the access to the eviction routines, avoiding two evictions happening at the same time
 	evictionCond               *sync.Cond
-	lastEvictionNs             uint64
 	metrics                    *metrics.Metrics
 	timeSpentinLookupAndDelete prometheus.Histogram
 }
@@ -40,7 +39,6 @@ func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout 
 	return &MapTracer{
 		mapFetcher:                 fetcher,
 		evictionTimeout:            evictionTimeout,
-		lastEvictionNs:             uint64(monotime.Now()),
 		evictionCond:               sync.NewCond(&sync.Mutex{}),
 		staleEntriesEvictTimeout:   staleEntriesEvictTimeout,
 		metrics:                    m,
@@ -101,7 +99,6 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	currentTime := time.Now()
 
 	var forwardingFlows []*model.Record
-	laterFlowNs := uint64(0)
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
@@ -109,10 +106,6 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
 		if aggregatedMetrics.EndMonoTimeTs == 0 {
 			continue
-		}
-		// If it iterated an entry that do not have updated flows
-		if aggregatedMetrics.EndMonoTimeTs > laterFlowNs {
-			laterFlowNs = aggregatedMetrics.EndMonoTimeTs
 		}
 		forwardingFlows = append(forwardingFlows, model.NewRecord(
 			flowKey,
@@ -122,7 +115,6 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 		))
 	}
 	m.mapFetcher.DeleteMapsStaleEntries(m.staleEntriesEvictTimeout)
-	m.lastEvictionNs = laterFlowNs
 	select {
 	case <-ctx.Done():
 		mtlog.Debug("skipping flow eviction as agent is being stopped")
@@ -146,12 +138,6 @@ func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetric
 	}
 	aggr := &ebpf.BpfFlowMetrics{}
 	for i := range metrics {
-		// eBPF hashmap values are not zeroed when the entry is removed. That causes that we
-		// might receive entries from previous collect-eviction timeslots.
-		// We need to check the flow time and discard old flows.
-		if metrics[i].StartMonoTimeTs <= m.lastEvictionNs || metrics[i].EndMonoTimeTs <= m.lastEvictionNs {
-			continue
-		}
 		model.Accumulate(aggr, &metrics[i])
 	}
 	return aggr
