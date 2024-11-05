@@ -5,7 +5,7 @@ linters:
     - cyclop
     - errname
     - exhaustive
-    - exportloopref
+    - copyloopvar
     - gocritic
     - gofmt
     - gosimple
@@ -25,6 +25,5 @@ linters-settings:
       - rangeExprCopy
       - rangeValCopy
       - indexAlloc
-      - deprecatedComment
   cyclop:
     max-complexity: 20

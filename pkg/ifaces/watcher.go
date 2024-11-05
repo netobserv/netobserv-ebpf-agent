@@ -74,7 +74,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	}()
 	// subscribe for interface events
 	links := make(chan netlink.LinkUpdate)
-	if err = wait.PollUntilContextTimeout(ctx, 50*time.Microsecond, time.Second, true, func(ctx context.Context) (done bool, err error) {
+	if err = wait.PollUntilContextTimeout(ctx, 50*time.Microsecond, time.Second, true, func(_ context.Context) (done bool, err error) {
 		if ns == "" {
 			netnsHandle = netns.None()
 		} else {

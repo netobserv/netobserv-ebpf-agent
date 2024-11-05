@@ -228,7 +228,7 @@ func (k *Kind) orderedManifests() []Deployment {
 
 // export logs into the e2e-logs folder of the base directory.
 func (k *Kind) exportLogs() env.Func {
-	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+	return func(ctx context.Context, _ *envconf.Config) (context.Context, error) {
 		logsDir := path.Join(k.baseDir, logsSubDir)
 		log.WithField("directory", logsDir).Info("exporting cluster logs")
 		exe := gexe.New()

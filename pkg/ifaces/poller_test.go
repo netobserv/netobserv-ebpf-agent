@@ -19,7 +19,7 @@ func TestPoller(t *testing.T) {
 	// fake net.Interfaces implementation that returns two different sets of
 	// interfaces on successive invocations
 	firstInvocation := true
-	var fakeInterfaces = func(handle netns.NsHandle) ([]Interface, error) {
+	var fakeInterfaces = func(_ netns.NsHandle) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
 			return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}}, nil
