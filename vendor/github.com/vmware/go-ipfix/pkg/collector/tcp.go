@@ -54,7 +54,10 @@ func (cp *CollectingProcess) startTCPServer() {
 				}
 			}
 			cp.wg.Add(1)
-			go cp.handleTCPClient(conn)
+			go func() {
+				defer cp.wg.Done()
+				cp.handleTCPClient(conn)
+			}()
 		}
 	}(cp.stopChan)
 	<-cp.stopChan
@@ -63,12 +66,24 @@ func (cp *CollectingProcess) startTCPServer() {
 
 func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 	address := conn.RemoteAddr().String()
-	client := cp.createClient()
-	cp.addClient(address, client)
-	defer cp.wg.Done()
+	// The channels stored in clientHandler are not needed for the TCP client, so we do not
+	// initialize them.
+	client := &clientHandler{}
+	func() {
+		cp.mutex.Lock()
+		defer cp.mutex.Unlock()
+		cp.clients[address] = client
+	}()
+	defer func() {
+		cp.mutex.Lock()
+		defer cp.mutex.Unlock()
+		delete(cp.clients, address)
+	}()
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	cp.wg.Add(1)
 	go func() {
-		reader := bufio.NewReader(conn)
+		defer cp.wg.Done()
 		for {
 			length, err := getMessageLength(reader)
 			if errors.Is(err, io.EOF) {
@@ -77,18 +92,18 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 			}
 			if err != nil {
 				klog.ErrorS(err, "Error when retrieving message length")
-				cp.deleteClient(address)
 				return
 			}
 			buff := make([]byte, length)
 			_, err = io.ReadFull(reader, buff)
 			if err != nil {
 				klog.ErrorS(err, "Error when reading the message")
-				cp.deleteClient(address)
 				return
 			}
 			message, err := cp.decodePacket(bytes.NewBuffer(buff), address)
 			if err != nil {
+				// TODO: should we close the connection instead and force the client to
+				// re-open it?
 				klog.ErrorS(err, "Error when decoding packet")
 				continue
 			}
