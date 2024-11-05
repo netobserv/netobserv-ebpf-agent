@@ -4,17 +4,6 @@
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= main
-BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
-TAG_COMMIT := $(shell git rev-list --abbrev-commit --tags --max-count=1)
-TAG := $(shell git describe --abbrev=0 --tags ${TAG_COMMIT} 2>/dev/null || true)
-BUILD_SHA := $(shell git rev-parse --short HEAD)
-BUILD_VERSION := $(TAG:v%=%)
-ifneq ($(COMMIT), $(TAG_COMMIT))
-	BUILD_VERSION := $(BUILD_VERSION)-$(BUILD_SHA)
-endif
-ifneq ($(shell git status --porcelain),)
-	BUILD_VERSION := $(BUILD_VERSION)-dirty
-endif
 
 # Go architecture and targets images to build
 GOARCH ?= amd64
@@ -28,11 +17,17 @@ IMAGE_TAG_BASE ?= quay.io/$(IMAGE_ORG)/netobserv-ebpf-agent
 
 # Image URL to use all building/pushing image targets
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
-OCI_BUILD_OPTS ?=
 
 # Image building tool (docker / podman) - docker is preferred in CI
 OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
+OCI_BUILD_OPTS ?=
+
+ifneq ($(CLEAN_BUILD),)
+	BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
+	BUILD_SHA := $(shell git rev-parse --short HEAD)
+	LDFLAGS ?= -X 'main.buildVersion=${VERSION}-${BUILD_SHA}' -X 'main.buildDate=${BUILD_DATE}'
+endif
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.16.0
@@ -53,7 +48,7 @@ EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 # build a single arch target provided as argument
 define build_target
 	echo 'building image for arch $(1)'; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg TARGETARCH=$(1) --build-arg GOVERSION="$(GO_VERSION)" ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
 endef
 
 # push a single arch target image
@@ -148,7 +143,7 @@ docker-generate: ## Create the container that generates the eBPF binaries
 .PHONY: compile
 compile: ## Compile ebpf agent project
 	@echo "### Compiling project"
-	GOARCH=${GOARCH} GOOS=$(GOOS) go build -ldflags "-X main.version=${VERSION} -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildDate=${BUILD_DATE}'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
+	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 .PHONY: test
 test: ## Test code using go test

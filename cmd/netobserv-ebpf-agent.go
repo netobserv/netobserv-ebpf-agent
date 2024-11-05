@@ -18,8 +18,12 @@ import (
 	_ "net/http/pprof"
 )
 
-func terminateAgent() (ctx context.Context) {
+var (
+	buildVersion = "unknown"
+	buildDate    = "unknown"
+)
 
+func terminateAgent() (ctx context.Context) {
 	logrus.Infof("push CTRL+C or send SIGTERM to interrupt execution")
 	ctx, canceler := context.WithCancel(context.Background())
 	// Subscribe to signals for terminating the program.
@@ -33,7 +37,7 @@ func terminateAgent() (ctx context.Context) {
 }
 
 func main() {
-	logrus.Infof("starting NetObserv eBPF Agent")
+	logrus.Infof("starting NetObserv eBPF Agent [build version: %s, build date: %s]", buildVersion, buildDate)
 	config := agent.Config{}
 	if err := env.Parse(&config); err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
