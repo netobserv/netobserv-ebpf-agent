@@ -135,73 +135,55 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     return ret;
 }
 
-static inline void update_network_events_statistics(u32 *key, u32 *value) {
-    u32 *error_counter_p = NULL;
-    error_counter_p = bpf_map_lookup_elem(&global_counters, key);
-    if (!error_counter_p) {
-        bpf_map_update_elem(&global_counters, key, value, BPF_ANY);
-        return;
-    }
-    __sync_fetch_and_add(error_counter_p, 1);
-}
-
 // for older kernel will use `rh_psample_sample_packet` to avoid kapis issues
 SEC("kprobe/rh_psample_sample_packet")
 int BPF_KPROBE(rh_network_events_monitoring, struct psample_group *group, struct sk_buff *skb,
                u32 sample_rate, struct rh_psample_metadata *md) {
-    u32 initVal = 1, key = NETWORK_EVENTS_ERR_KEY;
     if (enable_network_events_monitoring == 0 || do_sampling == 0) {
         return 0;
     }
     if (skb == NULL || md == NULL || group == NULL) {
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR);
         return 0;
     }
     // filter out none matching samples with different groupid
     int group_id = BPF_CORE_READ(group, group_num);
     if (group_id != network_events_monitoring_groupid) {
-        key = NETWORK_EVENTS_ERR_GROUPID_MISMATCH;
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR_GROUPID_MISMATCH);
         return 0;
     }
     long ret = 0;
     if ((ret = trace_network_events(skb, md)) != 0) {
-        key = NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS;
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS);
         return 0;
     }
-    key = NETWORK_EVENTS_GOOD;
-    update_network_events_statistics(&key, &initVal);
+    increase_counter(NETWORK_EVENTS_GOOD);
     return 0;
 }
 /*
 SEC("kprobe/psample_sample_packet")
 int BPF_KPROBE(network_events_monitoring, struct psample_group *group, struct sk_buff *skb, u32 sample_rate,
                struct psample_metadata *md) {
-    u32 initVal = 1, key = NETWORK_EVENTS_ERR_KEY;
     if (enable_network_events_monitoring == 0 || do_sampling == 0) {
         return 0;
     }
     if (skb == NULL || md == NULL || group == NULL) {
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR);
         return 0;
     }
     // filter out none matching samples with different groupid
     int group_id = BPF_CORE_READ(group, group_num);
     if (group_id != network_events_monitoring_groupid) {
-        key = NETWORK_EVENTS_ERR_GROUPID_MISMATCH;
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR_GROUPID_MISMATCH);
         return 0;
     }
 
     long ret = 0;
     if ((ret = trace_network_events(skb, md)) != 0) {
-        key = NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS;
-        update_network_events_statistics(&key, &initVal);
+        increase_counter(NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS);
         return 0;
     }
-    key = NETWORK_EVENTS_GOOD;
-    update_network_events_statistics(&key, &initVal);
+    increase_counter(NETWORK_EVENTS_GOOD);
     return 0;
 }
 */

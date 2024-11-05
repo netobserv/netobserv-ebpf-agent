@@ -12,6 +12,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -231,10 +232,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 			if err == nil {
 				goto next
 			}
-			if err != nil {
-				log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
-				// Fall through to use kprobe
-			}
+			log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
+			// Fall through to use kprobe
 		}
 		// try to use kprobe for older kernels
 		if !rtOldKernel {
@@ -760,33 +759,27 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 // ReadGlobalCounter reads the global counter and updates drop flows counter metrics
 func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
-	reasons := []string{
-		"CannotUpdateHashMapCounter",
-		"FilterRejectCounter",
-		"FilterAcceptCounter",
-		"FilterNoMatchCounter",
-		"NetworkEventsErrorsCounter",
-		"NetworkEventsErrorsGroupIDMismatch",
-		"NetworkEventsErrorsFlowMapUpdate",
-		"NetworkEventsGoodEvent",
+	globalCounters := map[ebpf.BpfGlobalCountersKeyT]prometheus.Counter{
+		ebpf.BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED:               met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
+		ebpf.BpfGlobalCountersKeyTFILTER_REJECT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterReject"),
+		ebpf.BpfGlobalCountersKeyTFILTER_ACCEPT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterAccept"),
+		ebpf.BpfGlobalCountersKeyTFILTER_NOMATCH:                      met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterNoMatch"),
+		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR:                  met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrors"),
+		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
+		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
+		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
-	for key := ebpf.BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY; key < ebpf.BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY; key++ {
+	for key := ebpf.BpfGlobalCountersKeyT(0); key < ebpf.BpfGlobalCountersKeyTMAX_COUNTERS; key++ {
 		if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
 			log.WithError(err).Warnf("couldn't read global counter")
 			return
 		}
-		// aggregate all the counters
-		for _, counter := range allCPUValue {
-			if key == ebpf.BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY {
-				met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", reasons[key]).Add(float64(counter))
-			} else if key == ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_KEY ||
-				key == ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH ||
-				key == ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS ||
-				key == ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD {
-				met.NetworkEventsCounter.WithSourceAndReason("network-events", reasons[key]).Add(float64(counter))
-			} else {
-				met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", reasons[key]).Add(float64(counter))
+		metric := globalCounters[key]
+		if metric != nil {
+			// aggregate all the counters
+			for _, counter := range allCPUValue {
+				metric.Add(float64(counter))
 			}
 		}
 		// reset the global counter-map entry

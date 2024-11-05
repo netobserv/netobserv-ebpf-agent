@@ -114,15 +114,15 @@ type BpfFlowRecordT struct {
 type BpfGlobalCountersKeyT uint32
 
 const (
-	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY           BpfGlobalCountersKeyT = 0
-	BpfGlobalCountersKeyTFILTER_REJECT_KEY                   BpfGlobalCountersKeyT = 1
-	BpfGlobalCountersKeyTFILTER_ACCEPT_KEY                   BpfGlobalCountersKeyT = 2
-	BpfGlobalCountersKeyTFILTER_NOMATCH_KEY                  BpfGlobalCountersKeyT = 3
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_KEY              BpfGlobalCountersKeyT = 4
+	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED               BpfGlobalCountersKeyT = 0
+	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 4
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 5
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 6
 	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 7
-	BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY               BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 8
 )
 
 type BpfPktDropsT struct {
