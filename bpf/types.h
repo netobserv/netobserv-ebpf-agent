@@ -184,15 +184,15 @@ typedef struct dns_flow_id_t {
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
-    HASHMAP_FLOWS_DROPPED_KEY,
-    FILTER_REJECT_KEY,
-    FILTER_ACCEPT_KEY,
-    FILTER_NOMATCH_KEY,
-    NETWORK_EVENTS_ERR_KEY,
+    HASHMAP_FLOWS_DROPPED,
+    FILTER_REJECT,
+    FILTER_ACCEPT,
+    FILTER_NOMATCH,
+    NETWORK_EVENTS_ERR,
     NETWORK_EVENTS_ERR_GROUPID_MISMATCH,
     NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS,
     NETWORK_EVENTS_GOOD,
-    MAX_DROPPED_FLOWS_KEY,
+    MAX_COUNTERS,
 } global_counters_key;
 
 // Force emitting enum global_counters_key_t into the ELF.

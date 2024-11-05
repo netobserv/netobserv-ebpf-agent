@@ -41,7 +41,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
     __type(key, u32);
     __type(value, u32);
-    __uint(max_entries, MAX_DROPPED_FLOWS_KEY);
+    __uint(max_entries, MAX_COUNTERS);
 } global_counters SEC(".maps");
 
 // LPM trie map used to filter traffic by IP address CIDR and direction

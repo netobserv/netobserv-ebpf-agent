@@ -8,6 +8,18 @@
 
 static u8 do_sampling = 0;
 
+// Update global counter for hashmap update errors
+static inline void increase_counter(u32 key) {
+    u32 *error_counter_p = NULL;
+    u32 initVal = 1;
+    error_counter_p = bpf_map_lookup_elem(&global_counters, &key);
+    if (!error_counter_p) {
+        bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
+    } else {
+        __sync_fetch_and_add(error_counter_p, 1);
+    }
+}
+
 // sets the TCP header flags for connection information
 static inline void set_flags(struct tcphdr *th, u16 *flags) {
     //If both ACK and SYN are set, then it is server -> client communication during 3-way handshake.
@@ -170,22 +182,20 @@ static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_
     // check if this packet need to be filtered if filtering feature is enabled
     if (enable_flows_filtering || enable_pca) {
         filter_action action = ACCEPT;
-        u32 *filter_counter_p = NULL;
-        u32 initVal = 1, key = 0;
         if (is_flow_filtered(id, &action, flags, drop_reason) != 0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases
-            u32 reject_key = FILTER_REJECT_KEY, accept_key = FILTER_ACCEPT_KEY;
             bool skip = false;
+            u32 key = 0;
 
             switch (action) {
             case REJECT:
-                key = reject_key;
+                key = FILTER_REJECT;
                 skip = true;
                 break;
             case ACCEPT:
-                key = accept_key;
+                key = FILTER_ACCEPT;
                 break;
             // should never come here
             case MAX_FILTER_ACTIONS:
@@ -193,24 +203,13 @@ static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_
             }
 
             // update global counter for flows dropped by filter
-            filter_counter_p = bpf_map_lookup_elem(&global_counters, &key);
-            if (!filter_counter_p) {
-                bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
-            } else {
-                __sync_fetch_and_add(filter_counter_p, 1);
-            }
+            increase_counter(key);
             if (skip) {
                 return true;
             }
         } else {
             // we have no matching rules so we update global counter for flows that are not matched by any rule
-            key = FILTER_NOMATCH_KEY;
-            filter_counter_p = bpf_map_lookup_elem(&global_counters, &key);
-            if (!filter_counter_p) {
-                bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
-            } else {
-                __sync_fetch_and_add(filter_counter_p, 1);
-            }
+            increase_counter(FILTER_NOMATCH);
             // we have accept rule but no match so we can't let mismatched flows in the hashmap table.
             if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
                 return true;
