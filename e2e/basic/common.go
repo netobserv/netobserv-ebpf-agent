@@ -282,6 +282,7 @@ func (bt *FlowCaptureTester) lokiQuery(t *testing.T, logQL string) tester.LokiQu
 		query, err = bt.Cluster.Loki().Query(1, logQL)
 		require.NoError(t, err)
 		require.NotNil(t, query)
+		require.NotNil(t, query.Data)
 		require.NotEmpty(t, query.Data.Result)
 	}, test.Interval(time.Second))
 	result := query.Data.Result[0]

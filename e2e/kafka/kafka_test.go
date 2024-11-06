@@ -43,12 +43,16 @@ func TestMain(m *testing.M) {
 		}),
 		cluster.Deploy(cluster.Deployment{
 			Order: cluster.ExternalServices, ManifestFile: path.Join("manifests", "11-kafka-cluster.yml"),
-			ReadyFunction: func(cfg *envconf.Config) error {
-				// wait for kafka to be ready
-				if !checkResources(cfg.Client(), "kafka-cluster-zookeeper", "kafka-cluster-kafka", "strimzi-cluster-operator", "kafka-cluster-entity-operator") {
-					return errors.New("waiting for kafka cluster to be ready")
-				}
-				return nil
+			Ready: &cluster.Readiness{
+				Function: func(cfg *envconf.Config) error {
+					// wait for kafka to be ready
+					if !checkResources(cfg.Client(), "kafka-cluster-zookeeper", "kafka-cluster-kafka", "strimzi-cluster-operator", "kafka-cluster-entity-operator") {
+						return errors.New("waiting for kafka cluster to be ready")
+					}
+					return nil
+				},
+				Timeout: 10 * time.Minute,
+				Retry:   20 * time.Second,
 			},
 		}),
 		cluster.Override(cluster.FlowLogsPipeline, cluster.Deployment{

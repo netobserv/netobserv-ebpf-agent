@@ -11678,10 +11678,10 @@ spec:
           resources:
             limits:
               cpu: 1000m
-              memory: 384Mi
+              memory: 500Mi
             requests:
               cpu: 200m
-              memory: 384Mi
+              memory: 100Mi
   strategy:
     type: Recreate
 
