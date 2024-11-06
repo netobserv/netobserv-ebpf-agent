@@ -14,7 +14,7 @@ import (
 
 const (
 	clusterNamePrefix = "ipfix-test-cluster"
-	testTimeout       = 20 * time.Minute
+	testTimeout       = 10 * time.Minute
 	namespace         = "default"
 )
 

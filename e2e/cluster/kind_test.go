@@ -18,13 +18,28 @@ func TestOrderManifests(t *testing.T) {
 		Deploy(Deployment{Order: ExternalServices, ManifestFile: "sql"}),
 		Override(Loki, Deployment{Order: ExternalServices, ManifestFile: "loki"}))
 
+	var orders []DeployOrder
+	var files []string
+	for _, m := range tc.orderedManifests() {
+		orders = append(orders, m.Order)
+		files = append(files, m.ManifestFile)
+	}
+
 	// verify that deployments are overridden and/or inserted in proper order
-	require.Equal(t, []Deployment{
-		{Order: Preconditions, ManifestFile: path.Join(packageDir(), "base", "01-permissions.yml")},
-		{Order: ExternalServices, ManifestFile: "sql"},
-		{Order: ExternalServices, ManifestFile: "loki"},
-		{Order: NetObservServices, ManifestFile: path.Join(packageDir(), "base", "03-flp.yml")},
-		{Order: WithAgent, ManifestFile: path.Join(packageDir(), "base", "04-agent.yml")},
-		{ManifestFile: "pods.yml"},
-	}, tc.orderedManifests())
+	require.Equal(t, []DeployOrder{
+		Preconditions,
+		ExternalServices,
+		ExternalServices,
+		NetObservServices,
+		WithAgent,
+		0,
+	}, orders)
+	require.Equal(t, []string{
+		path.Join(packageDir(), "base", "01-permissions.yml"),
+		"sql",
+		"loki",
+		path.Join(packageDir(), "base", "03-flp.yml"),
+		path.Join(packageDir(), "base", "04-agent.yml"),
+		"pods.yml",
+	}, files)
 }

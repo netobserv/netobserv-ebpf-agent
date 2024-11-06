@@ -171,7 +171,7 @@ tests-e2e: prereqs ## Run e2e tests
 	go clean -testcache
 	# making the local agent image available to kind in two ways, so it will work in different
 	# environments: (1) as image tagged in the local repository (2) as image archive.
-	$(OCI_BIN) build .  --build-arg TARGETARCH=$(GOARCH) -t localhost/ebpf-agent:test
+	$(OCI_BIN) build . --build-arg LDFLAGS="" --build-arg TARGETARCH=$(GOARCH) -t localhost/ebpf-agent:test
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...
 
