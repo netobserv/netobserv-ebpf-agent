@@ -49,7 +49,7 @@ func TestGRPCCommunication(t *testing.T) {
 	case rs = <-serverOut:
 		assert.Failf(t, "shouldn't have received any packet", "Got: %#v", rs)
 	default:
-		//ok!
+		// ok!
 	}
 }
 
@@ -63,7 +63,7 @@ func TestConstructorOptions(t *testing.T) {
 		WithGRPCServerOptions(grpc.UnaryInterceptor(func(
 			ctx context.Context,
 			req interface{},
-			info *grpc.UnaryServerInfo,
+			_ *grpc.UnaryServerInfo,
 			handler grpc.UnaryHandler,
 		) (resp interface{}, err error) {
 			close(intercepted)

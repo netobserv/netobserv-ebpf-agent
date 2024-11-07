@@ -57,7 +57,7 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	case rs = <-serverOut:
 		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
 	default:
-		//ok!
+		// ok!
 	}
 }
 
@@ -99,7 +99,7 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	case rs = <-serverOut:
 		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
 	default:
-		//ok!
+		// ok!
 	}
 }
 
@@ -141,6 +141,6 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	case rs = <-serverOut:
 		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
 	default:
-		//ok!
+		// ok!
 	}
 }

@@ -14,7 +14,6 @@ func TestInterfaces_DefaultConfig(t *testing.T) {
 
 	// Allowed
 	for _, iface := range []string{"eth0", "br-0"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.True(t, allowed)
@@ -32,14 +31,12 @@ func TestInterfaceFilter_SelectingInterfaces_DefaultExclusion(t *testing.T) {
 
 	// Allowed
 	for _, iface := range []string{"eth0", "br-0"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.True(t, allowed)
 	}
 	// Not Allowed
 	for _, iface := range []string{"eth01", "abr-3", "lo"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.False(t, allowed)
@@ -52,14 +49,12 @@ func TestInterfaceFilter_ExclusionTakesPriority(t *testing.T) {
 
 	// Allowed
 	for _, iface := range []string{"eth0", "eth-10", "eth11", "br-2", "br-0"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.True(t, allowed)
 	}
 	// Not Allowed
 	for _, iface := range []string{"eth1", "br-1", "br-10"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.False(t, allowed)
@@ -94,14 +89,12 @@ func TestInterfaceFilter_InterfaceIPs(t *testing.T) {
 
 	// Allowed
 	for _, iface := range []string{"eth0", "eth2", "eth4"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.True(t, allowed)
 	}
 	// Not Allowed
 	for _, iface := range []string{"eth1", "eth3"} {
-		iface := iface
 		allowed, err := ifaces.Allowed(iface)
 		require.NoError(t, err)
 		assert.False(t, allowed)

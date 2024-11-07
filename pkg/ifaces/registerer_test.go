@@ -17,11 +17,11 @@ func TestRegisterer(t *testing.T) {
 	watcher := NewWatcher(10)
 	registry := NewRegisterer(watcher, 10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
-	watcher.interfaces = func(handle netns.NsHandle) ([]Interface, error) {
+	watcher.interfaces = func(_ netns.NsHandle) ([]Interface, error) {
 		return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}, {"baz", 3, netns.None()}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
-	watcher.linkSubscriberAt = func(nsHandle netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error {
+	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
 		go func() {
 			for link := range inputLinks {
 				ch <- link
