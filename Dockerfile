@@ -25,7 +25,7 @@ COPY .mk/ .mk/
 RUN GOARCH=$TARGETARCH make compile
 
 # Create final image from minimal + built binary
-FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:9.4
+FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:9.5
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
