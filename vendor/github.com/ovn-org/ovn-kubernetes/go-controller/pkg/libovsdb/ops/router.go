@@ -8,9 +8,10 @@ import (
 
 	libovsdbclient "github.com/ovn-org/libovsdb/client"
 	libovsdb "github.com/ovn-org/libovsdb/ovsdb"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/nbdb"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // ROUTER OPs
@@ -644,7 +645,7 @@ func CreateOrReplaceLogicalRouterStaticRouteWithPredicate(nbClient libovsdbclien
 	lr := &nbdb.LogicalRouter{Name: routerName}
 	router, err := GetLogicalRouter(nbClient, lr)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to get logical router %s: %w", routerName, err)
 	}
 	newPredicate := func(item *nbdb.LogicalRouterStaticRoute) bool {
 		for _, routeUUID := range router.StaticRoutes {
@@ -656,7 +657,7 @@ func CreateOrReplaceLogicalRouterStaticRouteWithPredicate(nbClient libovsdbclien
 	}
 	routes, err := FindLogicalRouterStaticRoutesWithPredicate(nbClient, newPredicate)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to get logical router static routes with predicate on router %s: %w", routerName, err)
 	}
 
 	var ops []libovsdb.Operation
@@ -697,7 +698,7 @@ func CreateOrReplaceLogicalRouterStaticRouteWithPredicate(nbClient libovsdbclien
 
 	ops, err = CreateOrUpdateLogicalRouterStaticRoutesWithPredicateOps(nbClient, ops, routerName, lrsr, nil, fields...)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to get create or update logical router static routes on router %s: %w", routerName, err)
 	}
 	_, err = TransactAndCheck(nbClient, ops)
 	return err
@@ -886,6 +887,7 @@ func buildNAT(
 	logicalPort string,
 	externalMac string,
 	externalIDs map[string]string,
+	match string,
 ) *nbdb.NAT {
 	nat := &nbdb.NAT{
 		Type:        natType,
@@ -893,6 +895,7 @@ func buildNAT(
 		LogicalIP:   logicalIP,
 		Options:     map[string]string{"stateless": "false"},
 		ExternalIDs: externalIDs,
+		Match:       match,
 	}
 
 	if logicalPort != "" {
@@ -913,6 +916,16 @@ func BuildSNAT(
 	logicalPort string,
 	externalIDs map[string]string,
 ) *nbdb.NAT {
+	return BuildSNATWithMatch(externalIP, logicalIP, logicalPort, externalIDs, "")
+}
+
+func BuildSNATWithMatch(
+	externalIP *net.IP,
+	logicalIP *net.IPNet,
+	logicalPort string,
+	externalIDs map[string]string,
+	match string,
+) *nbdb.NAT {
 	externalIPStr := ""
 	if externalIP != nil {
 		externalIPStr = externalIP.String()
@@ -923,7 +936,7 @@ func BuildSNAT(
 	if logicalIPMask != 32 && logicalIPMask != 128 {
 		logicalIPStr = logicalIP.String()
 	}
-	return buildNAT(nbdb.NATTypeSNAT, externalIPStr, logicalIPStr, logicalPort, "", externalIDs)
+	return buildNAT(nbdb.NATTypeSNAT, externalIPStr, logicalIPStr, logicalPort, "", externalIDs, match)
 }
 
 // BuildDNATAndSNAT builds a logical router DNAT/SNAT
@@ -933,6 +946,17 @@ func BuildDNATAndSNAT(
 	logicalPort string,
 	externalMac string,
 	externalIDs map[string]string,
+) *nbdb.NAT {
+	return BuildDNATAndSNATWithMatch(externalIP, logicalIP, logicalPort, externalMac, externalIDs, "")
+}
+
+func BuildDNATAndSNATWithMatch(
+	externalIP *net.IP,
+	logicalIP *net.IPNet,
+	logicalPort string,
+	externalMac string,
+	externalIDs map[string]string,
+	match string,
 ) *nbdb.NAT {
 	externalIPStr := ""
 	if externalIP != nil {
@@ -948,13 +972,18 @@ func BuildDNATAndSNAT(
 		logicalIPStr,
 		logicalPort,
 		externalMac,
-		externalIDs)
+		externalIDs,
+		match)
 }
 
-// isEquivalentNAT if it has same uuid. Otherwise, check if types match.
-// ExternalIP must be unique amonst non-SNATs;
-// LogicalIP must be unique amonst SNATs;
-// If provided, LogicalPort is expected to match;
+// isEquivalentNAT checks if the `searched` NAT is equivalent to `existing`.
+// Returns true if the UUID is set in `searched` and matches the UUID of `existing`.
+// Otherwise, perform the following checks:
+//   - Compare the Type and Match fields.
+//   - Compare ExternalIP if it is set in `searched`.
+//   - Compare LogicalIP if the Type in `searched` is SNAT.
+//   - Compare LogicalPort if it is set in `searched`.
+//   - Ensure that all ExternalIDs of `searched` exist and have the same value in `existing`.
 func isEquivalentNAT(existing *nbdb.NAT, searched *nbdb.NAT) bool {
 	// Simple case: uuid was provided.
 	if searched.UUID != "" && existing.UUID == searched.UUID {
@@ -962,6 +991,10 @@ func isEquivalentNAT(existing *nbdb.NAT, searched *nbdb.NAT) bool {
 	}
 
 	if searched.Type != existing.Type {
+		return false
+	}
+
+	if searched.Match != existing.Match {
 		return false
 	}
 

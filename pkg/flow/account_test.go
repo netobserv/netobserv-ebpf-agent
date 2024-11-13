@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -112,7 +113,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			TimeFlowStart:          now.Add(-(1000 - 123) * time.Nanosecond),
 			TimeFlowEnd:            now.Add(-(1000 - 789) * time.Nanosecond),
 			DupList:                make([]map[string]uint8, 0),
-			NetworkMonitorEventsMD: make([]string, 0),
+			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 		},
 		k2: {
 			RawRecord: model.RawRecord{
@@ -124,7 +125,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			TimeFlowStart:          now.Add(-(1000 - 456) * time.Nanosecond),
 			TimeFlowEnd:            now.Add(-(1000 - 456) * time.Nanosecond),
 			DupList:                make([]map[string]uint8, 0),
-			NetworkMonitorEventsMD: make([]string, 0),
+			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 		},
 	}, received)
 }
@@ -194,7 +195,7 @@ func TestEvict_Period(t *testing.T) {
 		TimeFlowStart:          now.Add(-1000 + 123),
 		TimeFlowEnd:            now.Add(-1000 + 789),
 		DupList:                make([]map[string]uint8, 0),
-		NetworkMonitorEventsMD: make([]string, 0),
+		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -212,7 +213,7 @@ func TestEvict_Period(t *testing.T) {
 		TimeFlowStart:          now.Add(-1000 + 1123),
 		TimeFlowEnd:            now.Add(-1000 + 1456),
 		DupList:                make([]map[string]uint8, 0),
-		NetworkMonitorEventsMD: make([]string, 0),
+		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 	}, *records[0])
 
 	// no more flows are evicted

@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -78,7 +79,7 @@ var (
 		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
 	}, Metrics: ebpf.BpfFlowMetrics{
 		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
-	}}, Interface: "123456789", NetworkMonitorEventsMD: []string{"test netpol1"}}
+	}}, Interface: "123456789", NetworkMonitorEventsMD: []config.GenericMap{{"Name": "test netpol1"}}}
 )
 
 func TestDedupe(t *testing.T) {
