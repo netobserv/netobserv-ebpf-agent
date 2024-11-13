@@ -103,10 +103,11 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		for _, metadata := range fr.Metrics.NetworkEvents {
 			if !model.AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
+					s := md.String()
 					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v", metadata, md)
-					if !seen[md] {
-						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, md)
-						seen[md] = true
+					if !seen[s] {
+						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, s)
+						seen[s] = true
 					}
 				} else {
 					protoLog.Errorf("unable to decode Network events cookie: %v", err)
