@@ -81,10 +81,10 @@ spec:
   results:
   - description: ""
     name: IMAGE_URL
-    value: $(tasks.build-container.results.IMAGE_URL)
+    value: $(tasks.build-image-index.results.IMAGE_URL)
   - description: ""
     name: IMAGE_DIGEST
-    value: $(tasks.build-container.results.IMAGE_DIGEST)
+    value: $(tasks.build-image-index.results.IMAGE_DIGEST)
   - description: ""
     name: CHAINS-GIT_URL
     value: $(tasks.clone-repository.results.url)
@@ -361,6 +361,28 @@ spec:
         value: sast-snyk-check-oci-ta
       - name: bundle
         value: quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta:0.2@sha256:ad02dd316d68725490f45f23d2b8acf042bf0a80f7a22c28e0cadc6181fc10f1
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
+  - name: rpms-signature-scan
+    params:
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    runAfter:
+    - build-image-index
+    taskRef:
+      params:
+      - name: name
+        value: rpms-signature-scan
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:28aaf87d61078a0aeeeabcae455eda7d05c4f9b81d8995bdcf3dde95c1a7a77b
       - name: kind
         value: task
       resolver: bundles
