@@ -17,10 +17,6 @@ static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 fl
         aggregate_flow->pkt_drops.latest_state = state;
         aggregate_flow->pkt_drops.latest_flags = flags;
         aggregate_flow->pkt_drops.latest_drop_cause = reason;
-        long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_EXIST);
-        if (trace_messages && ret != 0) {
-            bpf_printk("error packet drop updating flow %d\n", ret);
-        }
         return 0;
     }
     return -1;
@@ -93,9 +89,17 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
         .pkt_drops.latest_flags = flags,
         .pkt_drops.latest_drop_cause = reason,
     };
-    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
-    if (trace_messages && ret != 0) {
-        bpf_printk("error packet drop creating new flow %d\n", ret);
+    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
+    if (ret != 0) {
+        if (trace_messages && ret != -EEXIST) {
+            bpf_printk("error packet drop creating new flow %d\n", ret);
+        }
+        if (ret == -EEXIST) {
+            ret = pkt_drop_lookup_and_update_flow(&id, state, flags, reason, len);
+            if (ret != 0 && trace_messages) {
+                bpf_printk("error packet drop updating an existing flow %d\n", ret);
+            }
+        }
     }
 
     return ret;

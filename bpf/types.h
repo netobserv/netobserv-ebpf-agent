@@ -9,6 +9,10 @@
 #define DISCARD 1
 #define SUBMIT 0
 
+#define ENOENT 2
+#define EEXIST 17
+#define EINVAL 22
+
 // Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum tcp_flags_t {
     FIN_FLAG = 0x01,

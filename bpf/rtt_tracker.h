@@ -17,10 +17,6 @@ static inline int rtt_lookup_and_update_flow(flow_id *id, u16 flags, u64 rtt) {
         if (aggregate_flow->flow_rtt < rtt) {
             aggregate_flow->flow_rtt = rtt;
         }
-        long ret = bpf_map_update_elem(&aggregated_flows, id, aggregate_flow, BPF_ANY);
-        if (trace_messages && ret != 0) {
-            bpf_printk("error rtt updating flow %d\n", ret);
-        }
         return 0;
     }
     return -1;
@@ -87,9 +83,17 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
         .flow_rtt = rtt,
         .dscp = dscp,
     };
-    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
-    if (trace_messages && ret != 0) {
-        bpf_printk("error rtt track creating flow %d\n", ret);
+    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
+    if (ret != 0) {
+        if (trace_messages && ret != -EEXIST) {
+            bpf_printk("error rtt track creating flow %d\n", ret);
+        }
+        if (ret == -EEXIST) {
+            ret = rtt_lookup_and_update_flow(&id, flags, rtt);
+            if (trace_messages && ret != 0) {
+                bpf_printk("error rtt track updating an existing flow %d\n", ret);
+            }
+        }
     }
 
     return 0;
