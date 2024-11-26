@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-
 	"github.com/urfave/cli/v2"
 	gcfg "gopkg.in/gcfg.v1"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"k8s.io/apimachinery/pkg/api/validation"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-
 	kexec "k8s.io/utils/exec"
 	utilnet "k8s.io/utils/net"
 
@@ -60,19 +60,20 @@ var (
 
 	// Default holds parsed config file parameters and command-line overrides
 	Default = DefaultConfig{
-		MTU:                   1400,
-		ConntrackZone:         64000,
-		EncapType:             "geneve",
-		EncapIP:               "",
-		EncapPort:             DefaultEncapPort,
-		InactivityProbe:       100000, // in Milliseconds
-		OpenFlowProbe:         180,    // in Seconds
-		OfctrlWaitBeforeClear: 0,      // in Milliseconds
-		MonitorAll:            true,
-		OVSDBTxnTimeout:       DefaultDBTxnTimeout,
-		LFlowCacheEnable:      true,
-		RawClusterSubnets:     "10.128.0.0/14/23",
-		Zone:                  types.OvnDefaultZone,
+		MTU:                          1400,
+		ConntrackZone:                64000,
+		EncapType:                    "geneve",
+		EncapIP:                      "",
+		EncapPort:                    DefaultEncapPort,
+		InactivityProbe:              100000, // in Milliseconds
+		OpenFlowProbe:                180,    // in Seconds
+		OfctrlWaitBeforeClear:        0,      // in Milliseconds
+		MonitorAll:                   true,
+		OVSDBTxnTimeout:              DefaultDBTxnTimeout,
+		LFlowCacheEnable:             true,
+		RawClusterSubnets:            "10.128.0.0/14/23",
+		Zone:                         types.OvnDefaultZone,
+		RawUDNAllowedDefaultServices: "default/kubernetes,kube-system/kube-dns",
 	}
 
 	// Logging holds logging-related parsed config file parameters and command-line overrides
@@ -110,13 +111,14 @@ var (
 
 	// Kubernetes holds Kubernetes-related parsed config file parameters and command-line overrides
 	Kubernetes = KubernetesConfig{
-		APIServer:            DefaultAPIServer,
-		RawServiceCIDRs:      "172.16.1.0/24",
-		OVNConfigNamespace:   "ovn-kubernetes",
-		HostNetworkNamespace: "",
-		PlatformType:         "",
-		DNSServiceNamespace:  "kube-system",
-		DNSServiceName:       "kube-dns",
+		APIServer:               DefaultAPIServer,
+		RawServiceCIDRs:         "172.16.1.0/24",
+		OVNConfigNamespace:      "ovn-kubernetes",
+		HostNetworkNamespace:    "",
+		DisableRequestedChassis: false,
+		PlatformType:            "",
+		DNSServiceNamespace:     "kube-system",
+		DNSServiceName:          "kube-dns",
 		// By default, use a short lifetime length for certificates to ensure that the automatic rotation works well,
 		// might revisit in the future to use a more sensible value
 		CertDuration: 10 * time.Minute,
@@ -280,6 +282,14 @@ type DefaultConfig struct {
 
 	// Zone name to which ovnkube-node/ovnkube-controller belongs to
 	Zone string `gcfg:"zone"`
+
+	// RawUDNAllowedDefaultServices holds the unparsed UDNAllowedDefaultServices. Should only be
+	// used inside config module.
+	RawUDNAllowedDefaultServices string `gcfg:"udn-allowed-default-services"`
+
+	// UDNAllowedDefaultServices holds a list of namespaced names of
+	// default cluster network services accessible from primary user-defined networks
+	UDNAllowedDefaultServices []string
 }
 
 // LoggingConfig holds logging-related parsed config file parameters and command-line overrides
@@ -346,26 +356,27 @@ type CNIConfig struct {
 
 // KubernetesConfig holds Kubernetes-related parsed config file parameters and command-line overrides
 type KubernetesConfig struct {
-	BootstrapKubeconfig  string        `gcfg:"bootstrap-kubeconfig"`
-	CertDir              string        `gcfg:"cert-dir"`
-	CertDuration         time.Duration `gcfg:"cert-duration"`
-	Kubeconfig           string        `gcfg:"kubeconfig"`
-	CACert               string        `gcfg:"cacert"`
-	CAData               []byte
-	APIServer            string `gcfg:"apiserver"`
-	Token                string `gcfg:"token"`
-	TokenFile            string `gcfg:"tokenFile"`
-	CompatServiceCIDR    string `gcfg:"service-cidr"`
-	RawServiceCIDRs      string `gcfg:"service-cidrs"`
-	ServiceCIDRs         []*net.IPNet
-	OVNConfigNamespace   string `gcfg:"ovn-config-namespace"`
-	OVNEmptyLbEvents     bool   `gcfg:"ovn-empty-lb-events"`
-	PodIP                string `gcfg:"pod-ip"` // UNUSED
-	RawNoHostSubnetNodes string `gcfg:"no-hostsubnet-nodes"`
-	NoHostSubnetNodes    labels.Selector
-	HostNetworkNamespace string `gcfg:"host-network-namespace"`
-	PlatformType         string `gcfg:"platform-type"`
-	HealthzBindAddress   string `gcfg:"healthz-bind-address"`
+	BootstrapKubeconfig     string        `gcfg:"bootstrap-kubeconfig"`
+	CertDir                 string        `gcfg:"cert-dir"`
+	CertDuration            time.Duration `gcfg:"cert-duration"`
+	Kubeconfig              string        `gcfg:"kubeconfig"`
+	CACert                  string        `gcfg:"cacert"`
+	CAData                  []byte
+	APIServer               string `gcfg:"apiserver"`
+	Token                   string `gcfg:"token"`
+	TokenFile               string `gcfg:"tokenFile"`
+	CompatServiceCIDR       string `gcfg:"service-cidr"`
+	RawServiceCIDRs         string `gcfg:"service-cidrs"`
+	ServiceCIDRs            []*net.IPNet
+	OVNConfigNamespace      string `gcfg:"ovn-config-namespace"`
+	OVNEmptyLbEvents        bool   `gcfg:"ovn-empty-lb-events"`
+	PodIP                   string `gcfg:"pod-ip"` // UNUSED
+	RawNoHostSubnetNodes    string `gcfg:"no-hostsubnet-nodes"`
+	NoHostSubnetNodes       labels.Selector
+	HostNetworkNamespace    string `gcfg:"host-network-namespace"`
+	DisableRequestedChassis bool   `gcfg:"disable-requestedchassis"`
+	PlatformType            string `gcfg:"platform-type"`
+	HealthzBindAddress      string `gcfg:"healthz-bind-address"`
 
 	// CompatMetricsBindAddress is overridden by the corresponding option in MetricsConfig
 	CompatMetricsBindAddress string `gcfg:"metrics-bind-address"`
@@ -636,6 +647,7 @@ func PrepareTestConfig() error {
 	HybridOverlay = savedHybridOverlay
 	OvnKubeNode = savedOvnKubeNode
 	ClusterManager = savedClusterManager
+	Kubernetes.DisableRequestedChassis = false
 	EnableMulticast = false
 	Default.OVSDBTxnTimeout = 5 * time.Second
 
@@ -921,6 +933,14 @@ var CommonFlags = []cli.Flag{
 		Value:       Default.Zone,
 		Destination: &cliConfig.Default.Zone,
 	},
+	&cli.StringFlag{
+		Name: "udn-allowed-default-services",
+		Usage: "a list of namespaced names of default cluster network services accessible from primary" +
+			"user-defined networks. If not specified defaults to [\"default/kubernetes\", \"kube-system/kube-dns\"]." +
+			"Only used when enable-network-segmentation is set",
+		Value:       Default.RawUDNAllowedDefaultServices,
+		Destination: &cliConfig.Default.RawUDNAllowedDefaultServices,
+	},
 }
 
 // MonitoringFlags capture monitoring-related options
@@ -1183,6 +1203,12 @@ var K8sFlags = []cli.Flag{
 		Usage:       "specify a namespace which will be used to classify host network traffic for network policy",
 		Destination: &cliConfig.Kubernetes.HostNetworkNamespace,
 		Value:       Kubernetes.HostNetworkNamespace,
+	},
+	&cli.BoolFlag{
+		Name:        "disable-requestedchassis",
+		Usage:       "If set to true, requested-chassis option will not be set during pod creation",
+		Destination: &cliConfig.Kubernetes.DisableRequestedChassis,
+		Value:       Kubernetes.DisableRequestedChassis,
 	},
 	&cli.StringFlag{
 		Name: "platform-type",
@@ -1759,7 +1785,7 @@ func buildKubernetesConfig(exec kexec.Interface, cli, file *config, saPath strin
 
 // completeKubernetesConfig completes the Kubernetes config by parsing raw values
 // into their final form.
-func completeKubernetesConfig(allSubnets *configSubnets) error {
+func completeKubernetesConfig(allSubnets *ConfigSubnets) error {
 	Kubernetes.ServiceCIDRs = []*net.IPNet{}
 	for _, cidrString := range strings.Split(Kubernetes.RawServiceCIDRs, ",") {
 		_, serviceCIDR, err := net.ParseCIDR(cidrString)
@@ -1767,7 +1793,7 @@ func completeKubernetesConfig(allSubnets *configSubnets) error {
 			return fmt.Errorf("kubernetes service network CIDR %q invalid: %v", cidrString, err)
 		}
 		Kubernetes.ServiceCIDRs = append(Kubernetes.ServiceCIDRs, serviceCIDR)
-		allSubnets.append(configSubnetService, serviceCIDR)
+		allSubnets.Append(ConfigSubnetService, serviceCIDR)
 	}
 	if len(Kubernetes.ServiceCIDRs) > 2 {
 		return fmt.Errorf("kubernetes service-cidrs must contain either a single CIDR or else an IPv4/IPv6 pair")
@@ -1865,7 +1891,7 @@ func buildGatewayConfig(ctx *cli.Context, cli, file *config) error {
 	return nil
 }
 
-func completeGatewayConfig(allSubnets *configSubnets, masqueradeIPs *MasqueradeIPsConfig) error {
+func completeGatewayConfig(allSubnets *ConfigSubnets, masqueradeIPs *MasqueradeIPsConfig) error {
 	// Validate v4 and v6 join subnets
 	v4IP, v4JoinCIDR, err := net.ParseCIDR(Gateway.V4JoinSubnet)
 	if err != nil || utilnet.IsIPv6(v4IP) {
@@ -1876,8 +1902,8 @@ func completeGatewayConfig(allSubnets *configSubnets, masqueradeIPs *MasqueradeI
 	if err != nil || !utilnet.IsIPv6(v6IP) {
 		return fmt.Errorf("invalid gateway v6 join subnet specified, subnet: %s: error: %v", Gateway.V6JoinSubnet, err)
 	}
-	allSubnets.append(configSubnetJoin, v4JoinCIDR)
-	allSubnets.append(configSubnetJoin, v6JoinCIDR)
+	allSubnets.Append(ConfigSubnetJoin, v4JoinCIDR)
+	allSubnets.Append(ConfigSubnetJoin, v6JoinCIDR)
 
 	//validate v4 and v6 masquerade subnets
 	v4MasqueradeIP, v4MasqueradeCIDR, err := net.ParseCIDR(Gateway.V4MasqueradeSubnet)
@@ -1896,8 +1922,8 @@ func completeGatewayConfig(allSubnets *configSubnets, masqueradeIPs *MasqueradeI
 		return fmt.Errorf("unable to allocate V6MasqueradeIPs: %s", err)
 	}
 
-	allSubnets.append(configSubnetMasquerade, v4MasqueradeCIDR)
-	allSubnets.append(configSubnetMasquerade, v6MasqueradeCIDR)
+	allSubnets.Append(ConfigSubnetMasquerade, v4MasqueradeCIDR)
+	allSubnets.Append(ConfigSubnetMasquerade, v6MasqueradeCIDR)
 
 	return nil
 }
@@ -2027,7 +2053,7 @@ func buildHybridOverlayConfig(ctx *cli.Context, cli, file *config) error {
 
 // completeHybridOverlayConfig completes the HybridOverlay config by parsing raw values
 // into their final form.
-func completeHybridOverlayConfig(allSubnets *configSubnets) error {
+func completeHybridOverlayConfig(allSubnets *ConfigSubnets) error {
 	if !HybridOverlay.Enabled || len(HybridOverlay.RawClusterSubnets) == 0 {
 		return nil
 	}
@@ -2038,7 +2064,7 @@ func completeHybridOverlayConfig(allSubnets *configSubnets) error {
 		return fmt.Errorf("hybrid overlay cluster subnet invalid: %v", err)
 	}
 	for _, subnet := range HybridOverlay.ClusterSubnets {
-		allSubnets.append(configSubnetHybrid, subnet.CIDR)
+		allSubnets.Append(ConfigSubnetHybrid, subnet.CIDR)
 	}
 
 	return nil
@@ -2060,7 +2086,7 @@ func buildClusterManagerConfig(ctx *cli.Context, cli, file *config) error {
 
 // completeClusterManagerConfig completes the ClusterManager config by parsing raw values
 // into their final form.
-func completeClusterManagerConfig(allSubnets *configSubnets) error {
+func completeClusterManagerConfig(allSubnets *ConfigSubnets) error {
 	// Validate v4 and v6 transit switch subnets
 	v4IP, v4TransitCIDR, err := net.ParseCIDR(ClusterManager.V4TransitSwitchSubnet)
 	if err != nil || utilnet.IsIPv6(v4IP) {
@@ -2071,8 +2097,8 @@ func completeClusterManagerConfig(allSubnets *configSubnets) error {
 	if err != nil || !utilnet.IsIPv6(v6IP) {
 		return fmt.Errorf("invalid transit switch v6 subnet specified, subnet: %s: error: %v", ClusterManager.V6TransitSwitchSubnet, err)
 	}
-	allSubnets.append(configSubnetTransit, v4TransitCIDR)
-	allSubnets.append(configSubnetTransit, v6TransitCIDR)
+	allSubnets.Append(ConfigSubnetTransit, v4TransitCIDR)
+	allSubnets.Append(ConfigSubnetTransit, v6TransitCIDR)
 	return nil
 }
 
@@ -2101,14 +2127,19 @@ func buildDefaultConfig(cli, file *config) error {
 
 // completeDefaultConfig completes the Default config by parsing raw values
 // into their final form.
-func completeDefaultConfig(allSubnets *configSubnets) error {
+func completeDefaultConfig(allSubnets *ConfigSubnets) error {
 	var err error
 	Default.ClusterSubnets, err = ParseClusterSubnetEntries(Default.RawClusterSubnets)
 	if err != nil {
 		return fmt.Errorf("cluster subnet invalid: %v", err)
 	}
 	for _, subnet := range Default.ClusterSubnets {
-		allSubnets.append(configSubnetCluster, subnet.CIDR)
+		allSubnets.Append(ConfigSubnetCluster, subnet.CIDR)
+	}
+
+	Default.UDNAllowedDefaultServices, err = parseServicesNamespacedNames(Default.RawUDNAllowedDefaultServices)
+	if err != nil {
+		return fmt.Errorf("UDN allowed services field is invalid: %v", err)
 	}
 
 	Default.HostMasqConntrackZone = Default.ConntrackZone + 1
@@ -2116,6 +2147,27 @@ func completeDefaultConfig(allSubnets *configSubnets) error {
 	Default.HostNodePortConntrackZone = Default.ConntrackZone + 3
 	Default.ReassemblyConntrackZone = Default.ConntrackZone + 4
 	return nil
+}
+
+// parseServicesNamespacedNames splits the input string by `,` and returns a slice
+// of keys that were verified to be a valid namespaced service name. It ignores spaces between the elements.
+func parseServicesNamespacedNames(servicesRaw string) ([]string, error) {
+	var services []string
+	for _, udnEnabledSVC := range strings.Split(servicesRaw, ",") {
+		svcKey := strings.TrimSpace(udnEnabledSVC)
+		namespace, name, err := cache.SplitMetaNamespaceKey(strings.TrimSpace(svcKey))
+		if namespace == "" {
+			return nil, fmt.Errorf("UDN enabled service %q no namespace set: %v", svcKey, err)
+		}
+		if errs := validation.ValidateNamespaceName(namespace, false); len(errs) != 0 {
+			return nil, fmt.Errorf("UDN enabled service %q has an invalid namespace: %v", svcKey, err)
+		}
+		if errs := validation.NameIsDNSSubdomain(name, false); len(errs) != 0 {
+			return nil, fmt.Errorf("UDN enabled service %q has an invalid name: %v", svcKey, err)
+		}
+		services = append(services, svcKey)
+	}
+	return services, nil
 }
 
 // getConfigFilePath returns config file path and 'true' if the config file is
@@ -2333,7 +2385,7 @@ func initConfigWithPath(ctx *cli.Context, exec kexec.Interface, saPath string, d
 }
 
 func completeConfig() error {
-	allSubnets := newConfigSubnets()
+	allSubnets := NewConfigSubnets()
 
 	if err := completeKubernetesConfig(allSubnets); err != nil {
 		return err
@@ -2356,7 +2408,7 @@ func completeConfig() error {
 		return err
 	}
 
-	if err := allSubnets.checkForOverlaps(); err != nil {
+	if err := allSubnets.CheckForOverlaps(); err != nil {
 		return err
 	}
 

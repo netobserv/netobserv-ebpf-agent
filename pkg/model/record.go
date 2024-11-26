@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
@@ -59,7 +60,7 @@ type Record struct {
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
 	DupList                []map[string]uint8
-	NetworkMonitorEventsMD []string
+	NetworkMonitorEventsMD []config.GenericMap
 }
 
 func NewRecord(
@@ -86,7 +87,7 @@ func NewRecord(
 		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
 	}
 	record.DupList = make([]map[string]uint8, 0)
-	record.NetworkMonitorEventsMD = make([]string, 0)
+	record.NetworkMonitorEventsMD = make([]config.GenericMap, 0)
 	return &record
 }
 
@@ -151,7 +152,7 @@ func IP(ia IPAddr) net.IP {
 }
 
 // IntEncodeV4 encodes an IPv4 address as an integer (in network encoding, big endian).
-// It assumes that the passed IP is already IPv4. Otherwise it would just encode the
+// It assumes that the passed IP is already IPv4. Otherwise, it would just encode the
 // last 4 bytes of an IPv6 address
 func IntEncodeV4(ia [net.IPv6len]uint8) uint32 {
 	return binary.BigEndian.Uint32(ia[net.IPv6len-net.IPv4len : net.IPv6len])

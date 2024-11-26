@@ -23,6 +23,10 @@ message DupMapEntry {
   Direction direction = 2;
 }
 
+message NetworkEvent {
+  map<string, string> events = 1;
+}
+
 message Record {
   // protocol as defined by ETH_P_* in linux/if_ether.h
   // https://github.com/torvalds/linux/blob/master/include/uapi/linux/if_ether.h
@@ -60,7 +64,7 @@ message Record {
   google.protobuf.Duration time_flow_rtt = 24;
   uint32 dns_errno = 25;
   repeated DupMapEntry dup_list = 26;
-  repeated string network_events_metadata = 27;
+  repeated NetworkEvent network_events_metadata = 27;
 }
 
 message DataLink {
