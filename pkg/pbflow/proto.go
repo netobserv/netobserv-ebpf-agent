@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"net"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -100,13 +102,35 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	}
 	if s != nil {
 		seen := make(map[string]bool)
+		pbflowRecord.NetworkEventsMetadata = make([]*NetworkEvent, 0)
 		for _, metadata := range fr.Metrics.NetworkEvents {
+			var pbEvent NetworkEvent
 			if !model.AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
-					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v", metadata, md)
-					if !seen[md] {
-						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, md)
-						seen[md] = true
+					acl, ok := md.(*ovnmodel.ACLEvent)
+					mdStr := md.String()
+					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v decoded string: %s", metadata, md, mdStr)
+					if !seen[mdStr] {
+						if ok {
+							pbEvent = NetworkEvent{
+								Events: map[string]string{
+									"Action":    acl.Action,
+									"Type":      acl.Actor,
+									"Feature":   "acl",
+									"Name":      acl.Name,
+									"Namespace": acl.Namespace,
+									"Direction": acl.Direction,
+								},
+							}
+						} else {
+							pbEvent = NetworkEvent{
+								Events: map[string]string{
+									"Message": mdStr,
+								},
+							}
+						}
+						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, &pbEvent)
+						seen[mdStr] = true
 					}
 				} else {
 					protoLog.Errorf("unable to decode Network events cookie: %v", err)
@@ -173,7 +197,13 @@ func PBToFlow(pb *Record) *model.Record {
 		}
 	}
 	if len(pb.GetNetworkEventsMetadata()) != 0 {
-		out.NetworkMonitorEventsMD = append(out.NetworkMonitorEventsMD, pb.GetNetworkEventsMetadata()...)
+		for _, e := range pb.GetNetworkEventsMetadata() {
+			m := config.GenericMap{}
+			for k, v := range e.Events {
+				m[k] = v
+			}
+			out.NetworkMonitorEventsMD = append(out.NetworkMonitorEventsMD, m)
+		}
 		protoLog.Debugf("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
 	}
 	return &out

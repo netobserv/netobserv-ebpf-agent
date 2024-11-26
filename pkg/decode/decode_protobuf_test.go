@@ -68,6 +68,26 @@ func TestPBFlowToMap(t *testing.T) {
 		DnsFlags:               0x80,
 		DnsErrno:               0,
 		TimeFlowRtt:            durationpb.New(someDuration),
+		NetworkEventsMetadata: []*pbflow.NetworkEvent{
+			{
+				Events: map[string]string{
+					"Name":      "test1",
+					"Type":      "NetworkPolicy",
+					"Feature":   "acl",
+					"Namespace": "test-namespace",
+					"Direction": "ingress",
+				},
+			},
+			{
+				Events: map[string]string{
+					"Name":      "test2",
+					"Type":      "NetworkPolicy",
+					"Feature":   "acl",
+					"Namespace": "test-namespace",
+					"Direction": "egress",
+				},
+			},
+		},
 	}
 
 	out := PBFlowToMap(flow)
@@ -103,6 +123,22 @@ func TestPBFlowToMap(t *testing.T) {
 		"DnsFlagsResponseCode":   "NoError",
 		"DnsErrno":               uint8(0),
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
+		"NetworkEvents": []config.GenericMap{
+			{
+				"Name":      "test1",
+				"Type":      "NetworkPolicy",
+				"Feature":   "acl",
+				"Namespace": "test-namespace",
+				"Direction": "ingress",
+			},
+			{
+				"Name":      "test2",
+				"Type":      "NetworkPolicy",
+				"Feature":   "acl",
+				"Namespace": "test-namespace",
+				"Direction": "egress",
+			},
+		},
 	}, out)
 
 }

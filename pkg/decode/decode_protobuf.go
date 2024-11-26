@@ -135,13 +135,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	}
 
 	if len(fr.NetworkMonitorEventsMD) != 0 {
-		var metadata []string
-		for _, md := range fr.NetworkMonitorEventsMD {
-			if md != "" {
-				metadata = append(metadata, md)
-			}
-		}
-		out["NetworkEvents"] = metadata
+		out["NetworkEvents"] = fr.NetworkMonitorEventsMD
 	}
 	return out
 }
