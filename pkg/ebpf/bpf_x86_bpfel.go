@@ -12,6 +12,15 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfAdditionalMetrics struct {
+	DnsRecord        BpfDnsRecordT
+	PktDrops         BpfPktDropsT
+	FlowRtt          uint64
+	NetworkEventsIdx uint8
+	NetworkEvents    [4][8]uint8
+	_                [7]byte
+}
+
 type BpfDirectionT uint32
 
 const (
@@ -27,13 +36,16 @@ type BpfDnsFlowId struct {
 	DstIp    [16]uint8
 	Id       uint16
 	Protocol uint8
+	_        [1]byte
 }
 
 type BpfDnsRecordT struct {
 	Id      uint16
 	Flags   uint16
+	_       [4]byte
 	Latency uint64
 	Errno   uint8
+	_       [7]byte
 }
 
 type BpfFilterActionT uint32
@@ -75,35 +87,35 @@ type BpfFilterValueT struct {
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
-	EthProtocol       uint16
 	Direction         uint8
-	SrcMac            [6]uint8
-	DstMac            [6]uint8
 	SrcIp             [16]uint8
 	DstIp             [16]uint8
+	_                 [1]byte
 	SrcPort           uint16
 	DstPort           uint16
 	TransportProtocol uint8
 	IcmpType          uint8
 	IcmpCode          uint8
+	_                 [3]byte
 	IfIndex           uint32
 }
 
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	Packets          uint32
-	Bytes            uint64
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	Flags            uint16
-	Errno            uint8
-	Dscp             uint8
-	PktDrops         BpfPktDropsT
-	DnsRecord        BpfDnsRecordT
-	FlowRtt          uint64
-	NetworkEventsIdx uint8
-	NetworkEvents    [4][8]uint8
+	Lock            struct{ Val uint32 }
+	EthProtocol     uint16
+	SrcMac          [6]uint8
+	DstMac          [6]uint8
+	_               [2]byte
+	Packets         uint32
+	Bytes           uint64
+	StartMonoTimeTs uint64
+	EndMonoTimeTs   uint64
+	Flags           uint16
+	Errno           uint8
+	Dscp            uint8
+	_               [4]byte
 }
 
 type BpfFlowRecordT struct {
@@ -115,21 +127,24 @@ type BpfGlobalCountersKeyT uint32
 
 const (
 	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED               BpfGlobalCountersKeyT = 0
-	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 1
-	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 2
-	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 3
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 4
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 5
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 6
-	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 7
-	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS             BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 4
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 5
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 6
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 7
+	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 9
 )
 
 type BpfPktDropsT struct {
 	Packets         uint32
+	_               [4]byte
 	Bytes           uint64
 	LatestFlags     uint16
 	LatestState     uint8
+	_               [1]byte
 	LatestDropCause uint32
 }
 
@@ -208,12 +223,13 @@ type BpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfMapSpecs struct {
-	AggregatedFlows *ebpf.MapSpec `ebpf:"aggregated_flows"`
-	DirectFlows     *ebpf.MapSpec `ebpf:"direct_flows"`
-	DnsFlows        *ebpf.MapSpec `ebpf:"dns_flows"`
-	FilterMap       *ebpf.MapSpec `ebpf:"filter_map"`
-	GlobalCounters  *ebpf.MapSpec `ebpf:"global_counters"`
-	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
+	AdditionalFlowMetrics *ebpf.MapSpec `ebpf:"additional_flow_metrics"`
+	AggregatedFlows       *ebpf.MapSpec `ebpf:"aggregated_flows"`
+	DirectFlows           *ebpf.MapSpec `ebpf:"direct_flows"`
+	DnsFlows              *ebpf.MapSpec `ebpf:"dns_flows"`
+	FilterMap             *ebpf.MapSpec `ebpf:"filter_map"`
+	GlobalCounters        *ebpf.MapSpec `ebpf:"global_counters"`
+	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -235,16 +251,18 @@ func (o *BpfObjects) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfMaps struct {
-	AggregatedFlows *ebpf.Map `ebpf:"aggregated_flows"`
-	DirectFlows     *ebpf.Map `ebpf:"direct_flows"`
-	DnsFlows        *ebpf.Map `ebpf:"dns_flows"`
-	FilterMap       *ebpf.Map `ebpf:"filter_map"`
-	GlobalCounters  *ebpf.Map `ebpf:"global_counters"`
-	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
+	AdditionalFlowMetrics *ebpf.Map `ebpf:"additional_flow_metrics"`
+	AggregatedFlows       *ebpf.Map `ebpf:"aggregated_flows"`
+	DirectFlows           *ebpf.Map `ebpf:"direct_flows"`
+	DnsFlows              *ebpf.Map `ebpf:"dns_flows"`
+	FilterMap             *ebpf.Map `ebpf:"filter_map"`
+	GlobalCounters        *ebpf.Map `ebpf:"global_counters"`
+	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
+		m.AdditionalFlowMetrics,
 		m.AggregatedFlows,
 		m.DirectFlows,
 		m.DnsFlows,

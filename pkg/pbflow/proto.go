@@ -39,22 +39,22 @@ func FlowsToPB(inputRecords []*model.Record, maxLen int, s *ovnobserv.SampleDeco
 // into a protobuf-encoded message ready to be sent to the collector via kafka
 func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	var pbflowRecord = Record{
-		EthProtocol: uint32(fr.Id.EthProtocol),
-		Direction:   Direction(fr.Id.Direction),
+		EthProtocol: uint32(fr.Metrics.EthProtocol),
+		Direction:   Direction(fr.ID.Direction),
 		DataLink: &DataLink{
-			SrcMac: macToUint64(&fr.Id.SrcMac),
-			DstMac: macToUint64(&fr.Id.DstMac),
+			SrcMac: macToUint64(&fr.Metrics.SrcMac),
+			DstMac: macToUint64(&fr.Metrics.DstMac),
 		},
 		Network: &Network{
 			Dscp: uint32(fr.Metrics.Dscp),
 		},
 		Transport: &Transport{
-			Protocol: uint32(fr.Id.TransportProtocol),
-			SrcPort:  uint32(fr.Id.SrcPort),
-			DstPort:  uint32(fr.Id.DstPort),
+			Protocol: uint32(fr.ID.TransportProtocol),
+			SrcPort:  uint32(fr.ID.SrcPort),
+			DstPort:  uint32(fr.ID.DstPort),
 		},
-		IcmpType: uint32(fr.Id.IcmpType),
-		IcmpCode: uint32(fr.Id.IcmpCode),
+		IcmpType: uint32(fr.ID.IcmpType),
+		IcmpCode: uint32(fr.ID.IcmpCode),
 		Bytes:    fr.Metrics.Bytes,
 		TimeFlowStart: &timestamppb.Timestamp{
 			Seconds: fr.TimeFlowStart.Unix(),
@@ -64,23 +64,25 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			Seconds: fr.TimeFlowEnd.Unix(),
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
-		Packets:                uint64(fr.Metrics.Packets),
-		Duplicate:              fr.Duplicate,
-		AgentIp:                agentIP(fr.AgentIP),
-		Flags:                  uint32(fr.Metrics.Flags),
-		Interface:              fr.Interface,
-		PktDropBytes:           fr.Metrics.PktDrops.Bytes,
-		PktDropPackets:         uint64(fr.Metrics.PktDrops.Packets),
-		PktDropLatestFlags:     uint32(fr.Metrics.PktDrops.LatestFlags),
-		PktDropLatestState:     uint32(fr.Metrics.PktDrops.LatestState),
-		PktDropLatestDropCause: fr.Metrics.PktDrops.LatestDropCause,
-		DnsId:                  uint32(fr.Metrics.DnsRecord.Id),
-		DnsFlags:               uint32(fr.Metrics.DnsRecord.Flags),
-		DnsErrno:               uint32(fr.Metrics.DnsRecord.Errno),
-		TimeFlowRtt:            durationpb.New(fr.TimeFlowRtt),
+		Packets:     uint64(fr.Metrics.Packets),
+		Duplicate:   fr.Duplicate,
+		AgentIp:     agentIP(fr.AgentIP),
+		Flags:       uint32(fr.Metrics.Flags),
+		Interface:   fr.Interface,
+		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 	}
-	if fr.Metrics.DnsRecord.Latency != 0 {
-		pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
+	if fr.Metrics.AdditionalMetrics != nil {
+		pbflowRecord.PktDropBytes = fr.Metrics.AdditionalMetrics.PktDrops.Bytes
+		pbflowRecord.PktDropPackets = uint64(fr.Metrics.AdditionalMetrics.PktDrops.Packets)
+		pbflowRecord.PktDropLatestFlags = uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestFlags)
+		pbflowRecord.PktDropLatestState = uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestState)
+		pbflowRecord.PktDropLatestDropCause = fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause
+		pbflowRecord.DnsId = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Id)
+		pbflowRecord.DnsFlags = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags)
+		pbflowRecord.DnsErrno = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Errno)
+		if fr.Metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
+			pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
+		}
 	}
 	if len(fr.DupList) != 0 {
 		pbflowRecord.DupList = make([]*DupMapEntry, 0)
@@ -93,17 +95,17 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			}
 		}
 	}
-	if fr.Id.EthProtocol == model.IPv6Type {
-		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.SrcIp[:]}}
-		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Id.DstIp[:]}}
+	if fr.Metrics.EthProtocol == model.IPv6Type {
+		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
+		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.DstIp[:]}}
 	} else {
-		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.SrcIp)}}
-		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Id.DstIp)}}
+		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.SrcIp)}}
+		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.DstIp)}}
 	}
-	if s != nil {
+	if s != nil && fr.Metrics.AdditionalMetrics != nil {
 		seen := make(map[string]bool)
 		pbflowRecord.NetworkEventsMetadata = make([]*NetworkEvent, 0)
-		for _, metadata := range fr.Metrics.NetworkEvents {
+		for _, metadata := range fr.Metrics.AdditionalMetrics.NetworkEvents {
 			var pbEvent NetworkEvent
 			if !model.AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
@@ -146,25 +148,27 @@ func PBToFlow(pb *Record) *model.Record {
 		return nil
 	}
 	out := model.Record{
-		RawRecord: model.RawRecord{
-			Id: ebpf.BpfFlowId{
-				Direction:         uint8(pb.Direction),
-				EthProtocol:       uint16(pb.EthProtocol),
-				TransportProtocol: uint8(pb.Transport.Protocol),
-				SrcMac:            macToUint8(pb.DataLink.GetSrcMac()),
-				DstMac:            macToUint8(pb.DataLink.GetDstMac()),
-				SrcIp:             ipToIPAddr(pb.Network.GetSrcAddr()),
-				DstIp:             ipToIPAddr(pb.Network.GetDstAddr()),
-				SrcPort:           uint16(pb.Transport.SrcPort),
-				DstPort:           uint16(pb.Transport.DstPort),
-				IcmpType:          uint8(pb.IcmpType),
-				IcmpCode:          uint8(pb.IcmpCode),
+		ID: ebpf.BpfFlowId{
+			Direction:         uint8(pb.Direction),
+			TransportProtocol: uint8(pb.Transport.Protocol),
+			SrcIp:             ipToIPAddr(pb.Network.GetSrcAddr()),
+			DstIp:             ipToIPAddr(pb.Network.GetDstAddr()),
+			SrcPort:           uint16(pb.Transport.SrcPort),
+			DstPort:           uint16(pb.Transport.DstPort),
+			IcmpType:          uint8(pb.IcmpType),
+			IcmpCode:          uint8(pb.IcmpCode),
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+				EthProtocol: uint16(pb.EthProtocol),
+				SrcMac:      macToUint8(pb.DataLink.GetSrcMac()),
+				DstMac:      macToUint8(pb.DataLink.GetDstMac()),
+				Bytes:       pb.Bytes,
+				Packets:     uint32(pb.Packets),
+				Flags:       uint16(pb.Flags),
+				Dscp:        uint8(pb.Network.Dscp),
 			},
-			Metrics: ebpf.BpfFlowMetrics{
-				Bytes:   pb.Bytes,
-				Packets: uint32(pb.Packets),
-				Flags:   uint16(pb.Flags),
-				Dscp:    uint8(pb.Network.Dscp),
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				PktDrops: ebpf.BpfPktDropsT{
 					Bytes:           pb.PktDropBytes,
 					Packets:         uint32(pb.PktDropPackets),

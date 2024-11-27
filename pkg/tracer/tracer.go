@@ -12,6 +12,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
@@ -31,8 +32,9 @@ import (
 const (
 	qdiscType = "clsact"
 	// ebpf map names as defined in bpf/maps_definition.h
-	aggregatedFlowsMap = "aggregated_flows"
-	dnsLatencyMap      = "dns_flows"
+	aggregatedFlowsMap    = "aggregated_flows"
+	additionalFlowMetrics = "additional_flow_metrics"
+	dnsLatencyMap         = "dns_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
 	constTraceMessages                  = "trace_messages"
@@ -86,8 +88,8 @@ type FlowFetcherConfig struct {
 	Debug                          bool
 	Sampling                       int
 	CacheMaxSize                   int
-	PktDrops                       bool
-	DNSTracker                     bool
+	EnablePktDrops                 bool
+	EnableDNSTracker               bool
 	DNSTrackerPort                 uint16
 	EnableRTT                      bool
 	EnableNetworkEventsMonitoring  bool
@@ -111,6 +113,11 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	// Resize maps according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
+	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker {
+		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
+	} else {
+		spec.Maps[additionalFlowMetrics].MaxEntries = 1
+	}
 
 	traceMsgs := 0
 	if cfg.Debug {
@@ -124,7 +131,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	enableDNSTracking := 0
 	dnsTrackerPort := uint16(dnsDefaultPort)
-	if cfg.DNSTracker {
+	if cfg.EnableDNSTracker {
 		enableDNSTracking = 1
 		if cfg.DNSTrackerPort != 0 {
 			dnsTrackerPort = cfg.DNSTrackerPort
@@ -192,7 +199,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	delete(spec.Programs, constPcaEnable)
 
 	var pktDropsLink link.Link
-	if cfg.PktDrops && !oldKernel && !rtOldKernel {
+	if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
 		pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
@@ -715,7 +722,7 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
-func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
+func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
 	if !m.lookupAndDeleteSupported {
 		return m.legacyLookupAndDeleteMap(met)
 	}
@@ -723,13 +730,14 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	var flows = make(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics, m.cacheMaxSize)
+	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.cacheMaxSize)
 	var ids []ebpf.BpfFlowId
 	var id ebpf.BpfFlowId
-	var metrics []ebpf.BpfFlowMetrics
+	var baseMetrics ebpf.BpfFlowMetrics
+	var additionalMetrics []ebpf.BpfAdditionalMetrics
 
 	// First, get all ids and don't care about metrics (we need lookup+delete to be atomic)
-	for iterator.Next(&id, &metrics) {
+	for iterator.Next(&id, &baseMetrics) {
 		ids = append(ids, id)
 	}
 
@@ -737,17 +745,34 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	// Run the atomic Lookup+Delete; if new ids have been inserted in the meantime, they'll be fetched next time
 	for i, id := range ids {
 		count++
-		if err := flowMap.LookupAndDelete(&id, &metrics); err != nil {
+		if err := flowMap.LookupAndDelete(&id, &baseMetrics); err != nil {
 			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
 				log.WithError(err).Warnf("switching to legacy mode")
 				m.lookupAndDeleteSupported = false
 				return m.legacyLookupAndDeleteMap(met)
 			}
-			log.WithError(err).WithField("flowId", id).Warnf("couldn't delete flow entry")
+			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete flow entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flows[id] = metrics
+		flowPayload := model.BpfFlowContent{}
+		flowPayload.AccumulateBase(&baseMetrics)
+
+		// Fetch additional metrics; ids are without direction and interface
+		shorterID := id
+		shorterID.Direction = 0
+		shorterID.IfIndex = 0
+		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&shorterID, &additionalMetrics); err != nil {
+			if !errors.Is(err, cilium.ErrKeyNotExist) {
+				log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
+				met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
+			}
+		} else {
+			for _, a := range additionalMetrics {
+				flowPayload.AccumulateAdditional(&a)
+			}
+		}
+		flows[id] = flowPayload
 	}
 	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
@@ -761,6 +786,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
 	globalCounters := map[ebpf.BpfGlobalCountersKeyT]prometheus.Counter{
 		ebpf.BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED:               met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
+		ebpf.BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
 		ebpf.BpfGlobalCountersKeyTFILTER_REJECT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterReject"),
 		ebpf.BpfGlobalCountersKeyTFILTER_ACCEPT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterAccept"),
 		ebpf.BpfGlobalCountersKeyTFILTER_NOMATCH:                      met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterNoMatch"),
@@ -1104,6 +1130,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, tcpRcvKprobe)
 	delete(spec.Programs, tcpFentryHook)
 	delete(spec.Programs, aggregatedFlowsMap)
+	delete(spec.Programs, additionalFlowMetrics)
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)

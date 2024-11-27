@@ -35,10 +35,9 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
 
     bpf_probe_read(cookie, md_len, user_cookie);
 
-    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
+    additional_metrics *aggregate_flow = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (aggregate_flow != NULL) {
         u8 idx = aggregate_flow->network_events_idx;
-        aggregate_flow->end_mono_time_ts = bpf_ktime_get_ns();
         // Needed to check length here again to keep JIT verifier happy
         if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
             if (!md_already_exists(aggregate_flow->network_events, (u8 *)cookie)) {
@@ -53,10 +52,9 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
 
 static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_metadata *md) {
     u8 dscp = 0, protocol = 0, md_len = 0;
-    u16 family = 0, flags = 0;
+    u16 family = 0, flags = 0, eth_protocol = 0;
     u8 *user_cookie = NULL;
     long ret = 0;
-    u64 len = 0;
     flow_id id;
 
     __builtin_memset(&id, 0, sizeof(id));
@@ -67,12 +65,8 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
         return -1;
     }
 
-    id.if_index = BPF_CORE_READ(md, in_ifindex);
-
-    len = BPF_CORE_READ(skb, len);
-
     // read L2 info
-    core_fill_in_l2(skb, &id, &family);
+    core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
     core_fill_in_l3(skb, &id, family, &protocol, &dscp);
@@ -99,7 +93,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, 0);
+    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol);
     if (skip) {
         return 0;
     }
@@ -113,19 +107,12 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     }
 
     // there is no matching flows so lets create new one and add the network event metadata
-    u64 current_time = bpf_ktime_get_ns();
-    id.direction = INGRESS;
-    flow_metrics new_flow = {
-        .packets = 1,
-        .bytes = len,
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .flags = flags,
+    additional_metrics new_flow = {
         .network_events_idx = 0,
     };
     bpf_probe_read(new_flow.network_events[0], md_len, user_cookie);
     new_flow.network_events_idx++;
-    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
+    ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
             bpf_printk("error network events creating new flow %d\n", ret);

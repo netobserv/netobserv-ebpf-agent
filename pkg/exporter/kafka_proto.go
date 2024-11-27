@@ -38,14 +38,14 @@ func (kp *KafkaProto) ExportFlows(input <-chan []*model.Record) {
 
 func getFlowKey(record *model.Record) []byte {
 	// We are sorting IP address so flows from on ip to a second IP get the same key whatever the direction is
-	for k := range record.Id.SrcIp {
-		if record.Id.SrcIp[k] < record.Id.DstIp[k] {
-			return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
-		} else if record.Id.SrcIp[k] > record.Id.DstIp[k] {
-			return append(record.Id.DstIp[:], record.Id.SrcIp[:]...)
+	for k := range record.ID.SrcIp {
+		if record.ID.SrcIp[k] < record.ID.DstIp[k] {
+			return append(record.ID.SrcIp[:], record.ID.DstIp[:]...)
+		} else if record.ID.SrcIp[k] > record.ID.DstIp[k] {
+			return append(record.ID.DstIp[:], record.ID.SrcIp[:]...)
 		}
 	}
-	return append(record.Id.SrcIp[:], record.Id.DstIp[:]...)
+	return append(record.ID.SrcIp[:], record.ID.DstIp[:]...)
 }
 
 func (kp *KafkaProto) batchAndSubmit(records []*model.Record) {

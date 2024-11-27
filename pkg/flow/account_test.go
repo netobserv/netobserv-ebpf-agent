@@ -95,8 +95,8 @@ func TestEvict_MaxEntries(t *testing.T) {
 	received := map[ebpf.BpfFlowId]model.Record{}
 	r := receiveTimeout(t, evictor)
 	require.Len(t, r, 2)
-	received[r[0].Id] = *r[0]
-	received[r[1].Id] = *r[1]
+	received[r[0].ID] = *r[0]
+	received[r[1].ID] = *r[1]
 
 	requireNoEviction(t, evictor)
 
@@ -104,9 +104,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 	// of each flow
 	assert.Equal(t, map[ebpf.BpfFlowId]model.Record{
 		k1: {
-			RawRecord: model.RawRecord{
-				Id: k1,
-				Metrics: ebpf.BpfFlowMetrics{
+			ID: k1,
+			Metrics: model.BpfFlowContent{
+				BpfFlowMetrics: ebpf.BpfFlowMetrics{
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
 				},
 			},
@@ -116,9 +116,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 		},
 		k2: {
-			RawRecord: model.RawRecord{
-				Id: k2,
-				Metrics: ebpf.BpfFlowMetrics{
+			ID: k2,
+			Metrics: model.BpfFlowContent{
+				BpfFlowMetrics: ebpf.BpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 				},
 			},
@@ -182,9 +182,9 @@ func TestEvict_Period(t *testing.T) {
 	records := receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
 	assert.Equal(t, model.Record{
-		RawRecord: model.RawRecord{
-			Id: k1,
-			Metrics: ebpf.BpfFlowMetrics{
+		ID: k1,
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: ebpf.BpfFlowMetrics{
 				Bytes:           30,
 				Packets:         3,
 				StartMonoTimeTs: 123,
@@ -200,9 +200,9 @@ func TestEvict_Period(t *testing.T) {
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
 	assert.Equal(t, model.Record{
-		RawRecord: model.RawRecord{
-			Id: k1,
-			Metrics: ebpf.BpfFlowMetrics{
+		ID: k1,
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: ebpf.BpfFlowMetrics{
 				Bytes:           20,
 				Packets:         2,
 				StartMonoTimeTs: 1123,

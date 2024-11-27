@@ -29,16 +29,16 @@ func TestProtoConversion(t *testing.T) {
 	kj := KafkaProto{Writer: &wc, Metrics: m}
 	input := make(chan []*model.Record, 11)
 	record := model.Record{}
-	record.Id.EthProtocol = 3
-	record.Id.Direction = 1
-	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
-	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.SrcPort = 4321
-	record.Id.DstPort = 1234
-	record.Id.IcmpType = 8
-	record.Id.TransportProtocol = 210
+	record.Metrics.EthProtocol = 3
+	record.ID.Direction = 1
+	record.Metrics.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	record.Metrics.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
+	record.ID.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.ID.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.ID.SrcPort = 4321
+	record.ID.DstPort = 1234
+	record.ID.IcmpType = 8
+	record.ID.TransportProtocol = 210
 	record.TimeFlowStart = time.Now().Add(-5 * time.Second)
 	record.TimeFlowEnd = time.Now()
 	record.Metrics.Bytes = 789
@@ -77,16 +77,16 @@ func TestProtoConversion(t *testing.T) {
 
 func TestIdenticalKeys(t *testing.T) {
 	record := model.Record{}
-	record.Id.EthProtocol = 3
-	record.Id.Direction = 1
-	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
-	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.SrcPort = 4321
-	record.Id.DstPort = 1234
-	record.Id.IcmpType = 8
-	record.Id.TransportProtocol = 210
+	record.Metrics.EthProtocol = 3
+	record.ID.Direction = 1
+	record.Metrics.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	record.Metrics.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
+	record.ID.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.ID.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.ID.SrcPort = 4321
+	record.ID.DstPort = 1234
+	record.ID.IcmpType = 8
+	record.ID.TransportProtocol = 210
 	record.TimeFlowStart = time.Now().Add(-5 * time.Second)
 	record.TimeFlowEnd = time.Now()
 	record.Metrics.Bytes = 789
@@ -96,8 +96,8 @@ func TestIdenticalKeys(t *testing.T) {
 
 	key1 := getFlowKey(&record)
 
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.ID.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.ID.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
 	key2 := getFlowKey(&record)
 
 	// Both keys should be identical
