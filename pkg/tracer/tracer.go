@@ -755,14 +755,10 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-		flowPayload.AccumulateBase(&baseMetrics)
+		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &baseMetrics}
 
-		// Fetch additional metrics; ids are without direction and interface
-		shorterID := id
-		shorterID.Direction = 0
-		shorterID.IfIndex = 0
-		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&shorterID, &additionalMetrics); err != nil {
+		// Fetch additional metrics
+		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&id, &additionalMetrics); err != nil {
 			if !errors.Is(err, cilium.ErrKeyNotExist) {
 				log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
 				met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()

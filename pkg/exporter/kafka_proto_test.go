@@ -33,7 +33,6 @@ func TestProtoConversion(t *testing.T) {
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
 		ID: ebpf.BpfFlowId{
-			Direction:         1,
 			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
 			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 			SrcPort:           4321,
@@ -43,15 +42,16 @@ func TestProtoConversion(t *testing.T) {
 		},
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
-				EthProtocol: 3,
-				SrcMac:      [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-				DstMac:      [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
-				Bytes:       789,
-				Packets:     987,
-				Flags:       uint16(1),
+				DirectionFirstSeen: 1,
+				EthProtocol:        3,
+				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+				DstMac:             [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
+				Bytes:              789,
+				Packets:            987,
+				Flags:              uint16(1),
 			},
 		},
-		Interface: "veth0",
+		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
 	}
 
 	input <- []*model.Record{&record}
@@ -62,10 +62,12 @@ func TestProtoConversion(t *testing.T) {
 	var r pbflow.Record
 	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &r))
 	assert.EqualValues(t, 3, r.EthProtocol)
-	for _, e := range r.DupList {
-		assert.EqualValues(t, 1, e.Direction)
-		assert.Equal(t, "veth0", e.Interface)
-	}
+	assert.EqualValues(t, 1, r.Direction)
+	assert.Len(t, r.DupList, 2)
+	assert.EqualValues(t, 0, r.DupList[0].Direction)
+	assert.Equal(t, "veth0", r.DupList[0].Interface)
+	assert.EqualValues(t, 1, r.DupList[1].Direction)
+	assert.Equal(t, "abcde", r.DupList[1].Interface)
 	assert.EqualValues(t, uint64(0xaabbccddeeff), r.DataLink.SrcMac)
 	assert.EqualValues(t, uint64(0x112233445566), r.DataLink.DstMac)
 	assert.EqualValues(t, uint64(0xC0010203) /* 192.1.2.3 */, r.Network.SrcAddr.GetIpv4())
@@ -88,7 +90,6 @@ func TestIdenticalKeys(t *testing.T) {
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
 		ID: ebpf.BpfFlowId{
-			Direction:         1,
 			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
 			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 			SrcPort:           4321,
@@ -98,15 +99,16 @@ func TestIdenticalKeys(t *testing.T) {
 		},
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
-				EthProtocol: 3,
-				SrcMac:      [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-				DstMac:      [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
-				Bytes:       789,
-				Packets:     987,
-				Flags:       uint16(1),
+				DirectionFirstSeen: 1,
+				EthProtocol:        3,
+				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+				DstMac:             [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
+				Bytes:              789,
+				Packets:            987,
+				Flags:              uint16(1),
 			},
 		},
-		Interface: "veth0",
+		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
 	}
 	key1 := getFlowKey(&record)
 
