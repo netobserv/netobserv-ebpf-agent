@@ -66,6 +66,7 @@ typedef __u64 u64;
 #define MAX_FILTER_ENTRIES 16
 #define MAX_EVENT_MD 8
 #define MAX_NETWORK_EVENTS 4
+#define MAX_OBSERVED_INTERFACES 4
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
@@ -80,19 +81,22 @@ const enum direction_t *unused1 __attribute__((unused));
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 typedef struct flow_metrics_t {
-    struct bpf_spin_lock lock;
-    u16 eth_protocol;
-    // L2 data link layer
-    u8 src_mac[ETH_ALEN];
-    u8 dst_mac[ETH_ALEN];
-    u32 packets;
-    u64 bytes;
     // Flow start and end times as monotomic timestamps in nanoseconds
     // as output from bpf_ktime_get_ns()
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
+    u64 bytes;
+    u32 packets;
+    u16 eth_protocol;
     // TCP Flags from https://www.ietf.org/rfc/rfc793.txt
     u16 flags;
+    // L2 data link layer
+    u8 src_mac[ETH_ALEN];
+    u8 dst_mac[ETH_ALEN];
+    // OS interface index
+    u32 if_index_first_seen;
+    struct bpf_spin_lock lock;
+    u8 direction_first_seen;
     // The positive errno of a failed map insertion that caused a flow
     // to be sent via ringbuffer.
     // 0 otherwise
@@ -109,20 +113,19 @@ typedef struct additional_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
     struct dns_record_t {
+        u64 latency;
         u16 id;
         u16 flags;
-        u64 latency;
         u8 errno;
     } dns_record;
     struct pkt_drops_t {
-        u32 packets;
         u64 bytes;
+        u32 packets;
+        u32 latest_drop_cause;
         u16 latest_flags;
         u8 latest_state;
-        u32 latest_drop_cause;
     } pkt_drops;
     u64 flow_rtt;
-    u8 network_events_idx;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
     u16 eth_protocol;
     struct translated_flow_t {
@@ -133,23 +136,23 @@ typedef struct additional_metrics_t {
         u16 zone_id;
         u8 icmp_id;
     } translated_flow;
+    struct observed_intf_t {
+        u8 direction;
+        u32 if_index;
+    } __attribute__((packed)) observed_intf[MAX_OBSERVED_INTERFACES];
+    u8 network_events_idx;
+    u8 nb_observed_intf;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
 const struct additional_metrics_t *unused3 __attribute__((unused));
-
-// Force emitting enums/structs into the ELF
 const struct dns_record_t *unused4 __attribute__((unused));
-
-// Force emitting enums/structs into the ELF
 const struct pkt_drops_t *unused5 __attribute__((unused));
-
-// Force emitting struct translated_flow_t into the ELF.
 const struct translated_flow_t *unused6 __attribute__((unused));
+const struct observed_intf_t *unused13 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
-    u8 direction;
     // L3 network layer
     // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
     // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
@@ -162,8 +165,6 @@ typedef struct flow_id_t {
     // ICMP protocol
     u8 icmp_type;
     u8 icmp_code;
-    // OS interface index
-    u32 if_index;
 } flow_id;
 
 // Force emitting enums/structs into the ELF

@@ -94,17 +94,14 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol, NULL);
+    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
         return 0;
     }
 
-    for (direction dir = INGRESS; dir < MAX_DIRECTION; dir++) {
-        id.direction = dir;
-        ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
-        if (ret == 0) {
-            return ret;
-        }
+    ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
+    if (ret == 0) {
+        return ret;
     }
 
     // there is no matching flows so lets create new one and add the network event metadata

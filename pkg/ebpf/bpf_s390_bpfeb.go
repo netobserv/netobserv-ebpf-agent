@@ -18,12 +18,12 @@ type BpfAdditionalMetrics struct {
 	DnsRecord        BpfDnsRecordT
 	PktDrops         BpfPktDropsT
 	FlowRtt          uint64
-	NetworkEventsIdx uint8
 	NetworkEvents    [4][8]uint8
-	_                [1]byte
 	EthProtocol      uint16
 	TranslatedFlow   BpfTranslatedFlowT
-	_                [4]byte
+	ObservedIntf     [4]BpfObservedIntfT
+	NetworkEventsIdx uint8
+	NbObservedIntf   uint8
 }
 
 type BpfDirectionT uint32
@@ -45,12 +45,11 @@ type BpfDnsFlowId struct {
 }
 
 type BpfDnsRecordT struct {
+	Latency uint64
 	Id      uint16
 	Flags   uint16
-	_       [4]byte
-	Latency uint64
 	Errno   uint8
-	_       [7]byte
+	_       [3]byte
 }
 
 type BpfFilterActionT uint32
@@ -93,35 +92,35 @@ type BpfFilterValueT struct {
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
-	Direction         uint8
 	SrcIp             [16]uint8
 	DstIp             [16]uint8
-	_                 [1]byte
 	SrcPort           uint16
 	DstPort           uint16
 	TransportProtocol uint8
 	IcmpType          uint8
 	IcmpCode          uint8
-	_                 [3]byte
-	IfIndex           uint32
+	_                 [1]byte
 }
 
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	Lock            struct{ Val uint32 }
-	EthProtocol     uint16
-	SrcMac          [6]uint8
-	DstMac          [6]uint8
-	_               [2]byte
-	Packets         uint32
-	Bytes           uint64
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Flags           uint16
-	Errno           uint8
-	Dscp            uint8
-	Sampling        uint32
+	StartMonoTimeTs    uint64
+	EndMonoTimeTs      uint64
+	Bytes              uint64
+	Packets            uint32
+	EthProtocol        uint16
+	Flags              uint16
+	SrcMac             [6]uint8
+	DstMac             [6]uint8
+	IfIndexFirstSeen   uint32
+	Lock               struct{ Val uint32 }
+	DirectionFirstSeen uint8
+	Errno              uint8
+	Dscp               uint8
+	_                  [1]byte
+	Sampling           uint32
+	_                  [4]byte
 }
 
 type BpfFlowRecordT struct {
@@ -144,14 +143,18 @@ const (
 	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 9
 )
 
+type BpfObservedIntfT struct {
+	Direction uint8
+	IfIndex   uint32
+}
+
 type BpfPktDropsT struct {
-	Packets         uint32
-	_               [4]byte
 	Bytes           uint64
+	Packets         uint32
+	LatestDropCause uint32
 	LatestFlags     uint16
 	LatestState     uint8
-	_               [1]byte
-	LatestDropCause uint32
+	_               [5]byte
 }
 
 type BpfTcpFlagsT uint32
