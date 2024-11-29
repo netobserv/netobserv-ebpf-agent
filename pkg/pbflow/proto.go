@@ -40,7 +40,7 @@ func FlowsToPB(inputRecords []*model.Record, maxLen int, s *ovnobserv.SampleDeco
 func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	var pbflowRecord = Record{
 		EthProtocol: uint32(fr.Metrics.EthProtocol),
-		Direction:   Direction(fr.ID.Direction),
+		Direction:   Direction(fr.Metrics.DirectionFirstSeen),
 		DataLink: &DataLink{
 			SrcMac: macToUint64(&fr.Metrics.SrcMac),
 			DstMac: macToUint64(&fr.Metrics.DstMac),
@@ -65,10 +65,8 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
 		},
 		Packets:     uint64(fr.Metrics.Packets),
-		Duplicate:   fr.Duplicate,
 		AgentIp:     agentIP(fr.AgentIP),
 		Flags:       uint32(fr.Metrics.Flags),
-		Interface:   fr.Interface,
 		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 		Sampling:    fr.Metrics.Sampling,
 	}
@@ -91,16 +89,12 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			IcmpId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.IcmpId),
 		}
 	}
-	if len(fr.DupList) != 0 {
-		pbflowRecord.DupList = make([]*DupMapEntry, 0)
-		for _, m := range fr.DupList {
-			for key, value := range m {
-				pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
-					Interface: key,
-					Direction: Direction(value),
-				})
-			}
-		}
+	pbflowRecord.DupList = make([]*DupMapEntry, 0)
+	for _, intf := range fr.Interfaces {
+		pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
+			Interface: intf.Interface,
+			Direction: Direction(intf.Direction),
+		})
 	}
 	if fr.Metrics.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
@@ -164,7 +158,6 @@ func PBToFlow(pb *Record) *model.Record {
 	}
 	out := model.Record{
 		ID: ebpf.BpfFlowId{
-			Direction:         uint8(pb.Direction),
 			TransportProtocol: uint8(pb.Transport.Protocol),
 			SrcIp:             ipToIPAddr(pb.Network.GetSrcAddr()),
 			DstIp:             ipToIPAddr(pb.Network.GetDstAddr()),
@@ -211,19 +204,16 @@ func PBToFlow(pb *Record) *model.Record {
 		TimeFlowStart: pb.TimeFlowStart.AsTime(),
 		TimeFlowEnd:   pb.TimeFlowEnd.AsTime(),
 		AgentIP:       pbIPToNetIP(pb.AgentIp),
-		Duplicate:     pb.Duplicate,
-		Interface:     pb.Interface,
 		TimeFlowRtt:   pb.TimeFlowRtt.AsDuration(),
 		DNSLatency:    pb.DnsLatency.AsDuration(),
 	}
 
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
-			intf := entry.Interface
-			dir := uint8(entry.Direction)
-			out.DupList = append(out.DupList, map[string]uint8{intf: dir})
+			out.Interfaces = append(out.Interfaces, model.NewIntfDir(entry.Interface, uint8(entry.Direction)))
 		}
 	}
+
 	if len(pb.GetNetworkEventsMetadata()) != 0 {
 		for _, e := range pb.GetNetworkEventsMetadata() {
 			m := config.GenericMap{}

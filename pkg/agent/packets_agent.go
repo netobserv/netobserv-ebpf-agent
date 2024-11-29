@@ -34,7 +34,7 @@ type Packets struct {
 	exporter     node.TerminalFunc[[]*model.PacketRecord]
 
 	// elements used to decorate flows with extra information
-	interfaceNamer flow.InterfaceNamer
+	interfaceNamer model.InterfaceNamer
 	agentIP        net.IP
 
 	status Status

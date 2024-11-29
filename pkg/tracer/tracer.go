@@ -877,8 +877,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-		flowPayload.AccumulateBase(&baseMetrics)
+		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &baseMetrics}
 		flows[id] = flowPayload
 	}
 

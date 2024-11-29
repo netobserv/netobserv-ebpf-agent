@@ -10,58 +10,98 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
+var (
+	additionalSample1 = ebpf.BpfAdditionalMetrics{
+		DnsRecord: ebpf.BpfDnsRecordT{
+			Latency: 100,
+			Id:      101,
+		},
+		FlowRtt: 200,
+		PktDrops: ebpf.BpfPktDropsT{
+			Bytes:           10,
+			Packets:         2,
+			LatestDropCause: 5,
+			LatestFlags:     6,
+			LatestState:     7,
+		},
+	}
+	additionalSample2 = ebpf.BpfAdditionalMetrics{
+		DnsRecord: ebpf.BpfDnsRecordT{
+			Latency: 1000,
+			Id:      1000,
+		},
+		FlowRtt: 1000,
+		PktDrops: ebpf.BpfPktDropsT{
+			Bytes:           1000,
+			Packets:         1000,
+			LatestDropCause: 1000,
+			LatestFlags:     1000,
+			LatestState:     10,
+		},
+	}
+)
+
 func TestPacketAggregation(t *testing.T) {
 	type testCase struct {
-		name     string
-		input    model.BpfFlowContents
-		expected model.BpfFlowContent
+		name            string
+		inputFlow       ebpf.BpfFlowMetrics
+		inputAdditional []ebpf.BpfAdditionalMetrics
+		expected        model.BpfFlowContent
 	}
 	tcs := []testCase{{
-		name: "single valid entry and empty",
-		input: []model.BpfFlowContent{
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0, Bytes: 0, StartMonoTimeTs: 0, EndMonoTimeTs: 0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-		},
+		name:      "flow without additional",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		expected: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 			Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1,
 		}},
 	}, {
-		name: "two valid entries and empty",
-		input: []model.BpfFlowContent{
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x3, Bytes: 0x5c4, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x2, Bytes: 0x8c, StartMonoTimeTs: 0x17f3e9633a7f, EndMonoTimeTs: 0x17f3e96f164e, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
+		name:            "with single additional",
+		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1},
+		expected: model.BpfFlowContent{
+			BpfFlowMetrics:    &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &additionalSample1,
 		},
-		expected: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
-			Packets: 0x5, Bytes: 0x5c4 + 0x8c, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1,
-		}},
 	}, {
-		name: "duplicate net events",
-		input: []model.BpfFlowContent{
+		name:            "with two additional",
+		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1, additionalSample2},
+		expected: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				DnsRecord: ebpf.BpfDnsRecordT{
+					Latency: 1000, // keep highest
+					Id:      1000, // last seen
+				},
+				FlowRtt: 1000, // keep highest
+				PktDrops: ebpf.BpfPktDropsT{
+					Bytes:           1010, // sum
+					Packets:         1002, // sum
+					LatestDropCause: 1000, // last seen
+					LatestFlags:     1006, // union
+					LatestState:     10,   // last seen
+				},
+			},
+		},
+	}, {
+		name:      "duplicate net events",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x3, Bytes: 0x5c4, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 2, 0, 0, 0, 0, 0, 0},
-					},
-				}},
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 2, 0, 0, 0, 0, 0, 0},
+				},
+			},
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x2, Bytes: 0x8c, StartMonoTimeTs: 0x17f3e9633a7f, EndMonoTimeTs: 0x17f3e96f164e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 2, 0, 0, 0, 0, 0, 0},
-					},
-				}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 2, 0, 0, 0, 0, 0, 0},
+				},
+			},
 		},
 		expected: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x5, Bytes: 0x5c4 + 0x8c, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 1,
 				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
@@ -69,27 +109,22 @@ func TestPacketAggregation(t *testing.T) {
 				},
 			}},
 	}, {
-		name: "net events + empty net event",
-		input: []model.BpfFlowContent{
+		name:      "net events + empty net event",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x3, Bytes: 0x5c4, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 2, 0, 0, 0, 0, 0, 0},
-					},
-				}},
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 2, 0, 0, 0, 0, 0, 0},
+				},
+			},
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x2, Bytes: 0x8c, StartMonoTimeTs: 0x17f3e9633a7f, EndMonoTimeTs: 0x17f3e96f164e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 0,
-					NetworkEvents:    [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{},
-				}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
+				NetworkEventsIdx: 0,
+				NetworkEvents:    [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{},
+			},
 		},
 		expected: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x5, Bytes: 0x5c4 + 0x8c, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 1,
 				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
@@ -97,59 +132,52 @@ func TestPacketAggregation(t *testing.T) {
 				},
 			}},
 	}, {
-		name: "different net events",
-		input: []model.BpfFlowContent{
+		name:      "different net events",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x3, Bytes: 0x5c4, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 2, 0, 0, 0, 0, 0, 0},
-					},
-				}},
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 2, 0, 0, 0, 0, 0, 0},
+				},
+			},
 			{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x2, Bytes: 0x8c, StartMonoTimeTs: 0x17f3e9633a7f, EndMonoTimeTs: 0x17f3e96f164e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 4, 0, 0, 0, 0, 0, 0},
-					},
-				}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 4, 0, 0, 0, 0, 0, 0},
+				},
+			},
 		},
 		expected: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x5, Bytes: 0x5c4 + 0x8c, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 2,
 				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
-			}},
+			},
+		},
 	}, {
-		name: "3 different net events",
-		input: []model.BpfFlowContent{
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x3, Bytes: 0x5c4, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 2,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 2, 0, 0, 0, 0, 0, 0},
-						{1, 3, 0, 0, 0, 0, 0, 0},
-					},
-				}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x2, Bytes: 0x8c, StartMonoTimeTs: 0x17f3e9633a7f, EndMonoTimeTs: 0x17f3e96f164e, Flags: 1},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-					NetworkEventsIdx: 1,
-					NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
-						{1, 4, 0, 0, 0, 0, 0, 0},
-					},
-				}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
-			{BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x0, Bytes: 0x0, StartMonoTimeTs: 0x0, EndMonoTimeTs: 0x0, Flags: 1}},
+		name:      "3 different net events",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				NetworkEventsIdx: 2,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 2, 0, 0, 0, 0, 0, 0},
+					{1, 3, 0, 0, 0, 0, 0, 0},
+				},
+			},
+			{
+				NetworkEventsIdx: 1,
+				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+					{1, 4, 0, 0, 0, 0, 0, 0},
+				},
+			},
 		},
 		expected: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x5, Bytes: 0x5c4 + 0x8c, StartMonoTimeTs: 0x17f3e9613a7f, EndMonoTimeTs: 0x17f3e979816e, Flags: 1},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 3,
 				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
@@ -157,22 +185,15 @@ func TestPacketAggregation(t *testing.T) {
 					{1, 3, 0, 0, 0, 0, 0, 0},
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
-			}},
+			},
+		},
 	}, {
-		name: "accumulate no base",
-		input: []model.BpfFlowContent{
-			{
-				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{DnsRecord: ebpf.BpfDnsRecordT{Id: 5}, StartMonoTimeTs: 15, EndMonoTimeTs: 25},
-			},
-			{
-				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{FlowRtt: 500},
-			},
-			{
-				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
-				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{PktDrops: ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1}},
-			},
+		name:      "accumulate no base",
+		inputFlow: ebpf.BpfFlowMetrics{},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{DnsRecord: ebpf.BpfDnsRecordT{Id: 5}, StartMonoTimeTs: 15, EndMonoTimeTs: 25},
+			{FlowRtt: 500},
+			{PktDrops: ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1}},
 		},
 		expected: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 15, EndMonoTimeTs: 25, Flags: 1},
@@ -182,12 +203,78 @@ func TestPacketAggregation(t *testing.T) {
 				DnsRecord:       ebpf.BpfDnsRecordT{Id: 5},
 				FlowRtt:         500,
 				PktDrops:        ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1},
-			}},
-	},
-	}
+			},
+		},
+	}, {
+		name:      "merge interfaces",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				NbObservedIntf: 2,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 1},
+					{Direction: 1, IfIndex: 2},
+				},
+			},
+			{
+				NbObservedIntf: 2,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 1}, // duplicate
+					{Direction: 1, IfIndex: 3},
+				},
+			},
+		},
+		expected: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				NbObservedIntf: 3,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 1},
+					{Direction: 1, IfIndex: 2},
+					{Direction: 1, IfIndex: 3},
+				},
+			},
+		},
+	}, {
+		name:      "ignore too many interfaces",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				NbObservedIntf: 3,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 1},
+					{Direction: 1, IfIndex: 2},
+					{Direction: 1, IfIndex: 3},
+				},
+			},
+			{
+				NbObservedIntf: 2,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 4},
+					{Direction: 1, IfIndex: 5},
+				},
+			},
+		},
+		expected: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				NbObservedIntf: 4,
+				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+					{Direction: 0, IfIndex: 1},
+					{Direction: 1, IfIndex: 2},
+					{Direction: 1, IfIndex: 3},
+					{Direction: 0, IfIndex: 4},
+				},
+			},
+		},
+	}}
 	for i, tc := range tcs {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			assert.Equalf(t, tc.expected, tc.input.Accumulate(), "Test name: %s", tc.name)
+			aggregated := model.BpfFlowContent{BpfFlowMetrics: &tc.inputFlow}
+			for _, add := range tc.inputAdditional {
+				aggregated.AccumulateAdditional(&add)
+			}
+			assert.Equalf(t, tc.expected, aggregated, "Test name: %s", tc.name)
 		})
 	}
 }
