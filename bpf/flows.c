@@ -51,6 +51,24 @@
  */
 #include "network_events_monitoring.h"
 
+static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, int dns_errno,
+                                        u64 len) {
+    aggregate_flow->packets += 1;
+    aggregate_flow->bytes += len;
+    aggregate_flow->end_mono_time_ts = pkt->current_ts;
+    // it might happen that start_mono_time hasn't been set due to
+    // the way percpu hashmap deal with concurrent map entries
+    if (aggregate_flow->start_mono_time_ts == 0) {
+        aggregate_flow->start_mono_time_ts = pkt->current_ts;
+    }
+    aggregate_flow->flags |= pkt->flags;
+    aggregate_flow->dscp = pkt->dscp;
+    aggregate_flow->dns_record.id = pkt->dns_id;
+    aggregate_flow->dns_record.flags = pkt->dns_flags;
+    aggregate_flow->dns_record.latency = pkt->dns_latency;
+    aggregate_flow->dns_record.errno = dns_errno;
+}
+
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
@@ -70,6 +88,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     struct ethhdr *eth = (struct ethhdr *)data;
+    u64 len = skb->len;
 
     if (fill_ethhdr(eth, data_end, &pkt) == DISCARD) {
         return TC_ACT_OK;
@@ -93,33 +112,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // a spinlocked alternative version and use it selectively https://lwn.net/Articles/779120/
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        aggregate_flow->packets += 1;
-        aggregate_flow->bytes += skb->len;
-        aggregate_flow->end_mono_time_ts = pkt.current_ts;
-        // it might happen that start_mono_time hasn't been set due to
-        // the way percpu hashmap deal with concurrent map entries
-        if (aggregate_flow->start_mono_time_ts == 0) {
-            aggregate_flow->start_mono_time_ts = pkt.current_ts;
-        }
-        aggregate_flow->flags |= pkt.flags;
-        aggregate_flow->dscp = pkt.dscp;
-        aggregate_flow->dns_record.id = pkt.dns_id;
-        aggregate_flow->dns_record.flags = pkt.dns_flags;
-        aggregate_flow->dns_record.latency = pkt.dns_latency;
-        aggregate_flow->dns_record.errno = dns_errno;
-        long ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
-        if (ret != 0) {
-            // usually error -16 (-EBUSY) is printed here.
-            // In this case, the flow is dropped, as submitting it to the ringbuffer would cause
-            // a duplicated UNION of flows (two different flows with partial aggregation of the same packets),
-            // which can't be deduplicated.
-            // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
-            if (trace_messages) {
-                bpf_printk("error updating flow %d\n", ret);
-            }
-            // Update global counter for hashmap update errors
-            increase_counter(HASHMAP_FLOWS_DROPPED);
-        }
+        update_existing_flow(aggregate_flow, &pkt, dns_errno, len);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         u64 rtt = 0;
@@ -128,7 +121,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         }
         flow_metrics new_flow = {
             .packets = 1,
-            .bytes = skb->len,
+            .bytes = len,
             .start_mono_time_ts = pkt.current_ts,
             .end_mono_time_ts = pkt.current_ts,
             .flags = pkt.flags,
@@ -140,31 +133,42 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .flow_rtt = rtt,
         };
 
-        // even if we know that the entry is new, another CPU might be concurrently inserting a flow
-        // so we need to specify BPF_ANY
-        long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
+        long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {
-            // usually error -16 (-EBUSY) or -7 (E2BIG) is printed here.
-            // In this case, we send the single-packet flow via ringbuffer as in the worst case we can have
-            // a repeated INTERSECTION of flows (different flows aggregating different packets),
-            // which can be re-aggregated at userpace.
-            // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
-            if (trace_messages) {
+            if (trace_messages && ret != -EEXIST) {
                 bpf_printk("error adding flow %d\n", ret);
             }
-
-            new_flow.errno = -ret;
-            flow_record *record =
-                (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
-            if (!record) {
-                if (trace_messages) {
-                    bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
+            if (ret == -EEXIST) {
+                flow_metrics *aggregate_flow =
+                    (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
+                if (aggregate_flow != NULL) {
+                    update_existing_flow(aggregate_flow, &pkt, dns_errno, len);
+                } else {
+                    if (trace_messages) {
+                        bpf_printk("failed to update an exising flow\n");
+                    }
+                    // Update global counter for hashmap update errors
+                    increase_counter(HASHMAP_FLOWS_DROPPED);
                 }
-                return TC_ACT_OK;
+            } else {
+                // usually error -16 (-EBUSY) or -7 (E2BIG) is printed here.
+                // In this case, we send the single-packet flow via ringbuffer as in the worst case we can have
+                // a repeated INTERSECTION of flows (different flows aggregating different packets),
+                // which can be re-aggregated at userpace.
+                // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
+                new_flow.errno = -ret;
+                flow_record *record =
+                    (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
+                if (!record) {
+                    if (trace_messages) {
+                        bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
+                    }
+                    return TC_ACT_OK;
+                }
+                record->id = id;
+                record->metrics = new_flow;
+                bpf_ringbuf_submit(record, 0);
             }
-            record->id = id;
-            record->metrics = new_flow;
-            bpf_ringbuf_submit(record, 0);
         }
     }
     return TC_ACT_OK;
