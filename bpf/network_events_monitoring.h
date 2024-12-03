@@ -29,25 +29,43 @@ static inline bool md_already_exists(u8 network_events[MAX_NETWORK_EVENTS][MAX_E
     return false;
 }
 
+static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8 md_len,
+                                                                 u8 *user_cookie) {
+    u8 cookie[MAX_EVENT_MD];
+
+    bpf_probe_read(cookie, md_len, user_cookie);
+
+    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
+    if (aggregate_flow != NULL) {
+        u8 idx = aggregate_flow->network_events_idx;
+        aggregate_flow->end_mono_time_ts = bpf_ktime_get_ns();
+        // Needed to check length here again to keep JIT verifier happy
+        if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
+            if (!md_already_exists(aggregate_flow->network_events, (u8 *)cookie)) {
+                __builtin_memcpy(aggregate_flow->network_events[idx], cookie, MAX_EVENT_MD);
+                aggregate_flow->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
+            }
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_metadata *md) {
     u8 dscp = 0, protocol = 0, md_len = 0;
     u16 family = 0, flags = 0;
     u8 *user_cookie = NULL;
-    u8 cookie[MAX_EVENT_MD];
     long ret = 0;
     u64 len = 0;
     flow_id id;
 
     __builtin_memset(&id, 0, sizeof(id));
-    __builtin_memset(cookie, 0, sizeof(cookie));
 
     md_len = BPF_CORE_READ(md, user_cookie_len);
     user_cookie = (u8 *)BPF_CORE_READ(md, user_cookie);
     if (md_len == 0 || md_len > MAX_EVENT_MD || user_cookie == NULL) {
         return -1;
     }
-
-    bpf_probe_read(cookie, md_len, user_cookie);
 
     id.if_index = BPF_CORE_READ(md, in_ifindex);
 
@@ -88,31 +106,10 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
 
     for (direction dir = INGRESS; dir < MAX_DIRECTION; dir++) {
         id.direction = dir;
-        flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, &id);
-        if (aggregate_flow != NULL) {
-            u8 idx = aggregate_flow->network_events_idx;
-            aggregate_flow->end_mono_time_ts = bpf_ktime_get_ns();
-            // Needed to check length here again to keep JIT verifier happy
-            if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
-                if (!md_already_exists(aggregate_flow->network_events, (u8 *)cookie)) {
-                    __builtin_memcpy(aggregate_flow->network_events[idx], cookie, MAX_EVENT_MD);
-                    aggregate_flow->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
-                }
-                ret = bpf_map_update_elem(&aggregated_flows, &id, aggregate_flow, BPF_ANY);
-                if (ret == 0) {
-                    return 0;
-                }
-            } else {
-                return -1;
-            }
+        ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
+        if (ret == 0) {
+            return ret;
         }
-    }
-
-    if (ret != 0) {
-        if (trace_messages) {
-            bpf_printk("error network events updating existing flow %d\n", ret);
-        }
-        return ret;
     }
 
     // there is no matching flows so lets create new one and add the network event metadata
@@ -128,9 +125,17 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     };
     bpf_probe_read(new_flow.network_events[0], md_len, user_cookie);
     new_flow.network_events_idx++;
-    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_ANY);
-    if (trace_messages && ret != 0) {
-        bpf_printk("error network events creating new flow %d\n", ret);
+    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
+    if (ret != 0) {
+        if (trace_messages && ret != -EEXIST) {
+            bpf_printk("error network events creating new flow %d\n", ret);
+        }
+        if (ret == -EEXIST) {
+            ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
+            if (ret != 0 && trace_messages) {
+                bpf_printk("error network events failed to update an existing flow %d\n", ret);
+            }
+        }
     }
     return ret;
 }

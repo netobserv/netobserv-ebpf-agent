@@ -7,13 +7,9 @@
 
 #include "utils.h"
 
-// remove the comment below to enable debug prints
-//#define ENABLE_BPF_PRINTK
-#ifdef ENABLE_BPF_PRINTK
-#define BPF_PRINTK(fmt, args...) bpf_printk(fmt, ##args)
-#else
-#define BPF_PRINTK(fmt, args...)
-#endif
+#define BPF_PRINTK(fmt, args...)                                                                   \
+    if (trace_messages)                                                                            \
+    bpf_printk(fmt, ##args)
 
 static __always_inline int is_zero_ip(u8 *ip, u8 len) {
     for (int i = 0; i < len; i++) {
