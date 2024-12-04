@@ -51,6 +51,20 @@ func (l *Loki) Ready() error {
 	return nil
 }
 
+func (l *Loki) DebugPrint(limit int, query string) {
+	fmt.Printf("---- DEBUG PRINT %d ----\n", limit)
+	resp, err := l.Query(limit, query)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	if resp == nil {
+		fmt.Printf("Response is nil\n")
+		return
+	}
+	fmt.Printf("LOKI CONTENT: %v\n", resp.Data.Result)
+}
+
 // Query executes an arbitrary logQL query, given a limit in the results
 func (l *Loki) Query(limit int, logQL string) (*LokiQueryResponse, error) {
 	status, body, err := l.get(fmt.Sprintf("%s?%s=%d&%s&%s=%s",
