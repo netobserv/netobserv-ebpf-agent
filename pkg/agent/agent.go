@@ -225,6 +225,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			FilterTCPFLags:        cfg.FilterTCPFlags,
 			FilterDrops:           cfg.FilterDrops,
 		},
+		EnableBPFIterator: cfg.EnableBPFIterators,
 	}
 
 	fetcher, err := tracer.NewFlowFetcher(ebpfConfig)

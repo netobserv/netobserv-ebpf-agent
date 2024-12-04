@@ -235,7 +235,8 @@ type Config struct {
 	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
 	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest
 	NetworkEventsMonitoringGroupID int `env:"NETWORK_EVENTS_MONITORING_GROUP_ID" envDefault:"10"`
-
+	// EnableBPFIterators enables eBPF iterator to delete stale flows in the hashmap
+	EnableBPFIterators bool `env:"ENABLE_BPF_ITERATION" envDefault:"false"`
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

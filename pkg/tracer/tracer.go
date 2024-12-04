@@ -3,6 +3,7 @@ package tracer
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"strings"
@@ -63,21 +64,23 @@ var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 // and to flows that are forwarded by the kernel via ringbuffer because could not be aggregated
 // in the map
 type FlowFetcher struct {
-	objects                     *ebpf.BpfObjects
-	qdiscs                      map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters               map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters              map[ifaces.Interface]*netlink.BpfFilter
-	ringbufReader               *ringbuf.Reader
-	cacheMaxSize                int
-	enableIngress               bool
-	enableEgress                bool
-	pktDropsTracePoint          link.Link
-	rttFentryLink               link.Link
-	rttKprobeLink               link.Link
-	egressTCXLink               map[ifaces.Interface]link.Link
-	ingressTCXLink              map[ifaces.Interface]link.Link
-	networkEventsMonitoringLink link.Link
-	lookupAndDeleteSupported    bool
+	objects                         *ebpf.BpfObjects
+	qdiscs                          map[ifaces.Interface]*netlink.GenericQdisc
+	egressFilters                   map[ifaces.Interface]*netlink.BpfFilter
+	ingressFilters                  map[ifaces.Interface]*netlink.BpfFilter
+	ringbufReader                   *ringbuf.Reader
+	cacheMaxSize                    int
+	enableIngress                   bool
+	enableEgress                    bool
+	pktDropsTracePoint              link.Link
+	rttFentryLink                   link.Link
+	rttKprobeLink                   link.Link
+	flowMapLink                     *link.Iter
+	egressTCXLink                   map[ifaces.Interface]link.Link
+	ingressTCXLink                  map[ifaces.Interface]link.Link
+	networkEventsMonitoringLink     link.Link
+	lookupAndDeleteSupported        bool
+	lookupAndDeleteIterateSupported bool
 }
 
 type FlowFetcherConfig struct {
@@ -95,6 +98,7 @@ type FlowFetcherConfig struct {
 	EnableFlowFilter               bool
 	EnablePCA                      bool
 	FilterConfig                   *FilterConfig
+	EnableBPFIterator              bool
 }
 
 // nolint:golint,cyclop
@@ -182,6 +186,17 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
+	var flowMapLink *link.Iter
+	if cfg.EnableBPFIterator {
+		flowMapLink, err = link.AttachIter(link.IterOptions{
+			Program: objects.FlowsHashmapCleanup,
+			Map:     objects.AggregatedFlows,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	log.Debugf("Deleting specs for PCA")
 	// Deleting specs for PCA
 	// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
@@ -252,21 +267,23 @@ next:
 	}
 
 	return &FlowFetcher{
-		objects:                     &objects,
-		ringbufReader:               flows,
-		egressFilters:               map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:              map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                      map[ifaces.Interface]*netlink.GenericQdisc{},
-		cacheMaxSize:                cfg.CacheMaxSize,
-		enableIngress:               cfg.EnableIngress,
-		enableEgress:                cfg.EnableEgress,
-		pktDropsTracePoint:          pktDropsLink,
-		rttFentryLink:               rttFentryLink,
-		rttKprobeLink:               rttKprobeLink,
-		egressTCXLink:               map[ifaces.Interface]link.Link{},
-		ingressTCXLink:              map[ifaces.Interface]link.Link{},
-		networkEventsMonitoringLink: networkEventsMonitoringLink,
-		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
+		objects:                         &objects,
+		ringbufReader:                   flows,
+		egressFilters:                   map[ifaces.Interface]*netlink.BpfFilter{},
+		ingressFilters:                  map[ifaces.Interface]*netlink.BpfFilter{},
+		qdiscs:                          map[ifaces.Interface]*netlink.GenericQdisc{},
+		cacheMaxSize:                    cfg.CacheMaxSize,
+		enableIngress:                   cfg.EnableIngress,
+		enableEgress:                    cfg.EnableEgress,
+		pktDropsTracePoint:              pktDropsLink,
+		rttFentryLink:                   rttFentryLink,
+		rttKprobeLink:                   rttKprobeLink,
+		flowMapLink:                     flowMapLink,
+		egressTCXLink:                   map[ifaces.Interface]link.Link{},
+		ingressTCXLink:                  map[ifaces.Interface]link.Link{},
+		networkEventsMonitoringLink:     networkEventsMonitoringLink,
+		lookupAndDeleteSupported:        true, // this will be turned off later if found to be not supported
+		lookupAndDeleteIterateSupported: cfg.EnableBPFIterator,
 	}, nil
 }
 
@@ -598,6 +615,11 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if m.flowMapLink != nil {
+		if err := m.flowMapLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -712,14 +734,7 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 	return m.ringbufReader.Read()
 }
 
-// LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
-// TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
-// Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
-func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
-	if !m.lookupAndDeleteSupported {
-		return m.legacyLookupAndDeleteMap(met)
-	}
-
+func (m *FlowFetcher) lookupAndDeleteMapUserSpace(met *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
@@ -749,6 +764,68 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		}
 		flows[id] = metrics
 	}
+	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
+	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
+
+	m.ReadGlobalCounter(met)
+	return flows
+}
+
+// LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
+// TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
+// Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
+func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
+	if !m.lookupAndDeleteSupported {
+		return m.legacyLookupAndDeleteMap(met)
+	}
+
+	if !m.lookupAndDeleteIterateSupported {
+		return m.lookupAndDeleteMapUserSpace(met)
+	}
+
+	flowMap := m.objects.AggregatedFlows
+
+	iterator := flowMap.Iterate()
+	var flows = make(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics, m.cacheMaxSize)
+	var ids []ebpf.BpfFlowId
+	var id ebpf.BpfFlowId
+	var metrics []ebpf.BpfFlowMetrics
+
+	// First, get all ids and don't care about metrics (we need lookup+delete to be atomic)
+	for iterator.Next(&id, &metrics) {
+		ids = append(ids, id)
+	}
+
+	count := 0
+	// Run the atomic Lookup+Delete; if new ids have been inserted in the meantime, they'll be fetched next time
+	for i, id := range ids {
+		count++
+		if err := flowMap.Lookup(&id, &metrics); err != nil {
+			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
+				log.WithError(err).Warnf("switching to legacy mode")
+				m.lookupAndDeleteIterateSupported = false
+				return m.lookupAndDeleteMapUserSpace(met)
+			}
+			log.WithError(err).WithField("flowId", id).Warnf("couldn't delete flow entry")
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
+			continue
+		}
+		flows[id] = metrics
+	}
+	// trigger iterator kernel check to look for stale entries
+	f, err := m.flowMapLink.Open()
+	if err != nil {
+		log.WithError(err).WithField("flowId", id).Warnf("couldn't open flows map iterator")
+		m.lookupAndDeleteIterateSupported = false
+		return m.lookupAndDeleteMapUserSpace(met)
+	}
+	defer f.Close()
+	if _, err := io.ReadAll(f); err != nil {
+		log.WithError(err).WithField("flowId", id).Warnf("couldn't read flows map iterator")
+		m.lookupAndDeleteIterateSupported = false
+		return m.lookupAndDeleteMapUserSpace(met)
+	}
+
 	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
 
@@ -855,6 +932,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+			FlowsHashmapCleanup *cilium.Program `ebpf:"netobserv_flowsmap_cleanup"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -879,6 +957,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
+				FlowsHashmapCleanup:       newObjects.FlowsHashmapCleanup,
 				TcpRcvKprobe:              nil,
 				TcpRcvFentry:              nil,
 				KfreeSkb:                  nil,
@@ -904,6 +983,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
 			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+			FlowsHashmapCleanup *cilium.Program `ebpf:"netobserv_flowsmap_cleanup"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -928,6 +1008,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
 				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
+				FlowsHashmapCleanup:       newObjects.FlowsHashmapCleanup,
 				TcpRcvFentry:              nil,
 				KfreeSkb:                  nil,
 				RhNetworkEventsMonitoring: nil,
@@ -952,6 +1033,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
 			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
+			FlowsHashmapCleanup *cilium.Program `ebpf:"netobserv_flowsmap_cleanup"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -976,6 +1058,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
 				TcpRcvFentry:              newObjects.TCPRcvFentry,
+				FlowsHashmapCleanup:       newObjects.FlowsHashmapCleanup,
 				TcpRcvKprobe:              nil,
 				KfreeSkb:                  nil,
 				RhNetworkEventsMonitoring: nil,
@@ -1002,6 +1085,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
 			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
 			KfreeSkb            *cilium.Program `ebpf:"kfree_skb"`
+			FlowsHashmapCleanup *cilium.Program `ebpf:"flows_hashmap_cleanup"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1027,6 +1111,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcpRcvFentry:              newObjects.TCPRcvFentry,
 				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
 				KfreeSkb:                  newObjects.KfreeSkb,
+				FlowsHashmapCleanup:       newObjects.FlowsHashmapCleanup,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{

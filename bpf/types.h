@@ -85,6 +85,7 @@ typedef struct flow_metrics_t {
     // as output from bpf_ktime_get_ns()
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
+    u64 last_seen_timestamp;
     // TCP Flags from https://www.ietf.org/rfc/rfc793.txt
     u16 flags;
     // The positive errno of a failed map insertion that caused a flow

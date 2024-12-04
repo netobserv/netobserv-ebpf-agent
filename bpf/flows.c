@@ -51,6 +51,11 @@
  */
 #include "network_events_monitoring.h"
 
+/*
+ * map evictions iterator hook
+ */
+#include "map_delete_iter.h"
+
 static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, int dns_errno,
                                         u64 len) {
     aggregate_flow->packets += 1;
@@ -61,6 +66,8 @@ static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *
     if (aggregate_flow->start_mono_time_ts == 0) {
         aggregate_flow->start_mono_time_ts = pkt->current_ts;
     }
+
+    aggregate_flow->last_seen_timestamp = pkt->current_ts;
     aggregate_flow->flags |= pkt->flags;
     aggregate_flow->dscp = pkt->dscp;
     aggregate_flow->dns_record.id = pkt->dns_id;

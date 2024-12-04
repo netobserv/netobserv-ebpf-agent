@@ -92,18 +92,19 @@ type BpfFlowIdT struct {
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	Packets          uint32
-	Bytes            uint64
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	Flags            uint16
-	Errno            uint8
-	Dscp             uint8
-	PktDrops         BpfPktDropsT
-	DnsRecord        BpfDnsRecordT
-	FlowRtt          uint64
-	NetworkEventsIdx uint8
-	NetworkEvents    [4][8]uint8
+	Packets           uint32
+	Bytes             uint64
+	StartMonoTimeTs   uint64
+	EndMonoTimeTs     uint64
+	LastSeenTimestamp uint64
+	Flags             uint16
+	Errno             uint8
+	Dscp              uint8
+	PktDrops          BpfPktDropsT
+	DnsRecord         BpfDnsRecordT
+	FlowRtt           uint64
+	NetworkEventsIdx  uint8
+	NetworkEvents     [4][8]uint8
 }
 
 type BpfFlowRecordT struct {
@@ -190,6 +191,7 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
+	FlowsHashmapCleanup       *ebpf.ProgramSpec `ebpf:"flows_hashmap_cleanup"`
 	KfreeSkb                  *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	RhNetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"rh_network_events_monitoring"`
 	TcEgressFlowParse         *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
@@ -258,6 +260,7 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
+	FlowsHashmapCleanup       *ebpf.Program `ebpf:"flows_hashmap_cleanup"`
 	KfreeSkb                  *ebpf.Program `ebpf:"kfree_skb"`
 	RhNetworkEventsMonitoring *ebpf.Program `ebpf:"rh_network_events_monitoring"`
 	TcEgressFlowParse         *ebpf.Program `ebpf:"tc_egress_flow_parse"`
@@ -274,6 +277,7 @@ type BpfPrograms struct {
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
+		p.FlowsHashmapCleanup,
 		p.KfreeSkb,
 		p.RhNetworkEventsMonitoring,
 		p.TcEgressFlowParse,
