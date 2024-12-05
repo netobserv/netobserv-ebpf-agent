@@ -26,6 +26,57 @@ const (
 	IPIfaceNamedPrefix = "name:"
 )
 
+type FlowFilter struct {
+	// FilterDirection is the direction of the flow filter.
+	// Possible values are "Ingress" or "Egress".
+	FilterDirection string `json:"direction,omitempty"`
+	// FilterIPCIDR is the IP CIDR to filter flows.
+	// Example: 10.10.10.0/24 or 100:100:100:100::/64, default is 0.0.0.0/0
+	FilterIPCIDR string `json:"ip_cidr,omitempty"`
+	// FilterProtocol is the protocol to filter flows.
+	// supported protocols: TCP, UDP, SCTP, ICMP, ICMPv6
+	FilterProtocol string `json:"protocol,omitempty"`
+	// FilterSourcePort is the source port to filter flows.
+	FilterSourcePort int32 `json:"source_port,omitempty"`
+	// FilterDestinationPort is the destination port to filter flows.
+	FilterDestinationPort int32 `json:"destination_port,omitempty"`
+	// FilterPort is the port to filter flows, can be use for either source or destination port.
+	FilterPort int32 `json:"port,omitempty"`
+	// FilterSourcePortRange is the source port range to filter flows.
+	// Example: 8000-8010
+	FilterSourcePortRange string `json:"source_port_range,omitempty"`
+	// FilterSourcePorts is two source ports to filter flows.
+	// Example: 8000,8010
+	FilterSourcePorts string `json:"source_ports,omitempty"`
+	// FilterDestinationPortRange is the destination port range to filter flows.
+	// Example: 8000-8010
+	FilterDestinationPortRange string `json:"destination_port_range,omitempty"`
+	// FilterDestinationPorts is two destination ports to filter flows.
+	// Example: 8000,8010
+	FilterDestinationPorts string `json:"destination_ports,omitempty"`
+	// FilterPortRange is the port range to filter flows, can be used for either source or destination port.
+	// Example: 8000-8010
+	FilterPortRange string `json:"port_range,omitempty"`
+	// FilterPorts is two ports option to filter flows, can be used for either source or destination port.
+	// Example: 8000,8010
+	FilterPorts string `json:"ports,omitempty"`
+	// FilterICMPType is the ICMP type to filter flows.
+	FilterICMPType int `json:"icmp_type,omitempty"`
+	// FilterICMPCode is the ICMP code to filter flows.
+	FilterICMPCode int `json:"icmp_code,omitempty"`
+	// FilterPeerIP is the IP to filter flows.
+	// Example: 10.10.10.10
+	FilterPeerIP string `json:"peer_ip,omitempty"`
+	// FilterAction is the action to filter flows.
+	// Possible values are "Accept" or "Reject".
+	FilterAction string `json:"action,omitempty"`
+	// FilterTCPFlags is the TCP flags to filter flows.
+	// possible values are: SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST-ACK
+	FilterTCPFlags string `json:"tcp_flags,omitempty"`
+	// FilterDrops allow filtering flows with packet drops, default is false.
+	FilterDrops bool `json:"drops,omitempty"`
+}
+
 type Config struct {
 	// AgentIP allows overriding the reported Agent IP address on each flow.
 	AgentIP string `env:"AGENT_IP"`
@@ -183,54 +234,8 @@ type Config struct {
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
 	// EnableFlowFilter enables flow filter, default is false.
 	EnableFlowFilter bool `env:"ENABLE_FLOW_FILTER" envDefault:"false"`
-	// FilterDirection is the direction of the flow filter.
-	// Possible values are "Ingress" or "Egress".
-	FilterDirection string `env:"FILTER_DIRECTION"`
-	// FilterIPCIDR is the IP CIDR to filter flows.
-	// Example: 10.10.10.0/24 or 100:100:100:100::/64
-	FilterIPCIDR string `env:"FILTER_IP_CIDR" envDefault:"0.0.0.0/0"`
-	// FilterProtocol is the protocol to filter flows.
-	// Example: TCP, UDP, SCTP, ICMP, ICMPv6
-	FilterProtocol string `env:"FILTER_PROTOCOL"`
-	// FilterSourcePort is the source port to filter flows.
-	FilterSourcePort int32 `env:"FILTER_SOURCE_PORT"`
-	// FilterDestinationPort is the destination port to filter flows.
-	FilterDestinationPort int32 `env:"FILTER_DESTINATION_PORT"`
-	// FilterPort is the port to filter flows, can be use for either source or destination port.
-	FilterPort int32 `env:"FILTER_PORT"`
-	// FilterSourcePortRange is the source port range to filter flows.
-	// Example: 8000-8010
-	FilterSourcePortRange string `env:"FILTER_SOURCE_PORT_RANGE"`
-	// FilterSourcePorts is two source ports to filter flows.
-	// Example: 8000,8010
-	FilterSourcePorts string `env:"FILTER_SOURCE_PORTS"`
-	// FilterDestinationPortRange is the destination port range to filter flows.
-	// Example: 8000-8010
-	FilterDestinationPortRange string `env:"FILTER_DESTINATION_PORT_RANGE"`
-	// FilterDestinationPorts is two destination ports to filter flows.
-	// Example: 8000,8010
-	FilterDestinationPorts string `env:"FILTER_DESTINATION_PORTS"`
-	// FilterPortRange is the port range to filter flows, can be used for either source or destination port.
-	// Example: 8000-8010
-	FilterPortRange string `env:"FILTER_PORT_RANGE"`
-	// FilterPorts is two ports option to filter flows, can be used for either source or destination port.
-	// Example: 8000,8010
-	FilterPorts string `env:"FILTER_PORTS"`
-	// FilterICMPType is the ICMP type to filter flows.
-	FilterICMPType int `env:"FILTER_ICMP_TYPE"`
-	// FilterICMPCode is the ICMP code to filter flows.
-	FilterICMPCode int `env:"FILTER_ICMP_CODE"`
-	// FilterPeerIP is the IP to filter flows.
-	// Example: 10.10.10.10
-	FilterPeerIP string `env:"FILTER_PEER_IP"`
-	// FilterAction is the action to filter flows.
-	// Possible values are "Accept" or "Reject".
-	FilterAction string `env:"FILTER_ACTION" envDefault:"Accept"`
-	// FilterTCPFlags is the TCP flags to filter flows.
-	// possible values are: SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST-ACK
-	FilterTCPFlags string `env:"FILTER_TCP_FLAGS"`
-	// FilterDrops allow filtering flows with packet drops, default is false.
-	FilterDrops bool `env:"FILTER_DROPS" envDefault:"false"`
+	// FlowFilterRules list of flow filter rules
+	FlowFilterRules string `env:"FLOW_FILTER_RULES"`
 	// EnableNetworkEventsMonitoring enables monitoring network plugin events, default is false.
 	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
 	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest

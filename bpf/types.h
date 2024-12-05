@@ -63,7 +63,7 @@ typedef __u64 u64;
 #define DSCP_SHIFT 2
 #define DSCP_MASK 0x3F
 
-#define MAX_FILTER_ENTRIES 1 // we have only one global filter
+#define MAX_FILTER_ENTRIES 16
 #define MAX_EVENT_MD 8
 #define MAX_NETWORK_EVENTS 4
 
