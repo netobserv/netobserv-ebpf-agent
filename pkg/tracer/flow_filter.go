@@ -23,17 +23,17 @@ type FilterConfig struct {
 	FilterIcmpCode        int
 	FilterPeerIP          string
 	FilterAction          string
-	FilterTCPFLags        string
+	FilterTCPFlags        string
 	FilterDrops           bool
 }
 
 type Filter struct {
 	// eBPF objs to create/update eBPF maps
 	objects *ebpf.BpfObjects
-	config  *FilterConfig
+	config  []*FilterConfig
 }
 
-func NewFilter(objects *ebpf.BpfObjects, cfg *FilterConfig) *Filter {
+func NewFilter(objects *ebpf.BpfObjects, cfg []*FilterConfig) *Filter {
 	return &Filter{
 		objects: objects,
 		config:  cfg,
@@ -41,30 +41,34 @@ func NewFilter(objects *ebpf.BpfObjects, cfg *FilterConfig) *Filter {
 }
 
 func (f *Filter) ProgramFilter() error {
-	log.Infof("Flow filter config: %v", f.config)
-	key, err := f.getFilterKey(f.config)
-	if err != nil {
-		return fmt.Errorf("failed to get filter key: %w", err)
+
+	for _, config := range f.config {
+		log.Infof("Flow filter config: %v", f.config)
+		key, err := f.getFilterKey(config)
+		if err != nil {
+			return fmt.Errorf("failed to get filter key: %w", err)
+		}
+
+		val, err := f.getFilterValue(config)
+		if err != nil {
+			return fmt.Errorf("failed to get filter value: %w", err)
+		}
+
+		err = f.objects.FilterMap.Update(key, val, cilium.UpdateAny)
+		if err != nil {
+			return fmt.Errorf("failed to update filter map: %w", err)
+		}
+
+		log.Infof("Programmed filter with key: %v, value: %v", key, val)
 	}
-
-	val, err := f.getFilterValue(f.config)
-	if err != nil {
-		return fmt.Errorf("failed to get filter value: %w", err)
-	}
-
-	err = f.objects.FilterMap.Update(key, val, cilium.UpdateAny)
-	if err != nil {
-		return fmt.Errorf("failed to update filter map: %w", err)
-	}
-
-	log.Infof("Programmed filter with key: %v, value: %v", key, val)
-
 	return nil
 }
 
 func (f *Filter) getFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
 	key := ebpf.BpfFilterKeyT{}
-
+	if config.FilterIPCIDR == "" {
+		config.FilterIPCIDR = "0.0.0.0/0"
+	}
 	ip, ipNet, err := net.ParseCIDR(config.FilterIPCIDR)
 	if err != nil {
 		return key, fmt.Errorf("failed to parse FlowFilterIPCIDR: %w", err)
@@ -133,7 +137,7 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 		}
 	}
 
-	switch config.FilterTCPFLags {
+	switch config.FilterTCPFlags {
 	case "SYN":
 		val.TcpFlags = ebpf.BpfTcpFlagsTSYN_FLAG
 	case "SYN-ACK":
