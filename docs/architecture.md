@@ -11,7 +11,7 @@ flowchart TD
     E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
     style E fill:#990
 
-    E --> |"polls<br/>PerCPUHashMap"| M(flow.MapTracer)
+    E --> |"polls<br/>HashMap"| M(flow.MapTracer)
     RB --> |chan *model.Record| ACC(flow.Accounter)
     RB -.-> |flushes| M
     ACC --> |"chan []*model.Record"| DD(flow.Deduper)
@@ -25,5 +25,5 @@ flowchart TD
 
     CL --> |"chan []*model.Record"| DC(flow.Decorator)
     
-    DC --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto")
+    DC --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto<br/>or<br/>export.DirectFLP")
 ```
