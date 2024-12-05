@@ -102,10 +102,6 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
-		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
-		if flowMetrics.EndMonoTimeTs == 0 {
-			continue
-		}
 		forwardingFlows = append(forwardingFlows, model.NewRecord(
 			flowKey,
 			&flowMetrics,

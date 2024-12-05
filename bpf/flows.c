@@ -56,11 +56,6 @@ static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *
     aggregate_flow->packets += 1;
     aggregate_flow->bytes += len;
     aggregate_flow->end_mono_time_ts = pkt->current_ts;
-    // it might happen that start_mono_time hasn't been set due to
-    // the way percpu hashmap deal with concurrent map entries
-    if (aggregate_flow->start_mono_time_ts == 0) {
-        aggregate_flow->start_mono_time_ts = pkt->current_ts;
-    }
     aggregate_flow->flags |= pkt->flags;
     aggregate_flow->dscp = pkt->dscp;
     bpf_spin_unlock(&aggregate_flow->lock);
