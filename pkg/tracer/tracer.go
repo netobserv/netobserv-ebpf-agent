@@ -94,7 +94,7 @@ type FlowFetcherConfig struct {
 	NetworkEventsMonitoringGroupID int
 	EnableFlowFilter               bool
 	EnablePCA                      bool
-	FilterConfig                   *FilterConfig
+	FilterConfig                   []*FilterConfig
 }
 
 // nolint:golint,cyclop
