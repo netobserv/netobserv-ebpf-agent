@@ -31,7 +31,7 @@ type entry struct {
 	key           *ebpf.BpfFlowId
 	dnsRecord     *ebpf.BpfDnsRecordT
 	flowRTT       *uint64
-	networkEvents *[model.MaxNetworkEvents][8]uint8
+	networkEvents *[model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8
 	ifIndex       uint32
 	expiryTime    time.Time
 	dupList       *[]map[string]uint8

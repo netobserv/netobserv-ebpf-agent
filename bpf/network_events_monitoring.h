@@ -35,14 +35,14 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
 
     bpf_probe_read(cookie, md_len, user_cookie);
 
-    additional_metrics *aggregate_flow = bpf_map_lookup_elem(&additional_flow_metrics, id);
-    if (aggregate_flow != NULL) {
-        u8 idx = aggregate_flow->network_events_idx;
+    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    if (extra_metrics != NULL) {
+        u8 idx = extra_metrics->network_events_idx;
         // Needed to check length here again to keep JIT verifier happy
         if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
-            if (!md_already_exists(aggregate_flow->network_events, (u8 *)cookie)) {
-                __builtin_memcpy(aggregate_flow->network_events[idx], cookie, MAX_EVENT_MD);
-                aggregate_flow->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
+            if (!md_already_exists(extra_metrics->network_events, (u8 *)cookie)) {
+                __builtin_memcpy(extra_metrics->network_events[idx], cookie, MAX_EVENT_MD);
+                extra_metrics->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
             }
             return 0;
         }

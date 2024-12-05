@@ -10,10 +10,10 @@
 #include "maps_definition.h"
 
 static inline int rtt_lookup_and_update_flow(flow_id *id, u64 rtt) {
-    additional_metrics *aggregate_flow = bpf_map_lookup_elem(&additional_flow_metrics, id);
-    if (aggregate_flow != NULL) {
-        if (aggregate_flow->flow_rtt < rtt) {
-            aggregate_flow->flow_rtt = rtt;
+    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    if (extra_metrics != NULL) {
+        if (extra_metrics->flow_rtt < rtt) {
+            extra_metrics->flow_rtt = rtt;
         }
         return 0;
     }

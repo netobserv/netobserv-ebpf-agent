@@ -42,10 +42,10 @@ func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.Bp
 	if other.EthProtocol != 0 {
 		p.EthProtocol = other.EthProtocol
 	}
-	if allZero(p.SrcMac) {
+	if allZerosMac(p.SrcMac) {
 		p.SrcMac = other.SrcMac
 	}
-	if allZero(p.DstMac) {
+	if allZerosMac(p.DstMac) {
 		p.DstMac = other.DstMac
 	}
 	if other.Dscp != 0 {
@@ -92,7 +92,7 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 	}
 }
 
-func allZero(s [6]uint8) bool {
+func allZerosMac(s [6]uint8) bool {
 	for _, v := range s {
 		if v != 0 {
 			return false

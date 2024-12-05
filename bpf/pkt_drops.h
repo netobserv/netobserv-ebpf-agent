@@ -9,13 +9,13 @@
 
 static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 flags,
                                                    enum skb_drop_reason reason, u64 len) {
-    additional_metrics *aggregate_flow = bpf_map_lookup_elem(&additional_flow_metrics, id);
-    if (aggregate_flow != NULL) {
-        aggregate_flow->pkt_drops.packets += 1;
-        aggregate_flow->pkt_drops.bytes += len;
-        aggregate_flow->pkt_drops.latest_state = state;
-        aggregate_flow->pkt_drops.latest_flags = flags;
-        aggregate_flow->pkt_drops.latest_drop_cause = reason;
+    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    if (extra_metrics != NULL) {
+        extra_metrics->pkt_drops.packets += 1;
+        extra_metrics->pkt_drops.bytes += len;
+        extra_metrics->pkt_drops.latest_state = state;
+        extra_metrics->pkt_drops.latest_flags = flags;
+        extra_metrics->pkt_drops.latest_drop_cause = reason;
         return 0;
     }
     return -1;

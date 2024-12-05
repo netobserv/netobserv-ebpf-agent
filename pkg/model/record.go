@@ -22,7 +22,7 @@ const MacLen = 6
 // IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const (
 	IPv6Type                 = 0x86DD
-	networkEventsMaxEventsMD = 8
+	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
 )
 
@@ -93,7 +93,7 @@ func NewRecord(
 	return &record
 }
 
-func networkEventsMDExist(events [MaxNetworkEvents][networkEventsMaxEventsMD]uint8, md [networkEventsMaxEventsMD]uint8) bool {
+func networkEventsMDExist(events [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8, md [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, e := range events {
 		if reflect.DeepEqual(e, md) {
 			return true
@@ -140,7 +140,7 @@ func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	return &fr, err
 }
 
-func AllZerosMetaData(s [networkEventsMaxEventsMD]uint8) bool {
+func AllZerosMetaData(s [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, v := range s {
 		if v != 0 {
 			return false
