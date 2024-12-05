@@ -106,7 +106,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		k1: {
 			ID: k1,
 			Metrics: model.BpfFlowContent{
-				BpfFlowMetrics: ebpf.BpfFlowMetrics{
+				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
 				},
 			},
@@ -118,7 +118,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		k2: {
 			ID: k2,
 			Metrics: model.BpfFlowContent{
-				BpfFlowMetrics: ebpf.BpfFlowMetrics{
+				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 				},
 			},
@@ -184,7 +184,7 @@ func TestEvict_Period(t *testing.T) {
 	assert.Equal(t, model.Record{
 		ID: k1,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				Bytes:           30,
 				Packets:         3,
 				StartMonoTimeTs: 123,
@@ -202,7 +202,7 @@ func TestEvict_Period(t *testing.T) {
 	assert.Equal(t, model.Record{
 		ID: k1,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				Bytes:           20,
 				Packets:         2,
 				StartMonoTimeTs: 1123,

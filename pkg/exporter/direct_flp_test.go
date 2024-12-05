@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ parameters:
 	flows := make(chan []*model.Record, 10)
 	go flp.ExportFlows(flows)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.9.8.7")},
+		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
 	}
 
 	// Read capture

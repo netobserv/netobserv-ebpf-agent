@@ -3,7 +3,7 @@ package model
 import "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 
 type BpfFlowContent struct {
-	ebpf.BpfFlowMetrics
+	*ebpf.BpfFlowMetrics
 	AdditionalMetrics *ebpf.BpfAdditionalMetrics
 }
 
@@ -12,14 +12,14 @@ type BpfFlowContents []BpfFlowContent
 func (a *BpfFlowContents) Accumulate() BpfFlowContent {
 	res := BpfFlowContent{}
 	for _, p := range *a {
-		res.AccumulateBase(&p.BpfFlowMetrics)
+		res.AccumulateBase(p.BpfFlowMetrics)
 		res.AccumulateAdditional(p.AdditionalMetrics)
 	}
 	return res
 }
 
 func (p *BpfFlowContent) AccumulateBase(other *ebpf.BpfFlowMetrics) {
-	p.BpfFlowMetrics = *AccumulateBase(&p.BpfFlowMetrics, other)
+	p.BpfFlowMetrics = AccumulateBase(p.BpfFlowMetrics, other)
 }
 
 func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetrics {

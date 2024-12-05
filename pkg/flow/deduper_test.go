@@ -23,7 +23,7 @@ var (
 			IfIndex:   1,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				SrcMac:      model.MacAddr{0x1},
 				DstMac:      model.MacAddr{0x1},
@@ -42,7 +42,7 @@ var (
 			IfIndex:   2,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				SrcMac:      model.MacAddr{0x2},
 				DstMac:      model.MacAddr{0x2},
@@ -62,7 +62,7 @@ var (
 			IfIndex:   1,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				SrcMac:      model.MacAddr{0x1},
 				DstMac:      model.MacAddr{0x1},
@@ -81,7 +81,7 @@ var (
 			IfIndex:   2,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				SrcMac:      model.MacAddr{0x2},
 				DstMac:      model.MacAddr{0x2},
@@ -101,7 +101,7 @@ var (
 			IfIndex:   1,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				SrcMac:      model.MacAddr{0x1},
 				DstMac:      model.MacAddr{0x1},
@@ -120,7 +120,7 @@ var (
 			IfIndex:   2,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				DstMac:      model.MacAddr{0x2},
 				SrcMac:      model.MacAddr{0x2},
@@ -144,7 +144,7 @@ var (
 			IfIndex:   1,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				DstMac:      model.MacAddr{0x1},
 				SrcMac:      model.MacAddr{0x1},
@@ -163,7 +163,7 @@ var (
 			IfIndex:   2,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				DstMac:      model.MacAddr{0x2},
 				SrcMac:      model.MacAddr{0x2},
@@ -187,7 +187,7 @@ var (
 			IfIndex:   1,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				DstMac:      model.MacAddr{0x1},
 				SrcMac:      model.MacAddr{0x1},
@@ -206,7 +206,7 @@ var (
 			IfIndex:   2,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: 1,
 				DstMac:      model.MacAddr{0x2},
 				SrcMac:      model.MacAddr{0x2},

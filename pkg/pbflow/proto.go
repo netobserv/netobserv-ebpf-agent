@@ -159,7 +159,7 @@ func PBToFlow(pb *Record) *model.Record {
 			IcmpCode:          uint8(pb.IcmpCode),
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol: uint16(pb.EthProtocol),
 				SrcMac:      macToUint8(pb.DataLink.GetSrcMac()),
 				DstMac:      macToUint8(pb.DataLink.GetDstMac()),

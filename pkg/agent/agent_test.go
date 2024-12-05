@@ -223,20 +223,21 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	now := uint64(monotime.Now())
 	key1Metrics := model.BpfFlowContents{
 		{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
 		},
 		{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
 		},
 	}
 	key2Metrics := model.BpfFlowContents{
 		{
-			BpfFlowMetrics: ebpf.BpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
 		},
 	}
+	acc := key1Metrics.Accumulate()
 	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId]model.BpfFlowContent{
-		key1:     key1Metrics.Accumulate(),
-		key1Dupe: key1Metrics.Accumulate(),
+		key1:     acc,
+		key1Dupe: acc,
 		key2:     key2Metrics.Accumulate(),
 	})
 	return export

@@ -40,7 +40,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -92,7 +92,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 17,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -137,7 +137,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -182,7 +182,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 0x86dd,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -229,7 +229,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2054, // ARP protocol
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -267,7 +267,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2054, // ARP protocol
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -319,7 +319,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -393,7 +393,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: ebpf.BpfFlowMetrics{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
