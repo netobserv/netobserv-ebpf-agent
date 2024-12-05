@@ -23,6 +23,10 @@ flowchart TD
     M1 --> |Polling|U[User space]
     M2 --> |Polling|U
     RB --> |Push|U
+    style A fill:#FBB
+    style B fill:#FBB
+    style C fill:#FBB
+    style E fill:#FBB
 ```
 
 ### User space
