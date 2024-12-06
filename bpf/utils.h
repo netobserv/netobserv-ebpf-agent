@@ -148,19 +148,18 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt)
 }
 
 // sets flow fields from Ethernet header information
-static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt) {
+static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
+                              u16 *eth_protocol) {
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
     flow_id *id = pkt->id;
-    __builtin_memcpy(id->dst_mac, eth->h_dest, ETH_ALEN);
-    __builtin_memcpy(id->src_mac, eth->h_source, ETH_ALEN);
-    id->eth_protocol = bpf_ntohs(eth->h_proto);
+    *eth_protocol = bpf_ntohs(eth->h_proto);
 
-    if (id->eth_protocol == ETH_P_IP) {
+    if (*eth_protocol == ETH_P_IP) {
         struct iphdr *ip = (void *)eth + sizeof(*eth);
         return fill_iphdr(ip, data_end, pkt);
-    } else if (id->eth_protocol == ETH_P_IPV6) {
+    } else if (*eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
         return fill_ip6hdr(ip6, data_end, pkt);
     } else {
@@ -178,11 +177,12 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt)
 /*
  * check if flow filter is enabled and if we need to continue processing the packet or not
  */
-static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason) {
+static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
+                                               u16 eth_protocol) {
     // check if this packet need to be filtered if filtering feature is enabled
     if (enable_flows_filtering || enable_pca) {
         filter_action action = ACCEPT;
-        if (is_flow_filtered(id, &action, flags, drop_reason) != 0 &&
+        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol) != 0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases
@@ -221,7 +221,7 @@ static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_
     return false;
 }
 
-static inline void core_fill_in_l2(struct sk_buff *skb, flow_id *id, u16 *family) {
+static inline void core_fill_in_l2(struct sk_buff *skb, u16 *eth_protocol, u16 *family) {
     struct ethhdr eth;
 
     __builtin_memset(&eth, 0, sizeof(eth));
@@ -230,12 +230,10 @@ static inline void core_fill_in_l2(struct sk_buff *skb, flow_id *id, u16 *family
     u16 skb_mac_header = BPF_CORE_READ(skb, mac_header);
 
     bpf_probe_read(&eth, sizeof(eth), (struct ethhdr *)(skb_head + skb_mac_header));
-    __builtin_memcpy(id->dst_mac, eth.h_dest, ETH_ALEN);
-    __builtin_memcpy(id->src_mac, eth.h_source, ETH_ALEN);
-    id->eth_protocol = bpf_ntohs(eth.h_proto);
-    if (id->eth_protocol == ETH_P_IP) {
+    *eth_protocol = bpf_ntohs(eth.h_proto);
+    if (*eth_protocol == ETH_P_IP) {
         *family = AF_INET;
-    } else if (id->eth_protocol == ETH_P_IPV6) {
+    } else if (*eth_protocol == ETH_P_IPV6) {
         *family = AF_INET6;
     }
 }

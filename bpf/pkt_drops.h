@@ -9,14 +9,13 @@
 
 static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 flags,
                                                    enum skb_drop_reason reason, u64 len) {
-    flow_metrics *aggregate_flow = bpf_map_lookup_elem(&aggregated_flows, id);
-    if (aggregate_flow != NULL) {
-        aggregate_flow->end_mono_time_ts = bpf_ktime_get_ns();
-        aggregate_flow->pkt_drops.packets += 1;
-        aggregate_flow->pkt_drops.bytes += len;
-        aggregate_flow->pkt_drops.latest_state = state;
-        aggregate_flow->pkt_drops.latest_flags = flags;
-        aggregate_flow->pkt_drops.latest_drop_cause = reason;
+    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    if (extra_metrics != NULL) {
+        extra_metrics->pkt_drops.packets += 1;
+        extra_metrics->pkt_drops.bytes += len;
+        extra_metrics->pkt_drops.latest_state = state;
+        extra_metrics->pkt_drops.latest_flags = flags;
+        extra_metrics->pkt_drops.latest_drop_cause = reason;
         return 0;
     }
     return -1;
@@ -26,17 +25,18 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
                                  enum skb_drop_reason reason) {
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
+    u16 eth_protocol = 0;
 
     u8 protocol = 0, dscp = 0;
     u16 family = 0, flags = 0;
 
-    id.if_index = BPF_CORE_READ(skb, skb_iif);
+    u32 if_index = BPF_CORE_READ(skb, skb_iif);
     // filter out TCP sockets with unknown or loopback interface
-    if (id.if_index == 0 || id.if_index == 1) {
+    if (if_index == 0 || if_index == 1) {
         return 0;
     }
     // read L2 info
-    core_fill_in_l2(skb, &id, &family);
+    core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
     core_fill_in_l3(skb, &id, family, &protocol, &dscp);
@@ -63,33 +63,24 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, reason);
+    bool skip = check_and_do_flow_filtering(&id, flags, reason, eth_protocol);
     if (skip) {
         return 0;
     }
     u64 len = BPF_CORE_READ(skb, len);
-    long ret = 0;
-    for (direction dir = INGRESS; dir < MAX_DIRECTION; dir++) {
-        id.direction = dir;
-        ret = pkt_drop_lookup_and_update_flow(&id, state, flags, reason, len);
-        if (ret == 0) {
-            return 0;
-        }
+    long ret = pkt_drop_lookup_and_update_flow(&id, state, flags, reason, len);
+    if (ret == 0) {
+        return 0;
     }
     // there is no matching flows so lets create new one and add the drops
-    u64 current_time = bpf_ktime_get_ns();
-    id.direction = INGRESS;
-    flow_metrics new_flow = {
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .flags = flags,
+    additional_metrics new_flow = {
         .pkt_drops.packets = 1,
         .pkt_drops.bytes = len,
         .pkt_drops.latest_state = state,
         .pkt_drops.latest_flags = flags,
         .pkt_drops.latest_drop_cause = reason,
     };
-    ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
+    ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
             bpf_printk("error packet drop creating new flow %d\n", ret);

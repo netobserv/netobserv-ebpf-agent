@@ -55,12 +55,12 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	if fr == nil {
 		return config.GenericMap{}
 	}
-	srcMAC := model.MacAddr(fr.Id.SrcMac)
-	dstMAC := model.MacAddr(fr.Id.DstMac)
+	srcMAC := model.MacAddr(fr.Metrics.SrcMac)
+	dstMAC := model.MacAddr(fr.Metrics.DstMac)
 	out := config.GenericMap{
 		"SrcMac":          srcMAC.String(),
 		"DstMac":          dstMAC.String(),
-		"Etype":           fr.Id.EthProtocol,
+		"Etype":           fr.Metrics.EthProtocol,
 		"TimeFlowStartMs": fr.TimeFlowStart.UnixMilli(),
 		"TimeFlowEndMs":   fr.TimeFlowEnd.UnixMilli(),
 		"TimeReceived":    time.Now().Unix(),
@@ -90,44 +90,47 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		}
 	} else {
 		interfaces = append(interfaces, fr.Interface)
-		directions = append(directions, int(fr.Id.Direction))
+		directions = append(directions, int(fr.ID.Direction))
 	}
 	out["Interfaces"] = interfaces
 	out["IfDirections"] = directions
 
-	if fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Id.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
-		out["SrcAddr"] = model.IP(fr.Id.SrcIp).String()
-		out["DstAddr"] = model.IP(fr.Id.DstIp).String()
-		out["Proto"] = fr.Id.TransportProtocol
+	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
+		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
+		out["DstAddr"] = model.IP(fr.ID.DstIp).String()
+		out["Proto"] = fr.ID.TransportProtocol
 		out["Dscp"] = fr.Metrics.Dscp
 
-		if fr.Id.TransportProtocol == syscall.IPPROTO_ICMP || fr.Id.TransportProtocol == syscall.IPPROTO_ICMPV6 {
-			out["IcmpType"] = fr.Id.IcmpType
-			out["IcmpCode"] = fr.Id.IcmpCode
-		} else if fr.Id.TransportProtocol == syscall.IPPROTO_TCP || fr.Id.TransportProtocol == syscall.IPPROTO_UDP || fr.Id.TransportProtocol == syscall.IPPROTO_SCTP {
-			out["SrcPort"] = fr.Id.SrcPort
-			out["DstPort"] = fr.Id.DstPort
-			if fr.Id.TransportProtocol == syscall.IPPROTO_TCP {
+		if fr.ID.TransportProtocol == syscall.IPPROTO_ICMP || fr.ID.TransportProtocol == syscall.IPPROTO_ICMPV6 {
+			out["IcmpType"] = fr.ID.IcmpType
+			out["IcmpCode"] = fr.ID.IcmpCode
+		} else if fr.ID.TransportProtocol == syscall.IPPROTO_TCP || fr.ID.TransportProtocol == syscall.IPPROTO_UDP || fr.ID.TransportProtocol == syscall.IPPROTO_SCTP {
+			out["SrcPort"] = fr.ID.SrcPort
+			out["DstPort"] = fr.ID.DstPort
+			if fr.ID.TransportProtocol == syscall.IPPROTO_TCP {
 				out["Flags"] = fr.Metrics.Flags
 			}
 		}
-
-		out["DnsErrno"] = fr.Metrics.DnsRecord.Errno
-		dnsID := fr.Metrics.DnsRecord.Id
-		if dnsID != 0 {
-			out["DnsId"] = dnsID
-			out["DnsFlags"] = fr.Metrics.DnsRecord.Flags
-			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.DnsRecord.Flags) & 0xF)
-			out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
-		}
 	}
 
-	if fr.Metrics.PktDrops.LatestDropCause != 0 {
-		out["PktDropBytes"] = fr.Metrics.PktDrops.Bytes
-		out["PktDropPackets"] = fr.Metrics.PktDrops.Packets
-		out["PktDropLatestFlags"] = fr.Metrics.PktDrops.LatestFlags
-		out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.PktDrops.LatestState))
-		out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.PktDrops.LatestDropCause)
+	if fr.Metrics.AdditionalMetrics != nil {
+		if fr.Metrics.AdditionalMetrics.DnsRecord.Errno != 0 {
+			out["DnsErrno"] = fr.Metrics.AdditionalMetrics.DnsRecord.Errno
+		}
+		if fr.Metrics.AdditionalMetrics.DnsRecord.Id != 0 {
+			out["DnsId"] = fr.Metrics.AdditionalMetrics.DnsRecord.Id
+			out["DnsFlags"] = fr.Metrics.AdditionalMetrics.DnsRecord.Flags
+			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags) & 0xF)
+			out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
+		}
+
+		if fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause != 0 {
+			out["PktDropBytes"] = fr.Metrics.AdditionalMetrics.PktDrops.Bytes
+			out["PktDropPackets"] = fr.Metrics.AdditionalMetrics.PktDrops.Packets
+			out["PktDropLatestFlags"] = fr.Metrics.AdditionalMetrics.PktDrops.LatestFlags
+			out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestState))
+			out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause)
+		}
 	}
 
 	if fr.TimeFlowRtt != 0 {

@@ -15,71 +15,211 @@ import (
 
 var (
 	// the same flow from 2 different interfaces
-	oneIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
-		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "eth0"}
-	oneIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 123, DstPort: 456,
-		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "123456789"}
+	oneIf1 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   123,
+			DstPort:   456,
+			IfIndex:   1,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				SrcMac:      model.MacAddr{0x1},
+				DstMac:      model.MacAddr{0x1},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "eth0",
+	}
+	oneIf2 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   123,
+			DstPort:   456,
+			IfIndex:   2,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				SrcMac:      model.MacAddr{0x2},
+				DstMac:      model.MacAddr{0x2},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "123456789",
+	}
 	// another flow from 2 different interfaces and directions
-	twoIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 333, DstPort: 456,
-		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "eth0"}
-	twoIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 0, SrcPort: 333, DstPort: 456,
-		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "123456789"}
+	twoIf1 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   333,
+			DstPort:   456,
+			IfIndex:   1,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				SrcMac:      model.MacAddr{0x1},
+				DstMac:      model.MacAddr{0x1},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "eth0",
+	}
+	twoIf2 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 0,
+			SrcPort:   333,
+			DstPort:   456,
+			IfIndex:   2,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				SrcMac:      model.MacAddr{0x2},
+				DstMac:      model.MacAddr{0x2},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "123456789",
+	}
 	// another flow from 2 different interfaces and directions with DNS latency set on the latest
-	threeIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 433, DstPort: 456,
-		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "eth0"}
-	threeIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 0, SrcPort: 433, DstPort: 456,
-		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-		DnsRecord: ebpf.BpfDnsRecordT{Id: 1, Flags: 100, Latency: 1000},
-	}}, Interface: "123456789", DNSLatency: time.Millisecond}
+	threeIf1 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   433,
+			DstPort:   456,
+			IfIndex:   1,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				SrcMac:      model.MacAddr{0x1},
+				DstMac:      model.MacAddr{0x1},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "eth0",
+	}
+	threeIf2 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 0,
+			SrcPort:   433,
+			DstPort:   456,
+			IfIndex:   2,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				DstMac:      model.MacAddr{0x2},
+				SrcMac:      model.MacAddr{0x2},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				DnsRecord: ebpf.BpfDnsRecordT{Id: 1, Flags: 100, Latency: 1000},
+			},
+		},
+		Interface:  "123456789",
+		DNSLatency: time.Millisecond,
+	}
 	// another flow from 2 different interfaces and directions with RTT set on the latest
-	fourIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 533, DstPort: 456,
-		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "eth0"}
-	fourIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 0, SrcPort: 533, DstPort: 456,
-		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
-	}}, Interface: "123456789", TimeFlowRtt: 100}
+	fourIf1 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   533,
+			DstPort:   456,
+			IfIndex:   1,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				DstMac:      model.MacAddr{0x1},
+				SrcMac:      model.MacAddr{0x1},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "eth0",
+	}
+	fourIf2 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 0,
+			SrcPort:   533,
+			DstPort:   456,
+			IfIndex:   2,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				DstMac:      model.MacAddr{0x2},
+				SrcMac:      model.MacAddr{0x2},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowRtt: 100,
+			},
+		},
+		Interface:   "123456789",
+		TimeFlowRtt: 100,
+	}
 	// another flow from 2 different interfaces and directions with NetworkEvents set on the latest
-	fiveIf1 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 1, SrcPort: 633, DstPort: 456,
-		DstMac: model.MacAddr{0x1}, SrcMac: model.MacAddr{0x1}, IfIndex: 1,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1,
-	}}, Interface: "eth0"}
-	fiveIf2 = &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
-		EthProtocol: 1, Direction: 0, SrcPort: 633, DstPort: 456,
-		DstMac: model.MacAddr{0x2}, SrcMac: model.MacAddr{0x2}, IfIndex: 2,
-	}, Metrics: ebpf.BpfFlowMetrics{
-		Packets: 2, Bytes: 456, Flags: 1, FlowRtt: 100,
-	}}, Interface: "123456789", NetworkMonitorEventsMD: []config.GenericMap{{"Name": "test netpol1"}}}
+	fiveIf1 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 1,
+			SrcPort:   633,
+			DstPort:   456,
+			IfIndex:   1,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				DstMac:      model.MacAddr{0x1},
+				SrcMac:      model.MacAddr{0x1},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+		},
+		Interface: "eth0",
+	}
+	fiveIf2 = &model.Record{
+		ID: ebpf.BpfFlowId{
+			Direction: 0,
+			SrcPort:   633,
+			DstPort:   456,
+			IfIndex:   2,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				EthProtocol: 1,
+				DstMac:      model.MacAddr{0x2},
+				SrcMac:      model.MacAddr{0x2},
+				Packets:     2,
+				Bytes:       456,
+				Flags:       1,
+			},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowRtt: 100,
+			},
+		},
+		Interface:              "123456789",
+		NetworkMonitorEventsMD: []config.GenericMap{{"Name": "test netpol1"}}}
 )
 
 func TestDedupe(t *testing.T) {
@@ -92,7 +232,7 @@ func TestDedupe(t *testing.T) {
 		oneIf2,   // record 1 at interface 2: should be accepted
 		twoIf1,   // record 2 at interface 1: should be accepted
 		oneIf1,   // record 1 duplicate at interface 1: should NOT be accepted
-		oneIf1,   //                                        (same record key, different interface)
+		oneIf1,   // (same record key, different interface)
 		twoIf2,   // record 2 duplicate at interface 2: should NOT be accepted
 		oneIf2,   // record 1 at interface 1: should be accepted (same record key, same interface)
 		threeIf1, // record 1 has no DNS so it get enriched with DNS record from the following record
@@ -112,15 +252,15 @@ func TestDedupe(t *testing.T) {
 	assert.Equal(t, []*model.Record{oneIf2}, deduped)
 
 	// make sure flow with no DNS get enriched with the DNS record
-	assert.Equal(t, threeIf1.Metrics.DnsRecord.Id, threeIf2.Metrics.DnsRecord.Id)
-	assert.Equal(t, threeIf1.Metrics.DnsRecord.Flags, threeIf2.Metrics.DnsRecord.Flags)
-	assert.Equal(t, threeIf1.Metrics.DnsRecord.Latency, threeIf2.Metrics.DnsRecord.Latency)
+	assert.Equal(t, threeIf1.Metrics.AdditionalMetrics.DnsRecord.Id, threeIf2.Metrics.AdditionalMetrics.DnsRecord.Id)
+	assert.Equal(t, threeIf1.Metrics.AdditionalMetrics.DnsRecord.Flags, threeIf2.Metrics.AdditionalMetrics.DnsRecord.Flags)
+	assert.Equal(t, threeIf1.Metrics.AdditionalMetrics.DnsRecord.Latency, threeIf2.Metrics.AdditionalMetrics.DnsRecord.Latency)
 
 	// make sure flow with no RTT get enriched from the dup flow with RTT
-	assert.Equal(t, fourIf1.Metrics.FlowRtt, fourIf2.Metrics.FlowRtt)
+	assert.Equal(t, fourIf1.Metrics.AdditionalMetrics.FlowRtt, fourIf2.Metrics.AdditionalMetrics.FlowRtt)
 
 	// make sure flow with no NetworkEvents gets enriched from dup flow with NetworkEvents
-	assert.Equal(t, fiveIf1.Metrics.NetworkEvents, fiveIf2.Metrics.NetworkEvents)
+	assert.Equal(t, fiveIf1.Metrics.AdditionalMetrics.NetworkEvents, fiveIf2.Metrics.AdditionalMetrics.NetworkEvents)
 }
 
 func TestDedupe_EvictFlows(t *testing.T) {
@@ -176,10 +316,10 @@ func TestDedupeMerge(t *testing.T) {
 
 	expectedMap := []map[string]uint8{
 		{
-			interfaceNamer(int(oneIf2.Id.IfIndex)): oneIf2.Id.Direction,
+			interfaceNamer(int(oneIf2.ID.IfIndex)): oneIf2.ID.Direction,
 		},
 		{
-			interfaceNamer(int(oneIf1.Id.IfIndex)): oneIf1.Id.Direction,
+			interfaceNamer(int(oneIf1.ID.IfIndex)): oneIf1.ID.Direction,
 		},
 	}
 

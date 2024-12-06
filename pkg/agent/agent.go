@@ -138,7 +138,7 @@ type ebpfFlowFetcher interface {
 	AttachTCX(iface ifaces.Interface) error
 	DetachTCX(iface ifaces.Interface) error
 
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }
@@ -206,8 +206,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		Debug:                          debug,
 		Sampling:                       cfg.Sampling,
 		CacheMaxSize:                   cfg.CacheMaxFlows,
-		PktDrops:                       cfg.EnablePktDrops,
-		DNSTracker:                     cfg.EnableDNSTracking,
+		EnablePktDrops:                 cfg.EnablePktDrops,
+		EnableDNSTracker:               cfg.EnableDNSTracking,
 		DNSTrackerPort:                 cfg.DNSTrackingPort,
 		EnableRTT:                      cfg.EnableRTT,
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,

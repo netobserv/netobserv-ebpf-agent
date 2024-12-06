@@ -106,6 +106,7 @@ prereqs: ## Check if prerequisites are met, and install missing dependencies
 fmt: ## Run go fmt against code.
 	@echo "### Formatting code"
 	go fmt ./...
+	find ./bpf -type f -not -path "./bpf/headers/*" -name "*.[ch]" | xargs clang-format -i --Werror
 
 .PHONY: lint
 lint: prereqs ## Lint the code

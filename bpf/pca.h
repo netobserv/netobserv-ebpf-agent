@@ -41,6 +41,7 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
     __builtin_memset(&pkt, 0, sizeof(pkt));
     flow_id id;
     __builtin_memset(&id, 0, sizeof(id));
+    u16 eth_protocol = 0;
 
     pkt.id = &id;
 
@@ -48,7 +49,7 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
     void *data = (void *)(long)skb->data;
     struct ethhdr *eth = (struct ethhdr *)data;
 
-    if (fill_ethhdr(eth, data_end, &pkt) == DISCARD) {
+    if (fill_ethhdr(eth, data_end, &pkt, &eth_protocol) == DISCARD) {
         return false;
     }
 
@@ -57,7 +58,7 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
     id.direction = dir;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0);
+    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol);
     if (skip) {
         return false;
     }

@@ -15,7 +15,7 @@ func Decorate(agentIP net.IP, ifaceNamer InterfaceNamer) func(in <-chan []*model
 	return func(in <-chan []*model.Record, out chan<- []*model.Record) {
 		for flows := range in {
 			for _, flow := range flows {
-				flow.Interface = ifaceNamer(int(flow.Id.IfIndex))
+				flow.Interface = ifaceNamer(int(flow.ID.IfIndex))
 				flow.AgentIP = agentIP
 			}
 			out <- flows

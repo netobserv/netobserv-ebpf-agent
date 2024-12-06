@@ -31,7 +31,7 @@ type entry struct {
 	key           *ebpf.BpfFlowId
 	dnsRecord     *ebpf.BpfDnsRecordT
 	flowRTT       *uint64
-	networkEvents *[4][8]uint8
+	networkEvents *[model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8
 	ifIndex       uint32
 	expiryTime    time.Time
 	dupList       *[]map[string]uint8
@@ -69,12 +69,13 @@ func Dedupe(expireTime time.Duration, justMark, mergeDup bool, ifaceNamer Interf
 // checkDupe check current record if its already available nad if not added to fwd records list
 func (c *deduperCache) checkDupe(r *model.Record, justMark, mergeDup bool, fwd *[]*model.Record, ifaceNamer InterfaceNamer) {
 	mergeEntry := make(map[string]uint8)
-	rk := r.Id
+	rk := r.ID
 	// zeroes fields from key that should be ignored from the flow comparison
 	rk.IfIndex = 0
-	rk.SrcMac = [model.MacLen]uint8{0, 0, 0, 0, 0, 0}
-	rk.DstMac = [model.MacLen]uint8{0, 0, 0, 0, 0, 0}
 	rk.Direction = 0
+	if r.Metrics.AdditionalMetrics == nil {
+		r.Metrics.AdditionalMetrics = &ebpf.BpfAdditionalMetrics{}
+	}
 	// If a flow has been accounted previously, whatever its interface was,
 	// it updates the expiry time for that flow
 	if ele, ok := c.ifaces[rk]; ok {
@@ -85,31 +86,31 @@ func (c *deduperCache) checkDupe(r *model.Record, justMark, mergeDup bool, fwd *
 		// of the non-duplicate flow that was first registered in the cache
 		// except if the new flow has DNS enrichment in this case will enrich the flow in the cache
 		// with DNS info and mark the current flow as duplicate
-		if r.Metrics.DnsRecord.Latency != 0 && fEntry.dnsRecord.Latency == 0 {
+		if r.Metrics.AdditionalMetrics.DnsRecord.Latency != 0 && fEntry.dnsRecord.Latency == 0 {
 			// copy DNS record to the cached entry and mark it as duplicate
-			fEntry.dnsRecord.Flags = r.Metrics.DnsRecord.Flags
-			fEntry.dnsRecord.Id = r.Metrics.DnsRecord.Id
-			fEntry.dnsRecord.Latency = r.Metrics.DnsRecord.Latency
-			fEntry.dnsRecord.Errno = r.Metrics.DnsRecord.Errno
+			fEntry.dnsRecord.Flags = r.Metrics.AdditionalMetrics.DnsRecord.Flags
+			fEntry.dnsRecord.Id = r.Metrics.AdditionalMetrics.DnsRecord.Id
+			fEntry.dnsRecord.Latency = r.Metrics.AdditionalMetrics.DnsRecord.Latency
+			fEntry.dnsRecord.Errno = r.Metrics.AdditionalMetrics.DnsRecord.Errno
 		}
 		// If the new flow has flowRTT then enrich the flow in the case with the same RTT and mark it duplicate
-		if r.Metrics.FlowRtt != 0 && *fEntry.flowRTT == 0 {
-			*fEntry.flowRTT = r.Metrics.FlowRtt
+		if r.Metrics.AdditionalMetrics.FlowRtt != 0 && *fEntry.flowRTT == 0 {
+			*fEntry.flowRTT = r.Metrics.AdditionalMetrics.FlowRtt
 		}
 		// If the new flows have network events, then enrich the flow in the cache and mark the flow as duplicate
-		for i, md := range r.Metrics.NetworkEvents {
+		for i, md := range r.Metrics.AdditionalMetrics.NetworkEvents {
 			if !model.AllZerosMetaData(md) && model.AllZerosMetaData(fEntry.networkEvents[i]) {
 				copy(fEntry.networkEvents[i][:], md[:])
 			}
 		}
-		if fEntry.ifIndex != r.Id.IfIndex {
+		if fEntry.ifIndex != r.ID.IfIndex {
 			if justMark {
 				r.Duplicate = true
 				*fwd = append(*fwd, r)
 			}
 			if mergeDup {
-				ifName := ifaceNamer(int(r.Id.IfIndex))
-				mergeEntry[ifName] = r.Id.Direction
+				ifName := ifaceNamer(int(r.ID.IfIndex))
+				mergeEntry[ifName] = r.ID.Direction
 				if dupEntryNew(*fEntry.dupList, mergeEntry) {
 					*fEntry.dupList = append(*fEntry.dupList, mergeEntry)
 					dlog.Debugf("merge list entries dump:")
@@ -129,15 +130,15 @@ func (c *deduperCache) checkDupe(r *model.Record, justMark, mergeDup bool, fwd *
 	// so we register it for that concrete interface
 	e := entry{
 		key:           &rk,
-		dnsRecord:     &r.Metrics.DnsRecord,
-		flowRTT:       &r.Metrics.FlowRtt,
-		networkEvents: &r.Metrics.NetworkEvents,
-		ifIndex:       r.Id.IfIndex,
+		dnsRecord:     &r.Metrics.AdditionalMetrics.DnsRecord,
+		flowRTT:       &r.Metrics.AdditionalMetrics.FlowRtt,
+		networkEvents: &r.Metrics.AdditionalMetrics.NetworkEvents,
+		ifIndex:       r.ID.IfIndex,
 		expiryTime:    timeNow().Add(c.expire),
 	}
 	if mergeDup {
-		ifName := ifaceNamer(int(r.Id.IfIndex))
-		mergeEntry[ifName] = r.Id.Direction
+		ifName := ifaceNamer(int(r.ID.IfIndex))
+		mergeEntry[ifName] = r.ID.Direction
 		r.DupList = append(r.DupList, mergeEntry)
 		e.dupList = &r.DupList
 	}
