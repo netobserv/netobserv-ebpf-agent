@@ -51,6 +51,32 @@ export TARGET_PORT=...
 sudo -E bin/netobserv-ebpf-agent
 ```
 
+We don't recommend using the agent's IPFIX exporter mode as it is not actively maintained (if you're interested in maintaining it, let us know!). Note that flowlogs-pipeline can also generate IPFIX exports, so a valid way to get IPFIX data is to export to flowlogs-pipeline (via GRPC, Kafka or direct-flp) and then configure IPFIX within flowlogs-pipeline.
+
+A simple way to try the agent is using the `direct-flp` export mode, printing directly to stdout:
+
+Given the following file `flp-config.json`:
+
+```json
+{
+	"pipeline":[
+		{"name": "writer","follows": "preset-ingester"}
+	],
+	"parameters":[
+		{"name": "writer","write": {"type": "stdout"}}
+	]
+}
+```
+Run:
+
+```bash
+export FLP_CONFIG=$(cat flp-config.json)
+export EXPORT="direct-flp"
+sudo -E bin/netobserv-ebpf-agent
+```
+
+For more information about configuring flowlogs-pipeline, please refer to [its documentation](https://github.com/netobserv/flowlogs-pipeline).
+
 To deploy locally, use instructions from [flowlogs-dump (like tcpdump)](./examples/flowlogs-dump/README.md).    
 To deploy it as a Pod, you can check the [deployment examples](./deployments).
 
