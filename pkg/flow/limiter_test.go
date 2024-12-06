@@ -19,14 +19,14 @@ func TestCapacityLimiter_NoDrop(t *testing.T) {
 
 	// WHEN it buffers less elements than it's maximum capacity
 	for i := 0; i < 33; i++ {
-		pipeIn <- []*model.Record{{Interface: strconv.Itoa(i)}}
+		pipeIn <- []*model.Record{{Interfaces: []model.IntfDir{model.NewIntfDir(strconv.Itoa(i), 0)}}}
 	}
 
 	// THEN it is able to retrieve all the buffered elements
 	for i := 0; i < 33; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
-		assert.Equal(t, strconv.Itoa(i), elem[0].Interface)
+		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
 	}
 
 	// AND not a single extra element
@@ -45,7 +45,7 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	// WHEN it receives more elements than its maximum capacity
 	// (it's not blocking)
 	for i := 0; i < limiterLen*2; i++ {
-		pipeIn <- []*model.Record{{Interface: strconv.Itoa(i)}}
+		pipeIn <- []*model.Record{{Interfaces: []model.IntfDir{model.NewIntfDir(strconv.Itoa(i), 0)}}}
 	}
 
 	// THEN it is only able to retrieve all the nth first buffered elements
@@ -53,7 +53,7 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	for i := 0; i < limiterLen+1; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
-		assert.Equal(t, strconv.Itoa(i), elem[0].Interface)
+		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
 	}
 
 	// BUT not a single extra element

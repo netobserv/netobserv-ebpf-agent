@@ -3,17 +3,18 @@ package tracer
 import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
 // This file contains legacy implementations kept for old kernels
 
-func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics {
+func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	var flows = make(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics, m.cacheMaxSize)
+	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.cacheMaxSize)
 	var id ebpf.BpfFlowId
-	var metrics []ebpf.BpfFlowMetrics
+	var metrics ebpf.BpfFlowMetrics
 	count := 0
 
 	// Deleting while iterating is really bad for performance (like, really!) as it causes seeing multiple times the same key
@@ -26,7 +27,9 @@ func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.Bp
 		}
 		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
 		// (probably due to race conditions) so we need to re-join metrics again at userspace
-		flows[id] = append(flows[id], metrics...)
+		flows[id] = model.BpfFlowContent{
+			BpfFlowMetrics: metrics,
+		}
 	}
 	met.BufferSizeGauge.WithBufferName("hashmap-legacy-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-legacy-unique").Set(float64(len(flows)))

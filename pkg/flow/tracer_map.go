@@ -31,7 +31,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 
@@ -102,14 +102,13 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	for flowKey, flowMetrics := range flows {
-		aggregatedMetrics := m.aggregate(flowMetrics)
 		// we ignore metrics that haven't been aggregated (e.g. all the mapped values are ignored)
-		if aggregatedMetrics.EndMonoTimeTs == 0 {
+		if flowMetrics.EndMonoTimeTs == 0 {
 			continue
 		}
 		forwardingFlows = append(forwardingFlows, model.NewRecord(
 			flowKey,
-			aggregatedMetrics,
+			&flowMetrics,
 			currentTime,
 			uint64(monotonicTimeNow),
 		))
@@ -129,16 +128,4 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	m.metrics.EvictedFlowsCounter.WithSource("hashmap").Add(float64(len(forwardingFlows)))
 	m.timeSpentinLookupAndDelete.Observe(elapsed.Seconds())
 	mtlog.Debugf("%d flows evicted", len(forwardingFlows))
-}
-
-func (m *MapTracer) aggregate(metrics []ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetrics {
-	if len(metrics) == 0 {
-		mtlog.Warn("invoked aggregate with no values")
-		return &ebpf.BpfFlowMetrics{}
-	}
-	aggr := &ebpf.BpfFlowMetrics{}
-	for i := range metrics {
-		model.Accumulate(aggr, &metrics[i])
-	}
-	return aggr
 }
