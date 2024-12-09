@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
@@ -28,23 +29,30 @@ func TestProtoConversion(t *testing.T) {
 
 	kj := KafkaProto{Writer: &wc, Metrics: m}
 	input := make(chan []*model.Record, 11)
-	record := model.Record{}
-	record.Id.EthProtocol = 3
-	record.Id.Direction = 1
-	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
-	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.SrcPort = 4321
-	record.Id.DstPort = 1234
-	record.Id.IcmpType = 8
-	record.Id.TransportProtocol = 210
-	record.TimeFlowStart = time.Now().Add(-5 * time.Second)
-	record.TimeFlowEnd = time.Now()
-	record.Metrics.Bytes = 789
-	record.Metrics.Packets = 987
-	record.Metrics.Flags = uint16(1)
-	record.Interface = "veth0"
+	record := model.Record{
+		TimeFlowStart: time.Now().Add(-5 * time.Second),
+		TimeFlowEnd:   time.Now(),
+		ID: ebpf.BpfFlowId{
+			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
+			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
+			SrcPort:           4321,
+			DstPort:           1234,
+			IcmpType:          8,
+			TransportProtocol: 210,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				DirectionFirstSeen: 1,
+				EthProtocol:        3,
+				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+				DstMac:             [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
+				Bytes:              789,
+				Packets:            987,
+				Flags:              uint16(1),
+			},
+		},
+		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
+	}
 
 	input <- []*model.Record{&record}
 	close(input)
@@ -54,10 +62,12 @@ func TestProtoConversion(t *testing.T) {
 	var r pbflow.Record
 	require.NoError(t, proto.Unmarshal(wc.messages[0].Value, &r))
 	assert.EqualValues(t, 3, r.EthProtocol)
-	for _, e := range r.DupList {
-		assert.EqualValues(t, 1, e.Direction)
-		assert.Equal(t, "veth0", e.Interface)
-	}
+	assert.EqualValues(t, 1, r.Direction)
+	assert.Len(t, r.DupList, 2)
+	assert.EqualValues(t, 0, r.DupList[0].Direction)
+	assert.Equal(t, "veth0", r.DupList[0].Interface)
+	assert.EqualValues(t, 1, r.DupList[1].Direction)
+	assert.Equal(t, "abcde", r.DupList[1].Interface)
 	assert.EqualValues(t, uint64(0xaabbccddeeff), r.DataLink.SrcMac)
 	assert.EqualValues(t, uint64(0x112233445566), r.DataLink.DstMac)
 	assert.EqualValues(t, uint64(0xC0010203) /* 192.1.2.3 */, r.Network.SrcAddr.GetIpv4())
@@ -76,28 +86,34 @@ func TestProtoConversion(t *testing.T) {
 }
 
 func TestIdenticalKeys(t *testing.T) {
-	record := model.Record{}
-	record.Id.EthProtocol = 3
-	record.Id.Direction = 1
-	record.Id.SrcMac = [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
-	record.Id.DstMac = [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.SrcPort = 4321
-	record.Id.DstPort = 1234
-	record.Id.IcmpType = 8
-	record.Id.TransportProtocol = 210
-	record.TimeFlowStart = time.Now().Add(-5 * time.Second)
-	record.TimeFlowEnd = time.Now()
-	record.Metrics.Bytes = 789
-	record.Metrics.Packets = 987
-	record.Metrics.Flags = uint16(1)
-	record.Interface = "veth0"
-
+	record := model.Record{
+		TimeFlowStart: time.Now().Add(-5 * time.Second),
+		TimeFlowEnd:   time.Now(),
+		ID: ebpf.BpfFlowId{
+			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
+			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
+			SrcPort:           4321,
+			DstPort:           1234,
+			IcmpType:          8,
+			TransportProtocol: 210,
+		},
+		Metrics: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				DirectionFirstSeen: 1,
+				EthProtocol:        3,
+				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+				DstMac:             [...]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66},
+				Bytes:              789,
+				Packets:            987,
+				Flags:              uint16(1),
+			},
+		},
+		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
+	}
 	key1 := getFlowKey(&record)
 
-	record.Id.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.Id.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.ID.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.ID.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
 	key2 := getFlowKey(&record)
 
 	// Both keys should be identical

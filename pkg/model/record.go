@@ -22,8 +22,9 @@ const MacLen = 6
 // IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const (
 	IPv6Type                 = 0x86DD
-	networkEventsMaxEventsMD = 8
-	maxNetworkEvents         = 4
+	NetworkEventsMaxEventsMD = 8
+	MaxNetworkEvents         = 4
+	MaxObservedInterfaces    = 4
 )
 
 type HumanBytes uint64
@@ -36,36 +37,41 @@ type Direction uint8
 // (same behavior as Go's net.IP type)
 type IPAddr [net.IPv6len]uint8
 
+type InterfaceNamer func(ifIndex int) string
+
+var (
+	agentIP        net.IP
+	interfaceNamer InterfaceNamer = func(ifIndex int) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
+)
+
+func SetGlobals(ip net.IP, ifaceNamer InterfaceNamer) {
+	agentIP = ip
+	interfaceNamer = ifaceNamer
+}
+
 // record structure as parsed from eBPF
 type RawRecord ebpf.BpfFlowRecordT
 
 // Record contains accumulated metrics from a flow
 type Record struct {
-	RawRecord
+	ID      ebpf.BpfFlowId
+	Metrics BpfFlowContent
+
 	// TODO: redundant field from RecordMetrics. Reorganize structs
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	DNSLatency    time.Duration
-	Interface     string
-	// Duplicate tells whether this flow has another duplicate so it has to be excluded from
-	// any metrics' aggregation (e.g. bytes/second rates between two pods).
-	// The reason for this field is that the same flow can be observed from multiple interfaces,
-	// so the agent needs to choose only a view of the same flow and mark the others as
-	// "exclude from aggregation". Otherwise rates, sums, etc... values would be multiplied by the
-	// number of interfaces this flow is observed from.
-	Duplicate bool
-
+	Interfaces    []IntfDir
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
-	DupList                []map[string]uint8
 	NetworkMonitorEventsMD []config.GenericMap
 }
 
 func NewRecord(
 	key ebpf.BpfFlowId,
-	metrics *ebpf.BpfFlowMetrics,
+	metrics *BpfFlowContent,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 ) *Record {
@@ -73,71 +79,39 @@ func NewRecord(
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
 
 	var record = Record{
-		RawRecord: RawRecord{
-			Id:      key,
-			Metrics: *metrics,
-		},
+		ID:            key,
+		Metrics:       *metrics,
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
+		AgentIP:       agentIP,
+		Interfaces:    []IntfDir{NewIntfDir(interfaceNamer(int(metrics.IfIndexFirstSeen)), metrics.DirectionFirstSeen)},
 	}
-	if metrics.FlowRtt != 0 {
-		record.TimeFlowRtt = time.Duration(metrics.FlowRtt)
+	if metrics.AdditionalMetrics != nil {
+		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
+			record.Interfaces = append(record.Interfaces, NewIntfDir(
+				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
+				metrics.AdditionalMetrics.ObservedIntf[i].Direction,
+			))
+		}
+		if metrics.AdditionalMetrics.FlowRtt != 0 {
+			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
+		}
+		if metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
+			record.DNSLatency = time.Duration(metrics.AdditionalMetrics.DnsRecord.Latency)
+		}
 	}
-	if metrics.DnsRecord.Latency != 0 {
-		record.DNSLatency = time.Duration(metrics.DnsRecord.Latency)
-	}
-	record.DupList = make([]map[string]uint8, 0)
 	record.NetworkMonitorEventsMD = make([]config.GenericMap, 0)
 	return &record
 }
 
-func Accumulate(r *ebpf.BpfFlowMetrics, src *ebpf.BpfFlowMetrics) {
-	// time == 0 if the value has not been yet set
-	if r.StartMonoTimeTs == 0 || (r.StartMonoTimeTs > src.StartMonoTimeTs && src.StartMonoTimeTs != 0) {
-		r.StartMonoTimeTs = src.StartMonoTimeTs
-	}
-	if r.EndMonoTimeTs == 0 || r.EndMonoTimeTs < src.EndMonoTimeTs {
-		r.EndMonoTimeTs = src.EndMonoTimeTs
-	}
-	r.Bytes += src.Bytes
-	r.Packets += src.Packets
-	r.Flags |= src.Flags
-	// Accumulate Drop statistics
-	r.PktDrops.Bytes += src.PktDrops.Bytes
-	r.PktDrops.Packets += src.PktDrops.Packets
-	r.PktDrops.LatestFlags |= src.PktDrops.LatestFlags
-	if src.PktDrops.LatestDropCause != 0 {
-		r.PktDrops.LatestDropCause = src.PktDrops.LatestDropCause
-	}
-	// Accumulate DNS
-	r.DnsRecord.Flags |= src.DnsRecord.Flags
-	if src.DnsRecord.Id != 0 {
-		r.DnsRecord.Id = src.DnsRecord.Id
-	}
-	if r.DnsRecord.Errno != src.DnsRecord.Errno {
-		r.DnsRecord.Errno = src.DnsRecord.Errno
-	}
-	if r.DnsRecord.Latency < src.DnsRecord.Latency {
-		r.DnsRecord.Latency = src.DnsRecord.Latency
-	}
-	// Accumulate RTT
-	if r.FlowRtt < src.FlowRtt {
-		r.FlowRtt = src.FlowRtt
-	}
-	// Accumulate DSCP
-	if src.Dscp != 0 {
-		r.Dscp = src.Dscp
-	}
-
-	for _, md := range src.NetworkEvents {
-		if !AllZerosMetaData(md) && !networkEventsMDExist(r.NetworkEvents, md) {
-			copy(r.NetworkEvents[r.NetworkEventsIdx][:], md[:])
-			r.NetworkEventsIdx = (r.NetworkEventsIdx + 1) % maxNetworkEvents
-		}
-	}
+type IntfDir struct {
+	Interface string
+	Direction uint8
 }
 
-func networkEventsMDExist(events [maxNetworkEvents][networkEventsMaxEventsMD]uint8, md [networkEventsMaxEventsMD]uint8) bool {
+func NewIntfDir(intf string, dir uint8) IntfDir { return IntfDir{Interface: intf, Direction: dir} }
+
+func networkEventsMDExist(events [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8, md [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, e := range events {
 		if reflect.DeepEqual(e, md) {
 			return true
@@ -184,7 +158,7 @@ func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	return &fr, err
 }
 
-func AllZerosMetaData(s [networkEventsMaxEventsMD]uint8) bool {
+func AllZerosMetaData(s [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, v := range s {
 		if v != 0 {
 			return false
