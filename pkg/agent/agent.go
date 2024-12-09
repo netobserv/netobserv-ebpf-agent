@@ -213,6 +213,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
 		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
 		EnableFlowFilter:               cfg.EnableFlowFilter,
+		UseEbpfManager:                 cfg.EbpfProgramManagerMode,
+		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
 		FilterConfig: &tracer.FilterConfig{
 			FilterAction:          cfg.FilterAction,
 			FilterDirection:       cfg.FilterDirection,
@@ -485,12 +487,13 @@ func (f *Flows) interfacesManager(ctx context.Context) error {
 // For a more visual view, check the docs/architecture.md document.
 func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.Record], error) {
 
-	alog.Debug("registering interfaces' listener in background")
-	err := f.interfacesManager(ctx)
-	if err != nil {
-		return nil, err
+	if !f.cfg.EbpfProgramManagerMode {
+		alog.Debug("registering interfaces' listener in background")
+		err := f.interfacesManager(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	alog.Debug("connecting flows' processing graph")
 	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.ForceGC))
 	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
