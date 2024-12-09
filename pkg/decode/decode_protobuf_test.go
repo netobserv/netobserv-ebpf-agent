@@ -88,6 +88,18 @@ func TestPBFlowToMap(t *testing.T) {
 				},
 			},
 		},
+		Xlat: &pbflow.Xlat{
+			SrcAddr: &pbflow.IP{
+				IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x01020304},
+			},
+			DstAddr: &pbflow.IP{
+				IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x05060708},
+			},
+			SrcPort: 1,
+			DstPort: 2,
+			ZoneId:  100,
+			UdnId:   "udn",
+		},
 	}
 
 	out := PBFlowToMap(flow)
@@ -139,6 +151,13 @@ func TestPBFlowToMap(t *testing.T) {
 				"Direction": "egress",
 			},
 		},
+		"XlatSrcAddr": "1.2.3.4",
+		"XlatDstAddr": "5.6.7.8",
+		"XlatSrcPort": uint16(1),
+		"XlatDstPort": uint16(2),
+		"ZoneId":      uint16(100),
+		"UdnId":       "udn",
+		"XlatIcmpId":  uint8(0),
 	}, out)
 
 }

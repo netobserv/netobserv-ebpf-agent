@@ -152,3 +152,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+// HACK
+replace github.com/ovn-org/ovn-kubernetes/go-controller => github.com/npinaeva/ovn-kubernetes/go-controller v0.0.0-20241203081839-5d372e6ab2da
