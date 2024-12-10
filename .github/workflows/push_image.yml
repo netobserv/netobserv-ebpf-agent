@@ -34,7 +34,9 @@ jobs:
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: build and push bytecode image
-        run: make build-and-push-bc-image
+        run: |
+          IMAGE_NOO_BC=quay.io/netobserv/ebpf-bytecode:${{ env.WF_VERSION }} make build-and-push-bc-image
+          IMAGE_NOO_BC=quay.io/netobserv/ebpf-bytecode:${{ env.short_sha }} OCI_BUILD_OPTS="--label quay.expires-after=2w" make build-and-push-bc-image
       - name: build and push manifest with images
         run: |
           MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} CLEAN_BUILD=1 make images
