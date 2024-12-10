@@ -262,6 +262,7 @@ struct filter_value_t {
     filter_action action;
     tcp_flags tcpFlags;
     u8 filter_drops;
+    u32 sample;
     u8 ip[IP_MAX_LEN];
 } __attribute__((packed));
 

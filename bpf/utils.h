@@ -178,11 +178,11 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
  * check if flow filter is enabled and if we need to continue processing the packet or not
  */
 static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
-                                               u16 eth_protocol) {
+                                               u16 eth_protocol, u32 *sampling) {
     // check if this packet need to be filtered if filtering feature is enabled
     if (enable_flows_filtering || enable_pca) {
         filter_action action = ACCEPT;
-        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol) != 0 &&
+        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling) != 0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases

@@ -93,7 +93,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol);
+    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol, NULL);
     if (skip) {
         return 0;
     }
