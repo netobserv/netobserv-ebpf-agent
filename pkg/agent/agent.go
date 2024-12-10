@@ -219,6 +219,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 				FilterPort:            tracer.ConvertFilterPortsToInstr(r.FilterPort, r.FilterPortRange, r.FilterPorts),
 				FilterTCPFlags:        r.FilterTCPFlags,
 				FilterDrops:           r.FilterDrops,
+				FilterSample:          r.FilterSample,
 			})
 		}
 	}

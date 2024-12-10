@@ -75,6 +75,8 @@ type FlowFilter struct {
 	FilterTCPFlags string `json:"tcp_flags,omitempty"`
 	// FilterDrops allow filtering flows with packet drops, default is false.
 	FilterDrops bool `json:"drops,omitempty"`
+	// FilterSample is the sample rate this matching flow will use
+	FilterSample uint32 `json:"sample,omitempty"`
 }
 
 type Config struct {

@@ -25,6 +25,7 @@ type FilterConfig struct {
 	FilterAction          string
 	FilterTCPFlags        string
 	FilterDrops           bool
+	FilterSample          uint32
 }
 
 type Filter struct {
@@ -164,6 +165,10 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 
 	if config.FilterDrops {
 		val.FilterDrops = 1
+	}
+
+	if config.FilterSample != 0 {
+		val.Sample = config.FilterSample
 	}
 	return val, nil
 }
