@@ -36,6 +36,8 @@ jobs:
           registry: quay.io
       - name: get short sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: build and push bytecode image
+        run: IMAGE_NOO_BC=quay.io/netobserv/ebpf-bytecode:${{ env.short_sha }} OCI_BUILD_OPTS="--label quay.expires-after=2w" make build-and-push-bc-image
       - name: build and push manifest with images
         run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE_ORG=${{ env.WF_ORG }} IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make images
       - uses: actions/github-script@v6
