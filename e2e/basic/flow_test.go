@@ -1,5 +1,3 @@
-//go:build e2e
-
 package basic
 
 import (
@@ -152,6 +150,7 @@ func getPingFlows(t *testing.T, newerThan time.Time, expectedBytes int) (sent, r
 	}, test.Interval(time.Second))
 
 	test.Eventually(t, time.Minute, func(t require.TestingT) {
+		// testCluster.Loki().DebugPrint(100, `{app="netobserv-flowcollector",DstK8S_OwnerName="pinger"}`)
 		query, err = testCluster.Loki().
 			Query(1, fmt.Sprintf(`{SrcK8S_OwnerName="server",DstK8S_OwnerName="pinger"}`+
 				`|~"\"Proto\":1[,}]"`+ // Proto 1 == ICMP
