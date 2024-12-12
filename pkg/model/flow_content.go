@@ -51,6 +51,9 @@ func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.Bp
 	if other.Dscp != 0 {
 		p.Dscp = other.Dscp
 	}
+	if other.Sampling != 0 {
+		p.Sampling = other.Sampling
+	}
 	return p
 }
 

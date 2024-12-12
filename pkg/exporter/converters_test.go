@@ -48,6 +48,7 @@ func TestConversions(t *testing.T) {
 						Packets:     123,
 						Flags:       0x100,
 						Dscp:        64,
+						Sampling:    1,
 					},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 						DnsRecord: ebpf.BpfDnsRecordT{
@@ -74,6 +75,7 @@ func TestConversions(t *testing.T) {
 				"SrcPort":         23000,
 				"DstPort":         443,
 				"Flags":           0x100,
+				"Sampling":        1,
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interfaces":      []string{"eth0"},
@@ -99,6 +101,7 @@ func TestConversions(t *testing.T) {
 						Bytes:       456,
 						Packets:     123,
 						Dscp:        64,
+						Sampling:    2,
 					},
 				},
 				Interface:     "eth0",
@@ -117,6 +120,7 @@ func TestConversions(t *testing.T) {
 				"Etype":           2048,
 				"Packets":         123,
 				"Proto":           17,
+				"Sampling":        2,
 				"SrcPort":         23000,
 				"DstPort":         443,
 				"TimeFlowStartMs": someTime.UnixMilli(),
