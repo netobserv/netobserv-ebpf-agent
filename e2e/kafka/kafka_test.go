@@ -1,5 +1,3 @@
-//go:build e2e
-
 package basic
 
 import (
@@ -92,13 +90,14 @@ func checkResources(client klient.Client, list ...string) bool {
 		return false
 	}
 	deplInfo := []string{}
-	for _, p := range depl.Items {
+	for i := range depl.Items {
+		p := &depl.Items[i]
 		deplInfo = append(deplInfo, fmt.Sprintf("%s (%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.Replicas))
 		if _, toCheck := ready[p.Name]; toCheck {
 			ready[p.Name] = p.Status.ReadyReplicas == 1
 		}
 	}
-	klog.Infof("Deployments: " + strings.Join(deplInfo, ", "))
+	klog.Infof("Deployments: %s", strings.Join(deplInfo, ", "))
 	var sfs appsv1.StatefulSetList
 	err = client.Resources(namespace).List(context.TODO(), &sfs)
 	if err != nil {
@@ -106,13 +105,14 @@ func checkResources(client klient.Client, list ...string) bool {
 		return false
 	}
 	sfsInfo := []string{}
-	for _, p := range sfs.Items {
+	for i := range sfs.Items {
+		p := &sfs.Items[i]
 		sfsInfo = append(sfsInfo, fmt.Sprintf("%s (%d/%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.AvailableReplicas, p.Status.Replicas))
 		if _, toCheck := ready[p.Name]; toCheck {
 			ready[p.Name] = p.Status.ReadyReplicas == 1
 		}
 	}
-	klog.Infof("StatefulSets: " + strings.Join(sfsInfo, ", "))
+	klog.Infof("StatefulSets: %s", strings.Join(sfsInfo, ", "))
 	for _, state := range ready {
 		if !state {
 			return false
