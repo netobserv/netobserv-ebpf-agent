@@ -99,6 +99,7 @@ typedef struct flow_metrics_t {
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
     u8 dscp;
+    u32 sampling;
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF

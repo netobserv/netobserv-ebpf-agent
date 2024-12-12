@@ -79,6 +79,9 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		out["Packets"] = fr.Metrics.Packets
 	}
 
+	if fr.Metrics.Sampling != 0 {
+		out["Sampling"] = fr.Metrics.Sampling
+	}
 	var interfaces []string
 	var directions []int
 	if len(fr.DupList) != 0 {

@@ -116,7 +116,7 @@ type BpfFlowMetricsT struct {
 	Flags           uint16
 	Errno           uint8
 	Dscp            uint8
-	_               [4]byte
+	Sampling        uint32
 }
 
 type BpfFlowRecordT struct {

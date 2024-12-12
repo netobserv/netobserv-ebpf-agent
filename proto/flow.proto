@@ -65,6 +65,7 @@ message Record {
   uint32 dns_errno = 25;
   repeated DupMapEntry dup_list = 26;
   repeated NetworkEvent network_events_metadata = 27;
+  uint32 sampling = 28;
 }
 
 message DataLink {
