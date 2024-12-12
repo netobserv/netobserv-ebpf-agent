@@ -58,7 +58,7 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     rtt *= 1000u;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol);
+    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol, NULL);
     if (skip) {
         return 0;
     }

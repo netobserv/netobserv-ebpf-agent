@@ -40,7 +40,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x13, 0x14, // flags
 		0x33,                   // u8 errno
 		0x60,                   // u8 dscp
-		0x00, 0x00, 0x00, 0x00, // 4 bytes padding
+		0x00, 0x00, 0x00, 0x00, // 4 bytes sampling
 	}))
 	require.NoError(t, err)
 
@@ -67,6 +67,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			Flags:           0x1413,
 			Errno:           0x33,
 			Dscp:            0x60,
+			Sampling:        0x00,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses

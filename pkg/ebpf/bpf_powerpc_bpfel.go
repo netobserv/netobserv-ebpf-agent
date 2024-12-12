@@ -81,6 +81,7 @@ type BpfFilterValueT struct {
 	Action       BpfFilterActionT
 	TcpFlags     BpfTcpFlagsT
 	FilterDrops  uint8
+	Sample       uint32
 	Ip           [16]uint8
 }
 
@@ -115,7 +116,7 @@ type BpfFlowMetricsT struct {
 	Flags           uint16
 	Errno           uint8
 	Dscp            uint8
-	_               [4]byte
+	Sampling        uint32
 }
 
 type BpfFlowRecordT struct {
