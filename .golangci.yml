@@ -16,9 +16,9 @@ linters:
     - stylecheck
     - typecheck
     - unused
+run:
+  go: "1.22"
 linters-settings:
-  stylecheck:
-    go: "1.22"
   gocritic:
     enabled-checks:
       - hugeParam

@@ -78,9 +78,9 @@ func TestFlowsAgent_Deduplication(t *testing.T) {
 
 	var key1Flows []*model.Record
 	for _, f := range exported {
-		require.NotContains(t, receivedKeys, f.Id)
-		receivedKeys[f.Id] = struct{}{}
-		switch f.Id {
+		require.NotContains(t, receivedKeys, f.ID)
+		receivedKeys[f.ID] = struct{}{}
+		switch f.ID {
 		case key1:
 			assert.EqualValues(t, 4, f.Metrics.Packets)
 			assert.EqualValues(t, 66, f.Metrics.Bytes)
@@ -116,9 +116,9 @@ func TestFlowsAgent_DeduplicationJustMark(t *testing.T) {
 	assert.Len(t, exported, 3)
 	duplicates := 0
 	for _, f := range exported {
-		require.NotContains(t, receivedKeys, f.Id)
-		receivedKeys[f.Id] = struct{}{}
-		switch f.Id {
+		require.NotContains(t, receivedKeys, f.ID)
+		receivedKeys[f.ID] = struct{}{}
+		switch f.ID {
 		case key1:
 			assert.EqualValues(t, 4, f.Metrics.Packets)
 			assert.EqualValues(t, 66, f.Metrics.Bytes)
@@ -155,9 +155,9 @@ func TestFlowsAgent_Deduplication_None(t *testing.T) {
 
 	var key1Flows []*model.Record
 	for _, f := range exported {
-		require.NotContains(t, receivedKeys, f.Id)
-		receivedKeys[f.Id] = struct{}{}
-		switch f.Id {
+		require.NotContains(t, receivedKeys, f.ID)
+		receivedKeys[f.ID] = struct{}{}
+		switch f.ID {
 		case key1:
 			assert.EqualValues(t, 4, f.Metrics.Packets)
 			assert.EqualValues(t, 66, f.Metrics.Bytes)
@@ -192,7 +192,7 @@ func TestFlowsAgent_Decoration(t *testing.T) {
 	// add the interface name and the agent IP
 	for _, f := range exported {
 		assert.Equal(t, agentIP, f.AgentIP.String())
-		switch f.Id {
+		switch f.ID {
 		case key1, key2:
 			assert.Equal(t, "foo", f.Interface)
 		default:
@@ -221,17 +221,24 @@ func testAgent(t *testing.T, cfg *Config) *test.ExporterFake {
 	})
 
 	now := uint64(monotime.Now())
-	key1Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
-		{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
+	key1Metrics := model.BpfFlowContents{
+		{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000},
+		},
+		{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 1, Bytes: 22, StartMonoTimeTs: now, EndMonoTimeTs: now + 3000},
+		},
 	}
-	key2Metrics := []ebpf.BpfFlowMetrics{
-		{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
+	key2Metrics := model.BpfFlowContents{
+		{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000},
+		},
 	}
-	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId][]ebpf.BpfFlowMetrics{
-		key1:     key1Metrics,
-		key1Dupe: key1Metrics,
-		key2:     key2Metrics,
+	acc := key1Metrics.Accumulate()
+	ebpfTracer.AppendLookupResults(map[ebpf.BpfFlowId]model.BpfFlowContent{
+		key1:     acc,
+		key1Dupe: acc,
+		key2:     key2Metrics.Accumulate(),
 	})
 	return export
 }
