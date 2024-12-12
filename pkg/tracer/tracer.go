@@ -877,8 +877,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &baseMetrics}
-		flows[id] = flowPayload
+		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
 
 	// Reiterate on additional metrics
@@ -902,14 +901,14 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
 			continue
 		}
-		flowPayload, found := flows[id]
+		flow, found := flows[id]
 		if !found {
-			flowPayload = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+			flow = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
 		}
 		for iMet := range additionalMetrics {
-			flowPayload.AccumulateAdditional(&additionalMetrics[iMet])
+			flow.AccumulateAdditional(&additionalMetrics[iMet])
 		}
-		flows[id] = flowPayload
+		flows[id] = flow
 	}
 	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
