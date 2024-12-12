@@ -132,6 +132,10 @@ make generate
 
 Regularly tested on Fedora.
 
+### Running end-to-end tests
+
+Refer to the specific documentation: [e2e readme](./e2e/README.md)
+
 ## Known issues
 
 ### Extrenal Traffic in Openshift (OVN-Kubernetes CNI)

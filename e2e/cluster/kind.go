@@ -14,12 +14,11 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	rt2 "runtime"
 	"sort"
 	"syscall"
 	"testing"
 	"time"
-
-	rt2 "runtime"
 
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
 
