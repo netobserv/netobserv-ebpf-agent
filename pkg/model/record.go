@@ -148,3 +148,10 @@ func AllZerosMetaData(s [NetworkEventsMaxEventsMD]uint8) bool {
 	}
 	return true
 }
+
+func AllZeroIP(ip net.IP) bool {
+	if ip.Equal(net.IPv4zero) || ip.Equal(net.IPv6zero) {
+		return true
+	}
+	return false
+}

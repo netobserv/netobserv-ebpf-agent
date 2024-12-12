@@ -84,11 +84,16 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 	if p.AdditionalMetrics.FlowRtt < other.FlowRtt {
 		p.AdditionalMetrics.FlowRtt = other.FlowRtt
 	}
+	// Network events
 	for _, md := range other.NetworkEvents {
 		if !AllZerosMetaData(md) && !networkEventsMDExist(p.AdditionalMetrics.NetworkEvents, md) {
 			copy(p.AdditionalMetrics.NetworkEvents[p.AdditionalMetrics.NetworkEventsIdx][:], md[:])
 			p.AdditionalMetrics.NetworkEventsIdx = (p.AdditionalMetrics.NetworkEventsIdx + 1) % MaxNetworkEvents
 		}
+	}
+	// Packet Translations
+	if !AllZeroIP(IP(other.TranslatedFlow.Saddr)) && !AllZeroIP(IP(other.TranslatedFlow.Daddr)) {
+		p.AdditionalMetrics.TranslatedFlow = other.TranslatedFlow
 	}
 }
 

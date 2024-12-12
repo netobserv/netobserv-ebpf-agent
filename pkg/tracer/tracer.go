@@ -45,6 +45,7 @@ const (
 	constEnableFlowFiltering            = "enable_flows_filtering"
 	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
+	constEnablePktTransformation        = "enable_pkt_transformation_tracking"
 	pktDropHook                         = "kfree_skb"
 	constPcaEnable                      = "enable_pca"
 	pcaRecordsMap                       = "packet_record"
@@ -79,6 +80,7 @@ type FlowFetcher struct {
 	egressTCXLink               map[ifaces.Interface]link.Link
 	ingressTCXLink              map[ifaces.Interface]link.Link
 	networkEventsMonitoringLink link.Link
+	nfNatManIPLink              link.Link
 	lookupAndDeleteSupported    bool
 }
 
@@ -96,6 +98,7 @@ type FlowFetcherConfig struct {
 	NetworkEventsMonitoringGroupID int
 	EnableFlowFilter               bool
 	EnablePCA                      bool
+	EnablePktTransformation        bool
 	FilterConfig                   *FilterConfig
 }
 
@@ -113,7 +116,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 	// Resize maps according to user-provided configuration
 	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker {
+	if isEBPFFeaturesEnabled(cfg) {
 		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
 	} else {
 		spec.Maps[additionalFlowMetrics].MaxEntries = 1
@@ -155,6 +158,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
 	}
 
+	enablePktTransformation := 0
+	if cfg.EnablePktTransformation {
+		enablePktTransformation = 1
+	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:                       uint32(cfg.Sampling),
 		constTraceMessages:                  uint8(traceMsgs),
@@ -164,6 +171,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		constEnableFlowFiltering:            uint8(enableFlowFiltering),
 		constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
 		constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
+		constEnablePktTransformation:        uint8(enablePktTransformation),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -252,6 +260,14 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 next:
+	var nfNatManIPLink link.Link
+	if cfg.EnablePktTransformation {
+		nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
+		if err != nil {
+			log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
+			return nil, fmt.Errorf("failed to attach the BPF program to nat_manip kprobe: %w", err)
+		}
+	}
 	// read events from igress+egress ringbuffer
 	flows, err := ringbuf.NewReader(objects.DirectFlows)
 	if err != nil {
@@ -270,11 +286,19 @@ next:
 		pktDropsTracePoint:          pktDropsLink,
 		rttFentryLink:               rttFentryLink,
 		rttKprobeLink:               rttKprobeLink,
+		nfNatManIPLink:              nfNatManIPLink,
 		egressTCXLink:               map[ifaces.Interface]link.Link{},
 		ingressTCXLink:              map[ifaces.Interface]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 	}, nil
+}
+
+func isEBPFFeaturesEnabled(cfg *FlowFetcherConfig) bool {
+	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker || cfg.EnablePktTransformation {
+		return true
+	}
+	return false
 }
 
 func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
@@ -605,6 +629,11 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if m.nfNatManIPLink != nil {
+		if err := m.nfNatManIPLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -768,8 +797,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 				met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
 			}
 		} else {
-			for _, a := range additionalMetrics {
-				flowPayload.AccumulateAdditional(&a)
+			for i := range additionalMetrics {
+				flowPayload.AccumulateAdditional(&additionalMetrics[i])
 			}
 		}
 		flows[id] = flowPayload
@@ -881,6 +910,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -905,6 +935,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
+				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
 				TcpRcvKprobe:              nil,
 				TcpRcvFentry:              nil,
 				KfreeSkb:                  nil,
@@ -930,6 +961,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
 			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -954,6 +986,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
 				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
+				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
 				TcpRcvFentry:              nil,
 				KfreeSkb:                  nil,
 				RhNetworkEventsMonitoring: nil,
@@ -978,6 +1011,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
 			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
+			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1002,6 +1036,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
 				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
 				TcpRcvFentry:              newObjects.TCPRcvFentry,
+				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
 				TcpRcvKprobe:              nil,
 				KfreeSkb:                  nil,
 				RhNetworkEventsMonitoring: nil,
@@ -1028,6 +1063,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
 			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
 			KfreeSkb            *cilium.Program `ebpf:"kfree_skb"`
+			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1053,6 +1089,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcpRcvFentry:              newObjects.TCPRcvFentry,
 				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
 				KfreeSkb:                  newObjects.KfreeSkb,
+				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{

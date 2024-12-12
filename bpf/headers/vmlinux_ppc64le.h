@@ -67125,10 +67125,17 @@ union nf_conntrack_proto {
 
 struct nf_ct_ext;
 
+struct nf_conntrack_zone {
+	u16 id;
+	u8 flags;
+	u8 dir;
+};
+
 struct nf_conn {
 	struct nf_conntrack ct_general;
 	spinlock_t lock;
 	u32 timeout;
+	struct nf_conntrack_zone zone;
 	struct nf_conntrack_tuple_hash tuplehash[2];
 	long unsigned int status;
 	possible_net_t ct_net;
@@ -133095,12 +133102,6 @@ struct fec_reply_data {
 struct nf_hook_entries_rcu_head {
 	struct callback_head head;
 	void *allocation;
-};
-
-struct nf_conntrack_zone {
-	u16 id;
-	u8 flags;
-	u8 dir;
 };
 
 struct nf_conntrack_tuple;
