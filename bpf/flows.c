@@ -72,6 +72,20 @@ static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, 
     }
 }
 
+static inline void add_observed_intf(additional_metrics *value, u32 if_index, u8 direction) {
+    if (value->nb_observed_intf < MAX_OBSERVED_INTERFACES) {
+        for (u8 i = 0; i < value->nb_observed_intf; i++) {
+            if (value->observed_intf[i].if_index == if_index &&
+                value->observed_intf[i].direction == direction) {
+                return;
+            }
+        }
+        value->observed_intf[value->nb_observed_intf].if_index = if_index;
+        value->observed_intf[value->nb_observed_intf].direction = direction;
+        value->nb_observed_intf++;
+    }
+}
+
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
@@ -100,12 +114,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         return TC_ACT_OK;
     }
 
-    //Set extra fields
-    id.if_index = skb->ifindex;
-    id.direction = direction;
-
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol);
+    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, direction);
     if (skip) {
         return TC_ACT_OK;
     }
@@ -116,10 +126,25 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len);
+        if (aggregate_flow->if_index_first_seen == skb->ifindex) {
+            update_existing_flow(aggregate_flow, &pkt, len);
+        } else {
+            // Only add info that we've seen this interface
+            additional_metrics *extra_metrics =
+                (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
+            if (extra_metrics != NULL) {
+                add_observed_intf(extra_metrics, skb->ifindex, direction);
+            } else {
+                additional_metrics new_metrics = {};
+                add_observed_intf(&new_metrics, skb->ifindex, direction);
+                bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
+            }
+        }
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
+            .if_index_first_seen = skb->ifindex,
+            .direction_first_seen = direction,
             .packets = 1,
             .bytes = len,
             .eth_protocol = eth_protocol,
@@ -172,9 +197,6 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     // Update additional metrics (per-CPU map)
     if (pkt.dns_id != 0 || dns_errno != 0) {
-        // hack on id will be removed with dedup-in-kernel work
-        id.direction = 0;
-        id.if_index = 0;
         additional_metrics *extra_metrics =
             (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
         if (extra_metrics != NULL) {

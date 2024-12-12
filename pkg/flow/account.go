@@ -96,7 +96,8 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 	monotonicNow := uint64(c.monoClock())
 	records := make([]*model.Record, 0, len(entries))
 	for key, metrics := range entries {
-		records = append(records, model.NewRecord(key, &model.BpfFlowContent{BpfFlowMetrics: metrics}, now, monotonicNow))
+		flowContent := model.NewBpfFlowContent(*metrics)
+		records = append(records, model.NewRecord(key, &flowContent, now, monotonicNow))
 	}
 	c.metrics.EvictionCounter.WithSourceAndReason("accounter", reason).Inc()
 	c.metrics.EvictedFlowsCounter.WithSourceAndReason("accounter", reason).Add(float64(len(records)))
