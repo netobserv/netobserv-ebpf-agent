@@ -70,6 +70,7 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		Flags:       uint32(fr.Metrics.Flags),
 		Interface:   fr.Interface,
 		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
+		Sampling:    fr.Metrics.Sampling,
 	}
 	if fr.Metrics.AdditionalMetrics != nil {
 		pbflowRecord.PktDropBytes = fr.Metrics.AdditionalMetrics.PktDrops.Bytes
@@ -181,6 +182,7 @@ func PBToFlow(pb *Record) *model.Record {
 				Packets:     uint32(pb.Packets),
 				Flags:       uint16(pb.Flags),
 				Dscp:        uint8(pb.Network.Dscp),
+				Sampling:    pb.Sampling,
 			},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				PktDrops: ebpf.BpfPktDropsT{

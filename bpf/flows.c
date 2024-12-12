@@ -55,13 +55,15 @@
  */
 #include "pkt_translation.h"
 
-static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, u64 len) {
+static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, u64 len,
+                                        u32 sampling) {
     bpf_spin_lock(&aggregate_flow->lock);
     aggregate_flow->packets += 1;
     aggregate_flow->bytes += len;
     aggregate_flow->end_mono_time_ts = pkt->current_ts;
     aggregate_flow->flags |= pkt->flags;
     aggregate_flow->dscp = pkt->dscp;
+    aggregate_flow->sampling = sampling;
     bpf_spin_unlock(&aggregate_flow->lock);
 }
 
@@ -123,7 +125,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len);
+        update_existing_flow(aggregate_flow, &pkt, len, filter_sampling);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow = {
@@ -134,6 +136,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             .end_mono_time_ts = pkt.current_ts,
             .flags = pkt.flags,
             .dscp = pkt.dscp,
+            .sampling = filter_sampling,
         };
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
@@ -147,7 +150,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 flow_metrics *aggregate_flow =
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
-                    update_existing_flow(aggregate_flow, &pkt, len);
+                    update_existing_flow(aggregate_flow, &pkt, len, filter_sampling);
                 } else {
                     if (trace_messages) {
                         bpf_printk("failed to update an exising flow\n");
