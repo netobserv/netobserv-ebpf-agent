@@ -35,10 +35,10 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	// Send some flows to the input of the exporter stage
 	flows := make(chan []*model.Record, 10)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.9.8.7")},
+		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
 	}
 	flows <- []*model.Record{
-		{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: model.IPv6Type}},
+		{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("8888::1111")},
 	}
 	go exporter.ExportFlows(flows)
@@ -77,10 +77,10 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	// Send some flows to the input of the exporter stage
 	flows := make(chan []*model.Record, 10)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.11.12.13")},
+		{AgentIP: net.ParseIP("10.11.12.13"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
 	}
 	flows <- []*model.Record{
-		{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{EthProtocol: model.IPv6Type}},
+		{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("9999::2222")},
 	}
 	go exporter.ExportFlows(flows)
@@ -121,7 +121,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	flows := make(chan []*model.Record, 10)
 	var input []*model.Record
 	for i := 0; i < 25000; i++ {
-		input = append(input, &model.Record{RawRecord: model.RawRecord{Id: ebpf.BpfFlowId{
+		input = append(input, &model.Record{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
 		}}, AgentIP: net.ParseIP("1111::1111"), Interface: "12345678"})
 	}

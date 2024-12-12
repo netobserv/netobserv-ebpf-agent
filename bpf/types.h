@@ -28,8 +28,9 @@ typedef enum tcp_flags_t {
     FIN_ACK_FLAG = 0x200,
     RST_ACK_FLAG = 0x400,
 } tcp_flags;
-// Force emitting enum tcp_flags_t into the ELF.
-const enum tcp_flags_t *unused10 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const enum tcp_flags_t *unused0 __attribute__((unused));
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&                                 \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -61,7 +62,6 @@ typedef __u64 u64;
 #define IPPROTO_ICMPV6 58
 #define DSCP_SHIFT 2
 #define DSCP_MASK 0x3F
-#define MIN_RTT 10000u //10us
 
 #define MAX_FILTER_ENTRIES 1 // we have only one global filter
 #define MAX_EVENT_MD 8
@@ -73,12 +73,18 @@ typedef enum direction_t {
     EGRESS,
     MAX_DIRECTION = 2,
 } direction;
-// Force emitting enum direction_t into the ELF.
-const enum direction_t *unused8 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const enum direction_t *unused1 __attribute__((unused));
 
 const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 typedef struct flow_metrics_t {
+    struct bpf_spin_lock lock;
+    u16 eth_protocol;
+    // L2 data link layer
+    u8 src_mac[ETH_ALEN];
+    u8 dst_mac[ETH_ALEN];
     u32 packets;
     u64 bytes;
     // Flow start and end times as monotomic timestamps in nanoseconds
@@ -93,37 +99,42 @@ typedef struct flow_metrics_t {
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
     u8 dscp;
+} flow_metrics;
+
+// Force emitting enums/structs into the ELF
+const struct flow_metrics_t *unused2 __attribute__((unused));
+
+typedef struct additional_metrics_t {
+    struct dns_record_t {
+        u16 id;
+        u16 flags;
+        u64 latency;
+        u8 errno;
+    } dns_record;
     struct pkt_drops_t {
         u32 packets;
         u64 bytes;
         u16 latest_flags;
         u8 latest_state;
         u32 latest_drop_cause;
-    } __attribute__((packed)) pkt_drops;
-    struct dns_record_t {
-        u16 id;
-        u16 flags;
-        u64 latency;
-        u8 errno;
-    } __attribute__((packed)) dns_record;
+    } pkt_drops;
     u64 flow_rtt;
     u8 network_events_idx;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
-} __attribute__((packed)) flow_metrics;
+} additional_metrics;
 
-// Force emitting struct pkt_drops into the ELF.
-const struct pkt_drops_t *unused0 __attribute__((unused));
+// Force emitting enums/structs into the ELF
+const struct additional_metrics_t *unused3 __attribute__((unused));
 
-// Force emitting struct flow_metrics into the ELF.
-const struct flow_metrics_t *unused1 __attribute__((unused));
+// Force emitting enums/structs into the ELF
+const struct dns_record_t *unused4 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const struct pkt_drops_t *unused5 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
-    u16 eth_protocol;
     u8 direction;
-    // L2 data link layer
-    u8 src_mac[ETH_ALEN];
-    u8 dst_mac[ETH_ALEN];
     // L3 network layer
     // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
     // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
@@ -138,10 +149,10 @@ typedef struct flow_id_t {
     u8 icmp_code;
     // OS interface index
     u32 if_index;
-} __attribute__((packed)) flow_id;
+} flow_id;
 
-// Force emitting struct flow_id into the ELF.
-const struct flow_id_t *unused2 __attribute__((unused));
+// Force emitting enums/structs into the ELF
+const struct flow_id_t *unused7 __attribute__((unused));
 
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.
@@ -149,13 +160,10 @@ const struct flow_id_t *unused2 __attribute__((unused));
 typedef struct flow_record_t {
     flow_id id;
     flow_metrics metrics;
-} __attribute__((packed)) flow_record;
+} flow_record;
 
-// Force emitting struct flow_record into the ELF.
-const struct flow_record_t *unused3 __attribute__((unused));
-
-// Force emitting struct dns_record into the ELF.
-const struct dns_record_t *unused4 __attribute__((unused));
+// Force emitting enums/structs into the ELF
+const struct flow_record_t *unused8 __attribute__((unused));
 
 // Internal structure: Packet info structure parsed around functions.
 typedef struct pkt_info_t {
@@ -174,7 +182,7 @@ typedef struct payload_meta_t {
     u32 if_index;
     u32 pkt_len;
     u64 timestamp; // timestamp when packet received by ebpf
-} __attribute__((packed)) payload_meta;
+} payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response
 typedef struct dns_flow_id_t {
@@ -184,11 +192,12 @@ typedef struct dns_flow_id_t {
     u8 dst_ip[IP_MAX_LEN];
     u16 id;
     u8 protocol;
-} __attribute__((packed)) dns_flow_id;
+} dns_flow_id;
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
     HASHMAP_FLOWS_DROPPED,
+    HASHMAP_FAIL_UPDATE_DNS,
     FILTER_REJECT,
     FILTER_ACCEPT,
     FILTER_NOMATCH,
@@ -199,16 +208,17 @@ typedef enum global_counters_key_t {
     MAX_COUNTERS,
 } global_counters_key;
 
-// Force emitting enum global_counters_key_t into the ELF.
-const enum global_counters_key_t *unused5 __attribute__((unused));
+// Force emitting enums/structs into the ELF
+const enum global_counters_key_t *unused12 __attribute__((unused));
 
 // filter key used as key to LPM map to filter out flows that are not interesting for the user
 struct filter_key_t {
     u32 prefix_len;
     u8 ip_data[IP_MAX_LEN];
 } __attribute__((packed));
-// Force emitting struct filter_key_t into the ELF.
-const struct filter_key_t *unused6 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const struct filter_key_t *unused10 __attribute__((unused));
 
 // Enum to define filter action
 typedef enum filter_action_t {
@@ -216,8 +226,9 @@ typedef enum filter_action_t {
     REJECT,
     MAX_FILTER_ACTIONS,
 } filter_action;
-// Force emitting enum direction_t into the ELF.
-const enum filter_action_t *unused7 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const enum filter_action_t *unused11 __attribute__((unused));
 
 // filter value used as value from LPM map lookup to filter out flows that are not interesting for the user
 struct filter_value_t {
@@ -242,7 +253,8 @@ struct filter_value_t {
     u8 filter_drops;
     u8 ip[IP_MAX_LEN];
 } __attribute__((packed));
-// Force emitting struct filter_value_t into the ELF.
-const struct filter_value_t *unused9 __attribute__((unused));
+
+// Force emitting enums/structs into the ELF
+const struct filter_value_t *unused6 __attribute__((unused));
 
 #endif /* __TYPES_H__ */

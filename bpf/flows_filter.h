@@ -202,9 +202,10 @@ end:
 }
 
 static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filter_key_t *key,
-                                                        u8 *len, u8 *offset, bool use_src_ip) {
+                                                        u8 *len, u8 *offset, bool use_src_ip,
+                                                        u16 eth_protocol) {
 
-    if (id->eth_protocol == ETH_P_IP) {
+    if (eth_protocol == ETH_P_IP) {
         *len = sizeof(u32);
         *offset = sizeof(ip4in6);
         if (use_src_ip) {
@@ -213,7 +214,7 @@ static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filt
             __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
         }
         key->prefix_len = 32;
-    } else if (id->eth_protocol == ETH_P_IPV6) {
+    } else if (eth_protocol == ETH_P_IPV6) {
         *len = IP_MAX_LEN;
         *offset = 0;
         if (use_src_ip) {
@@ -232,7 +233,7 @@ static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filt
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
 static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, u16 flags,
-                                            u32 drop_reason) {
+                                            u32 drop_reason, u16 eth_protocol) {
     struct filter_key_t key;
     u8 len, offset;
     int result = 0;
@@ -241,7 +242,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     *action = MAX_FILTER_ACTIONS;
 
     // Lets do first CIDR match using srcIP.
-    result = flow_filter_setup_lookup_key(id, &key, &len, &offset, true);
+    result = flow_filter_setup_lookup_key(id, &key, &len, &offset, true, eth_protocol);
     if (result < 0) {
         return result;
     }
@@ -253,7 +254,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     }
 
     // if we can't find a match then Lets do second CIDR match using dstIP.
-    result = flow_filter_setup_lookup_key(id, &key, &len, &offset, false);
+    result = flow_filter_setup_lookup_key(id, &key, &len, &offset, false, eth_protocol);
     if (result < 0) {
         return result;
     }
