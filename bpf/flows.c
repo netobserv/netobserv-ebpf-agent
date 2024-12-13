@@ -218,24 +218,24 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     return TC_ACT_OK;
 }
 
-SEC("tc_ingress")
+SEC("classifier/tc_ingress")
 int tc_ingress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, INGRESS);
 }
 
-SEC("tc_egress")
+SEC("classifier/tc_egress")
 int tc_egress_flow_parse(struct __sk_buff *skb) {
     return flow_monitor(skb, EGRESS);
 }
 
-SEC("tcx_ingress")
+SEC("classifier/tcx_ingress")
 int tcx_ingress_flow_parse(struct __sk_buff *skb) {
     flow_monitor(skb, INGRESS);
     // return TCX_NEXT to allow existing with other TCX hooks
     return TCX_NEXT;
 }
 
-SEC("tcx_egress")
+SEC("classifier/tcx_egress")
 int tcx_egress_flow_parse(struct __sk_buff *skb) {
     flow_monitor(skb, EGRESS);
     // return TCX_NEXT to allow existing with other TCX hooks

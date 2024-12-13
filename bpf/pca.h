@@ -81,25 +81,25 @@ static inline int export_packet_payload(struct __sk_buff *skb, direction dir) {
     return 0;
 }
 
-SEC("tc_pca_ingress")
+SEC("classifier/tc_pca_ingress")
 int tc_ingress_pca_parse(struct __sk_buff *skb) {
     export_packet_payload(skb, INGRESS);
     return TC_ACT_OK;
 }
 
-SEC("tc_pca_egress")
+SEC("classifier/tc_pca_egress")
 int tc_egress_pca_parse(struct __sk_buff *skb) {
     export_packet_payload(skb, EGRESS);
     return TC_ACT_OK;
 }
 
-SEC("tcx_pca_ingress")
+SEC("classifier/tcx_pca_ingress")
 int tcx_ingress_pca_parse(struct __sk_buff *skb) {
     export_packet_payload(skb, INGRESS);
     return TCX_NEXT;
 }
 
-SEC("tcx_pca_egress")
+SEC("classifier/tcx_pca_egress")
 int tcx_egress_pca_parse(struct __sk_buff *skb) {
     export_packet_payload(skb, EGRESS);
     return TCX_NEXT;

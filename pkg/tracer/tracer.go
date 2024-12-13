@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -82,6 +83,8 @@ type FlowFetcher struct {
 	networkEventsMonitoringLink link.Link
 	nfNatManIPLink              link.Link
 	lookupAndDeleteSupported    bool
+	useEbpfManager              bool
+	pinDir                      string
 }
 
 type FlowFetcherConfig struct {
@@ -99,95 +102,228 @@ type FlowFetcherConfig struct {
 	EnableFlowFilter               bool
 	EnablePCA                      bool
 	EnablePktTranslation           bool
+	UseEbpfManager                 bool
 	FilterConfig                   *FilterConfig
+	BpfManBpfFSPath                string
 }
 
 // nolint:golint,cyclop
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.WithError(err).
-			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
-	}
+	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
+	var nfNatManIPLink link.Link
+	var err error
+	objects := ebpf.BpfObjects{}
+	var pinDir string
 
-	spec, err := ebpf.LoadBpf()
-	if err != nil {
-		return nil, fmt.Errorf("loading BPF data: %w", err)
-	}
-
-	// Resize maps according to user-provided configuration
-	spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-	if isEBPFFeaturesEnabled(cfg) {
-		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
-	} else {
-		spec.Maps[additionalFlowMetrics].MaxEntries = 1
-	}
-
-	traceMsgs := 0
-	if cfg.Debug {
-		traceMsgs = 1
-	}
-
-	enableRtt := 0
-	if cfg.EnableRTT {
-		enableRtt = 1
-	}
-
-	enableDNSTracking := 0
-	dnsTrackerPort := uint16(dnsDefaultPort)
-	if cfg.EnableDNSTracker {
-		enableDNSTracking = 1
-		if cfg.DNSTrackerPort != 0 {
-			dnsTrackerPort = cfg.DNSTrackerPort
+	if !cfg.UseEbpfManager {
+		if err := rlimit.RemoveMemlock(); err != nil {
+			log.WithError(err).
+				Warn("can't remove mem lock. The agent will not be able to start eBPF programs")
 		}
-	}
+		spec, err := ebpf.LoadBpf()
+		if err != nil {
+			return nil, fmt.Errorf("loading BPF data: %w", err)
+		}
 
-	if enableDNSTracking == 0 {
-		spec.Maps[dnsLatencyMap].MaxEntries = 1
-	}
+		// Resize maps according to user-provided configuration
+		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
+		if isEBPFFeaturesEnabled(cfg) {
+			spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
+		} else {
+			spec.Maps[additionalFlowMetrics].MaxEntries = 1
+		}
+		// remove pinning from all maps
+		maps2Name := []string{"aggregated_flows", "additional_flow_metrics", "direct_flows", "dns_flows", "filter_map", "global_counters", "packet_record"}
+		for _, m := range maps2Name {
+			spec.Maps[m].Pinning = 0
+		}
 
-	enableFlowFiltering := 0
-	if cfg.EnableFlowFilter {
-		enableFlowFiltering = 1
-	}
-	enableNetworkEventsMonitoring := 0
-	if cfg.EnableNetworkEventsMonitoring {
-		enableNetworkEventsMonitoring = 1
-	}
-	networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
-	if cfg.NetworkEventsMonitoringGroupID > 0 {
-		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
-	}
+		traceMsgs := 0
+		if cfg.Debug {
+			traceMsgs = 1
+		}
 
-	enablePktTranslation := 0
-	if cfg.EnablePktTranslation {
-		enablePktTranslation = 1
-	}
-	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:                       uint32(cfg.Sampling),
-		constTraceMessages:                  uint8(traceMsgs),
-		constEnableRtt:                      uint8(enableRtt),
-		constEnableDNSTracking:              uint8(enableDNSTracking),
-		constDNSTrackingPort:                dnsTrackerPort,
-		constEnableFlowFiltering:            uint8(enableFlowFiltering),
-		constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
-		constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
-		constEnablePktTranslation:           uint8(enablePktTranslation),
-	}); err != nil {
-		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
-	}
+		enableRtt := 0
+		if cfg.EnableRTT {
+			enableRtt = 1
+		}
 
-	oldKernel := kernel.IsKernelOlderThan("5.14.0")
-	if oldKernel {
-		log.Infof("kernel older than 5.14.0 detected: not all hooks are supported")
-	}
-	rtOldKernel := kernel.IsRealTimeKernel() && kernel.IsKernelOlderThan("5.14.0-292")
-	if rtOldKernel {
-		log.Infof("kernel is realtime and older than 5.14.0-292 not all hooks are supported")
-	}
-	supportNetworkEvents := !kernel.IsKernelOlderThan("5.14.0-427")
-	objects, err := kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, spec)
-	if err != nil {
-		return nil, err
+		enableDNSTracking := 0
+		dnsTrackerPort := uint16(dnsDefaultPort)
+		if cfg.EnableDNSTracker {
+			enableDNSTracking = 1
+			if cfg.DNSTrackerPort != 0 {
+				dnsTrackerPort = cfg.DNSTrackerPort
+			}
+		}
+
+		if enableDNSTracking == 0 {
+			spec.Maps[dnsLatencyMap].MaxEntries = 1
+		}
+
+		enableFlowFiltering := 0
+		if cfg.EnableFlowFilter {
+			enableFlowFiltering = 1
+		}
+		enableNetworkEventsMonitoring := 0
+		if cfg.EnableNetworkEventsMonitoring {
+			enableNetworkEventsMonitoring = 1
+		}
+		networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
+		if cfg.NetworkEventsMonitoringGroupID > 0 {
+			networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
+		}
+		enablePktTranslation := 0
+		if cfg.EnablePktTranslation {
+			enablePktTranslation = 1
+		}
+		if err := spec.RewriteConstants(map[string]interface{}{
+			constSampling:                       uint32(cfg.Sampling),
+			constTraceMessages:                  uint8(traceMsgs),
+			constEnableRtt:                      uint8(enableRtt),
+			constEnableDNSTracking:              uint8(enableDNSTracking),
+			constDNSTrackingPort:                dnsTrackerPort,
+			constEnableFlowFiltering:            uint8(enableFlowFiltering),
+			constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
+			constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
+			constEnablePktTranslation:           uint8(enablePktTranslation),
+		}); err != nil {
+			return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
+		}
+
+		oldKernel := kernel.IsKernelOlderThan("5.14.0")
+		if oldKernel {
+			log.Infof("kernel older than 5.14.0 detected: not all hooks are supported")
+		}
+		rtOldKernel := kernel.IsRealTimeKernel() && kernel.IsKernelOlderThan("5.14.0-292")
+		if rtOldKernel {
+			log.Infof("kernel is realtime and older than 5.14.0-292 not all hooks are supported")
+		}
+		supportNetworkEvents := !kernel.IsKernelOlderThan("5.14.0-427")
+		objects, err = kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, spec, pinDir)
+		if err != nil {
+			return nil, err
+		}
+
+		log.Debugf("Deleting specs for PCA")
+		// Deleting specs for PCA
+		// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
+		spec.Maps[pcaRecordsMap].MaxEntries = 1
+
+		objects.TcxEgressPcaParse = nil
+		objects.TcIngressPcaParse = nil
+		delete(spec.Programs, constPcaEnable)
+
+		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
+			pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
+			}
+		}
+
+		if cfg.EnableNetworkEventsMonitoring {
+			if supportNetworkEvents {
+				// Enable the following logic with RHEL9.6 when its available
+				if !kernel.IsKernelOlderThan("5.16.0") {
+					//revive:disable
+					/*
+						networkEventsMonitoringLink, err = link.Kprobe(networkEventsMonitoringHook, objects.NetworkEventsMonitoring, nil)
+						if err != nil {
+							return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
+						}
+					*/
+				} else {
+					log.Infof("kernel older than 5.16.0 detected: use custom network_events_monitoring hook")
+					networkEventsMonitoringLink, err = link.Kprobe(rhNetworkEventsMonitoringHook, objects.RhNetworkEventsMonitoring, nil)
+					if err != nil {
+						return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
+					}
+				}
+			} else {
+				log.Infof("kernel older than 5.14.0-427 detected: it does not support network_events_monitoring hook, skip")
+			}
+		}
+
+		if cfg.EnableRTT {
+			if !oldKernel {
+				rttFentryLink, err = link.AttachTracing(link.TracingOptions{
+					Program: objects.BpfPrograms.TcpRcvFentry,
+				})
+				if err == nil {
+					goto next
+				}
+				if err != nil {
+					log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
+					// Fall through to use kprobe
+				}
+			}
+			// try to use kprobe for older kernels
+			if !rtOldKernel {
+				rttKprobeLink, err = link.Kprobe("tcp_rcv_established", objects.TcpRcvKprobe, nil)
+				if err != nil {
+					log.Warningf("failed to attach the BPF program to kprobe: %v", err)
+					return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveKprobe: %w", err)
+				}
+			}
+		}
+	next:
+		if cfg.EnablePktTranslation {
+			nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
+			if err != nil {
+				log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
+				return nil, fmt.Errorf("failed to attach the BPF program to nat_manip kprobe: %w", err)
+			}
+		}
+	} else {
+		pinDir = cfg.BpfManBpfFSPath
+		opts := &cilium.LoadPinOptions{
+			ReadOnly:  false,
+			WriteOnly: false,
+			Flags:     0,
+		}
+
+		log.Info("BPFManager mode: loading aggregated flows pinned maps")
+		mPath := path.Join(pinDir, "aggregated_flows")
+		objects.BpfMaps.AggregatedFlows, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Info("BPFManager mode: loading additional flow metrics pinned maps")
+		mPath = path.Join(pinDir, "additional_flow_metrics")
+		objects.BpfMaps.AdditionalFlowMetrics, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Info("BPFManager mode: loading direct flows pinned maps")
+		mPath = path.Join(pinDir, "direct_flows")
+		objects.BpfMaps.DirectFlows, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading DNS flows pinned maps")
+		mPath = path.Join(pinDir, "dns_flows")
+		objects.BpfMaps.DnsFlows, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading filter pinned maps")
+		mPath = path.Join(pinDir, "filter_map")
+		objects.BpfMaps.FilterMap, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading global counters pinned maps")
+		mPath = path.Join(pinDir, "global_counters")
+		objects.BpfMaps.GlobalCounters, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading packet record pinned maps")
+		mPath = path.Join(pinDir, "packet_record")
+		objects.BpfMaps.PacketRecord, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
 	}
 
 	if cfg.EnableFlowFilter {
@@ -197,79 +333,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
-	log.Debugf("Deleting specs for PCA")
-	// Deleting specs for PCA
-	// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
-	spec.Maps[pcaRecordsMap].MaxEntries = 1
-
-	objects.TcxEgressPcaParse = nil
-	objects.TcIngressPcaParse = nil
-	delete(spec.Programs, constPcaEnable)
-
-	var pktDropsLink link.Link
-	if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
-		pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
-		}
-	}
-
-	var networkEventsMonitoringLink link.Link
-	if cfg.EnableNetworkEventsMonitoring {
-		if supportNetworkEvents {
-			// Enable the following logic with RHEL9.6 when its available
-			if !kernel.IsKernelOlderThan("5.16.0") {
-				//revive:disable
-				/*
-					networkEventsMonitoringLink, err = link.Kprobe(networkEventsMonitoringHook, objects.NetworkEventsMonitoring, nil)
-					if err != nil {
-						return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
-					}
-				*/
-			} else {
-				log.Infof("kernel older than 5.16.0 detected: use custom network_events_monitoring hook")
-				networkEventsMonitoringLink, err = link.Kprobe(rhNetworkEventsMonitoringHook, objects.RhNetworkEventsMonitoring, nil)
-				if err != nil {
-					return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
-				}
-			}
-		} else {
-			log.Infof("kernel older than 5.14.0-427 detected: it does not support network_events_monitoring hook, skip")
-		}
-	}
-
-	var rttFentryLink, rttKprobeLink link.Link
-	if cfg.EnableRTT {
-		if !oldKernel {
-			rttFentryLink, err = link.AttachTracing(link.TracingOptions{
-				Program: objects.BpfPrograms.TcpRcvFentry,
-			})
-			if err == nil {
-				goto next
-			}
-			log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
-			// Fall through to use kprobe
-		}
-		// try to use kprobe for older kernels
-		if !rtOldKernel {
-			rttKprobeLink, err = link.Kprobe("tcp_rcv_established", objects.TcpRcvKprobe, nil)
-			if err != nil {
-				log.Warningf("failed to attach the BPF program to kprobe: %v", err)
-				return nil, fmt.Errorf("failed to attach the BPF program to tcpReceiveKprobe: %w", err)
-			}
-		}
-	}
-next:
-	var nfNatManIPLink link.Link
-	if cfg.EnablePktTranslation {
-		nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
-		if err != nil {
-			log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
-			return nil, fmt.Errorf("failed to attach the BPF program to nat_manip kprobe: %w", err)
-		}
-	}
-	// read events from igress+egress ringbuffer
-	flows, err := ringbuf.NewReader(objects.DirectFlows)
+	flows, err := ringbuf.NewReader(objects.BpfMaps.DirectFlows)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
@@ -291,6 +355,8 @@ next:
 		ingressTCXLink:              map[ifaces.Interface]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
+		useEbpfManager:              cfg.UseEbpfManager,
+		pinDir:                      pinDir,
 	}, nil
 }
 
@@ -699,9 +765,7 @@ func (m *FlowFetcher) Close() error {
 		}
 	}
 	m.qdiscs = map[ifaces.Interface]*netlink.GenericQdisc{}
-	if len(errs) == 0 {
-		return nil
-	}
+
 	for iface, l := range m.egressTCXLink {
 		log := log.WithField("interface", iface)
 		log.Debug("detach egress TCX hook")
@@ -715,11 +779,42 @@ func (m *FlowFetcher) Close() error {
 	}
 	m.ingressTCXLink = map[ifaces.Interface]link.Link{}
 
+	if !m.useEbpfManager {
+		if err := m.removeAllPins(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
 	var errStrings []string
 	for _, err := range errs {
 		errStrings = append(errStrings, err.Error())
 	}
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
+}
+
+// removeAllPins removes all pins.
+func (m *FlowFetcher) removeAllPins() error {
+	files, err := os.ReadDir(m.pinDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, file := range files {
+		if err := os.Remove(path.Join(m.pinDir, file.Name())); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if err := os.Remove(m.pinDir); err != nil {
+		return err
+	}
+	return nil
 }
 
 // doIgnoreNoDev runs the provided syscall over the provided device and ignores the error
@@ -877,7 +972,7 @@ func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
 }
 
 // kernelSpecificLoadAndAssign based on a kernel version, it will load only the supported eBPF hooks
-func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool, spec *cilium.CollectionSpec) (ebpf.BpfObjects, error) {
+func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool, spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
 	objects := ebpf.BpfObjects{}
 
 	// Helper to remove common hooks
@@ -888,7 +983,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 	// Helper to load and assign BPF objects
 	loadAndAssign := func(objects interface{}) error {
-		if err := spec.LoadAndAssign(objects, nil); err != nil {
+		if err := spec.LoadAndAssign(objects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: pinDir}}); err != nil {
 			var ve *cilium.VerifierError
 			if errors.As(err, &ve) {
 				log.Infof("Verifier error: %+v", ve)

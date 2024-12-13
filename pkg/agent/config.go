@@ -235,8 +235,12 @@ type Config struct {
 	EnableNetworkEventsMonitoring bool `env:"ENABLE_NETWORK_EVENTS_MONITORING" envDefault:"false"`
 	// NetworkEventsMonitoringGroupID to allow ebpf hook to process samples for specific groupID and ignore the rest
 	NetworkEventsMonitoringGroupID int `env:"NETWORK_EVENTS_MONITORING_GROUP_ID" envDefault:"10"`
-	// EnablePktTranslationTracking allow tracking packets after translation, for example NAT, default is false.
+	// EnablePktTranslationTracking allow tracking packets after translation - for example, NAT, default is false.
 	EnablePktTranslationTracking bool `env:"ENABLE_PKT_TRANSLATION" envDefault:"false"`
+	// EbpfProgramManagerMode is enabled when eBPF manager is handling netobserv ebpf programs life cycle, default is false.
+	EbpfProgramManagerMode bool `env:"EBPF_PROGRAM_MANAGER_MODE" envDefault:"false"`
+	// BpfManBpfFSPath user configurable ebpf manager mount path
+	BpfManBpfFSPath string `env:"BPFMAN_BPF_FS_PATH" envDefault:"/run/netobserv/maps"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
