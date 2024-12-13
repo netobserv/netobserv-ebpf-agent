@@ -66,6 +66,7 @@ message Record {
   repeated DupMapEntry dup_list = 26;
   repeated NetworkEvent network_events_metadata = 27;
   Xlat xlat = 28;
+  uint32 sampling = 29;
 }
 
 message DataLink {

@@ -63,7 +63,7 @@ typedef __u64 u64;
 #define DSCP_SHIFT 2
 #define DSCP_MASK 0x3F
 
-#define MAX_FILTER_ENTRIES 1 // we have only one global filter
+#define MAX_FILTER_ENTRIES 16
 #define MAX_EVENT_MD 8
 #define MAX_NETWORK_EVENTS 4
 
@@ -99,6 +99,7 @@ typedef struct flow_metrics_t {
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
     u8 dscp;
+    u32 sampling;
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF
@@ -262,6 +263,7 @@ struct filter_value_t {
     filter_action action;
     tcp_flags tcpFlags;
     u8 filter_drops;
+    u32 sample;
     u8 ip[IP_MAX_LEN];
 } __attribute__((packed));
 

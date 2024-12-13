@@ -103,8 +103,8 @@ type FlowFetcherConfig struct {
 	EnablePCA                      bool
 	EnablePktTranslation           bool
 	UseEbpfManager                 bool
-	FilterConfig                   *FilterConfig
 	BpfManBpfFSPath                string
+	FilterConfig                   []*FilterConfig
 }
 
 // nolint:golint,cyclop
