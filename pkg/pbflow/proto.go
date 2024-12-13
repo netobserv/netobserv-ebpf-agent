@@ -83,6 +83,12 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		if fr.Metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
 			pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 		}
+		pbflowRecord.Xlat = &Xlat{
+			SrcPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport),
+			DstPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport),
+			ZoneId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId),
+			IcmpId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.IcmpId),
+		}
 	}
 	if len(fr.DupList) != 0 {
 		pbflowRecord.DupList = make([]*DupMapEntry, 0)
@@ -98,9 +104,17 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	if fr.Metrics.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.DstIp[:]}}
+		if fr.Metrics.AdditionalMetrics != nil {
+			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr[:]}}
+			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr[:]}}
+		}
 	} else {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.SrcIp)}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.DstIp)}}
+		if fr.Metrics.AdditionalMetrics != nil {
+			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr)}}
+			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr)}}
+		}
 	}
 	if s != nil && fr.Metrics.AdditionalMetrics != nil {
 		seen := make(map[string]bool)
@@ -182,6 +196,14 @@ func PBToFlow(pb *Record) *model.Record {
 					Errno:   uint8(pb.DnsErrno),
 					Latency: uint64(pb.DnsLatency.AsDuration()),
 				},
+				TranslatedFlow: ebpf.BpfTranslatedFlowT{
+					Saddr:  ipToIPAddr(pb.Xlat.GetSrcAddr()),
+					Daddr:  ipToIPAddr(pb.Xlat.GetDstAddr()),
+					Sport:  uint16(pb.Xlat.GetSrcPort()),
+					Dport:  uint16(pb.Xlat.GetDstPort()),
+					ZoneId: uint16(pb.Xlat.GetZoneId()),
+					IcmpId: uint8(pb.Xlat.GetIcmpId()),
+				},
 			},
 		},
 		TimeFlowStart: pb.TimeFlowStart.AsTime(),
@@ -210,6 +232,7 @@ func PBToFlow(pb *Record) *model.Record {
 		}
 		protoLog.Debugf("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
 	}
+
 	return &out
 }
 
