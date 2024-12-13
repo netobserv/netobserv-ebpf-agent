@@ -1246,6 +1246,12 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
 
+	// remove pinning from all maps
+	maps2Name := []string{"aggregated_flows", "additional_flow_metrics", "direct_flows", "dns_flows", "filter_map", "global_counters", "packet_record"}
+	for _, m := range maps2Name {
+		spec.Maps[m].Pinning = 0
+	}
+
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
 		TcIngressPcaParse  *cilium.Program `ebpf:"tc_ingress_pca_parse"`
@@ -1272,7 +1278,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constEnableNetworkEventsMonitoring)
 	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
 
-	if err := spec.LoadAndAssign(&newObjects, nil); err != nil {
+	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
 		if errors.As(err, &ve) {
 			// Using %+v will print the whole verifier error, not just the last
