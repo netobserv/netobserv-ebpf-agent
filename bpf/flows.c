@@ -51,9 +51,9 @@
  */
 #include "network_events_monitoring.h"
 /*
- * Defines packets transformation tracker
+ * Defines packets translation tracker
  */
-#include "pkt_transformation.h"
+#include "pkt_translation.h"
 
 static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, u64 len) {
     bpf_spin_lock(&aggregate_flow->lock);

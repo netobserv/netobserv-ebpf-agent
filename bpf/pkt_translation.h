@@ -2,8 +2,8 @@
  * Packets Transformations tracker eBPF hooks.
  */
 
-#ifndef __PKT_TRANSFORMATION_H__
-#define __PKT_TRANSFORMATION_H__
+#ifndef __PKT_TRANSLATION_H__
+#define __PKT_TRANSLATION_H__
 
 #include "utils.h"
 
@@ -115,7 +115,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     long ret = 0;
     flow_id id;
 
-    if (!enable_pkt_transformation_tracking) {
+    if (!enable_pkt_translation_tracking) {
         return 0;
     }
     __builtin_memset(&id, 0, sizeof(id));
@@ -177,4 +177,4 @@ int BPF_KPROBE(track_nat_manip_pkt) {
     return trace_nat_manip_pkt(ct, skb);
 }
 
-#endif /* __PKT_TRANSFORMATION_H__ */
+#endif /* __PKT_TRANSLATION_H__ */

@@ -45,7 +45,7 @@ const (
 	constEnableFlowFiltering            = "enable_flows_filtering"
 	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
-	constEnablePktTransformation        = "enable_pkt_transformation_tracking"
+	constEnablePktTranslation           = "enable_pkt_translation_tracking"
 	pktDropHook                         = "kfree_skb"
 	constPcaEnable                      = "enable_pca"
 	pcaRecordsMap                       = "packet_record"
@@ -98,7 +98,7 @@ type FlowFetcherConfig struct {
 	NetworkEventsMonitoringGroupID int
 	EnableFlowFilter               bool
 	EnablePCA                      bool
-	EnablePktTransformation        bool
+	EnablePktTranslation           bool
 	FilterConfig                   *FilterConfig
 }
 
@@ -158,9 +158,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
 	}
 
-	enablePktTransformation := 0
-	if cfg.EnablePktTransformation {
-		enablePktTransformation = 1
+	enablePktTranslation := 0
+	if cfg.EnablePktTranslation {
+		enablePktTranslation = 1
 	}
 	if err := spec.RewriteConstants(map[string]interface{}{
 		constSampling:                       uint32(cfg.Sampling),
@@ -171,7 +171,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		constEnableFlowFiltering:            uint8(enableFlowFiltering),
 		constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
 		constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
-		constEnablePktTransformation:        uint8(enablePktTransformation),
+		constEnablePktTranslation:           uint8(enablePktTranslation),
 	}); err != nil {
 		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
 	}
@@ -261,7 +261,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}
 next:
 	var nfNatManIPLink link.Link
-	if cfg.EnablePktTransformation {
+	if cfg.EnablePktTranslation {
 		nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
 		if err != nil {
 			log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
@@ -295,7 +295,7 @@ next:
 }
 
 func isEBPFFeaturesEnabled(cfg *FlowFetcherConfig) bool {
-	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker || cfg.EnablePktTransformation {
+	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker || cfg.EnablePktTranslation {
 		return true
 	}
 	return false
