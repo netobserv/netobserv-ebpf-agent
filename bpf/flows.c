@@ -126,7 +126,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     // check if this packet need to be filtered if filtering feature is enabled
     if (is_filter_enabled()) {
-        bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling, direction);
+        bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling,
+                                                direction);
         if (filter_sampling == 0) {
             filter_sampling = sampling;
         }
