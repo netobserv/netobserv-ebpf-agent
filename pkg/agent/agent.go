@@ -173,7 +173,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	m := metrics.NewMetrics(metricsSettings)
 
 	var s *ovnobserv.SampleDecoder
-	if cfg.EnableNetworkEventsMonitoring {
+	if cfg.EnableNetworkEventsMonitoring || cfg.EnableUDNMapping {
 		if !kernel.IsKernelOlderThan("5.14.0") {
 			if s, err = ovnobserv.NewSampleDecoderWithDefaultCollector(context.Background(), networkEventsDBPath,
 				networkEventsOwnerName, cfg.NetworkEventsMonitoringGroupID); err != nil {

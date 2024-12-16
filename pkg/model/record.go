@@ -64,6 +64,7 @@ type Record struct {
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
 	NetworkMonitorEventsMD []config.GenericMap
+	UdnList                []string
 }
 
 func NewRecord(
@@ -98,6 +99,8 @@ func NewRecord(
 		}
 	}
 	record.NetworkMonitorEventsMD = make([]config.GenericMap, 0)
+	record.UdnList = make([]string, 0)
+
 	return &record
 }
 

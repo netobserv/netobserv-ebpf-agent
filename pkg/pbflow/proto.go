@@ -90,10 +90,27 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 	}
 	pbflowRecord.DupList = make([]*DupMapEntry, 0)
 	for _, intf := range fr.Interfaces {
-		pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
+		entry := DupMapEntry{
 			Interface: intf.Interface,
 			Direction: Direction(intf.Direction),
-		})
+			Udn:       "",
+		}
+		if s != nil {
+			m, err := s.GetInterfaceUDNs()
+			if err == nil {
+				if v, ok := m[entry.Interface]; ok {
+					if v != "" {
+						entry.Udn = v
+					} else {
+						entry.Udn = "default"
+					}
+				}
+			} else {
+				protoLog.Debugf("Failed to convert interface %s to UDN, err %s", entry.Interface, err)
+			}
+		}
+
+		pbflowRecord.DupList = append(pbflowRecord.DupList, &entry)
 	}
 	if fr.Metrics.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
@@ -209,6 +226,7 @@ func PBToFlow(pb *Record) *model.Record {
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
 			out.Interfaces = append(out.Interfaces, model.NewIntfDir(entry.Interface, int(entry.Direction)))
+			out.UdnList = append(out.UdnList, entry.Udn)
 		}
 	}
 

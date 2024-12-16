@@ -231,7 +231,8 @@ type Config struct {
 	EbpfProgramManagerMode bool `env:"EBPF_PROGRAM_MANAGER_MODE" envDefault:"false"`
 	// BpfManBpfFSPath user configurable ebpf manager mount path
 	BpfManBpfFSPath string `env:"BPFMAN_BPF_FS_PATH" envDefault:"/run/netobserv/maps"`
-
+	// EnableUDNMapping to allow mapping pod's interface to udn label
+	EnableUDNMapping bool `env:"ENABLE_UDN_MAPPING" envDefault:"false"`
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

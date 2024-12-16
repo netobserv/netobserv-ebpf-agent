@@ -114,6 +114,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			TimeFlowEnd:            now.Add(-(1000 - 789) * time.Nanosecond),
 			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 			Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+			UdnList:                make([]string, 0),
 		},
 		k2: {
 			ID: k2,
@@ -126,6 +127,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			TimeFlowEnd:            now.Add(-(1000 - 456) * time.Nanosecond),
 			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 			Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+			UdnList:                make([]string, 0),
 		},
 	}, received)
 }
@@ -196,6 +198,7 @@ func TestEvict_Period(t *testing.T) {
 		TimeFlowEnd:            now.Add(-1000 + 789),
 		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 		Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+		UdnList:                make([]string, 0),
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -214,6 +217,7 @@ func TestEvict_Period(t *testing.T) {
 		TimeFlowEnd:            now.Add(-1000 + 1456),
 		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
 		Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+		UdnList:                make([]string, 0),
 	}, *records[0])
 
 	// no more flows are evicted

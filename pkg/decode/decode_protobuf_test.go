@@ -22,10 +22,12 @@ func TestPBFlowToMap(t *testing.T) {
 			{
 				Interface: "5e6e92caa1d51cf",
 				Direction: pbflow.Direction_INGRESS,
+				Udn:       "",
 			},
 			{
 				Interface: "eth0",
 				Direction: pbflow.Direction_EGRESS,
+				Udn:       "",
 			},
 		},
 		EthProtocol:   2048,
@@ -117,6 +119,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"TimeFlowStartMs":        someTime.UnixMilli(),
 		"TimeFlowEndMs":          someTime.UnixMilli(),
 		"Interfaces":             []string{"5e6e92caa1d51cf", "eth0"},
+		"Udns":                   []string{"", ""},
 		"AgentIP":                "10.9.8.7",
 		"Flags":                  uint16(0x100),
 		"PktDropBytes":           uint64(200),
