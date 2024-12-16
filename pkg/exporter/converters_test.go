@@ -416,6 +416,7 @@ func TestConversions(t *testing.T) {
 					{"5e6e92caa1d51cf": 0},
 					{"eth0": 1},
 				},
+				UdnList:       []string{"", ""},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -438,6 +439,7 @@ func TestConversions(t *testing.T) {
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interfaces":      []string{"5e6e92caa1d51cf", "eth0"},
 				"AgentIP":         "10.11.12.13",
+				"Udns":            []string{"", ""},
 			},
 		},
 	}

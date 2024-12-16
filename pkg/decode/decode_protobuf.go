@@ -95,8 +95,13 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		interfaces = append(interfaces, fr.Interface)
 		directions = append(directions, int(fr.ID.Direction))
 	}
+
 	out["Interfaces"] = interfaces
 	out["IfDirections"] = directions
+
+	if len(fr.UdnList) != 0 {
+		out["Udns"] = fr.UdnList
+	}
 
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
 		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
