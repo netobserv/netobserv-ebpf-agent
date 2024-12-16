@@ -35,10 +35,11 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, // data_link: u8[6] dst_mac
 		0x13, 0x14, 0x15, 0x16, // u32 if_index_first_seen
 		0x00, 0x00, 0x00, 0x00, // u32 lock
-		0x03, // u8 direction_first_seen
-		0x33, // u8 errno
-		0x60, // u8 dscp
-		0x00, // 1 byte sampling
+		0x02, 0x00, 0x00, 0x00, // u32 sampling
+		0x03,                         // u8 direction_first_seen
+		0x33,                         // u8 errno
+		0x60,                         // u8 dscp
+		0x00, 0x00, 0x00, 0x00, 0x00, // 5 bytes padding
 	}))
 	require.NoError(t, err)
 
@@ -65,7 +66,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			Flags:              0x1413,
 			Errno:              0x33,
 			Dscp:               0x60,
-			Sampling:           0x00,
+			Sampling:           0x02,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses
