@@ -33,9 +33,7 @@ func NewPods(cfg *envconf.Config) (*Pods, error) {
 	}, nil
 }
 
-func (p *Pods) MACAddress(
-	ctx context.Context, namespace, name, iface string,
-) (net.HardwareAddr, error) {
+func (p *Pods) MACAddress(ctx context.Context, namespace, name, iface string) (net.HardwareAddr, error) {
 	mac, errStr, err := p.Execute(ctx, namespace, name, "cat", "/sys/class/net/"+iface+"/address")
 	if err != nil {
 		return nil, fmt.Errorf("executing command: %w", err)
@@ -77,4 +75,15 @@ func (p *Pods) Execute(ctx context.Context, namespace, name string, command ...s
 		return "", "", fmt.Errorf("executing command: %w", err)
 	}
 	return buf.String(), errBuf.String(), nil
+}
+
+func (p *Pods) DSReady(ctx context.Context, namespace, name string) error {
+	ds, err := p.client.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("getting DS %s: %w", name, err)
+	}
+	if ds.Status.NumberReady != 1 {
+		return fmt.Errorf("%s not ready", name)
+	}
+	return nil
 }

@@ -1,5 +1,3 @@
-//go:build e2e
-
 package basic
 
 import (
@@ -37,7 +35,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T, isIPFIX bool) {
 			return ctx
 		},
 	).Assess("correctness of client -> server (as Service) request flows",
-		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
 			lq := bt.lokiQuery(t,
 				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}`+
 					`|="\"DstAddr\":\"`+pci.serverServiceIP+`\""`)
@@ -82,7 +80,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T, isIPFIX bool) {
 			return ctx
 		},
 	).Assess("correctness of client -> server (as Pod) request flows",
-		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
 			lq := bt.lokiQuery(t,
 				`{DstK8S_OwnerName="server",SrcK8S_OwnerName="client"}`+
 					`|="\"DstAddr\":\"`+pci.serverPodIP+`\""`)
@@ -124,7 +122,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T, isIPFIX bool) {
 			return ctx
 		},
 	).Assess("correctness of server (from Service) -> client response flows",
-		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
 			lq := bt.lokiQuery(t,
 				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}`+
 					`|="\"SrcAddr\":\"`+pci.serverServiceIP+`\""`)
@@ -167,7 +165,7 @@ func (bt *FlowCaptureTester) DoTest(t *testing.T, isIPFIX bool) {
 			return ctx
 		},
 	).Assess("correctness of server (from Pod) -> client response flows",
-		func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		func(ctx context.Context, t *testing.T, _ *envconf.Config) context.Context {
 			lq := bt.lokiQuery(t,
 				`{DstK8S_OwnerName="client",SrcK8S_OwnerName="server"}`+
 					`|="\"SrcAddr\":\"`+pci.serverPodIP+`\""`)
@@ -282,6 +280,7 @@ func (bt *FlowCaptureTester) lokiQuery(t *testing.T, logQL string) tester.LokiQu
 		query, err = bt.Cluster.Loki().Query(1, logQL)
 		require.NoError(t, err)
 		require.NotNil(t, query)
+		require.NotNil(t, query.Data)
 		require.NotEmpty(t, query.Data.Result)
 	}, test.Interval(time.Second))
 	result := query.Data.Result[0]
