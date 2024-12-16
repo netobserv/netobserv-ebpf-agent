@@ -96,6 +96,7 @@ typedef struct flow_metrics_t {
     // OS interface index
     u32 if_index_first_seen;
     struct bpf_spin_lock lock;
+    u32 sampling;
     u8 direction_first_seen;
     // The positive errno of a failed map insertion that caused a flow
     // to be sent via ringbuffer.
@@ -103,7 +104,6 @@ typedef struct flow_metrics_t {
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
     u8 dscp;
-    u32 sampling;
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF

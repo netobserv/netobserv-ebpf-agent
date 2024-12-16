@@ -115,12 +115,11 @@ type BpfFlowMetricsT struct {
 	DstMac             [6]uint8
 	IfIndexFirstSeen   uint32
 	Lock               struct{ Val uint32 }
+	Sampling           uint32
 	DirectionFirstSeen uint8
 	Errno              uint8
 	Dscp               uint8
-	_                  [1]byte
-	Sampling           uint32
-	_                  [4]byte
+	_                  [5]byte
 }
 
 type BpfFlowRecordT struct {
