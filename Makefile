@@ -144,7 +144,7 @@ docker-generate: ## Create the container that generates the eBPF binaries
 .PHONY: compile
 compile: ## Compile ebpf agent project
 	@echo "### Compiling project"
-	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
+	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 .PHONY: build-and-push-bc-image
 build-and-push-bc-image: docker-generate ## Build and push bytecode image
@@ -153,7 +153,7 @@ build-and-push-bc-image: docker-generate ## Build and push bytecode image
 .PHONY: test
 test: ## Test code using go test
 	@echo "### Testing code"
-	GOOS=$(GOOS) go test -mod vendor -a ./... -coverpkg=./... -coverprofile cover.all.out
+	GOOS=$(GOOS) go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out
 
 .PHONY: cov-exclude-generated
 cov-exclude-generated:
@@ -175,7 +175,8 @@ tests-e2e: prereqs ## Run e2e tests
 	go clean -testcache
 	# making the local agent image available to kind in two ways, so it will work in different
 	# environments: (1) as image tagged in the local repository (2) as image archive.
-	$(OCI_BIN) build .  --build-arg TARGETARCH=$(GOARCH) -t localhost/ebpf-agent:test
+	rm -f ebpf-agent.tar || true
+	$(OCI_BIN) build . --build-arg LDFLAGS="" --build-arg TARGETARCH=$(GOARCH) -t localhost/ebpf-agent:test
 	$(OCI_BIN) save -o ebpf-agent.tar localhost/ebpf-agent:test
 	GOOS=$(GOOS) go test -p 1 -timeout 30m -v -mod vendor -tags e2e ./e2e/...
 

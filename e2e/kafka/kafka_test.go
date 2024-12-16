@@ -1,5 +1,3 @@
-//go:build e2e
-
 package basic
 
 import (
@@ -43,12 +41,16 @@ func TestMain(m *testing.M) {
 		}),
 		cluster.Deploy(cluster.Deployment{
 			Order: cluster.ExternalServices, ManifestFile: path.Join("manifests", "11-kafka-cluster.yml"),
-			ReadyFunction: func(cfg *envconf.Config) error {
-				// wait for kafka to be ready
-				if !checkResources(cfg.Client(), "kafka-cluster-zookeeper", "kafka-cluster-kafka", "strimzi-cluster-operator", "kafka-cluster-entity-operator") {
-					return errors.New("waiting for kafka cluster to be ready")
-				}
-				return nil
+			Ready: &cluster.Readiness{
+				Function: func(cfg *envconf.Config) error {
+					// wait for kafka to be ready
+					if !checkResources(cfg.Client(), "kafka-cluster-zookeeper", "kafka-cluster-kafka", "strimzi-cluster-operator", "kafka-cluster-entity-operator") {
+						return errors.New("waiting for kafka cluster to be ready")
+					}
+					return nil
+				},
+				Timeout: 10 * time.Minute,
+				Retry:   20 * time.Second,
 			},
 		}),
 		cluster.Override(cluster.FlowLogsPipeline, cluster.Deployment{
@@ -88,13 +90,14 @@ func checkResources(client klient.Client, list ...string) bool {
 		return false
 	}
 	deplInfo := []string{}
-	for _, p := range depl.Items {
+	for i := range depl.Items {
+		p := &depl.Items[i]
 		deplInfo = append(deplInfo, fmt.Sprintf("%s (%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.Replicas))
 		if _, toCheck := ready[p.Name]; toCheck {
 			ready[p.Name] = p.Status.ReadyReplicas == 1
 		}
 	}
-	klog.Infof("Deployments: " + strings.Join(deplInfo, ", "))
+	klog.Infof("Deployments: %s", strings.Join(deplInfo, ", "))
 	var sfs appsv1.StatefulSetList
 	err = client.Resources(namespace).List(context.TODO(), &sfs)
 	if err != nil {
@@ -102,13 +105,14 @@ func checkResources(client klient.Client, list ...string) bool {
 		return false
 	}
 	sfsInfo := []string{}
-	for _, p := range sfs.Items {
+	for i := range sfs.Items {
+		p := &sfs.Items[i]
 		sfsInfo = append(sfsInfo, fmt.Sprintf("%s (%d/%d/%d)", p.Name, p.Status.ReadyReplicas, p.Status.AvailableReplicas, p.Status.Replicas))
 		if _, toCheck := ready[p.Name]; toCheck {
 			ready[p.Name] = p.Status.ReadyReplicas == 1
 		}
 	}
-	klog.Infof("StatefulSets: " + strings.Join(sfsInfo, ", "))
+	klog.Infof("StatefulSets: %s", strings.Join(sfsInfo, ", "))
 	for _, state := range ready {
 		if !state {
 			return false

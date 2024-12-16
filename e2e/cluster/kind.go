@@ -12,12 +12,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path"
+	rt2 "runtime"
 	"sort"
+	"syscall"
 	"testing"
 	"time"
-
-	rt2 "runtime"
 
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster/tester"
 
@@ -90,16 +91,41 @@ var defaultBaseDeployments = map[DeployID]Deployment{
 	Loki: {
 		Order:        ExternalServices,
 		ManifestFile: path.Join(packageDir(), "base", "02-loki.yml"),
-		ReadyFunction: func(*envconf.Config) error {
-			return (&tester.Loki{BaseURL: "http://127.0.0.1:30100"}).Ready()
+		Ready: &Readiness{
+			Function:    func(*envconf.Config) error { return (&tester.Loki{BaseURL: "http://localhost:30100"}).Ready() },
+			Description: "Check that http://localhost:30100 is reachable (Loki NodePort)",
+			Timeout:     5 * time.Minute,
+			Retry:       5 * time.Second,
 		},
 	},
 	FlowLogsPipeline: {
 		Order: NetObservServices, ManifestFile: path.Join(packageDir(), "base", "03-flp.yml"),
+		Ready: &Readiness{
+			Function:    testPodsReady("flp"),
+			Description: "Check that flp pods are up and running",
+			Timeout:     5 * time.Minute,
+			Retry:       5 * time.Second,
+		},
 	},
 	Agent: {
 		Order: WithAgent, ManifestFile: path.Join(packageDir(), "base", "04-agent.yml"),
+		Ready: &Readiness{
+			Function:    testPodsReady("netobserv-ebpf-agent"),
+			Description: "Check that agent pods are up and running",
+			Timeout:     5 * time.Minute,
+			Retry:       5 * time.Second,
+		},
 	},
+}
+
+func testPodsReady(dsName string) func(*envconf.Config) error {
+	return func(cfg *envconf.Config) error {
+		pods, err := tester.NewPods(cfg)
+		if err != nil {
+			return err
+		}
+		return pods.DSReady(context.Background(), "default", dsName)
+	}
 }
 
 // Deployment of components. Not only K8s deployments but also Pods, Services, DaemonSets, ...
@@ -109,9 +135,14 @@ type Deployment struct {
 	Order DeployOrder
 	// ManifestFile path to the kubectl-like YAML manifest file
 	ManifestFile string
-	// ReadyFunction is an optional function that returns error if the deployment is not ready.
-	// Used when it's needed to wait before starting tests or deploying later components.
-	ReadyFunction func(*envconf.Config) error
+	Ready        *Readiness
+}
+
+type Readiness struct {
+	Function    func(*envconf.Config) error
+	Description string
+	Timeout     time.Duration
+	Retry       time.Duration
 }
 
 // Kind cluster deployed by each TestMain function, prepared for a given test scenario.
@@ -146,6 +177,7 @@ func Deploy(def Deployment) Option {
 
 // Timeout for long-running operations (e.g. deployments, readiness probes...)
 func Timeout(t time.Duration) Option {
+	log.Infof("Timeout set to %s", t.String())
 	return func(k *Kind) {
 		k.timeout = t
 	}
@@ -156,6 +188,9 @@ func Timeout(t time.Duration) Option {
 // backend doesn't provide access to the local images, where the ebpf-agent.tar container image
 // is located. Usually it will be the project root.
 func NewKind(kindClusterName, baseDir string, options ...Option) *Kind {
+	fmt.Println()
+	fmt.Println()
+	log.Infof("Starting KIND cluster %s", kindClusterName)
 	k := &Kind{
 		testEnv:         env.New(),
 		baseDir:         baseDir,
@@ -191,9 +226,18 @@ func (k *Kind) Run(m *testing.M) {
 			currentOrder = c.Order
 		}
 		envFuncs = append(envFuncs, deploy(c))
-		readyFuncs = append(readyFuncs, withTimeout(isReady(c), k.timeout))
+		readyFuncs = append(readyFuncs, isReady(c))
 	}
 	envFuncs = append(envFuncs, readyFuncs...)
+
+	exit := make(chan os.Signal, 1)
+	signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-exit
+		fmt.Println("SIGTERM received, cluster might still be running")
+		fmt.Printf("To clean up, run: \033[33mkind delete cluster --name %s\033[0m\n", k.clusterName)
+		os.Exit(1)
+	}()
 
 	log.Info("starting kind setup")
 	code := k.testEnv.Setup(envFuncs...).
@@ -244,7 +288,7 @@ func (k *Kind) TestEnv() env.Environment {
 
 // Loki client pointing to the Loki instance inside the test cluster
 func (k *Kind) Loki() *tester.Loki {
-	return &tester.Loki{BaseURL: "http://127.0.0.1:30100"}
+	return &tester.Loki{BaseURL: "http://localhost:30100"}
 }
 
 func deploy(definition Deployment) env.Func {
@@ -285,6 +329,7 @@ func deployManifestFile(definition Deployment,
 			if !errors.Is(err, io.EOF) {
 				return fmt.Errorf("decoding manifest raw object: %w", err)
 			}
+			log.WithField("file", definition.ManifestFile).Info("done") // eof
 			return nil
 		}
 
@@ -344,7 +389,7 @@ func (k *Kind) loadLocalImage() env.Func {
 }
 
 // withTimeout retries the execution of an env.Func until it succeeds or a timeout is reached
-func withTimeout(f env.Func, timeout time.Duration) env.Func {
+func withTimeout(f env.Func, timeout, retry time.Duration) env.Func {
 	tlog := log.WithField("function", "withTimeout")
 	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
 		start := time.Now()
@@ -356,26 +401,24 @@ func withTimeout(f env.Func, timeout time.Duration) env.Func {
 			if time.Since(start) > timeout {
 				return ctx, fmt.Errorf("timeout (%s) trying to execute function: %w", timeout, err)
 			}
-			tlog.WithError(err).Debug("function did not succeed. Retrying after 5s")
-			time.Sleep(5 * time.Second)
+			tlog.WithError(err).Debugf("function did not succeed. Retrying after %s", retry.String())
+			time.Sleep(retry)
 		}
 	}
 }
 
 // isReady succeeds if the passed deployment does not have ReadyFunction, or it succeeds
 func isReady(definition Deployment) env.Func {
-	return withTimeout(func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-		if definition.ReadyFunction != nil {
-			log.WithFields(logrus.Fields{
-				"function":   "isReady",
-				"deployment": definition.ManifestFile,
-			}).Debug("checking readiness")
-			if err := definition.ReadyFunction(cfg); err != nil {
+	if definition.Ready != nil {
+		log.WithFields(logrus.Fields{"deployment": definition.ManifestFile, "readiness": definition.Ready.Description}).Infof("Readiness check set with timeout: %s", definition.Ready.Timeout.String())
+		return withTimeout(func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+			if err := definition.Ready.Function(cfg); err != nil {
 				return ctx, fmt.Errorf("component not ready: %w", err)
 			}
-		}
-		return ctx, nil
-	}, time.Minute*20)
+			return ctx, nil
+		}, definition.Ready.Timeout, definition.Ready.Retry)
+	}
+	return func(ctx context.Context, _ *envconf.Config) (context.Context, error) { return ctx, nil }
 }
 
 // helper to get the base directory of this package, allowing to load the test deployment
