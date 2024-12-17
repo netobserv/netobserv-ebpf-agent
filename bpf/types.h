@@ -139,7 +139,7 @@ typedef struct additional_metrics_t {
     struct observed_intf_t {
         u8 direction;
         u32 if_index;
-    } __attribute__((packed)) observed_intf[MAX_OBSERVED_INTERFACES];
+    } observed_intf[MAX_OBSERVED_INTERFACES];
     u8 network_events_idx;
     u8 nb_observed_intf;
 } additional_metrics;
