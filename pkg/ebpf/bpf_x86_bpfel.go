@@ -21,9 +21,11 @@ type BpfAdditionalMetrics struct {
 	NetworkEvents    [4][8]uint8
 	EthProtocol      uint16
 	TranslatedFlow   BpfTranslatedFlowT
+	_                [2]byte
 	ObservedIntf     [4]BpfObservedIntfT
 	NetworkEventsIdx uint8
 	NbObservedIntf   uint8
+	_                [2]byte
 }
 
 type BpfDirectionT uint32
@@ -144,6 +146,7 @@ const (
 
 type BpfObservedIntfT struct {
 	Direction uint8
+	_         [3]byte
 	IfIndex   uint32
 }
 

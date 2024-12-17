@@ -150,7 +150,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     if (aggregate_flow != NULL) {
         if (aggregate_flow->if_index_first_seen == skb->ifindex) {
             update_existing_flow(aggregate_flow, &pkt, len, filter_sampling);
-        } else {
+        } else if (skb->ifindex != 0) {
             // Only add info that we've seen this interface
             additional_metrics *extra_metrics =
                 (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
@@ -159,7 +159,17 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             } else {
                 additional_metrics new_metrics = {};
                 add_observed_intf(&new_metrics, skb->ifindex, direction);
-                bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
+                long ret =
+                    bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
+                if (ret == -EEXIST) {
+                    extra_metrics =
+                        (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
+                    if (extra_metrics != NULL) {
+                        add_observed_intf(extra_metrics, skb->ifindex, direction);
+                    }
+                } else if (ret != 0 && trace_messages) {
+                    bpf_printk("error creating new observed_intf: %d\n", ret);
+                }
             }
         }
     } else {
