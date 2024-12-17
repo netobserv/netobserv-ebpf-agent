@@ -89,10 +89,12 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
 
         if ((flags & DNS_QR_FLAG) == 0) { /* dns query */
             fill_dns_id(pkt->id, &dns_req, dns_id, false);
-            ret = bpf_map_update_elem(&dns_flows, &dns_req, &ts, BPF_NOEXIST);
-            if (ret != 0) {
-                if (trace_messages && ret != -EEXIST) {
-                    bpf_printk("error creating new dns entry %d\n", ret);
+            if (bpf_map_lookup_elem(&dns_flows, &dns_req) == NULL) {
+                ret = bpf_map_update_elem(&dns_flows, &dns_req, &ts, BPF_NOEXIST);
+                if (ret != 0) {
+                    if (trace_messages && ret != -EEXIST) {
+                        bpf_printk("error creating new dns entry %d\n", ret);
+                    }
                 }
             }
         } else { /* dns response */
