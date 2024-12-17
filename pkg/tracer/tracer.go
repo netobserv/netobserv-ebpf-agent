@@ -965,7 +965,9 @@ func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
 		}
 		for _, dnsKey = range keysToDelete {
 			if err := dnsMap.Delete(dnsKey); err != nil {
-				log.WithError(err).WithField("dnsKey", dnsKey).Warnf("couldn't delete DNS record entry")
+				if !errors.Is(err, cilium.ErrKeyNotExist) {
+					log.WithError(err).WithField("dnsKey", dnsKey).Warnf("couldn't delete DNS record entry")
+				}
 			}
 		}
 	}
