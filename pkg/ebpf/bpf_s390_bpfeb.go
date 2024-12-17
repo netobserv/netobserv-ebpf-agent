@@ -21,7 +21,7 @@ type BpfAdditionalMetrics struct {
 	ObservedIntf     [4]BpfObservedIntfT
 	NetworkEventsIdx uint8
 	NbObservedIntf   uint8
-	_                [2]byte
+	_                [6]byte
 }
 
 type BpfDirectionT uint32
@@ -142,6 +142,7 @@ const (
 
 type BpfObservedIntfT struct {
 	Direction uint8
+	_         [3]byte
 	IfIndex   uint32
 }
 
