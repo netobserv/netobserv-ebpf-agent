@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ['1.22']
+        go: ['1.23']
     steps:
     - uses: actions/checkout@v3
     - name: Set up Go
@@ -26,7 +26,7 @@ jobs:
     - name: check clean vendors
       run: go mod vendor
     - name: Report coverage
-      if: ${{ matrix.go == '1.22' }}
+      if: ${{ matrix.go == '1.23' }}
       uses: codecov/codecov-action@v4
       with:
         files: ./cover.out
