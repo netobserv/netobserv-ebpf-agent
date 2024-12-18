@@ -90,6 +90,9 @@ static inline void add_observed_intf(additional_metrics *value, u32 if_index, u8
         value->observed_intf[value->nb_observed_intf].if_index = if_index;
         value->observed_intf[value->nb_observed_intf].direction = direction;
         value->nb_observed_intf++;
+    } else {
+        increase_counter(OBSERVED_INTF_MISSED);
+        BPF_PRINTK("observed interface missed (array capacity reached) for ifindex %d\n", if_index);
     }
 }
 
