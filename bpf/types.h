@@ -204,7 +204,7 @@ typedef struct dns_flow_id_t {
     u8 dst_ip[IP_MAX_LEN];
     u16 id;
     u8 protocol;
-} dns_flow_id;
+} __attribute__((packed)) dns_flow_id;
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {

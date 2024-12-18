@@ -38,7 +38,6 @@ type BpfDnsFlowId struct {
 	DstIp    [16]uint8
 	Id       uint16
 	Protocol uint8
-	_        [1]byte
 }
 
 type BpfDnsRecordT struct {
