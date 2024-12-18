@@ -92,13 +92,11 @@ type BpfFlowIdT struct {
 	Direction         uint8
 	SrcIp             [16]uint8
 	DstIp             [16]uint8
-	_                 [1]byte
 	SrcPort           uint16
 	DstPort           uint16
 	TransportProtocol uint8
 	IcmpType          uint8
 	IcmpCode          uint8
-	_                 [3]byte
 	IfIndex           uint32
 }
 
@@ -122,6 +120,7 @@ type BpfFlowMetricsT struct {
 
 type BpfFlowRecordT struct {
 	Id      BpfFlowId
+	_       [4]byte
 	Metrics BpfFlowMetrics
 }
 

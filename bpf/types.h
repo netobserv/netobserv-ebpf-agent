@@ -161,7 +161,7 @@ typedef struct flow_id_t {
     u8 icmp_code;
     // OS interface index
     u32 if_index;
-} flow_id;
+} __attribute__((packed)) flow_id;
 
 // Force emitting enums/structs into the ELF
 const struct flow_id_t *unused7 __attribute__((unused));
