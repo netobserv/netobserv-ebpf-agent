@@ -879,24 +879,21 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-		flowPayload.AccumulateBase(&baseMetrics)
 
-		// Fetch additional metrics; ids are without direction and interface
-		shorterID := id
-		shorterID.Direction = 0
-		shorterID.IfIndex = 0
-		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&shorterID, &additionalMetrics); err != nil {
+		flowContent := model.NewBpfFlowContent(baseMetrics)
+
+		// Fetch additional metrics
+		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&id, &additionalMetrics); err != nil {
 			if !errors.Is(err, cilium.ErrKeyNotExist) {
 				log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
 				met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
 			}
 		} else {
 			for i := range additionalMetrics {
-				flowPayload.AccumulateAdditional(&additionalMetrics[i])
+				flowContent.AccumulateAdditional(&additionalMetrics[i])
 			}
 		}
-		flows[id] = flowPayload
+		flows[id] = flowContent
 	}
 	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
@@ -918,6 +915,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
+		ebpf.BpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached"),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
 	for key := ebpf.BpfGlobalCountersKeyT(0); key < ebpf.BpfGlobalCountersKeyTMAX_COUNTERS; key++ {
