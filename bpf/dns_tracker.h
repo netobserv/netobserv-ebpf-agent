@@ -70,6 +70,7 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
     if (pkt->id->dst_port == dns_port || pkt->id->src_port == dns_port ||
         pkt->id->dst_port == DNS_DEFAULT_PORT || pkt->id->src_port == DNS_DEFAULT_PORT) {
         dns_flow_id dns_req;
+        __builtin_memset(&dns_req, 0, sizeof(dns_req));
 
         u8 len = calc_dns_header_offset(pkt, data_end);
         if (!len) {
