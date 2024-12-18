@@ -1,4 +1,4 @@
-package flow
+package model
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
 var (
@@ -41,24 +40,24 @@ var (
 	}
 )
 
-func TestPacketAggregation(t *testing.T) {
+func TestAccumulate(t *testing.T) {
 	type testCase struct {
 		name            string
 		inputFlow       ebpf.BpfFlowMetrics
 		inputAdditional []ebpf.BpfAdditionalMetrics
-		expected        model.BpfFlowContent
+		expected        BpfFlowContent
 	}
 	tcs := []testCase{{
 		name:      "flow without additional",
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		expected: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		expected: BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 			Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1,
 		}},
 	}, {
 		name:            "with single additional",
 		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics:    &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &additionalSample1,
 		},
@@ -66,7 +65,7 @@ func TestPacketAggregation(t *testing.T) {
 		name:            "with two additional",
 		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1, additionalSample2},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				DnsRecord: ebpf.BpfDnsRecordT{
@@ -89,22 +88,22 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			},
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			}},
@@ -114,20 +113,20 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			},
 			{
 				NetworkEventsIdx: 0,
-				NetworkEvents:    [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{},
+				NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			}},
@@ -137,22 +136,22 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 				},
 			},
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 2,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
@@ -164,23 +163,23 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NetworkEventsIdx: 2,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 					{1, 3, 0, 0, 0, 0, 0, 0},
 				},
 			},
 			{
 				NetworkEventsIdx: 1,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NetworkEventsIdx: 3,
-				NetworkEvents: [model.MaxNetworkEvents][model.NetworkEventsMaxEventsMD]uint8{
+				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
 					{1, 2, 0, 0, 0, 0, 0, 0},
 					{1, 3, 0, 0, 0, 0, 0, 0},
 					{1, 4, 0, 0, 0, 0, 0, 0},
@@ -211,24 +210,24 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NbObservedIntf: 2,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 1},
 					{Direction: 1, IfIndex: 2},
 				},
 			},
 			{
 				NbObservedIntf: 2,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 1}, // duplicate
 					{Direction: 1, IfIndex: 3},
 				},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NbObservedIntf: 3,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 1},
 					{Direction: 1, IfIndex: 2},
 					{Direction: 1, IfIndex: 3},
@@ -241,7 +240,7 @@ func TestPacketAggregation(t *testing.T) {
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
 				NbObservedIntf: 3,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 1},
 					{Direction: 1, IfIndex: 2},
 					{Direction: 1, IfIndex: 3},
@@ -249,17 +248,17 @@ func TestPacketAggregation(t *testing.T) {
 			},
 			{
 				NbObservedIntf: 2,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 4},
 					{Direction: 1, IfIndex: 5},
 				},
 			},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				NbObservedIntf: 4,
-				ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{
+				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
 					{Direction: 0, IfIndex: 1},
 					{Direction: 1, IfIndex: 2},
 					{Direction: 1, IfIndex: 3},
@@ -270,7 +269,7 @@ func TestPacketAggregation(t *testing.T) {
 	}}
 	for i, tc := range tcs {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			aggregated := model.BpfFlowContent{BpfFlowMetrics: &tc.inputFlow}
+			aggregated := BpfFlowContent{BpfFlowMetrics: &tc.inputFlow}
 			for _, add := range tc.inputAdditional {
 				aggregated.AccumulateAdditional(&add)
 			}
