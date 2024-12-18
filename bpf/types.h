@@ -221,6 +221,7 @@ typedef enum global_counters_key_t {
     NETWORK_EVENTS_ERR_GROUPID_MISMATCH,
     NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS,
     NETWORK_EVENTS_GOOD,
+    OBSERVED_INTF_MISSED,
     MAX_COUNTERS,
 } global_counters_key;
 
