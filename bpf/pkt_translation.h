@@ -171,7 +171,8 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     BPF_PRINTK("Xlat: protocol %d flags 0x%x family %d dscp %d\n", protocol, flags, family, dscp);
 
     bpf_probe_read(&zone_id, sizeof(zone_id), &ct->zone.id);
-    ret = translate_lookup_and_update_flow(&id, flags, orig_tuple, reply_tuple, zone_id, family, eth_protocol);
+    ret = translate_lookup_and_update_flow(&id, flags, orig_tuple, reply_tuple, zone_id, family,
+                                           eth_protocol);
 
     return ret;
 }

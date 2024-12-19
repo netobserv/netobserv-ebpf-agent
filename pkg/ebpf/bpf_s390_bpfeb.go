@@ -15,16 +15,15 @@ import (
 type BpfAdditionalMetrics struct {
 	StartMonoTimeTs  uint64
 	EndMonoTimeTs    uint64
-	EthProtocol      uint16
-	_                [6]byte
 	DnsRecord        BpfDnsRecordT
 	PktDrops         BpfPktDropsT
 	FlowRtt          uint64
 	NetworkEventsIdx uint8
 	NetworkEvents    [4][8]uint8
 	_                [1]byte
+	EthProtocol      uint16
 	TranslatedFlow   BpfTranslatedFlowT
-	_                [6]byte
+	_                [4]byte
 }
 
 type BpfDirectionT uint32

@@ -891,9 +891,14 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	}
 
 	countAdditional := 0
-	for _, id := range ids {
+	for i, id := range ids {
 		countAdditional++
 		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&id, &additionalMetrics); err != nil {
+			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
+				log.WithError(err).Warnf("switching to legacy mode")
+				m.lookupAndDeleteSupported = false
+				return m.legacyLookupAndDeleteMap(met)
+			}
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
 			continue
