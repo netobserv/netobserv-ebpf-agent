@@ -63,6 +63,7 @@ type Record struct {
 	TimeFlowRtt            time.Duration
 	DupList                []map[string]uint8
 	NetworkMonitorEventsMD []config.GenericMap
+	UdnList                []string
 }
 
 func NewRecord(

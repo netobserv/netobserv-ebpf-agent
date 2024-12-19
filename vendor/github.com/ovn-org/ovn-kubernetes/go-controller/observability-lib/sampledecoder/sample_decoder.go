@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"strings"
 
 	"github.com/ovn-org/libovsdb/client"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/ovsdb"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/clustermanager/userdefinednetwork/template"
 	libovsdbops "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/libovsdb/ops"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/nbdb"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/observability"
@@ -290,4 +292,81 @@ func (d *SampleDecoder) DeleteCollector(collectorID int) error {
 	res, err := d.ovsdbClient.Transact(context.Background(), ops...)
 	fmt.Println("res: ", res)
 	return err
+}
+
+// TODO check start with [prefix]udnName
+var ctPrefixes = sets.New("GR_", "breth0_", "cr-rtos-", "etor-GR_", "ext_", "jtor-GR_", "k8s-", "rtoe-GR_", "rtoj-GR_")
+
+func (d *SampleDecoder) GetConntrackZoneToUDN() (map[string]string, error) {
+	res := map[string]string{}
+	bridges := []*ovsdb.Bridge{}
+	err := d.ovsdbClient.WhereCache(func(item *ovsdb.Bridge) bool {
+		return item.Name == bridgeName
+	}).List(context.Background(), &bridges)
+	if err != nil || len(bridges) != 1 {
+		return nil, fmt.Errorf("failed finding br-int: %w", err)
+	}
+	networkPrefixes := sets.New[string]()
+	// node names can only have - or . and alphanumerics
+	for ctName := range bridges[0].ExternalIDs {
+		if strings.HasPrefix(ctName, "ct-zone-GR_") && strings.HasSuffix(ctName, "_dnat") {
+			// remove "ct-zone-GR_" prefix
+			s := ctName[11 : len(ctName)-5]
+			// format is [<network prefix>_]<nodeName>
+			if i := strings.Index(s, "_"); i != -1 {
+				networkPrefixes.Insert(s[:i])
+			}
+		}
+	}
+	for ctName, ctZone := range bridges[0].ExternalIDs {
+		if strings.HasPrefix(ctName, "ct-zone-") {
+			foundUDN := false
+			for networkPrefix := range networkPrefixes {
+				if strings.Contains(ctName, networkPrefix) {
+					res[ctZone] = networkPrefix
+					foundUDN = true
+					break
+				}
+			}
+			if !foundUDN {
+				res[ctZone] = "default"
+			}
+		}
+	}
+	return res, nil
+}
+
+func networkNameToUDNNamespacedName(networkName string) string {
+	namespace, name := template.ParseNetworkName(networkName)
+	if name == "" {
+		return ""
+	}
+	namespacedName := name
+	if namespace != "" {
+		namespacedName = namespace + "/" + name
+	}
+	return namespacedName
+}
+
+// GetInterfaceUDNs returns a map of all pod interface names to their corresponding UDN namespaced names.
+// default network or NAD that is not created by (C)UDN is represented by an empty string.
+func (d *SampleDecoder) GetInterfaceUDNs() (map[string]string, error) {
+	res := map[string]string{}
+	ifaces := []*ovsdb.Interface{}
+	err := d.ovsdbClient.List(context.Background(), &ifaces)
+	if err != nil {
+		return nil, fmt.Errorf("failed listing interfaces: %w", err)
+	}
+	for _, iface := range ifaces {
+		if iface.ExternalIDs["iface-id-ver"] == "" {
+			// not a pod interface
+			continue
+		}
+		if iface.ExternalIDs["k8s.ovn.org/network"] == "" {
+			res[iface.Name] = ""
+			continue
+		}
+		res[iface.Name] = networkNameToUDNNamespacedName(iface.ExternalIDs["k8s.ovn.org/network"])
+	}
+	return res, nil
 }

@@ -95,6 +95,10 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		interfaces = append(interfaces, fr.Interface)
 		directions = append(directions, int(fr.ID.Direction))
 	}
+
+	if len(fr.UdnList) != 0 {
+		out["Udns"] = fr.UdnList
+	}
 	out["Interfaces"] = interfaces
 	out["IfDirections"] = directions
 
