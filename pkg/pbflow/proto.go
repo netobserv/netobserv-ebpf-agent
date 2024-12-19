@@ -95,10 +95,25 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		pbflowRecord.DupList = make([]*DupMapEntry, 0)
 		for _, m := range fr.DupList {
 			for key, value := range m {
-				pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
+				entry := DupMapEntry{
 					Interface: key,
 					Direction: Direction(value),
-				})
+				}
+				if s != nil {
+					m, err := s.GetInterfaceUDNs()
+					if err == nil {
+						if v, ok := m[entry.Interface]; ok {
+							entry.Udn = v
+							protoLog.Debugf("Mapping interface %s to UDN %s", entry.Interface, v)
+						} else {
+							protoLog.Debugf("Failed to map interface %s to UDN", entry.Interface)
+						}
+					} else {
+						protoLog.Debugf("Failed to convert interface %s to UDN, err %s", entry.Interface, err)
+					}
+				}
+
+				pbflowRecord.DupList = append(pbflowRecord.DupList, &entry)
 			}
 		}
 	}
@@ -222,6 +237,7 @@ func PBToFlow(pb *Record) *model.Record {
 			intf := entry.Interface
 			dir := uint8(entry.Direction)
 			out.DupList = append(out.DupList, map[string]uint8{intf: dir})
+			out.UdnList = append(out.UdnList, entry.Udn)
 		}
 	}
 	if len(pb.GetNetworkEventsMetadata()) != 0 {

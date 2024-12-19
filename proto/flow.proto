@@ -21,6 +21,7 @@ message Records {
 message DupMapEntry {
   string interface = 1;
   Direction direction = 2;
+  string udn = 3;
 }
 
 message NetworkEvent {
