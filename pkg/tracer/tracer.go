@@ -38,6 +38,7 @@ const (
 	dnsLatencyMap         = "dns_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
+	constHasFilterSampling              = "has_filter_sampling"
 	constTraceMessages                  = "trace_messages"
 	constEnableRtt                      = "enable_rtt"
 	constEnableDNSTracking              = "enable_dns_tracking"
@@ -162,8 +163,15 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 
 		enableFlowFiltering := 0
+		hasFilterSampling := uint8(0)
 		if cfg.EnableFlowFilter {
 			enableFlowFiltering = 1
+			for _, f := range cfg.FilterConfig {
+				if f.FilterSample > 0 {
+					hasFilterSampling = 1
+					break
+				}
+			}
 		}
 		enableNetworkEventsMonitoring := 0
 		if cfg.EnableNetworkEventsMonitoring {
@@ -179,6 +187,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 		if err := spec.RewriteConstants(map[string]interface{}{
 			constSampling:                       uint32(cfg.Sampling),
+			constHasFilterSampling:              hasFilterSampling,
 			constTraceMessages:                  uint8(traceMsgs),
 			constEnableRtt:                      uint8(enableRtt),
 			constEnableDNSTracking:              uint8(enableDNSTracking),
