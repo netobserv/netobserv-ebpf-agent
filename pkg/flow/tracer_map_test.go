@@ -158,6 +158,31 @@ func TestPacketAggregation(t *testing.T) {
 					{1, 4, 0, 0, 0, 0, 0, 0},
 				},
 			}},
+	}, {
+		name: "accumulate no base",
+		input: []model.BpfFlowContent{
+			{
+				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
+				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{DnsRecord: ebpf.BpfDnsRecordT{Id: 5}, StartMonoTimeTs: 15, EndMonoTimeTs: 25},
+			},
+			{
+				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
+				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{FlowRtt: 500},
+			},
+			{
+				BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
+				AdditionalMetrics: &ebpf.BpfAdditionalMetrics{PktDrops: ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1}},
+			},
+		},
+		expected: model.BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 15, EndMonoTimeTs: 25, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				StartMonoTimeTs: 15,
+				EndMonoTimeTs:   25,
+				DnsRecord:       ebpf.BpfDnsRecordT{Id: 5},
+				FlowRtt:         500,
+				PktDrops:        ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1},
+			}},
 	},
 	}
 	for i, tc := range tcs {

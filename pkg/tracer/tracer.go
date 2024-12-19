@@ -852,23 +852,21 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	}
 
 	flowMap := m.objects.AggregatedFlows
-
-	iterator := flowMap.Iterate()
 	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.cacheMaxSize)
 	var ids []ebpf.BpfFlowId
 	var id ebpf.BpfFlowId
 	var baseMetrics ebpf.BpfFlowMetrics
-	var additionalMetrics []ebpf.BpfAdditionalMetrics
 
 	// First, get all ids and don't care about metrics (we need lookup+delete to be atomic)
+	iterator := flowMap.Iterate()
 	for iterator.Next(&id, &baseMetrics) {
 		ids = append(ids, id)
 	}
 
-	count := 0
+	countMain := 0
 	// Run the atomic Lookup+Delete; if new ids have been inserted in the meantime, they'll be fetched next time
 	for i, id := range ids {
-		count++
+		countMain++
 		if err := flowMap.LookupAndDelete(&id, &baseMetrics); err != nil {
 			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
 				log.WithError(err).Warnf("switching to legacy mode")
@@ -881,25 +879,37 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		}
 		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
 		flowPayload.AccumulateBase(&baseMetrics)
+		flows[id] = flowPayload
+	}
 
-		// Fetch additional metrics; ids are without direction and interface
-		shorterID := id
-		shorterID.Direction = 0
-		shorterID.IfIndex = 0
-		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&shorterID, &additionalMetrics); err != nil {
-			if !errors.Is(err, cilium.ErrKeyNotExist) {
-				log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
-				met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
-			}
-		} else {
-			for i := range additionalMetrics {
-				flowPayload.AccumulateAdditional(&additionalMetrics[i])
-			}
+	// Reiterate on additional metrics
+	var additionalMetrics []ebpf.BpfAdditionalMetrics
+	ids = []ebpf.BpfFlowId{}
+	addtlIterator := m.objects.AdditionalFlowMetrics.Iterate()
+	for addtlIterator.Next(&id, &additionalMetrics) {
+		ids = append(ids, id)
+	}
+
+	countAdditional := 0
+	for _, id := range ids {
+		countAdditional++
+		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&id, &additionalMetrics); err != nil {
+			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
+			continue
+		}
+		flowPayload, found := flows[id]
+		if !found {
+			flowPayload = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+		}
+		for iMet := range additionalMetrics {
+			flowPayload.AccumulateAdditional(&additionalMetrics[iMet])
 		}
 		flows[id] = flowPayload
 	}
-	met.BufferSizeGauge.WithBufferName("hashmap-total").Set(float64(count))
-	met.BufferSizeGauge.WithBufferName("hashmap-unique").Set(float64(len(flows)))
+	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
+	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
+	met.BufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 
 	m.ReadGlobalCounter(met)
 	return flows

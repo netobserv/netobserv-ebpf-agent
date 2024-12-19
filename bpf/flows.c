@@ -69,6 +69,7 @@ static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *
 
 static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, int dns_errno) {
     if (pkt->dns_id != 0) {
+        extra_metrics->end_mono_time_ts = pkt->current_ts;
         extra_metrics->dns_record.id = pkt->dns_id;
         extra_metrics->dns_record.flags = pkt->dns_flags;
         extra_metrics->dns_record.latency = pkt->dns_latency;
@@ -202,6 +203,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
             additional_metrics new_metrics = {
+                .start_mono_time_ts = pkt.current_ts,
+                .end_mono_time_ts = pkt.current_ts,
+                .eth_protocol = eth_protocol,
                 .dns_record.id = pkt.dns_id,
                 .dns_record.flags = pkt.dns_flags,
                 .dns_record.latency = pkt.dns_latency,

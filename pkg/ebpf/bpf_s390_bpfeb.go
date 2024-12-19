@@ -13,6 +13,10 @@ import (
 )
 
 type BpfAdditionalMetrics struct {
+	StartMonoTimeTs  uint64
+	EndMonoTimeTs    uint64
+	EthProtocol      uint16
+	_                [6]byte
 	DnsRecord        BpfDnsRecordT
 	PktDrops         BpfPktDropsT
 	FlowRtt          uint64

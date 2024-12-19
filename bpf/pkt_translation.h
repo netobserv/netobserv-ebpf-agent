@@ -69,7 +69,7 @@ static inline void parse_tuple(struct nf_conntrack_tuple *t, struct translated_f
 static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
                                                     struct nf_conntrack_tuple *orig_t,
                                                     struct nf_conntrack_tuple *reply_t, u16 zone_id,
-                                                    u16 family) {
+                                                    u16 family, u16 eth_protocol) {
     long ret = 0;
     struct translated_flow_t orig;
 
@@ -80,15 +80,21 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     __builtin_memcpy(id->dst_ip, orig.daddr, IP_MAX_LEN);
     id->src_port = orig.sport;
     id->dst_port = orig.dport;
+    u64 current_time = bpf_ktime_get_ns();
 
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
+        extra_metrics->end_mono_time_ts = current_time;
         parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family, true);
         return ret;
     }
 
     // there is no matching flows so lets create new one and add the xlation
-    additional_metrics new_extra_metrics = {};
+    additional_metrics new_extra_metrics = {
+        .start_mono_time_ts = current_time,
+        .end_mono_time_ts = current_time,
+        .eth_protocol = eth_protocol,
+    };
     parse_tuple(reply_t, &new_extra_metrics.translated_flow, zone_id, family, true);
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_extra_metrics, BPF_NOEXIST);
     if (ret != 0) {
@@ -98,6 +104,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
         if (ret == -EEXIST) {
             additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
             if (extra_metrics != NULL) {
+                extra_metrics->end_mono_time_ts = current_time;
                 parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family, true);
                 return 0;
             }
@@ -164,7 +171,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     BPF_PRINTK("Xlat: protocol %d flags 0x%x family %d dscp %d\n", protocol, flags, family, dscp);
 
     bpf_probe_read(&zone_id, sizeof(zone_id), &ct->zone.id);
-    ret = translate_lookup_and_update_flow(&id, flags, orig_tuple, reply_tuple, zone_id, family);
+    ret = translate_lookup_and_update_flow(&id, flags, orig_tuple, reply_tuple, zone_id, family, eth_protocol);
 
     return ret;
 }

@@ -106,6 +106,9 @@ typedef struct flow_metrics_t {
 const struct flow_metrics_t *unused2 __attribute__((unused));
 
 typedef struct additional_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u16 eth_protocol;
     struct dns_record_t {
         u16 id;
         u16 flags;
