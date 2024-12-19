@@ -1,6 +1,8 @@
 package model
 
-import "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+import (
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+)
 
 type BpfFlowContent struct {
 	*ebpf.BpfFlowMetrics
@@ -57,10 +59,30 @@ func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.Bp
 	return p
 }
 
+func (p *BpfFlowContent) buildBaseFromAdditional(add *ebpf.BpfAdditionalMetrics) {
+	if add == nil {
+		return
+	}
+	// Accumulate time into base metrics if unset
+	if p.BpfFlowMetrics.StartMonoTimeTs == 0 || (p.BpfFlowMetrics.StartMonoTimeTs > add.StartMonoTimeTs && add.StartMonoTimeTs != 0) {
+		p.BpfFlowMetrics.StartMonoTimeTs = add.StartMonoTimeTs
+	}
+	if p.BpfFlowMetrics.EndMonoTimeTs == 0 || p.BpfFlowMetrics.EndMonoTimeTs < add.EndMonoTimeTs {
+		p.BpfFlowMetrics.EndMonoTimeTs = add.EndMonoTimeTs
+	}
+	if p.BpfFlowMetrics.EthProtocol == 0 {
+		p.BpfFlowMetrics.EthProtocol = add.EthProtocol
+	}
+	if p.BpfFlowMetrics.Flags == 0 && add.PktDrops.LatestFlags != 0 {
+		p.BpfFlowMetrics.Flags = add.PktDrops.LatestFlags
+	}
+}
+
 func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) {
 	if other == nil {
 		return
 	}
+	p.buildBaseFromAdditional(other)
 	if p.AdditionalMetrics == nil {
 		p.AdditionalMetrics = other
 		return
@@ -82,6 +104,9 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 	p.AdditionalMetrics.PktDrops.LatestFlags |= other.PktDrops.LatestFlags
 	if other.PktDrops.LatestDropCause != 0 {
 		p.AdditionalMetrics.PktDrops.LatestDropCause = other.PktDrops.LatestDropCause
+	}
+	if other.PktDrops.LatestState != 0 {
+		p.AdditionalMetrics.PktDrops.LatestState = other.PktDrops.LatestState
 	}
 	// RTT
 	if p.AdditionalMetrics.FlowRtt < other.FlowRtt {

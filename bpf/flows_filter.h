@@ -39,14 +39,18 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
     struct filter_value_t *rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, key);
 
     if (rule) {
-        BPF_PRINTK("rule found\n");
+        BPF_PRINTK("rule found drop_reason %d flags %d\n", drop_reason, flags);
         result++;
         if (rule->action != MAX_FILTER_ACTIONS) {
             BPF_PRINTK("action matched: %d\n", rule->action);
             *action = rule->action;
             result++;
         }
-
+        if (rule->sample && sampling != NULL) {
+            BPF_PRINTK("sampling action is set to %d\n", rule->sample);
+            *sampling = rule->sample;
+            result++;
+        }
         // match specific rule protocol or use wildcard protocol
         if (rule->protocol == id->transport_protocol || rule->protocol == 0) {
             switch (id->transport_protocol) {
@@ -194,11 +198,6 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 result = 0;
                 goto end;
             }
-        }
-        u32 sample = rule->sample;
-        if (sample && sampling != NULL) {
-            BPF_PRINTK("sampling action is set to %d\n", sample);
-            *sampling = sample;
         }
     }
 end:

@@ -12,6 +12,7 @@
 static inline int rtt_lookup_and_update_flow(flow_id *id, u64 rtt) {
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
+        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         if (extra_metrics->flow_rtt < rtt) {
             extra_metrics->flow_rtt = rtt;
         }
@@ -69,7 +70,11 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
         return 0;
     }
 
+    u64 current_time = bpf_ktime_get_ns();
     additional_metrics new_flow = {
+        .start_mono_time_ts = current_time,
+        .end_mono_time_ts = current_time,
+        .eth_protocol = eth_protocol,
         .flow_rtt = rtt,
     };
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
