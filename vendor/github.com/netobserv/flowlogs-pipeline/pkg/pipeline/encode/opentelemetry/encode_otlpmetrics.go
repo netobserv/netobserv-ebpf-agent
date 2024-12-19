@@ -25,6 +25,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode/metrics"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -135,7 +136,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 		fullMetricName := cfg.Prefix + mCfg.Name
 		log.Debugf("fullMetricName = %v", fullMetricName)
 		log.Debugf("Labels = %v", mCfg.Labels)
-		mInfo := encode.CreateMetricInfo(mCfg)
+		mInfo := metrics.Preprocess(mCfg)
 		switch mCfg.Type {
 		case api.MetricCounter:
 			counter, err := meter.Float64Counter(fullMetricName)

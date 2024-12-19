@@ -71,7 +71,7 @@ func (aggregate *Aggregate) LabelsFromEntry(entry config.GenericMap) (Labels, bo
 		if !ok {
 			allLabelsFound = false
 		}
-		labels[key] = fmt.Sprint(value)
+		labels[key] = util.ConvertToString(value)
 	}
 
 	return labels, allLabelsFound
@@ -149,31 +149,29 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	if operation == OperationCount {
 		groupState.totalValue = float64(groupState.totalCount + 1)
 		groupState.recentOpValue = float64(groupState.recentCount + 1)
-	} else {
-		if operationKey != "" {
-			value, ok := entry[operationKey]
-			if ok {
-				valueString := util.ConvertToString(value)
-				if valueFloat64, err := strconv.ParseFloat(valueString, 64); err != nil {
-					// Log as debug to avoid performance impact
-					log.Debugf("UpdateByEntry error when parsing float '%s': %v", valueString, err)
-				} else {
-					switch operation {
-					case OperationSum:
-						groupState.totalValue += valueFloat64
-						groupState.recentOpValue += valueFloat64
-					case OperationMax:
-						groupState.totalValue = math.Max(groupState.totalValue, valueFloat64)
-						groupState.recentOpValue = math.Max(groupState.recentOpValue, valueFloat64)
-					case OperationMin:
-						groupState.totalValue = math.Min(groupState.totalValue, valueFloat64)
-						groupState.recentOpValue = math.Min(groupState.recentOpValue, valueFloat64)
-					case OperationAvg:
-						groupState.totalValue = (groupState.totalValue*float64(groupState.totalCount) + valueFloat64) / float64(groupState.totalCount+1)
-						groupState.recentOpValue = (groupState.recentOpValue*float64(groupState.recentCount) + valueFloat64) / float64(groupState.recentCount+1)
-					case OperationRawValues:
-						groupState.recentRawValues = append(groupState.recentRawValues, valueFloat64)
-					}
+	} else if operationKey != "" {
+		value, ok := entry[operationKey]
+		if ok {
+			valueString := util.ConvertToString(value)
+			if valueFloat64, err := strconv.ParseFloat(valueString, 64); err != nil {
+				// Log as debug to avoid performance impact
+				log.Debugf("UpdateByEntry error when parsing float '%s': %v", valueString, err)
+			} else {
+				switch operation {
+				case OperationSum:
+					groupState.totalValue += valueFloat64
+					groupState.recentOpValue += valueFloat64
+				case OperationMax:
+					groupState.totalValue = math.Max(groupState.totalValue, valueFloat64)
+					groupState.recentOpValue = math.Max(groupState.recentOpValue, valueFloat64)
+				case OperationMin:
+					groupState.totalValue = math.Min(groupState.totalValue, valueFloat64)
+					groupState.recentOpValue = math.Min(groupState.recentOpValue, valueFloat64)
+				case OperationAvg:
+					groupState.totalValue = (groupState.totalValue*float64(groupState.totalCount) + valueFloat64) / float64(groupState.totalCount+1)
+					groupState.recentOpValue = (groupState.recentOpValue*float64(groupState.recentCount) + valueFloat64) / float64(groupState.recentCount+1)
+				case OperationRawValues:
+					groupState.recentRawValues = append(groupState.recentRawValues, valueFloat64)
 				}
 			}
 		}

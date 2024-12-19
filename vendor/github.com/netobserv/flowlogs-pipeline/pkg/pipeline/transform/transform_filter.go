@@ -28,6 +28,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils/filters"
 	"github.com/sirupsen/logrus"
 )
 
@@ -37,7 +38,13 @@ var (
 )
 
 type Filter struct {
-	Rules []api.TransformFilterRule
+	Rules     []api.TransformFilterRule
+	KeepRules []predicatesRule
+}
+
+type predicatesRule struct {
+	predicates []filters.Predicate
+	sampling   uint16
 }
 
 // Transform transforms a flow; if false is returned as a second argument, the entry is dropped
@@ -45,6 +52,18 @@ func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	tlog.Tracef("f = %v", f)
 	outputEntry := entry.Copy()
 	labels := make(map[string]string)
+	if len(f.KeepRules) > 0 {
+		keep := false
+		for _, r := range f.KeepRules {
+			if applyPredicates(outputEntry, r) {
+				keep = true
+				break
+			}
+		}
+		if !keep {
+			return nil, false
+		}
+	}
 	for i := range f.Rules {
 		tlog.Tracef("rule = %v", f.Rules[i])
 		if cont := applyRule(outputEntry, labels, &f.Rules[i]); !cont {
@@ -143,6 +162,9 @@ func applyRule(entry config.GenericMap, labels map[string]string, rule *api.Tran
 		return !isRemoveEntrySatisfied(entry, rule.RemoveEntryAllSatisfied)
 	case api.ConditionalSampling:
 		return sample(entry, rule.ConditionalSampling)
+	case api.KeepEntryAllSatisfied:
+		// This should be processed only in "applyPredicates". Failure to do so is a bug.
+		tlog.Panicf("unexpected KeepEntryAllSatisfied: %v", rule)
 	default:
 		tlog.Panicf("unknown type %s for transform.Filter rule: %v", rule.Type, rule)
 	}
@@ -159,25 +181,58 @@ func isRemoveEntrySatisfied(entry config.GenericMap, rules []*api.RemoveEntryRul
 	return true
 }
 
-func sample(entry config.GenericMap, rules []*api.SamplingCondition) bool {
-	for _, r := range rules {
-		if isRemoveEntrySatisfied(entry, r.Rules) {
-			return r.Value == 0 || (rndgen.Intn(int(r.Value)) == 0)
+func applyPredicates(entry config.GenericMap, rule predicatesRule) bool {
+	if !rollSampling(rule.sampling) {
+		return false
+	}
+	for _, p := range rule.predicates {
+		if !p(entry) {
+			return false
 		}
 	}
 	return true
 }
 
+func sample(entry config.GenericMap, rules []*api.SamplingCondition) bool {
+	for _, r := range rules {
+		if isRemoveEntrySatisfied(entry, r.Rules) {
+			return rollSampling(r.Value)
+		}
+	}
+	return true
+}
+
+func rollSampling(value uint16) bool {
+	return value == 0 || (rndgen.Intn(int(value)) == 0)
+}
+
 // NewTransformFilter create a new filter transform
 func NewTransformFilter(params config.StageParam) (Transformer, error) {
 	tlog.Debugf("entering NewTransformFilter")
+	keepRules := []predicatesRule{}
 	rules := []api.TransformFilterRule{}
 	if params.Transform != nil && params.Transform.Filter != nil {
 		params.Transform.Filter.Preprocess()
-		rules = params.Transform.Filter.Rules
+		for i := range params.Transform.Filter.Rules {
+			baseRules := &params.Transform.Filter.Rules[i]
+			if baseRules.Type == api.KeepEntryAllSatisfied {
+				pr := predicatesRule{sampling: baseRules.KeepEntrySampling}
+				for _, keepRule := range baseRules.KeepEntryAllSatisfied {
+					pred, err := filters.FromKeepEntry(keepRule)
+					if err != nil {
+						return nil, err
+					}
+					pr.predicates = append(pr.predicates, pred)
+				}
+				keepRules = append(keepRules, pr)
+			} else {
+				rules = append(rules, *baseRules)
+			}
+		}
 	}
 	transformFilter := &Filter{
-		Rules: rules,
+		Rules:     rules,
+		KeepRules: keepRules,
 	}
 	return transformFilter, nil
 }

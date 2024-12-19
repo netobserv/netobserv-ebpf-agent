@@ -70,8 +70,7 @@ func (aggregates *Aggregates) addAggregate(aggregateDefinition *api.AggregateDef
 		expiryTime: expiryTime.Duration,
 	}
 
-	appendedAggregates := append(aggregates.Aggregates, aggregate)
-	return appendedAggregates
+	return append(aggregates.Aggregates, aggregate)
 }
 
 func (aggregates *Aggregates) cleanupExpiredEntriesLoop() {

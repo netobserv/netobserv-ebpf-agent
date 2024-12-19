@@ -24,6 +24,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode/metrics"
 	putils "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,7 +33,7 @@ import (
 
 type mInfoStruct struct {
 	genericMetric interface{} // can be a counter, gauge, or histogram pointer
-	info          *MetricInfo
+	info          *metrics.Preprocessed
 }
 
 type MetricsCommonStruct struct {
@@ -84,22 +85,22 @@ var (
 	)
 )
 
-func (m *MetricsCommonStruct) AddCounter(name string, g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddCounter(name string, g interface{}, info *metrics.Preprocessed) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
 	m.counters[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddGauge(name string, g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddGauge(name string, g interface{}, info *metrics.Preprocessed) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
 	m.gauges[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddHist(name string, g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddHist(name string, g interface{}, info *metrics.Preprocessed) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
 	m.histos[name] = mStruct
 }
 
-func (m *MetricsCommonStruct) AddAggHist(name string, g interface{}, info *MetricInfo) {
+func (m *MetricsCommonStruct) AddAggHist(name string, g interface{}, info *metrics.Preprocessed) {
 	mStruct := mInfoStruct{genericMetric: g, info: info}
 	m.aggHistos[name] = mStruct
 }
@@ -109,91 +110,116 @@ func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, met
 
 	// Process counters
 	for _, mInfo := range m.counters {
-		labels, value, _ := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
-		if labels == nil {
+		labelSets, value := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+		if labelSets == nil {
 			continue
 		}
-		err := mci.ProcessCounter(mInfo.genericMetric, labels, value)
-		if err != nil {
-			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
-			continue
+		for _, labels := range labelSets {
+			err := mci.ProcessCounter(mInfo.genericMetric, labels.lMap, value)
+			if err != nil {
+				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
+				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+				continue
+			}
+			m.metricsProcessed.Inc()
 		}
-		m.metricsProcessed.Inc()
 	}
 
 	// Process gauges
 	for _, mInfo := range m.gauges {
-		labels, value, key := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
-		if labels == nil {
+		labelSets, value := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+		if labelSets == nil {
 			continue
 		}
-		err := mci.ProcessGauge(mInfo.genericMetric, labels, value, key)
-		if err != nil {
-			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
-			continue
+		for _, labels := range labelSets {
+			err := mci.ProcessGauge(mInfo.genericMetric, labels.lMap, value, labels.key)
+			if err != nil {
+				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
+				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+				continue
+			}
+			m.metricsProcessed.Inc()
 		}
-		m.metricsProcessed.Inc()
 	}
 
 	// Process histograms
 	for _, mInfo := range m.histos {
-		labels, value, _ := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
-		if labels == nil {
+		labelSets, value := m.prepareMetric(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+		if labelSets == nil {
 			continue
 		}
-		err := mci.ProcessHist(mInfo.genericMetric, labels, value)
-		if err != nil {
-			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
-			continue
+		for _, labels := range labelSets {
+			err := mci.ProcessHist(mInfo.genericMetric, labels.lMap, value)
+			if err != nil {
+				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
+				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+				continue
+			}
+			m.metricsProcessed.Inc()
 		}
-		m.metricsProcessed.Inc()
 	}
 
 	// Process pre-aggregated histograms
 	for _, mInfo := range m.aggHistos {
-		labels, values := m.prepareAggHisto(mci, metricRecord, mInfo.info, mInfo.genericMetric)
-		if labels == nil {
+		labelSets, values := m.prepareAggHisto(mci, metricRecord, mInfo.info, mInfo.genericMetric)
+		if labelSets == nil {
 			continue
 		}
-		err := mci.ProcessAggHist(mInfo.genericMetric, labels, values)
-		if err != nil {
-			log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
-			m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
-			continue
+		for _, labels := range labelSets {
+			err := mci.ProcessAggHist(mInfo.genericMetric, labels.lMap, values)
+			if err != nil {
+				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
+				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
+				continue
+			}
+			m.metricsProcessed.Inc()
 		}
-		m.metricsProcessed.Inc()
 	}
 }
 
-func (m *MetricsCommonStruct) prepareMetric(mci MetricsCommonInterface, flow config.GenericMap, info *MetricInfo, mv interface{}) (map[string]string, float64, string) {
+func (m *MetricsCommonStruct) prepareMetric(mci MetricsCommonInterface, flow config.GenericMap, info *metrics.Preprocessed, mv interface{}) ([]labelsKeyAndMap, float64) {
+	flatParts := info.GenerateFlatParts(flow)
+	ok, flatParts := info.ApplyFilters(flow, flatParts)
+	if !ok {
+		return nil, 0
+	}
+
 	val := m.extractGenericValue(flow, info)
 	if val == nil {
-		return nil, 0, ""
+		return nil, 0
 	}
 	floatVal, err := utils.ConvertToFloat64(val)
 	if err != nil {
 		m.errorsCounter.WithLabelValues("ValueConversionError", info.Name, info.ValueKey).Inc()
-		return nil, 0, ""
+		return nil, 0
 	}
 	if info.ValueScale != 0 {
-		floatVal = floatVal / info.ValueScale
+		floatVal /= info.ValueScale
 	}
 
-	entryLabels, key := extractLabelsAndKey(flow, info)
-	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
-	cacheEntry := mci.GetChacheEntry(entryLabels, mv)
-	ok := m.mCache.UpdateCacheEntry(key, cacheEntry)
-	if !ok {
-		m.metricsDropped.Inc()
-		return nil, 0, ""
+	labelSets := extractLabels(flow, flatParts, info)
+	var lkms []labelsKeyAndMap
+	for _, ls := range labelSets {
+		// Update entry for expiry mechanism (the entry itself is its own cleanup function)
+		lkm := ls.toKeyAndMap(info)
+		lkms = append(lkms, lkm)
+		cacheEntry := mci.GetChacheEntry(lkm.lMap, mv)
+		ok := m.mCache.UpdateCacheEntry(lkm.key, cacheEntry)
+		if !ok {
+			m.metricsDropped.Inc()
+			return nil, 0
+		}
 	}
-	return entryLabels, floatVal, key
+	return lkms, floatVal
 }
 
-func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow config.GenericMap, info *MetricInfo, mc interface{}) (map[string]string, []float64) {
+func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow config.GenericMap, info *metrics.Preprocessed, mc interface{}) ([]labelsKeyAndMap, []float64) {
+	flatParts := info.GenerateFlatParts(flow)
+	ok, flatParts := info.ApplyFilters(flow, flatParts)
+	if !ok {
+		return nil, nil
+	}
+
 	val := m.extractGenericValue(flow, info)
 	if val == nil {
 		return nil, nil
@@ -204,23 +230,23 @@ func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow c
 		return nil, nil
 	}
 
-	entryLabels, key := extractLabelsAndKey(flow, info)
-	// Update entry for expiry mechanism (the entry itself is its own cleanup function)
-	cacheEntry := mci.GetChacheEntry(entryLabels, mc)
-	ok = m.mCache.UpdateCacheEntry(key, cacheEntry)
-	if !ok {
-		m.metricsDropped.Inc()
-		return nil, nil
-	}
-	return entryLabels, values
-}
-
-func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *MetricInfo) interface{} {
-	for _, pred := range info.FilterPredicates {
-		if !pred(flow) {
-			return nil
+	labelSets := extractLabels(flow, flatParts, info)
+	var lkms []labelsKeyAndMap
+	for _, ls := range labelSets {
+		// Update entry for expiry mechanism (the entry itself is its own cleanup function)
+		lkm := ls.toKeyAndMap(info)
+		lkms = append(lkms, lkm)
+		cacheEntry := mci.GetChacheEntry(lkm.lMap, mc)
+		ok := m.mCache.UpdateCacheEntry(lkm.key, cacheEntry)
+		if !ok {
+			m.metricsDropped.Inc()
+			return nil, nil
 		}
 	}
+	return lkms, values
+}
+
+func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *metrics.Preprocessed) interface{} {
 	if info.ValueKey == "" {
 		// No value key means it's a records / flows counter (1 flow = 1 increment), so just return 1
 		return 1
@@ -233,21 +259,58 @@ func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *
 	return val
 }
 
-func extractLabelsAndKey(flow config.GenericMap, info *MetricInfo) (map[string]string, string) {
-	entryLabels := make(map[string]string, len(info.MappedLabels))
+type label struct {
+	key   string
+	value string
+}
+
+type labelSet []label
+
+type labelsKeyAndMap struct {
+	key  string
+	lMap map[string]string
+}
+
+func (l labelSet) toKeyAndMap(info *metrics.Preprocessed) labelsKeyAndMap {
 	key := strings.Builder{}
 	key.WriteString(info.Name)
 	key.WriteRune('|')
-	for _, t := range info.MappedLabels {
-		value := ""
-		if v, ok := flow[t.Source]; ok {
-			value = utils.ConvertToString(v)
-		}
-		entryLabels[t.Target] = value
-		key.WriteString(value)
+	m := map[string]string{}
+	for _, kv := range l {
+		key.WriteString(kv.value)
 		key.WriteRune('|')
+		m[kv.key] = kv.value
 	}
-	return entryLabels, key.String()
+	return labelsKeyAndMap{key: key.String(), lMap: m}
+}
+
+// extractLabels takes the flow and a single metric definition as input.
+// It returns the flat labels maps (label names and values).
+// Most of the time it will return a single map; it may return several of them when the parsed flow fields are lists (e.g. "interfaces").
+func extractLabels(flow config.GenericMap, flatParts []config.GenericMap, info *metrics.Preprocessed) []labelSet {
+	common := newLabelSet(flow, info.MappedLabels)
+	if len(flatParts) == 0 {
+		return []labelSet{common}
+	}
+	var all []labelSet
+	for _, fp := range flatParts {
+		ls := newLabelSet(fp, info.FlattenedLabels)
+		ls = append(ls, common...)
+		all = append(all, ls)
+	}
+	return all
+}
+
+func newLabelSet(part config.GenericMap, labels []metrics.MappedLabel) labelSet {
+	var ls labelSet
+	for _, t := range labels {
+		label := label{key: t.Target, value: ""}
+		if v, ok := part[t.Source]; ok {
+			label.value = utils.ConvertToString(v)
+		}
+		ls = append(ls, label)
+	}
+	return ls
 }
 
 func (m *MetricsCommonStruct) cleanupExpiredEntriesLoop(callback putils.CacheCallback) {

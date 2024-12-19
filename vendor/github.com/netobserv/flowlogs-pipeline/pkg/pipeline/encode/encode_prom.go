@@ -25,6 +25,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/encode/metrics"
 	promserver "github.com/netobserv/flowlogs-pipeline/pkg/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -114,25 +115,25 @@ func (e *EncodeProm) Cleanup(cleanupFunc interface{}) {
 	cleanupFunc.(func())()
 }
 
-func (e *EncodeProm) addCounter(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
+func (e *EncodeProm) addCounter(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddCounter(fullMetricName, counter, mInfo)
 	return counter
 }
 
-func (e *EncodeProm) addGauge(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
+func (e *EncodeProm) addGauge(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddGauge(fullMetricName, gauge, mInfo)
 	return gauge
 }
 
-func (e *EncodeProm) addHistogram(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
+func (e *EncodeProm) addHistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddHist(fullMetricName, histogram, mInfo)
 	return histogram
 }
 
-func (e *EncodeProm) addAgghistogram(fullMetricName string, mInfo *MetricInfo) prometheus.Collector {
+func (e *EncodeProm) addAgghistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	agghistogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddAggHist(fullMetricName, agghistogram, mInfo)
 	return agghistogram
@@ -176,10 +177,10 @@ func (e *EncodeProm) cleanDeletedMetrics(newCfg api.PromEncode) {
 }
 
 // returns true if a registry restart is needed
-func (e *EncodeProm) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, store map[string]mInfoStruct, createMetric func(string, *MetricInfo) prometheus.Collector) bool {
+func (e *EncodeProm) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, store map[string]mInfoStruct, createMetric func(string, *metrics.Preprocessed) prometheus.Collector) bool {
 	fullMetricName := prefix + apiItem.Name
 	plog.Debugf("Checking metric: %s", fullMetricName)
-	mInfo := CreateMetricInfo(apiItem)
+	mInfo := metrics.Preprocess(apiItem)
 	if oldMetric, ok := store[fullMetricName]; ok {
 		if !reflect.DeepEqual(mInfo.TargetLabels(), oldMetric.info.TargetLabels()) {
 			plog.Debug("Changes detected in labels")
@@ -245,7 +246,7 @@ func (e *EncodeProm) checkConfUpdate() {
 			break
 		}
 	default:
-		//Nothing to do
+		// Nothing to do
 		return
 	}
 }
@@ -257,7 +258,7 @@ func (e *EncodeProm) resetRegistry() {
 	for i := range e.cfg.Metrics {
 		mCfg := &e.cfg.Metrics[i]
 		fullMetricName := e.cfg.Prefix + mCfg.Name
-		mInfo := CreateMetricInfo(mCfg)
+		mInfo := metrics.Preprocess(mCfg)
 		plog.Debugf("Create metric: %s, Labels: %v", fullMetricName, mInfo.TargetLabels())
 		var m prometheus.Collector
 		switch mCfg.Type {

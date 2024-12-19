@@ -141,6 +141,13 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 					}
 				}
 			}
+		case api.NetworkDecodeTCPFlags:
+			if anyFlags, ok := outputEntry[rule.DecodeTCPFlags.Input]; ok && anyFlags != nil {
+				if flags, ok := anyFlags.(uint16); ok {
+					flags := util.DecodeTCPFlags(flags)
+					outputEntry[rule.DecodeTCPFlags.Output] = flags
+				}
+			}
 
 		default:
 			log.Panicf("unknown type %s for transform.Network rule: %v", rule.Type, rule)
@@ -194,7 +201,8 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 			if len(jsonNetworkTransform.SubnetLabels) == 0 {
 				return nil, fmt.Errorf("a rule '%s' was found, but there are no subnet labels configured", api.NetworkAddSubnetLabel)
 			}
-		case api.NetworkAddSubnet:
+		case api.NetworkAddSubnet, api.NetworkDecodeTCPFlags:
+			// nothing
 		}
 	}
 
