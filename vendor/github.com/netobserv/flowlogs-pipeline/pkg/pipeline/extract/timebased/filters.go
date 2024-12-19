@@ -102,7 +102,7 @@ func (fs *FilterStruct) CalculateValue(l *list.List, oldestValidTime time.Time) 
 		}
 	}
 	if fs.Rule.OperationType == api.FilterOperationAvg && nItems > 0 {
-		currentValue = currentValue / float64(nItems)
+		currentValue /= float64(nItems)
 	}
 	if fs.Rule.OperationType == api.FilterOperationCnt {
 		currentValue = float64(nItems)

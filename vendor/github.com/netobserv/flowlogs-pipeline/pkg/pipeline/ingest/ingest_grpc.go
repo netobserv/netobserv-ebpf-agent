@@ -7,7 +7,8 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
+	pUtils "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
@@ -60,7 +61,7 @@ func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (
 func (no *GRPCProtobuf) Ingest(out chan<- config.GenericMap) {
 	no.metrics.createOutQueueLen(out)
 	go func() {
-		<-utils.ExitChannel()
+		<-pUtils.ExitChannel()
 		close(no.flowPackets)
 		no.collector.Close()
 	}()
@@ -108,7 +109,7 @@ func instrumentGRPC(m *metrics) grpc2.UnaryServerInterceptor {
 		if err != nil {
 			// "trace" level used to minimize performance impact
 			glog.Tracef("Reporting metric error: %v", err)
-			m.error(fmt.Sprint(status.Code(err)))
+			m.error(utils.ConvertToString(status.Code(err)))
 		}
 
 		// Stage duration

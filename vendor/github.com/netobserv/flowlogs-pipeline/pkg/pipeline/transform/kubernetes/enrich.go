@@ -96,7 +96,7 @@ const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
 func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *inf.Info, zonePrefix string) {
 	if !rule.AddZone {
-		//Nothing to do
+		// Nothing to do
 		return
 	}
 	switch kubeInfo.Type {
@@ -121,7 +121,7 @@ func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *i
 		return
 
 	case inf.TypeService:
-		//A service is not assigned to a dedicated zone, skipping
+		// A service is not assigned to a dedicated zone, skipping
 		return
 	}
 }
