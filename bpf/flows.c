@@ -69,6 +69,7 @@ static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *
 
 static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, int dns_errno) {
     if (pkt->dns_id != 0) {
+        extra_metrics->end_mono_time_ts = pkt->current_ts;
         extra_metrics->dns_record.id = pkt->dns_id;
         extra_metrics->dns_record.flags = pkt->dns_flags;
         extra_metrics->dns_record.latency = pkt->dns_latency;
@@ -79,6 +80,17 @@ static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, 
 }
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
+    u32 filter_sampling = 0;
+
+    if (!is_filter_enabled()) {
+        if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
+            do_sampling = 0;
+            return TC_ACT_OK;
+        }
+        filter_sampling = sampling;
+        do_sampling = 1;
+    }
+
     u16 eth_protocol = 0;
     pkt_info pkt;
     __builtin_memset(&pkt, 0, sizeof(pkt));
@@ -103,21 +115,21 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     id.direction = direction;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    u32 filter_sampling = 0;
-    bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling);
-    if (skip) {
-        return TC_ACT_OK;
+    if (is_filter_enabled()) {
+        bool skip = check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling);
+        if (filter_sampling == 0) {
+            filter_sampling = sampling;
+        }
+        // If sampling is defined, will only parse 1 out of "sampling" flows
+        if (filter_sampling > 1 && (bpf_get_prandom_u32() % filter_sampling) != 0) {
+            do_sampling = 0;
+            return TC_ACT_OK;
+        }
+        do_sampling = 1;
+        if (skip) {
+            return TC_ACT_OK;
+        }
     }
-    if (filter_sampling == 0) {
-        filter_sampling = sampling;
-    }
-
-    // If sampling is defined, will only parse 1 out of "sampling" flows
-    if (filter_sampling > 1 && (bpf_get_prandom_u32() % filter_sampling) != 0) {
-        do_sampling = 0;
-        return TC_ACT_OK;
-    }
-    do_sampling = 1;
 
     int dns_errno = 0;
     if (enable_dns_tracking) {
@@ -191,6 +203,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
             additional_metrics new_metrics = {
+                .start_mono_time_ts = pkt.current_ts,
+                .end_mono_time_ts = pkt.current_ts,
+                .eth_protocol = eth_protocol,
                 .dns_record.id = pkt.dns_id,
                 .dns_record.flags = pkt.dns_flags,
                 .dns_record.latency = pkt.dns_latency,

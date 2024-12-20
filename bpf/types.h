@@ -106,6 +106,8 @@ typedef struct flow_metrics_t {
 const struct flow_metrics_t *unused2 __attribute__((unused));
 
 typedef struct additional_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
     struct dns_record_t {
         u16 id;
         u16 flags;
@@ -122,6 +124,7 @@ typedef struct additional_metrics_t {
     u64 flow_rtt;
     u8 network_events_idx;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
+    u16 eth_protocol;
     struct translated_flow_t {
         u8 saddr[IP_MAX_LEN];
         u8 daddr[IP_MAX_LEN];
