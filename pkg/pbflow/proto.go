@@ -232,7 +232,7 @@ func PBToFlow(pb *Record) *model.Record {
 			}
 			out.NetworkMonitorEventsMD = append(out.NetworkMonitorEventsMD, m)
 		}
-		protoLog.Debugf("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
+		protoLog.Tracef("decoded Network events monitor metadata: %v", out.NetworkMonitorEventsMD)
 	}
 
 	return &out
