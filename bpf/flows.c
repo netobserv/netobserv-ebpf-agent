@@ -160,7 +160,11 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             if (extra_metrics != NULL) {
                 add_observed_intf(extra_metrics, skb->ifindex, direction);
             } else {
-                additional_metrics new_metrics = {};
+                additional_metrics new_metrics = {
+                    .eth_protocol = eth_protocol,
+                    .start_mono_time_ts = pkt.current_ts,
+                    .end_mono_time_ts = pkt.current_ts,
+                };
                 add_observed_intf(&new_metrics, skb->ifindex, direction);
                 long ret =
                     bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
