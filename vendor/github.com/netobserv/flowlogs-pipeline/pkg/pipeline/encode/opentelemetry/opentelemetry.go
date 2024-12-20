@@ -253,7 +253,7 @@ func (e *EncodeOtlpLogs) LogWrite(entry config.GenericMap) {
 	msg := string(msgByteArray)
 	// TODO: Decide whether the content should be delivered as Body or as Attributes
 	lrc := logs.LogRecordConfig{
-		//Timestamp:         &now, // take timestamp from entry, if present?
+		// Timestamp:         &now, // take timestamp from entry, if present?
 		ObservedTimestamp: now,
 		SeverityNumber:    &sn,
 		SeverityText:      &st,
