@@ -309,53 +309,53 @@ func addKubeContextToTemplate(elements *[]entities.InfoElementWithValue, registr
 	return nil
 }
 
-func loadCustomRegistry(EnterpriseID uint32) error {
-	err := registry.InitNewRegistry(EnterpriseID)
+func loadCustomRegistry(enterpriseID uint32) error {
+	err := registry.InitNewRegistry(enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to initialize registry")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodNamespace", 7733, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodNamespace", 7733, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodName", 7734, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourcePodName", 7734, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodNamespace", 7735, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodNamespace", 7735, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodName", 7736, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationPodName", 7736, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("sourceNodeName", 7737, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("sourceNodeName", 7737, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("destinationNodeName", 7738, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("destinationNodeName", 7738, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("timeFlowRttNs", 7740, entities.Unsigned64, EnterpriseID, 8)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("timeFlowRttNs", 7740, entities.Unsigned64, enterpriseID, 8)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("interfaces", 7741, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("interfaces", 7741, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err
 	}
-	err = registry.PutInfoElement((*entities.NewInfoElement("directions", 7742, entities.String, EnterpriseID, 65535)), EnterpriseID)
+	err = registry.PutInfoElement((*entities.NewInfoElement("directions", 7742, entities.String, enterpriseID, 65535)), enterpriseID)
 	if err != nil {
 		ilog.WithError(err).Errorf("Failed to register element")
 		return err

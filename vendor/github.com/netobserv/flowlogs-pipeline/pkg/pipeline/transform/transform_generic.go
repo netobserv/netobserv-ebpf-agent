@@ -53,31 +53,31 @@ func (g *Generic) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 
 func (g *Generic) performMultiplier(entry config.GenericMap, transformRule api.GenericTransformRule, outputEntry config.GenericMap) bool {
 	ok := true
-	switch entry[transformRule.Input].(type) {
+	switch val := entry[transformRule.Input].(type) {
 	case int:
-		outputEntry[transformRule.Output] = transformRule.Multiplier * entry[transformRule.Input].(int)
+		outputEntry[transformRule.Output] = transformRule.Multiplier * val
 	case uint:
-		outputEntry[transformRule.Output] = uint(transformRule.Multiplier) * entry[transformRule.Input].(uint)
+		outputEntry[transformRule.Output] = uint(transformRule.Multiplier) * val
 	case int8:
-		outputEntry[transformRule.Output] = int8(transformRule.Multiplier) * entry[transformRule.Input].(int8)
+		outputEntry[transformRule.Output] = int8(transformRule.Multiplier) * val
 	case uint8:
-		outputEntry[transformRule.Output] = uint8(transformRule.Multiplier) * entry[transformRule.Input].(uint8)
+		outputEntry[transformRule.Output] = uint8(transformRule.Multiplier) * val
 	case int16:
-		outputEntry[transformRule.Output] = int16(transformRule.Multiplier) * entry[transformRule.Input].(int16)
+		outputEntry[transformRule.Output] = int16(transformRule.Multiplier) * val
 	case uint16:
-		outputEntry[transformRule.Output] = uint16(transformRule.Multiplier) * entry[transformRule.Input].(uint16)
+		outputEntry[transformRule.Output] = uint16(transformRule.Multiplier) * val
 	case int32:
-		outputEntry[transformRule.Output] = int32(transformRule.Multiplier) * entry[transformRule.Input].(int32)
+		outputEntry[transformRule.Output] = int32(transformRule.Multiplier) * val
 	case uint32:
-		outputEntry[transformRule.Output] = uint32(transformRule.Multiplier) * entry[transformRule.Input].(uint32)
+		outputEntry[transformRule.Output] = uint32(transformRule.Multiplier) * val
 	case int64:
-		outputEntry[transformRule.Output] = int64(transformRule.Multiplier) * entry[transformRule.Input].(int64)
+		outputEntry[transformRule.Output] = int64(transformRule.Multiplier) * val
 	case uint64:
-		outputEntry[transformRule.Output] = uint64(transformRule.Multiplier) * entry[transformRule.Input].(uint64)
+		outputEntry[transformRule.Output] = uint64(transformRule.Multiplier) * val
 	case float32:
-		outputEntry[transformRule.Output] = float32(transformRule.Multiplier) * entry[transformRule.Input].(float32)
+		outputEntry[transformRule.Output] = float32(transformRule.Multiplier) * val
 	case float64:
-		outputEntry[transformRule.Output] = float64(transformRule.Multiplier) * entry[transformRule.Input].(float64)
+		outputEntry[transformRule.Output] = float64(transformRule.Multiplier) * val
 	default:
 		ok = false
 		glog.Errorf("%s not of numerical type; cannot perform multiplication", transformRule.Output)

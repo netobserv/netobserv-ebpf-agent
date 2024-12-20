@@ -80,10 +80,8 @@ func CreateIndexKeysAndFilters(rules []api.TimebasedFilterRule) (map[string]*Ind
 			}
 			tmpIndexKeyStructs[filterRule.IndexKey] = rStruct
 			log.Debugf("new IndexKeyTable: name = %s = %v", filterRule.IndexKey, *rStruct)
-		} else {
-			if filterRule.TimeInterval.Duration > rStruct.maxTimeInterval {
-				rStruct.maxTimeInterval = filterRule.TimeInterval.Duration
-			}
+		} else if filterRule.TimeInterval.Duration > rStruct.maxTimeInterval {
+			rStruct.maxTimeInterval = filterRule.TimeInterval.Duration
 		}
 		// verify the validity of the OperationType field in the filterRule
 		switch filterRule.OperationType {
