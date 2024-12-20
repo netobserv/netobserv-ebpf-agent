@@ -11,6 +11,7 @@ static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 fl
                                                    enum skb_drop_reason reason, u64 len) {
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
+        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         extra_metrics->pkt_drops.packets += 1;
         extra_metrics->pkt_drops.bytes += len;
         extra_metrics->pkt_drops.latest_state = state;
@@ -73,7 +74,11 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
         return 0;
     }
     // there is no matching flows so lets create new one and add the drops
+    u64 current_time = bpf_ktime_get_ns();
     additional_metrics new_flow = {
+        .start_mono_time_ts = current_time,
+        .end_mono_time_ts = current_time,
+        .eth_protocol = eth_protocol,
         .pkt_drops.packets = 1,
         .pkt_drops.bytes = len,
         .pkt_drops.latest_state = state,

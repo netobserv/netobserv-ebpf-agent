@@ -38,6 +38,7 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
         u8 idx = extra_metrics->network_events_idx;
+        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         // Needed to check length here again to keep JIT verifier happy
         if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
             if (!md_already_exists(extra_metrics->network_events, (u8 *)cookie)) {
@@ -107,7 +108,11 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
     }
 
     // there is no matching flows so lets create new one and add the network event metadata
+    u64 current_time = bpf_ktime_get_ns();
     additional_metrics new_flow = {
+        .start_mono_time_ts = current_time,
+        .end_mono_time_ts = current_time,
+        .eth_protocol = eth_protocol,
         .network_events_idx = 0,
     };
     bpf_probe_read(new_flow.network_events[0], md_len, user_cookie);

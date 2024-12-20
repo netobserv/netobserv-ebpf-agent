@@ -174,13 +174,20 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
     return SUBMIT;
 }
 
+static inline bool is_filter_enabled() {
+    if (enable_flows_filtering || enable_pca) {
+        return true;
+    }
+    return false;
+}
+
 /*
  * check if flow filter is enabled and if we need to continue processing the packet or not
  */
 static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
                                                u16 eth_protocol, u32 *sampling) {
     // check if this packet need to be filtered if filtering feature is enabled
-    if (enable_flows_filtering || enable_pca) {
+    if (is_filter_enabled()) {
         filter_action action = ACCEPT;
         if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling) != 0 &&
             action != MAX_FILTER_ACTIONS) {
@@ -210,7 +217,8 @@ static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_
         } else {
             // we have no matching rules so we update global counter for flows that are not matched by any rule
             increase_counter(FILTER_NOMATCH);
-            // we have accept rule but no match so we can't let mismatched flows in the hashmap table.
+            // we have accept rule but no match so we can't let mismatched flows in the hashmap table or
+            // we have no match at all and the action is the default value MAX_FILTER_ACTIONS.
             if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
                 return true;
             } else {
