@@ -127,7 +127,6 @@ typedef struct additional_metrics_t {
     } pkt_drops;
     u64 flow_rtt;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
-    u16 eth_protocol;
     struct translated_flow_t {
         u8 saddr[IP_MAX_LEN];
         u8 daddr[IP_MAX_LEN];
@@ -140,6 +139,7 @@ typedef struct additional_metrics_t {
         u8 direction;
         u32 if_index;
     } observed_intf[MAX_OBSERVED_INTERFACES];
+    u16 eth_protocol;
     u8 network_events_idx;
     u8 nb_observed_intf;
 } additional_metrics;

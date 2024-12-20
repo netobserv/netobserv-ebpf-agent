@@ -194,7 +194,7 @@ func TestAccumulate(t *testing.T) {
 			{FlowRtt: 500},
 			{PktDrops: ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1}},
 		},
-		expected: model.BpfFlowContent{
+		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 15, EndMonoTimeTs: 25, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 				StartMonoTimeTs: 15,
