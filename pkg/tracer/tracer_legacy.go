@@ -25,8 +25,6 @@ func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.Bp
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't delete flow entry")
 			met.Errors.WithErrorName("flow-fetcher-legacy", "CannotDeleteFlows").Inc()
 		}
-		// We observed that eBFP PerCPU map might insert multiple times the same key in the map
-		// (probably due to race conditions) so we need to re-join metrics again at userspace
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
 	met.BufferSizeGauge.WithBufferName("hashmap-legacy-total").Set(float64(count))
