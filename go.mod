@@ -14,7 +14,7 @@ require (
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/netobserv/flowlogs-pipeline v1.7.0-community.0.20241217113023-fa0540a1658e
 	github.com/netobserv/gopipes v0.3.0
-	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20241126140656-c95491e46334
+	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20241216151556-893bab69f917
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/segmentio/kafka-go v0.4.47
@@ -152,3 +152,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+// HACK
+replace github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20241216151556-893bab69f917 => github.com/npinaeva/ovn-kubernetes/go-controller v0.0.0-20241219142917-0e539997b136
