@@ -4,6 +4,7 @@
 
 // Constant definitions, to be overridden by the invoker
 volatile const u32 sampling = 0;
+volatile const u8 has_filter_sampling = 0;
 volatile const u8 trace_messages = 0;
 volatile const u8 enable_rtt = 0;
 volatile const u8 enable_pca = 0;
