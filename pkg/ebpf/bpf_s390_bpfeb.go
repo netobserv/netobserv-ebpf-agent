@@ -19,13 +19,12 @@ type BpfAdditionalMetrics struct {
 	PktDrops         BpfPktDropsT
 	FlowRtt          uint64
 	NetworkEvents    [4][8]uint8
-	EthProtocol      uint16
 	TranslatedFlow   BpfTranslatedFlowT
-	_                [2]byte
 	ObservedIntf     [4]BpfObservedIntfT
+	EthProtocol      uint16
 	NetworkEventsIdx uint8
 	NbObservedIntf   uint8
-	_                [2]byte
+	_                [4]byte
 }
 
 type BpfDirectionT uint32
