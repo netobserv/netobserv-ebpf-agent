@@ -75,6 +75,9 @@ type FlowFilter struct {
 	FilterDrops bool `json:"drops,omitempty"`
 	// FilterSample is the sample rate this matching flow will use
 	FilterSample uint32 `json:"sample,omitempty"`
+	// FilterPeerCIDR is the PeerIP CIDR to filter flows.
+	// Example: 10.10.10.0/24 or 100:100:100:100::/64, default is 0.0.0.0/0
+	FilterPeerCIDR string `json:"peer_cidr,omitempty"`
 }
 
 type Config struct {

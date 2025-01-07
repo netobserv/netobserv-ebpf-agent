@@ -68,27 +68,30 @@ type BpfFilterKeyT struct {
 }
 
 type BpfFilterValueT struct {
-	Protocol     uint8
-	DstPortStart uint16
-	DstPortEnd   uint16
-	DstPort1     uint16
-	DstPort2     uint16
-	SrcPortStart uint16
-	SrcPortEnd   uint16
-	SrcPort1     uint16
-	SrcPort2     uint16
-	PortStart    uint16
-	PortEnd      uint16
-	Port1        uint16
-	Port2        uint16
-	IcmpType     uint8
-	IcmpCode     uint8
-	Direction    BpfDirectionT
-	Action       BpfFilterActionT
-	TcpFlags     BpfTcpFlagsT
-	FilterDrops  uint8
-	Sample       uint32
-	Ip           [16]uint8
+	Protocol          uint8
+	_                 [1]byte
+	DstPortStart      uint16
+	DstPortEnd        uint16
+	DstPort1          uint16
+	DstPort2          uint16
+	SrcPortStart      uint16
+	SrcPortEnd        uint16
+	SrcPort1          uint16
+	SrcPort2          uint16
+	PortStart         uint16
+	PortEnd           uint16
+	Port1             uint16
+	Port2             uint16
+	IcmpType          uint8
+	IcmpCode          uint8
+	Direction         BpfDirectionT
+	Action            BpfFilterActionT
+	TcpFlags          BpfTcpFlagsT
+	FilterDrops       uint8
+	_                 [3]byte
+	Sample            uint32
+	DoPeerCIDR_lookup uint8
+	_                 [3]byte
 }
 
 type BpfFlowId BpfFlowIdT
@@ -251,6 +254,7 @@ type BpfMapSpecs struct {
 	FilterMap             *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.MapSpec `ebpf:"global_counters"`
 	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
+	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -279,6 +283,7 @@ type BpfMaps struct {
 	FilterMap             *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.Map `ebpf:"global_counters"`
 	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
+	PeerFilterMap         *ebpf.Map `ebpf:"peer_filter_map"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -290,6 +295,7 @@ func (m *BpfMaps) Close() error {
 		m.FilterMap,
 		m.GlobalCounters,
 		m.PacketRecord,
+		m.PeerFilterMap,
 	)
 }
 

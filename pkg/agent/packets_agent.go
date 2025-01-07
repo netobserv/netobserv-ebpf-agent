@@ -90,6 +90,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 			FilterIPCIDR:          r.FilterIPCIDR,
 			FilterProtocol:        r.FilterProtocol,
 			FilterPeerIP:          r.FilterPeerIP,
+			FilterPeerCIDR:        r.FilterPeerCIDR,
 			FilterDestinationPort: tracer.ConvertFilterPortsToInstr(r.FilterDestinationPort, r.FilterDestinationPortRange, r.FilterDestinationPorts),
 			FilterSourcePort:      tracer.ConvertFilterPortsToInstr(r.FilterSourcePort, r.FilterSourcePortRange, r.FilterSourcePorts),
 			FilterPort:            tracer.ConvertFilterPortsToInstr(r.FilterPort, r.FilterPortRange, r.FilterPorts),

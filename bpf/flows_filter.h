@@ -11,42 +11,75 @@
     if (trace_messages)                                                                            \
     bpf_printk(fmt, ##args)
 
-static __always_inline int is_zero_ip(u8 *ip, u8 len) {
-    for (int i = 0; i < len; i++) {
-        if (ip[i] != 0) {
-            BPF_PRINTK("ip not zero ip[%d]:%d\n", i, ip[i]);
-            return 0;
-        }
-    }
-    return 1;
-}
+static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filter_key_t *key,
+                                                        u8 *len, u8 *offset, bool use_src_ip,
+                                                        u16 eth_protocol) {
 
-static __always_inline int is_equal_ip(u8 *ip1, u8 *ip2, u8 len) {
-    for (int i = 0; i < len; i++) {
-        if (ip1[i] != ip2[i]) {
-            BPF_PRINTK("ip mismatched ip1[%d]:%d not equal to ip2[%d]:%d\n", i, ip1[i], i, ip2[i]);
-            return 0;
+    if (eth_protocol == ETH_P_IP) {
+        *len = sizeof(u32);
+        *offset = sizeof(ip4in6);
+        if (use_src_ip) {
+            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
+        } else {
+            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
         }
+        key->prefix_len = 32;
+    } else if (eth_protocol == ETH_P_IPV6) {
+        *len = IP_MAX_LEN;
+        *offset = 0;
+        if (use_src_ip) {
+            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
+        } else {
+            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
+        }
+        key->prefix_len = 128;
+    } else {
+        return -1;
     }
-    return 1;
+    return 0;
 }
 
 static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_t *key,
                                                  filter_action *action, u8 len, u8 offset,
                                                  u16 flags, u32 drop_reason, u32 *sampling,
-                                                 u8 direction) {
+                                                 u8 direction, bool use_src_ip, u16 eth_protocol) {
     int result = 0;
 
     struct filter_value_t *rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, key);
 
     if (rule) {
-        BPF_PRINTK("rule found drop_reason %d flags %d\n", drop_reason, flags);
+        BPF_PRINTK("rule found drop_reason %d flags %d do_peerCIDR_lookup %d\n", drop_reason, flags,
+                   rule->do_peerCIDR_lookup);
         result++;
         if (rule->action != MAX_FILTER_ACTIONS) {
             BPF_PRINTK("action matched: %d\n", rule->action);
             *action = rule->action;
             result++;
         }
+
+        if (rule->do_peerCIDR_lookup) {
+            struct filter_key_t peerKey;
+            __builtin_memset(&peerKey, 0, sizeof(peerKey));
+            // PeerCIDR lookup will will target the opposite IP compared to original CIDR lookup
+            // In other words if cidr is using srcIP then peerCIDR will be the dstIP
+            if (flow_filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip,
+                                             eth_protocol) < 0) {
+                BPF_PRINTK("peerCIDR failed to setup lookup key\n");
+                result = 0;
+                goto end;
+            }
+
+            u8 *peer_result = (u8 *)bpf_map_lookup_elem(&peer_filter_map, &peerKey);
+            if (peer_result) {
+                BPF_PRINTK("peerCIDR matched\n");
+                result++;
+            } else {
+                BPF_PRINTK("peerCIDR couldn't find a matching key\n");
+                result = 0;
+                goto end;
+            }
+        }
+
         if (rule->sample && sampling != NULL) {
             BPF_PRINTK("sampling action is set to %d\n", rule->sample);
             *sampling = rule->sample;
@@ -160,27 +193,6 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
             goto end;
         }
 
-        if (!is_zero_ip(rule->ip, len)) {
-            // for Ingress side we can filter using dstIP and for Egress side we can filter using srcIP
-            if (direction == INGRESS) {
-                if (is_equal_ip(rule->ip, id->dst_ip + offset, len)) {
-                    BPF_PRINTK("dstIP matched\n");
-                    result++;
-                } else {
-                    result = 0;
-                    goto end;
-                }
-            } else {
-                if (is_equal_ip(rule->ip, id->src_ip + offset, len)) {
-                    BPF_PRINTK("srcIP matched\n");
-                    result++;
-                } else {
-                    result = 0;
-                    goto end;
-                }
-            }
-        }
-
         if (rule->direction != MAX_DIRECTION) {
             if (rule->direction == direction) {
                 BPF_PRINTK("direction matched\n");
@@ -206,34 +218,6 @@ end:
     return result;
 }
 
-static __always_inline int flow_filter_setup_lookup_key(flow_id *id, struct filter_key_t *key,
-                                                        u8 *len, u8 *offset, bool use_src_ip,
-                                                        u16 eth_protocol) {
-
-    if (eth_protocol == ETH_P_IP) {
-        *len = sizeof(u32);
-        *offset = sizeof(ip4in6);
-        if (use_src_ip) {
-            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
-        } else {
-            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
-        }
-        key->prefix_len = 32;
-    } else if (eth_protocol == ETH_P_IPV6) {
-        *len = IP_MAX_LEN;
-        *offset = 0;
-        if (use_src_ip) {
-            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
-        } else {
-            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
-        }
-        key->prefix_len = 128;
-    } else {
-        return -1;
-    }
-    return 0;
-}
-
 /*
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
@@ -254,7 +238,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     }
 
     result = do_flow_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling,
-                                   direction);
+                                   direction, false, eth_protocol);
     // we have a match so return
     if (result > 0) {
         return result;
@@ -267,7 +251,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     }
 
     return do_flow_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling,
-                                 direction);
+                                 direction, true, eth_protocol);
 }
 
 #endif //__FLOWS_FILTER_H__
