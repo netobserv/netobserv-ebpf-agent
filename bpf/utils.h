@@ -3,22 +3,8 @@
 
 #include <bpf_core_read.h>
 #include "types.h"
-#include "maps_definition.h"
-#include "flows_filter.h"
 
 static u8 do_sampling = 0;
-
-// Update global counter for hashmap update errors
-static inline void increase_counter(u32 key) {
-    u32 *error_counter_p = NULL;
-    u32 initVal = 1;
-    error_counter_p = bpf_map_lookup_elem(&global_counters, &key);
-    if (!error_counter_p) {
-        bpf_map_update_elem(&global_counters, &key, &initVal, BPF_ANY);
-    } else {
-        __sync_fetch_and_add(error_counter_p, 1);
-    }
-}
 
 // sets the TCP header flags for connection information
 static inline void set_flags(struct tcphdr *th, u16 *flags) {
@@ -172,61 +158,6 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
         id->dst_port = 0;
     }
     return SUBMIT;
-}
-
-static inline bool is_filter_enabled() {
-    if (enable_flows_filtering || enable_pca) {
-        return true;
-    }
-    return false;
-}
-
-/*
- * check if flow filter is enabled and if we need to continue processing the packet or not
- */
-static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
-                                               u16 eth_protocol, u32 *sampling) {
-    // check if this packet need to be filtered if filtering feature is enabled
-    if (is_filter_enabled()) {
-        filter_action action = ACCEPT;
-        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling) != 0 &&
-            action != MAX_FILTER_ACTIONS) {
-            // we have matching rules follow through the actions to decide if we should accept or reject the flow
-            // and update global counter for both cases
-            bool skip = false;
-            u32 key = 0;
-
-            switch (action) {
-            case REJECT:
-                key = FILTER_REJECT;
-                skip = true;
-                break;
-            case ACCEPT:
-                key = FILTER_ACCEPT;
-                break;
-            // should never come here
-            case MAX_FILTER_ACTIONS:
-                return true;
-            }
-
-            // update global counter for flows dropped by filter
-            increase_counter(key);
-            if (skip) {
-                return true;
-            }
-        } else {
-            // we have no matching rules so we update global counter for flows that are not matched by any rule
-            increase_counter(FILTER_NOMATCH);
-            // we have accept rule but no match so we can't let mismatched flows in the hashmap table or
-            // we have no match at all and the action is the default value MAX_FILTER_ACTIONS.
-            if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
-                return true;
-            } else {
-                // we have reject rule and no match so we can add the flows to the hashmap table.
-            }
-        }
-    }
-    return false;
 }
 
 static inline void core_fill_in_l2(struct sk_buff *skb, u16 *eth_protocol, u16 *family) {

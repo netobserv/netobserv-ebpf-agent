@@ -5,8 +5,6 @@
 #ifndef __FLOWS_FILTER_H__
 #define __FLOWS_FILTER_H__
 
-#include "utils.h"
-
 #define BPF_PRINTK(fmt, args...)                                                                   \
     if (trace_messages)                                                                            \
     bpf_printk(fmt, ##args)
@@ -264,6 +262,61 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     }
 
     return do_flow_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling);
+}
+
+static inline bool is_filter_enabled() {
+    if (enable_flows_filtering || enable_pca) {
+        return true;
+    }
+    return false;
+}
+
+/*
+ * check if flow filter is enabled and if we need to continue processing the packet or not
+ */
+static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
+                                               u16 eth_protocol, u32 *sampling) {
+    // check if this packet need to be filtered if filtering feature is enabled
+    if (is_filter_enabled()) {
+        filter_action action = ACCEPT;
+        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling) != 0 &&
+            action != MAX_FILTER_ACTIONS) {
+            // we have matching rules follow through the actions to decide if we should accept or reject the flow
+            // and update global counter for both cases
+            bool skip = false;
+            u32 key = 0;
+
+            switch (action) {
+            case REJECT:
+                key = FILTER_REJECT;
+                skip = true;
+                break;
+            case ACCEPT:
+                key = FILTER_ACCEPT;
+                break;
+            // should never come here
+            case MAX_FILTER_ACTIONS:
+                return true;
+            }
+
+            // update global counter for flows dropped by filter
+            increase_counter(key);
+            if (skip) {
+                return true;
+            }
+        } else {
+            // we have no matching rules so we update global counter for flows that are not matched by any rule
+            increase_counter(FILTER_NOMATCH);
+            // we have accept rule but no match so we can't let mismatched flows in the hashmap table or
+            // we have no match at all and the action is the default value MAX_FILTER_ACTIONS.
+            if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
+                return true;
+            } else {
+                // we have reject rule and no match so we can add the flows to the hashmap table.
+            }
+        }
+    }
+    return false;
 }
 
 #endif //__FLOWS_FILTER_H__

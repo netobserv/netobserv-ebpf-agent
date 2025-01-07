@@ -18,6 +18,10 @@
 #include <bpf_helpers.h>
 #include "configs.h"
 #include "utils.h"
+#include "counters.h"
+
+/* Do flow filtering. Is optional. */
+#include "flows_filter.h"
 
 /*
  * Defines a packet drops statistics tracker,
@@ -42,9 +46,6 @@
  * It is enabled by setting env var ENABLE_PCA= true. Is Optional
  */
 #include "pca.h"
-
-/* Do flow filtering. Is optional. */
-#include "flows_filter.h"
 /*
  * Defines an Network events monitoring tracker,
  * which runs inside flow_monitor. Is optional.
