@@ -181,18 +181,17 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         }
     } else {
         // Key does not exist in the map, and will need to create a new entry.
-        flow_metrics new_flow = {
-            .if_index_first_seen = skb->ifindex,
-            .direction_first_seen = direction,
-            .packets = 1,
-            .bytes = len,
-            .eth_protocol = eth_protocol,
-            .start_mono_time_ts = pkt.current_ts,
-            .end_mono_time_ts = pkt.current_ts,
-            .flags = pkt.flags,
-            .dscp = pkt.dscp,
-            .sampling = filter_sampling,
-        };
+        flow_metrics new_flow;
+        __builtin_memset(&new_flow, 0, sizeof(new_flow));
+        new_flow.if_index_first_seen = skb->ifindex;
+        new_flow.direction_first_seen = direction;
+        new_flow.packets = 1;
+        new_flow.bytes = len;
+        new_flow.eth_protocol = eth_protocol;
+        new_flow.start_mono_time_ts = pkt.current_ts;
+        new_flow.end_mono_time_ts = pkt.current_ts;
+        new_flow.dscp = pkt.dscp;
+        new_flow.sampling = filter_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
 

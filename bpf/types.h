@@ -232,7 +232,7 @@ const enum global_counters_key_t *unused9 __attribute__((unused));
 struct filter_key_t {
     u32 prefix_len;
     u8 ip_data[IP_MAX_LEN];
-} __attribute__((packed));
+} filter_key;
 
 // Force emitting enums/structs into the ELF
 const struct filter_key_t *unused10 __attribute__((unused));
