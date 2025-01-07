@@ -59,7 +59,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } global_counters SEC(".maps");
 
-// LPM trie map used to filter traffic by IP address CIDR and direction
+// LPM trie map used to filter traffic by IP address CIDR
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __type(key, struct filter_key_t);
@@ -68,5 +68,15 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } filter_map SEC(".maps");
+
+// LPM trie map used to filter traffic by peer IP address CIDR
+struct {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __type(key, struct filter_key_t);
+    __type(value, u8);
+    __uint(max_entries, MAX_FILTER_ENTRIES);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} peer_filter_map SEC(".maps");
 
 #endif //__MAPS_DEFINITION_H__

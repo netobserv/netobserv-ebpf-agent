@@ -268,8 +268,8 @@ struct filter_value_t {
     tcp_flags tcpFlags;
     u8 filter_drops;
     u32 sample;
-    u8 ip[IP_MAX_LEN];
-} __attribute__((packed));
+    u8 do_peerCIDR_lookup;
+} filter_value;
 
 // Force emitting enums/structs into the ELF
 const struct filter_value_t *unused12 __attribute__((unused));

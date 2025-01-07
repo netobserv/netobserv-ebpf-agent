@@ -31,7 +31,8 @@ define MAPS
 	"packets_record":"perf_event_array",
 	"dns_flows":"hash",
 	"global_counters":"per_cpu_array",
-	"filter_map":"lpm_trie"
+	"filter_map":"lpm_trie",
+	"peer_filter_map":"lpm_trie"
 }
 endef
 

@@ -36,6 +36,8 @@ const (
 	aggregatedFlowsMap    = "aggregated_flows"
 	additionalFlowMetrics = "additional_flow_metrics"
 	dnsLatencyMap         = "dns_flows"
+	flowFilterMap         = "filter_map"
+	flowPeerFilterMap     = "peer_filter_map"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
 	constHasFilterSampling              = "has_filter_sampling"
@@ -135,7 +137,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
 
 		// remove pinning from all maps
-		maps2Name := []string{"aggregated_flows", "additional_flow_metrics", "direct_flows", "dns_flows", "filter_map", "global_counters", "packet_record"}
+		maps2Name := []string{"aggregated_flows", "additional_flow_metrics", "direct_flows", "dns_flows", "filter_map", "peer_filter_map", "global_counters", "packet_record"}
 		for _, m := range maps2Name {
 			spec.Maps[m].Pinning = 0
 		}
@@ -168,6 +170,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		if filter != nil {
 			enableFlowFiltering = 1
 			hasFilterSampling = filter.hasSampling()
+		} else {
+			spec.Maps[flowFilterMap].MaxEntries = 1
+			spec.Maps[flowPeerFilterMap].MaxEntries = 1
 		}
 		enableNetworkEventsMonitoring := 0
 		if cfg.EnableNetworkEventsMonitoring {
@@ -315,6 +320,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		log.Infof("BPFManager mode: loading filter pinned maps")
 		mPath = path.Join(pinDir, "filter_map")
 		objects.BpfMaps.FilterMap, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		objects.BpfMaps.PeerFilterMap, err = cilium.LoadPinnedMap(mPath, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
@@ -737,6 +746,9 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.FilterMap.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.PeerFilterMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -1072,6 +1084,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
 				DnsFlows:              newObjects.DnsFlows,
 				FilterMap:             newObjects.FilterMap,
+				PeerFilterMap:         newObjects.PeerFilterMap,
 				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
@@ -1123,6 +1136,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
 				DnsFlows:              newObjects.DnsFlows,
 				FilterMap:             newObjects.FilterMap,
+				PeerFilterMap:         newObjects.PeerFilterMap,
 				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
@@ -1174,6 +1188,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
 				DnsFlows:              newObjects.DnsFlows,
 				FilterMap:             newObjects.FilterMap,
+				PeerFilterMap:         newObjects.PeerFilterMap,
 				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
@@ -1226,6 +1241,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
 				DnsFlows:              newObjects.DnsFlows,
 				FilterMap:             newObjects.FilterMap,
+				PeerFilterMap:         newObjects.PeerFilterMap,
 				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
@@ -1339,8 +1355,9 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			RhNetworkEventsMonitoring: nil,
 		},
 		BpfMaps: ebpf.BpfMaps{
-			PacketRecord: newObjects.PacketRecord,
-			FilterMap:    newObjects.FilterMap,
+			PacketRecord:  newObjects.PacketRecord,
+			FilterMap:     newObjects.FilterMap,
+			PeerFilterMap: newObjects.PeerFilterMap,
 		},
 	}
 
