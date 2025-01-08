@@ -29,20 +29,14 @@ type FilterConfig struct {
 }
 
 type Filter struct {
-	// eBPF objs to create/update eBPF maps
-	objects *ebpf.BpfObjects
-	config  []*FilterConfig
+	config []*FilterConfig
 }
 
-func NewFilter(objects *ebpf.BpfObjects, cfg []*FilterConfig) *Filter {
-	return &Filter{
-		objects: objects,
-		config:  cfg,
-	}
+func NewFilter(cfg []*FilterConfig) *Filter {
+	return &Filter{config: cfg}
 }
 
-func (f *Filter) ProgramFilter() error {
-
+func (f *Filter) ProgramFilter(objects *ebpf.BpfObjects) error {
 	for _, config := range f.config {
 		log.Infof("Flow filter config: %v", f.config)
 		key, err := f.getFilterKey(config)
@@ -55,7 +49,7 @@ func (f *Filter) ProgramFilter() error {
 			return fmt.Errorf("failed to get filter value: %w", err)
 		}
 
-		err = f.objects.FilterMap.Update(key, val, cilium.UpdateAny)
+		err = objects.FilterMap.Update(key, val, cilium.UpdateAny)
 		if err != nil {
 			return fmt.Errorf("failed to update filter map: %w", err)
 		}
@@ -263,4 +257,13 @@ func ConvertFilterPortsToInstr(intPort int32, rangePorts, ports string) intstr.I
 		return intstr.FromString(ports)
 	}
 	return intstr.FromInt32(intPort)
+}
+
+func (f *Filter) hasSampling() uint8 {
+	for _, r := range f.config {
+		if r.FilterSample > 0 {
+			return 1
+		}
+	}
+	return 0
 }
