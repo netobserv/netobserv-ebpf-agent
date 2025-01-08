@@ -724,6 +724,9 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.AggregatedFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.AdditionalFlowMetrics.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if err := m.objects.DirectFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
@@ -912,8 +915,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		}
 		flows[id] = flowPayload
 	}
-	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
+	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.BufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 
 	m.ReadGlobalCounter(met)
@@ -1052,11 +1055,12 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:     newObjects.DirectFlows,
-				AggregatedFlows: newObjects.AggregatedFlows,
-				DnsFlows:        newObjects.DnsFlows,
-				FilterMap:       newObjects.FilterMap,
-				GlobalCounters:  newObjects.GlobalCounters,
+				DirectFlows:           newObjects.DirectFlows,
+				AggregatedFlows:       newObjects.AggregatedFlows,
+				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
+				DnsFlows:              newObjects.DnsFlows,
+				FilterMap:             newObjects.FilterMap,
+				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
 
@@ -1102,11 +1106,12 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:     newObjects.DirectFlows,
-				AggregatedFlows: newObjects.AggregatedFlows,
-				DnsFlows:        newObjects.DnsFlows,
-				FilterMap:       newObjects.FilterMap,
-				GlobalCounters:  newObjects.GlobalCounters,
+				DirectFlows:           newObjects.DirectFlows,
+				AggregatedFlows:       newObjects.AggregatedFlows,
+				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
+				DnsFlows:              newObjects.DnsFlows,
+				FilterMap:             newObjects.FilterMap,
+				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
 
@@ -1152,11 +1157,12 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:     newObjects.DirectFlows,
-				AggregatedFlows: newObjects.AggregatedFlows,
-				DnsFlows:        newObjects.DnsFlows,
-				FilterMap:       newObjects.FilterMap,
-				GlobalCounters:  newObjects.GlobalCounters,
+				DirectFlows:           newObjects.DirectFlows,
+				AggregatedFlows:       newObjects.AggregatedFlows,
+				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
+				DnsFlows:              newObjects.DnsFlows,
+				FilterMap:             newObjects.FilterMap,
+				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
 
@@ -1203,11 +1209,12 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				RhNetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:     newObjects.DirectFlows,
-				AggregatedFlows: newObjects.AggregatedFlows,
-				DnsFlows:        newObjects.DnsFlows,
-				FilterMap:       newObjects.FilterMap,
-				GlobalCounters:  newObjects.GlobalCounters,
+				DirectFlows:           newObjects.DirectFlows,
+				AggregatedFlows:       newObjects.AggregatedFlows,
+				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
+				DnsFlows:              newObjects.DnsFlows,
+				FilterMap:             newObjects.FilterMap,
+				GlobalCounters:        newObjects.GlobalCounters,
 			},
 		}
 
