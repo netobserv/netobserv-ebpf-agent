@@ -880,9 +880,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
 			continue
 		}
-		flowPayload := model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-		flowPayload.AccumulateBase(&baseMetrics)
-		flows[id] = flowPayload
+		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
 
 	// Reiterate on additional metrics
@@ -906,14 +904,14 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
 			continue
 		}
-		flowPayload, found := flows[id]
+		flow, found := flows[id]
 		if !found {
-			flowPayload = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+			flow = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
 		}
 		for iMet := range additionalMetrics {
-			flowPayload.AccumulateAdditional(&additionalMetrics[iMet])
+			flow.AccumulateAdditional(&additionalMetrics[iMet])
 		}
-		flows[id] = flowPayload
+		flows[id] = flow
 	}
 	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
 	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
@@ -936,6 +934,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
+		ebpf.BpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached"),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
 	for key := ebpf.BpfGlobalCountersKeyT(0); key < ebpf.BpfGlobalCountersKeyTMAX_COUNTERS; key++ {

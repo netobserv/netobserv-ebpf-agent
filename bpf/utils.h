@@ -184,12 +184,14 @@ static inline bool is_filter_enabled() {
 /*
  * check if flow filter is enabled and if we need to continue processing the packet or not
  */
-static inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
-                                               u16 eth_protocol, u32 *sampling) {
+static __always_inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
+                                                        u16 eth_protocol, u32 *sampling,
+                                                        u8 direction) {
     // check if this packet need to be filtered if filtering feature is enabled
     if (is_filter_enabled()) {
         filter_action action = ACCEPT;
-        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling) != 0 &&
+        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling, direction) !=
+                0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases

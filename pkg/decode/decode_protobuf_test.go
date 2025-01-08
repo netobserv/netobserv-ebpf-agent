@@ -18,7 +18,6 @@ func TestPBFlowToMap(t *testing.T) {
 	someTime := time.Now()
 	var someDuration time.Duration = 10000000 // 10ms
 	flow := &pbflow.Record{
-		Interface: "eth0",
 		DupList: []*pbflow.DupMapEntry{
 			{
 				Interface: "5e6e92caa1d51cf",
@@ -32,10 +31,8 @@ func TestPBFlowToMap(t *testing.T) {
 		EthProtocol:   2048,
 		Bytes:         456,
 		Packets:       123,
-		Direction:     pbflow.Direction_EGRESS,
 		TimeFlowStart: timestamppb.New(someTime),
 		TimeFlowEnd:   timestamppb.New(someTime),
-		Duplicate:     true,
 		Network: &pbflow.Network{
 			SrcAddr: &pbflow.IP{
 				IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x01020304},
@@ -105,7 +102,7 @@ func TestPBFlowToMap(t *testing.T) {
 	assert.NotZero(t, out["TimeReceived"])
 	delete(out, "TimeReceived")
 	assert.Equal(t, config.GenericMap{
-		"IfDirections":           []int{0, 1},
+		"IfDirections":           []uint8{0, 1},
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",
@@ -114,7 +111,6 @@ func TestPBFlowToMap(t *testing.T) {
 		"SrcMac":                 "01:02:03:04:05:06",
 		"SrcPort":                uint16(23000),
 		"DstPort":                uint16(443),
-		"Duplicate":              true,
 		"Etype":                  uint16(2048),
 		"Packets":                uint32(123),
 		"Proto":                  uint8(6),
@@ -156,5 +152,4 @@ func TestPBFlowToMap(t *testing.T) {
 		"ZoneId":      uint16(100),
 		"XlatIcmpId":  uint8(0),
 	}, out)
-
 }

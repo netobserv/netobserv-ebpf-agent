@@ -24,6 +24,7 @@ const (
 	IPv6Type                 = 0x86DD
 	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
+	MaxObservedInterfaces    = 4
 )
 
 type HumanBytes uint64
@@ -35,6 +36,18 @@ type Direction uint8
 // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
 // (same behavior as Go's net.IP type)
 type IPAddr [net.IPv6len]uint8
+
+type InterfaceNamer func(ifIndex int) string
+
+var (
+	agentIP        net.IP
+	interfaceNamer InterfaceNamer = func(ifIndex int) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
+)
+
+func SetGlobals(ip net.IP, ifaceNamer InterfaceNamer) {
+	agentIP = ip
+	interfaceNamer = ifaceNamer
+}
 
 // record structure as parsed from eBPF
 type RawRecord ebpf.BpfFlowRecordT
@@ -48,20 +61,11 @@ type Record struct {
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	DNSLatency    time.Duration
-	Interface     string
-	// Duplicate tells whether this flow has another duplicate so it has to be excluded from
-	// any metrics' aggregation (e.g. bytes/second rates between two pods).
-	// The reason for this field is that the same flow can be observed from multiple interfaces,
-	// so the agent needs to choose only a view of the same flow and mark the others as
-	// "exclude from aggregation". Otherwise rates, sums, etc... values would be multiplied by the
-	// number of interfaces this flow is observed from.
-	Duplicate bool
-
+	Interfaces    []IntfDir
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
-	DupList                []map[string]uint8
 	NetworkMonitorEventsMD []config.GenericMap
 }
 
@@ -79,8 +83,16 @@ func NewRecord(
 		Metrics:       *metrics,
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
+		AgentIP:       agentIP,
+		Interfaces:    []IntfDir{NewIntfDir(interfaceNamer(int(metrics.IfIndexFirstSeen)), metrics.DirectionFirstSeen)},
 	}
 	if metrics.AdditionalMetrics != nil {
+		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
+			record.Interfaces = append(record.Interfaces, NewIntfDir(
+				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
+				metrics.AdditionalMetrics.ObservedIntf[i].Direction,
+			))
+		}
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
 			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}
@@ -88,10 +100,16 @@ func NewRecord(
 			record.DNSLatency = time.Duration(metrics.AdditionalMetrics.DnsRecord.Latency)
 		}
 	}
-	record.DupList = make([]map[string]uint8, 0)
 	record.NetworkMonitorEventsMD = make([]config.GenericMap, 0)
 	return &record
 }
+
+type IntfDir struct {
+	Interface string
+	Direction uint8
+}
+
+func NewIntfDir(intf string, dir uint8) IntfDir { return IntfDir{Interface: intf, Direction: dir} }
 
 func networkEventsMDExist(events [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8, md [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, e := range events {

@@ -6,6 +6,8 @@ The following graph provides a birds' eye view on how the different components a
 
 For more info on each component, please check their corresponding Go docs.
 
+<!-- When editing, you can use an online editor for a live preview, e.g. https://mermaid.live/ -->
+
 ### Kernel space
 
 ```mermaid
@@ -33,21 +35,13 @@ flowchart TD
 ```mermaid
 flowchart TD
     E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
-    style E fill:#990
+    style E fill:#7CA
 
     E --> |"polls<br/>HashMap"| M(flow.MapTracer)
     RB --> |chan *model.Record| ACC(flow.Accounter)
     RB -.-> |flushes| M
-    ACC --> |"chan []*model.Record"| DD(flow.Deduper)
-    M --> |"chan []*model.Record"| DD
+    ACC --> |"chan []*model.Record"| CL(flow.CapacityLimiter)
+    M --> |"chan []*model.Record"| CL
 
-    subgraph Optional
-        DD
-    end
-
-    DD --> |"chan []*model.Record"| CL(flow.CapacityLimiter)
-
-    CL --> |"chan []*model.Record"| DC(flow.Decorator)
-    
-    DC --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto<br/>or<br/>export.DirectFLP")
+    CL --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto<br/>or<br/>export.DirectFLP")
 ```
