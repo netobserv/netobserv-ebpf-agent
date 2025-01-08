@@ -11,8 +11,6 @@ var clog = logrus.WithField("component", "config")
 const (
 	ListenPoll       = "poll"
 	ListenWatch      = "watch"
-	DeduperNone      = "none"
-	DeduperFirstCome = "firstCome"
 	DirectionIngress = "ingress"
 	DirectionEgress  = "egress"
 	DirectionBoth    = "both"
@@ -131,21 +129,6 @@ type Config struct {
 	// CacheActiveTimeout specifies the maximum duration that flows are kept in the accounting
 	// cache before being flushed for its later export
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`
-	// Deduper specifies the deduper type. Accepted values are "none" (disabled) and "firstCome".
-	// When enabled, it will detect duplicate flows (flows that have been detected e.g. through
-	// both the physical and a virtual interface).
-	// "firstCome" will forward only flows from the first interface the flows are received from.
-	Deduper string `env:"DEDUPER" envDefault:"none"`
-	// DeduperFCExpiry specifies the expiry duration of the flows "firstCome" deduplicator. After
-	// a flow hasn't been received for that expiry time, the deduplicator forgets it. That means
-	// that a flow from a connection that has been inactive during that period could be forwarded
-	// again from a different interface.
-	// If the value is not set, it will default to 2 * CacheActiveTimeout
-	DeduperFCExpiry time.Duration `env:"DEDUPER_FC_EXPIRY"`
-	// DeduperJustMark will just mark duplicates (boolean field) instead of dropping them.
-	DeduperJustMark bool `env:"DEDUPER_JUST_MARK" envDefault:"false"`
-	// DeduperMerge will merge duplicated flows and generate list of interfaces and direction pairs
-	DeduperMerge bool `env:"DEDUPER_MERGE" envDefault:"true"`
 	// Direction allows selecting which flows to trace according to its direction. Accepted values
 	// are "ingress", "egress" or "both" (default).
 	Direction string `env:"DIRECTION" envDefault:"both"`

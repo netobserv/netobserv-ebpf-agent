@@ -32,7 +32,6 @@ func TestConversions(t *testing.T) {
 			name: "TCP record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -56,7 +55,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -86,7 +85,6 @@ func TestConversions(t *testing.T) {
 			name: "UDP record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -104,7 +102,7 @@ func TestConversions(t *testing.T) {
 						Sampling:    2,
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -133,7 +131,6 @@ func TestConversions(t *testing.T) {
 			name: "ICMPv4 record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					TransportProtocol: 1,
@@ -150,7 +147,7 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -178,7 +175,6 @@ func TestConversions(t *testing.T) {
 			name: "ICMPv6 record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 					DstIp:             model.IPAddr{11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26},
 					TransportProtocol: 58,
@@ -195,7 +191,7 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -223,7 +219,6 @@ func TestConversions(t *testing.T) {
 			name: "ARP layer2",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{},
 					DstIp:             model.IPAddr{},
 					SrcPort:           0,
@@ -241,7 +236,7 @@ func TestConversions(t *testing.T) {
 						Packets:     128,
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -263,7 +258,6 @@ func TestConversions(t *testing.T) {
 			name: "L2 drops",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{},
 					DstIp:             model.IPAddr{},
 					SrcPort:           0,
@@ -288,7 +282,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -315,7 +309,6 @@ func TestConversions(t *testing.T) {
 			name: "TCP + drop + DNS + RTT record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -348,7 +341,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interface:     "eth0",
+				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -389,7 +382,6 @@ func TestConversions(t *testing.T) {
 			name: "Multiple interfaces record",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
-					Direction:         model.DirectionEgress,
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -412,9 +404,9 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				DupList: []map[string]uint8{
-					{"5e6e92caa1d51cf": 0},
-					{"eth0": 1},
+				Interfaces: []model.IntfDir{
+					model.NewIntfDir("5e6e92caa1d51cf", model.DirectionIngress),
+					model.NewIntfDir("eth0", model.DirectionEgress),
 				},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,

@@ -67,9 +67,14 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		"AgentIP":         fr.AgentIP.String(),
 	}
 
-	if fr.Duplicate {
-		out["Duplicate"] = true
+	var directions []uint8
+	var interfaces []string
+	for _, intf := range fr.Interfaces {
+		directions = append(directions, intf.Direction)
+		interfaces = append(interfaces, intf.Interface)
 	}
+	out["IfDirections"] = directions
+	out["Interfaces"] = interfaces
 
 	if fr.Metrics.Bytes != 0 {
 		out["Bytes"] = fr.Metrics.Bytes
@@ -82,22 +87,6 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	if fr.Metrics.Sampling != 0 {
 		out["Sampling"] = fr.Metrics.Sampling
 	}
-	var interfaces []string
-	var directions []int
-	if len(fr.DupList) != 0 {
-		for _, m := range fr.DupList {
-			for key, value := range m {
-				interfaces = append(interfaces, key)
-				directions = append(directions, int(model.Direction(value)))
-			}
-		}
-	} else {
-		interfaces = append(interfaces, fr.Interface)
-		directions = append(directions, int(fr.ID.Direction))
-	}
-	out["Interfaces"] = interfaces
-	out["IfDirections"] = directions
-
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
 		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
 		out["DstAddr"] = model.IP(fr.ID.DstIp).String()
