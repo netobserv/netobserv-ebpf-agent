@@ -38,6 +38,7 @@ const (
 	dnsLatencyMap         = "dns_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
+	constHasFilterSampling              = "has_filter_sampling"
 	constTraceMessages                  = "trace_messages"
 	constEnableRtt                      = "enable_rtt"
 	constEnableDNSTracking              = "enable_dns_tracking"
@@ -114,6 +115,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	var err error
 	objects := ebpf.BpfObjects{}
 	var pinDir string
+	var filter *Filter
+	if cfg.EnableFlowFilter {
+		filter = NewFilter(cfg.FilterConfig)
+	}
 
 	if !cfg.UseEbpfManager {
 		if err := rlimit.RemoveMemlock(); err != nil {
@@ -162,8 +167,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 
 		enableFlowFiltering := 0
-		if cfg.EnableFlowFilter {
+		hasFilterSampling := uint8(0)
+		if filter != nil {
 			enableFlowFiltering = 1
+			hasFilterSampling = filter.hasSampling()
 		}
 		enableNetworkEventsMonitoring := 0
 		if cfg.EnableNetworkEventsMonitoring {
@@ -178,7 +185,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 			enablePktTranslation = 1
 		}
 		if err := spec.RewriteConstants(map[string]interface{}{
+			// When adding constants here, remember to delete them in NewPacketFetcher
 			constSampling:                       uint32(cfg.Sampling),
+			constHasFilterSampling:              hasFilterSampling,
 			constTraceMessages:                  uint8(traceMsgs),
 			constEnableRtt:                      uint8(enableRtt),
 			constEnableDNSTracking:              uint8(enableDNSTracking),
@@ -326,9 +335,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		}
 	}
 
-	if cfg.EnableFlowFilter {
-		f := NewFilter(&objects, cfg.FilterConfig)
-		if err := f.ProgramFilter(); err != nil {
+	if filter != nil {
+		if err := filter.ProgramFilter(&objects); err != nil {
 			return nil, fmt.Errorf("programming flow filter: %w", err)
 		}
 	}
@@ -1291,6 +1299,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, aggregatedFlowsMap)
 	delete(spec.Programs, additionalFlowMetrics)
 	delete(spec.Programs, constSampling)
+	delete(spec.Programs, constHasFilterSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)
 	delete(spec.Programs, constDNSTrackingPort)
@@ -1330,8 +1339,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		},
 	}
 
-	f := NewFilter(&objects, cfg.FilterConfig)
-	if err := f.ProgramFilter(); err != nil {
+	f := NewFilter(cfg.FilterConfig)
+	if err := f.ProgramFilter(&objects); err != nil {
 		return nil, fmt.Errorf("programming flow filter: %w", err)
 	}
 
