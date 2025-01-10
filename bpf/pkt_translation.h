@@ -122,7 +122,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     long ret = 0;
     flow_id id;
 
-    if (!enable_pkt_translation_tracking) {
+    if (enable_pkt_translation_tracking == 0 || do_sampling == 0) {
         return 0;
     }
     __builtin_memset(&id, 0, sizeof(id));
