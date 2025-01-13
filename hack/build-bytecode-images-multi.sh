@@ -21,16 +21,20 @@ PROGRAMS='{
 "nf_nat_manip_pkt":"kprobe"
 }'
 
+echo "$PROGRAMS" | jq empty || { echo "Invalid JSON in PROGRAMS"; exit 1; }
+
 # MAPS is a list of <map name>:<map type> tuples
 MAPS='{
 "direct_flows":"ringbuf",
 "aggregated_flows":"hash",
-"additional_flow_metrics":"per_cpu_hash"
+"additional_flow_metrics":"per_cpu_hash",
 "packets_record":"perf_event_array",
 "dns_flows":"hash",
 "global_counters":"per_cpu_array",
 "filter_map":"lpm_trie"
 }'
+
+echo "$MAPS" | jq empty || { echo "Invalid JSON in MAPS"; exit 1; }
 
 if [[ ${OCI_BIN} == "docker" ]]; then
   docker buildx create --name bytecode-builder --use
