@@ -936,7 +936,7 @@ func (m *FlowFetcher) increaseEnrichmentStats(met *metrics.Metrics, flow *model.
 			flow.AdditionalMetrics.DnsRecord.Id != 0,
 			flow.AdditionalMetrics.FlowRtt != 0,
 			flow.AdditionalMetrics.PktDrops.Packets != 0,
-			flow.AdditionalMetrics.NetworkEventsIdx != 0,
+			!model.AllZerosMetaData(flow.AdditionalMetrics.NetworkEvents[0]),
 			!model.AllZeroIP(model.IP(flow.AdditionalMetrics.TranslatedFlow.Daddr)),
 		)
 	} else {
