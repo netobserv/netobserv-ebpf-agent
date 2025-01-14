@@ -919,6 +919,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		for iMet := range additionalMetrics {
 			flow.AccumulateAdditional(&additionalMetrics[iMet])
 		}
+		m.increaseEnrichmentStats(met, &flow)
 		flows[id] = flow
 	}
 	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
@@ -927,6 +928,20 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 
 	m.ReadGlobalCounter(met)
 	return flows
+}
+
+func (m *FlowFetcher) increaseEnrichmentStats(met *metrics.Metrics, flow *model.BpfFlowContent) {
+	if flow.AdditionalMetrics != nil {
+		met.FlowEnrichmentCounter.Increase(
+			flow.AdditionalMetrics.DnsRecord.Id != 0,
+			flow.AdditionalMetrics.FlowRtt != 0,
+			flow.AdditionalMetrics.PktDrops.Packets != 0,
+			!model.AllZerosMetaData(flow.AdditionalMetrics.NetworkEvents[0]),
+			!model.AllZeroIP(model.IP(flow.AdditionalMetrics.TranslatedFlow.Daddr)),
+		)
+	} else {
+		met.FlowEnrichmentCounter.Increase(false, false, false, false, false)
+	}
 }
 
 // ReadGlobalCounter reads the global counter and updates drop flows counter metrics
