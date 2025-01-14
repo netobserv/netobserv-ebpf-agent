@@ -102,7 +102,7 @@ func TestPBFlowToMap(t *testing.T) {
 	assert.NotZero(t, out["TimeReceived"])
 	delete(out, "TimeReceived")
 	assert.Equal(t, config.GenericMap{
-		"IfDirections":           []uint8{0, 1},
+		"IfDirections":           []int{0, 1},
 		"Bytes":                  uint64(456),
 		"SrcAddr":                "1.2.3.4",
 		"DstAddr":                "5.6.7.8",

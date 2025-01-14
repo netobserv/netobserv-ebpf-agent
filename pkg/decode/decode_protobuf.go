@@ -67,7 +67,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		"AgentIP":         fr.AgentIP.String(),
 	}
 
-	var directions []uint8
+	var directions []int
 	var interfaces []string
 	for _, intf := range fr.Interfaces {
 		directions = append(directions, intf.Direction)
