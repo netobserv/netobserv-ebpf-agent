@@ -10,8 +10,7 @@
 #define s6_addr in6_u.u6_addr8
 
 static inline void dump_xlated_flow(struct translated_flow_t *flow) {
-    BPF_PRINTK("zone_id %d sport %d dport %d icmpId %d\n", flow->zone_id, flow->sport, flow->dport,
-               flow->icmp_id);
+    BPF_PRINTK("zone_id %d sport %d dport %d\n", flow->zone_id, flow->sport, flow->dport);
     int i;
     for (i = 0; i < IP_MAX_LEN; i += 4) {
         BPF_PRINTK("scrIP[%d]:%d.%d.%d.%d\n", i, flow->saddr[0 + i], flow->saddr[1 + i],
@@ -23,12 +22,15 @@ static inline void dump_xlated_flow(struct translated_flow_t *flow) {
     }
 }
 
-static inline void parse_tuple(struct nf_conntrack_tuple *t, struct translated_flow_t *flow,
-                               u16 zone_id, u16 family, bool invert) {
+static void __always_inline parse_tuple(struct nf_conntrack_tuple *t,
+                                        struct translated_flow_t *flow, u16 zone_id, u16 family,
+                                        u8 protocol, bool invert) {
     __builtin_memset(flow, 0, sizeof(*flow));
     if (invert) {
-        flow->dport = bpf_ntohs(t->src.u.all);
-        flow->sport = bpf_ntohs(t->dst.u.all);
+        if (is_transport_protocol(protocol)) {
+            flow->dport = bpf_ntohs(t->src.u.all);
+            flow->sport = bpf_ntohs(t->dst.u.all);
+        }
 
         switch (family) {
         case AF_INET:
@@ -44,8 +46,10 @@ static inline void parse_tuple(struct nf_conntrack_tuple *t, struct translated_f
             break;
         }
     } else {
-        flow->dport = bpf_ntohs(t->dst.u.all);
-        flow->sport = bpf_ntohs(t->src.u.all);
+        if (is_transport_protocol(protocol)) {
+            flow->dport = bpf_ntohs(t->dst.u.all);
+            flow->sport = bpf_ntohs(t->src.u.all);
+        }
 
         switch (family) {
         case AF_INET:
@@ -61,7 +65,6 @@ static inline void parse_tuple(struct nf_conntrack_tuple *t, struct translated_f
             break;
         }
     }
-    flow->icmp_id = t->src.u.icmp.id;
     flow->zone_id = zone_id;
     dump_xlated_flow(flow);
 }
@@ -73,7 +76,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     long ret = 0;
     struct translated_flow_t orig;
 
-    parse_tuple(orig_t, &orig, zone_id, family, false);
+    parse_tuple(orig_t, &orig, zone_id, family, id->transport_protocol, false);
 
     // update id with original flow info
     __builtin_memcpy(id->src_ip, orig.saddr, IP_MAX_LEN);
@@ -85,7 +88,8 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
         extra_metrics->end_mono_time_ts = current_time;
-        parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family, true);
+        parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family,
+                    id->transport_protocol, true);
         return ret;
     }
 
@@ -95,7 +99,8 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
         .end_mono_time_ts = current_time,
         .eth_protocol = eth_protocol,
     };
-    parse_tuple(reply_t, &new_extra_metrics.translated_flow, zone_id, family, true);
+    parse_tuple(reply_t, &new_extra_metrics.translated_flow, zone_id, family,
+                id->transport_protocol, true);
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_extra_metrics, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
@@ -105,7 +110,8 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
             additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
             if (extra_metrics != NULL) {
                 extra_metrics->end_mono_time_ts = current_time;
-                parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family, true);
+                parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family,
+                            id->transport_protocol, true);
                 return 0;
             }
         }

@@ -86,7 +86,6 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			SrcPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport),
 			DstPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport),
 			ZoneId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId),
-			IcmpId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.IcmpId),
 		}
 	}
 	pbflowRecord.DupList = make([]*DupMapEntry, 0)
@@ -197,7 +196,6 @@ func PBToFlow(pb *Record) *model.Record {
 					Sport:  uint16(pb.Xlat.GetSrcPort()),
 					Dport:  uint16(pb.Xlat.GetDstPort()),
 					ZoneId: uint16(pb.Xlat.GetZoneId()),
-					IcmpId: uint8(pb.Xlat.GetIcmpId()),
 				},
 			},
 		},

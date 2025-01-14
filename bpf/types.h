@@ -133,7 +133,6 @@ typedef struct additional_metrics_t {
         u16 sport;
         u16 dport;
         u16 zone_id;
-        u8 icmp_id;
     } translated_flow;
     struct observed_intf_t {
         u8 direction;

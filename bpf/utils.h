@@ -358,4 +358,14 @@ static inline void fill_in_others_protocol(flow_id *id, u8 protocol) {
     id->transport_protocol = protocol;
 }
 
+static inline bool is_transport_protocol(u8 protocol) {
+    switch (protocol) {
+    case IPPROTO_TCP:
+    case IPPROTO_UDP:
+    case IPPROTO_SCTP:
+        return true;
+    }
+    return false;
+}
+
 #endif // __UTILS_H__

@@ -105,8 +105,7 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 		0x00, 0x00,
 		0x00, 0x00,
 		0x02, 0x00,
-		0x00,
-		0x00, // 1 byte padding
+		0x00, 0x00, // 2bytes padding
 		// observed_intf_t[4]
 		0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, // [0]: u8 direction + 3 bytes padding + u32 if_index
 		0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, // [1]: u8 direction + 3 bytes padding + u32 if_index
@@ -151,7 +150,6 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 			Sport:  0,
 			Dport:  0,
 			ZoneId: 2,
-			IcmpId: 0,
 		},
 		NbObservedIntf: 2,
 		ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
