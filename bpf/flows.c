@@ -190,6 +190,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         new_flow.eth_protocol = eth_protocol;
         new_flow.start_mono_time_ts = pkt.current_ts;
         new_flow.end_mono_time_ts = pkt.current_ts;
+        new_flow.flags = pkt.flags;
         new_flow.dscp = pkt.dscp;
         new_flow.sampling = filter_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
