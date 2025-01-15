@@ -20,6 +20,7 @@ type BpfAdditionalMetrics struct {
 	FlowRtt          uint64
 	NetworkEvents    [4][8]uint8
 	TranslatedFlow   BpfTranslatedFlowT
+	_                [2]byte
 	ObservedIntf     [4]BpfObservedIntfT
 	EthProtocol      uint16
 	NetworkEventsIdx uint8
@@ -181,8 +182,6 @@ type BpfTranslatedFlowT struct {
 	Sport  uint16
 	Dport  uint16
 	ZoneId uint16
-	IcmpId uint8
-	_      [1]byte
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.

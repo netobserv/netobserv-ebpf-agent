@@ -150,6 +150,5 @@ func TestPBFlowToMap(t *testing.T) {
 		"XlatSrcPort": uint16(1),
 		"XlatDstPort": uint16(2),
 		"ZoneId":      uint16(100),
-		"XlatIcmpId":  uint8(0),
 	}, out)
 }
