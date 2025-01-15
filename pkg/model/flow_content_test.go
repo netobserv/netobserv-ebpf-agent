@@ -204,68 +204,6 @@ func TestAccumulate(t *testing.T) {
 				PktDrops:        ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1},
 			},
 		},
-	}, {
-		name:      "merge interfaces",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NbObservedIntf: 2,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 1},
-					{Direction: 1, IfIndex: 2},
-				},
-			},
-			{
-				NbObservedIntf: 2,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 1}, // duplicate
-					{Direction: 1, IfIndex: 3},
-				},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NbObservedIntf: 3,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 1},
-					{Direction: 1, IfIndex: 2},
-					{Direction: 1, IfIndex: 3},
-				},
-			},
-		},
-	}, {
-		name:      "ignore too many interfaces",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NbObservedIntf: 3,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 1},
-					{Direction: 1, IfIndex: 2},
-					{Direction: 1, IfIndex: 3},
-				},
-			},
-			{
-				NbObservedIntf: 2,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 4},
-					{Direction: 1, IfIndex: 5},
-				},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NbObservedIntf: 4,
-				ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-					{Direction: 0, IfIndex: 1},
-					{Direction: 1, IfIndex: 2},
-					{Direction: 1, IfIndex: 3},
-					{Direction: 0, IfIndex: 4},
-				},
-			},
-		},
 	}}
 	for i, tc := range tcs {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
