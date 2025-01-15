@@ -14,13 +14,10 @@ import (
 
 // Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 const (
-	DirectionIngress = uint8(0)
-	DirectionEgress  = uint8(1)
-)
-const MacLen = 6
-
-// IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
-const (
+	DirectionIngress = 0
+	DirectionEgress  = 1
+	MacLen           = 6
+	// IPv4Type / IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 	IPv6Type                 = 0x86DD
 	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
@@ -84,13 +81,13 @@ func NewRecord(
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
-		Interfaces:    []IntfDir{NewIntfDir(interfaceNamer(int(metrics.IfIndexFirstSeen)), metrics.DirectionFirstSeen)},
+		Interfaces:    []IntfDir{NewIntfDir(interfaceNamer(int(metrics.IfIndexFirstSeen)), int(metrics.DirectionFirstSeen))},
 	}
 	if metrics.AdditionalMetrics != nil {
 		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
 			record.Interfaces = append(record.Interfaces, NewIntfDir(
 				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
-				metrics.AdditionalMetrics.ObservedIntf[i].Direction,
+				int(metrics.AdditionalMetrics.ObservedIntf[i].Direction),
 			))
 		}
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
@@ -106,10 +103,10 @@ func NewRecord(
 
 type IntfDir struct {
 	Interface string
-	Direction uint8
+	Direction int
 }
 
-func NewIntfDir(intf string, dir uint8) IntfDir { return IntfDir{Interface: intf, Direction: dir} }
+func NewIntfDir(intf string, dir int) IntfDir { return IntfDir{Interface: intf, Direction: dir} }
 
 func networkEventsMDExist(events [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8, md [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, e := range events {

@@ -296,7 +296,7 @@ func setIEValue(record *model.Record, ieValPtr *entities.InfoElementWithValue) {
 	case "ethernetType":
 		ieVal.SetUnsigned16Value(record.Metrics.EthProtocol)
 	case "flowDirection":
-		ieVal.SetUnsigned8Value(record.Interfaces[0].Direction)
+		ieVal.SetUnsigned8Value(uint8(record.Interfaces[0].Direction))
 	case "sourceMacAddress":
 		ieVal.SetMacAddressValue(record.Metrics.SrcMac[:])
 	case "destinationMacAddress":
