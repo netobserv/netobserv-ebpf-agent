@@ -132,11 +132,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 		// Resize maps according to user-provided configuration
 		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-		if isEBPFFeaturesEnabled(cfg) {
-			spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
-		} else {
-			spec.Maps[additionalFlowMetrics].MaxEntries = 1
-		}
+		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
+
 		// remove pinning from all maps
 		maps2Name := []string{"aggregated_flows", "additional_flow_metrics", "direct_flows", "dns_flows", "filter_map", "global_counters", "packet_record"}
 		for _, m := range maps2Name {
@@ -366,13 +363,6 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		useEbpfManager:              cfg.UseEbpfManager,
 		pinDir:                      pinDir,
 	}, nil
-}
-
-func isEBPFFeaturesEnabled(cfg *FlowFetcherConfig) bool {
-	if cfg.EnableNetworkEventsMonitoring || cfg.EnableRTT || cfg.EnablePktDrops || cfg.EnableDNSTracker || cfg.EnablePktTranslation {
-		return true
-	}
-	return false
 }
 
 func (m *FlowFetcher) AttachTCX(iface ifaces.Interface) error {
