@@ -210,7 +210,7 @@ func PBToFlow(pb *Record) *model.Record {
 
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
-			out.Interfaces = append(out.Interfaces, model.NewIntfDir(entry.Interface, uint8(entry.Direction)))
+			out.Interfaces = append(out.Interfaces, model.NewIntfDir(entry.Interface, int(entry.Direction)))
 		}
 	}
 
