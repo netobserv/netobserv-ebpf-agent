@@ -153,7 +153,6 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
     if ((void *)eth + sizeof(*eth) > data_end) {
         return DISCARD;
     }
-    flow_id *id = pkt->id;
     *eth_protocol = bpf_ntohs(eth->h_proto);
 
     if (*eth_protocol == ETH_P_IP) {
@@ -162,16 +161,9 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
     } else if (*eth_protocol == ETH_P_IPV6) {
         struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
         return fill_ip6hdr(ip6, data_end, pkt);
-    } else {
-        // TODO : Need to implement other specific ethertypes if needed
-        // For now other parts of flow id remain zero
-        __builtin_memset(&(id->src_ip), 0, sizeof(struct in6_addr));
-        __builtin_memset(&(id->dst_ip), 0, sizeof(struct in6_addr));
-        id->transport_protocol = 0;
-        id->src_port = 0;
-        id->dst_port = 0;
     }
-    return SUBMIT;
+    // Only IP-based flows are managed
+    return DISCARD;
 }
 
 static inline bool is_filter_enabled() {
