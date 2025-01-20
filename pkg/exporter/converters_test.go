@@ -55,8 +55,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -104,8 +103,7 @@ func TestConversions(t *testing.T) {
 						Sampling:    2,
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -151,8 +149,7 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -197,8 +194,7 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -244,8 +240,7 @@ func TestConversions(t *testing.T) {
 						Packets:     128,
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -292,8 +287,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -353,8 +347,7 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interfaces:    []model.IntfDir{model.NewIntfDir("eth0", model.DirectionEgress)},
-				UdnList:       []string{""},
+				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -418,11 +411,10 @@ func TestConversions(t *testing.T) {
 						},
 					},
 				},
-				Interfaces: []model.IntfDir{
-					model.NewIntfDir("5e6e92caa1d51cf", model.DirectionIngress),
-					model.NewIntfDir("eth0", model.DirectionEgress),
+				Interfaces: []model.IntfDirUdn{
+					model.NewIntfDirUdn("5e6e92caa1d51cf", model.DirectionIngress, nil),
+					model.NewIntfDirUdn("eth0", model.DirectionEgress, nil),
 				},
-				UdnList:       []string{"", ""},
 				TimeFlowStart: someTime,
 				TimeFlowEnd:   someTime,
 				AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
@@ -444,8 +436,8 @@ func TestConversions(t *testing.T) {
 				"TimeFlowStartMs": someTime.UnixMilli(),
 				"TimeFlowEndMs":   someTime.UnixMilli(),
 				"Interfaces":      []string{"5e6e92caa1d51cf", "eth0"},
-				"AgentIP":         "10.11.12.13",
 				"Udns":            []string{"", ""},
+				"AgentIP":         "10.11.12.13",
 			},
 		},
 	}
@@ -457,7 +449,7 @@ func TestConversions(t *testing.T) {
 		delete(outDirect, "TimeReceived")
 
 		// Generate the same using protobuf
-		tmpPB := pbflow.FlowToPB(tt.flow, nil)
+		tmpPB := pbflow.FlowToPB(tt.flow)
 		rawPB, err := proto.Marshal(tmpPB)
 		require.NoError(t, err, tt.name)
 		outPB, err := decoder.Decode(rawPB)

@@ -185,7 +185,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 
 	// configure selected exporter
-	exportFunc, err := buildFlowExporter(cfg, m, s)
+	exportFunc, err := buildFlowExporter(cfg, m)
 	if err != nil {
 		return nil, err
 	}
@@ -295,23 +295,22 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 	samplingGauge := m.CreateSamplingRate()
 	samplingGauge.Set(float64(cfg.Sampling))
 
-	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m)
+	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m, s)
 	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
-	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m)
+	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s)
 	limiter := flow.NewCapacityLimiter(m)
 
 	return &Flows{
-		ebpf:          fetcher,
-		exporter:      exporter,
-		interfaces:    registerer,
-		filter:        filter,
-		cfg:           cfg,
-		mapTracer:     mapTracer,
-		rbTracer:      rbTracer,
-		accounter:     accounter,
-		limiter:       limiter,
-		promoServer:   promoServer,
-		sampleDecoder: s,
+		ebpf:        fetcher,
+		exporter:    exporter,
+		interfaces:  registerer,
+		filter:      filter,
+		cfg:         cfg,
+		mapTracer:   mapTracer,
+		rbTracer:    rbTracer,
+		accounter:   accounter,
+		limiter:     limiter,
+		promoServer: promoServer,
 	}, nil
 }
 
@@ -329,12 +328,12 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
+func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	switch cfg.Export {
 	case "grpc":
-		return buildGRPCExporter(cfg, m, s)
+		return buildGRPCExporter(cfg, m)
 	case "kafka":
-		return buildKafkaExporter(cfg, m, s)
+		return buildKafkaExporter(cfg, m)
 	case "ipfix+udp":
 		return buildIPFIXExporter(cfg, "udp")
 	case "ipfix+tcp":
@@ -346,12 +345,12 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecod
 	}
 }
 
-func buildGRPCExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
+func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
 	}
-	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m, s)
+	grpcExporter, err := exporter.StartGRPCProto(cfg.TargetHost, cfg.TargetPort, cfg.GRPCMessageMaxFlows, m)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +365,7 @@ func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.Record]
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDecoder) (node.TerminalFunc[[]*model.Record], error) {
+func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -412,8 +411,7 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics, s *ovnobserv.SampleDeco
 			Transport:    &transport,
 			Balancer:     &kafkago.Hash{},
 		},
-		Metrics:       m,
-		SampleDecoder: s,
+		Metrics: m,
 	}).ExportFlows, nil
 }
 

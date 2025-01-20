@@ -22,12 +22,10 @@ func TestPBFlowToMap(t *testing.T) {
 			{
 				Interface: "5e6e92caa1d51cf",
 				Direction: pbflow.Direction_INGRESS,
-				Udn:       "",
 			},
 			{
 				Interface: "eth0",
 				Direction: pbflow.Direction_EGRESS,
-				Udn:       "",
 			},
 		},
 		EthProtocol:   2048,
@@ -132,7 +130,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"DnsFlags":               uint16(0x80),
 		"DnsFlagsResponseCode":   "NoError",
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
-		"NetworkEvents": []config.GenericMap{
+		"NetworkEvents": []map[string]string{
 			{
 				"Name":      "test1",
 				"Type":      "NetworkPolicy",

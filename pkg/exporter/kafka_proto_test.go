@@ -51,7 +51,7 @@ func TestProtoConversion(t *testing.T) {
 				Flags:              uint16(1),
 			},
 		},
-		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
+		Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("veth0", 0, nil), model.NewIntfDirUdn("abcde", 1, nil)},
 	}
 
 	input <- []*model.Record{&record}
@@ -108,7 +108,7 @@ func TestIdenticalKeys(t *testing.T) {
 				Flags:              uint16(1),
 			},
 		},
-		Interfaces: []model.IntfDir{model.NewIntfDir("veth0", 0), model.NewIntfDir("abcde", 1)},
+		Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("veth0", 0, nil), model.NewIntfDirUdn("abcde", 1, nil)},
 	}
 	key1 := getFlowKey(&record)
 
