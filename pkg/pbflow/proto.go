@@ -7,7 +7,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -114,32 +114,13 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		seen := make(map[string]bool)
 		pbflowRecord.NetworkEventsMetadata = make([]*NetworkEvent, 0)
 		for _, metadata := range fr.Metrics.AdditionalMetrics.NetworkEvents {
-			var pbEvent NetworkEvent
 			if !model.AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
-					acl, ok := md.(*ovnmodel.ACLEvent)
 					mdStr := md.String()
 					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v decoded string: %s", metadata, md, mdStr)
 					if !seen[mdStr] {
-						if ok {
-							pbEvent = NetworkEvent{
-								Events: map[string]string{
-									"Action":    acl.Action,
-									"Type":      acl.Actor,
-									"Feature":   "acl",
-									"Name":      acl.Name,
-									"Namespace": acl.Namespace,
-									"Direction": acl.Direction,
-								},
-							}
-						} else {
-							pbEvent = NetworkEvent{
-								Events: map[string]string{
-									"Message": mdStr,
-								},
-							}
-						}
-						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, &pbEvent)
+						eventMap := utils.NetworkEventToMap(md)
+						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, &NetworkEvent{Events: eventMap})
 						seen[mdStr] = true
 					}
 				} else {
