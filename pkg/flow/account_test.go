@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -52,7 +51,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NewMetrics(&metrics.Settings{}))
+	}, metrics.NewMetrics(&metrics.Settings{}), nil)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -110,10 +109,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
 				},
 			},
-			TimeFlowStart:          now.Add(-(1000 - 123) * time.Nanosecond),
-			TimeFlowEnd:            now.Add(-(1000 - 789) * time.Nanosecond),
-			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
-			Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
+			TimeFlowEnd:   now.Add(-(1000 - 789) * time.Nanosecond),
+			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
 		},
 		k2: {
 			ID: k2,
@@ -122,10 +120,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 				},
 			},
-			TimeFlowStart:          now.Add(-(1000 - 456) * time.Nanosecond),
-			TimeFlowEnd:            now.Add(-(1000 - 456) * time.Nanosecond),
-			NetworkMonitorEventsMD: make([]config.GenericMap, 0),
-			Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+			TimeFlowStart: now.Add(-(1000 - 456) * time.Nanosecond),
+			TimeFlowEnd:   now.Add(-(1000 - 456) * time.Nanosecond),
+			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
 		},
 	}, received)
 }
@@ -137,7 +134,7 @@ func TestEvict_Period(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NewMetrics(&metrics.Settings{}))
+	}, metrics.NewMetrics(&metrics.Settings{}), nil)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -192,10 +189,9 @@ func TestEvict_Period(t *testing.T) {
 				Flags:           1,
 			},
 		},
-		TimeFlowStart:          now.Add(-1000 + 123),
-		TimeFlowEnd:            now.Add(-1000 + 789),
-		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
-		Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+		TimeFlowStart: now.Add(-1000 + 123),
+		TimeFlowEnd:   now.Add(-1000 + 789),
+		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -210,10 +206,9 @@ func TestEvict_Period(t *testing.T) {
 				Flags:           1,
 			},
 		},
-		TimeFlowStart:          now.Add(-1000 + 1123),
-		TimeFlowEnd:            now.Add(-1000 + 1456),
-		NetworkMonitorEventsMD: make([]config.GenericMap, 0),
-		Interfaces:             []model.IntfDir{model.NewIntfDir("[namer unset] 0", 0)},
+		TimeFlowStart: now.Add(-1000 + 1123),
+		TimeFlowEnd:   now.Add(-1000 + 1456),
+		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
 	}, *records[0])
 
 	// no more flows are evicted

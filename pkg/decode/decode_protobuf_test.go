@@ -117,6 +117,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"TimeFlowStartMs":        someTime.UnixMilli(),
 		"TimeFlowEndMs":          someTime.UnixMilli(),
 		"Interfaces":             []string{"5e6e92caa1d51cf", "eth0"},
+		"Udns":                   []string{"", ""},
 		"AgentIP":                "10.9.8.7",
 		"Flags":                  uint16(0x100),
 		"PktDropBytes":           uint64(200),
@@ -129,7 +130,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"DnsFlags":               uint16(0x80),
 		"DnsFlagsResponseCode":   "NoError",
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
-		"NetworkEvents": []config.GenericMap{
+		"NetworkEvents": []map[string]string{
 			{
 				"Name":      "test1",
 				"Type":      "NetworkPolicy",

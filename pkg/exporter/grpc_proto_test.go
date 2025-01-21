@@ -29,7 +29,7 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, 1000, metrics.NewMetrics(&metrics.Settings{}), nil)
+	exporter, err := StartGRPCProto("127.0.0.1", port, 1000, metrics.NewMetrics(&metrics.Settings{}))
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -71,7 +71,7 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("::1", port, 1000, metrics.NewMetrics(&metrics.Settings{}), nil)
+	exporter, err := StartGRPCProto("::1", port, 1000, metrics.NewMetrics(&metrics.Settings{}))
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -114,7 +114,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 
 	const msgMaxLen = 10000
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, msgMaxLen, metrics.NewMetrics(&metrics.Settings{}), nil)
+	exporter, err := StartGRPCProto("127.0.0.1", port, msgMaxLen, metrics.NewMetrics(&metrics.Settings{}))
 	require.NoError(t, err)
 
 	// Send a message much longer than the limit length
@@ -123,7 +123,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	for i := 0; i < 25000; i++ {
 		input = append(input, &model.Record{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
-		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDir{model.NewIntfDir("12345678", 0)}})
+		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil)}})
 	}
 	flows <- input
 	go exporter.ExportFlows(flows)
