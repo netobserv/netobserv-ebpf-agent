@@ -17,3 +17,6 @@ push-manifest: manifest-push ## Push MULTIARCH_TARGETS manifest
 
 .PHONY: images
 images: image-build image-push manifest-build manifest-push ## Build and push MULTIARCH_TARGETS images and related manifest
+
+.PHONY: bc-images
+bc-images: bc-image-build bc-image-push bc-manifest-build bc-manifest-push ## Build and push MULTIARCH_TARGETS bytecode images and related manifest

@@ -146,10 +146,6 @@ compile: ## Compile ebpf agent project
 	@echo "### Compiling project"
 	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
-.PHONY: build-and-push-bc-image
-build-and-push-bc-image: docker-generate ## Build and push bytecode image
-	IMAGE_NOO_BC=${IMAGE_NOO_BC} OCI_BIN=${OCI_BIN} OCI_BUILD_OPTS="${OCI_BUILD_OPTS}" ./hack/build-bytecode-images-multi.sh
-
 .PHONY: test
 test: ## Test code using go test
 	@echo "### Testing code"
@@ -217,4 +213,5 @@ else
 	DOCKER_BUILDKIT=1 $(OCI_BIN) manifest push ${IMAGE} docker://${IMAGE};
 endif
 
+include .mk/bc.mk
 include .mk/shortcuts.mk
