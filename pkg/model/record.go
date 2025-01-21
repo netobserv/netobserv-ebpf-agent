@@ -8,8 +8,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+
+	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
+	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 )
 
 // Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
@@ -58,20 +60,24 @@ type Record struct {
 	TimeFlowStart time.Time
 	TimeFlowEnd   time.Time
 	DNSLatency    time.Duration
-	Interfaces    []IntfDir
+	Interfaces    []IntfDirUdn
 	// AgentIP provides information about the source of the flow (the Agent that traced it)
 	AgentIP net.IP
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
-	NetworkMonitorEventsMD []config.GenericMap
+	NetworkMonitorEventsMD []map[string]string
 }
+
+var udnsCache map[string]string
 
 func NewRecord(
 	key ebpf.BpfFlowId,
 	metrics *BpfFlowContent,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
+	s *ovnobserv.SampleDecoder,
 ) *Record {
+	udnsCache = make(map[string]string)
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
 
@@ -81,13 +87,17 @@ func NewRecord(
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
-		Interfaces:    []IntfDir{NewIntfDir(interfaceNamer(int(metrics.IfIndexFirstSeen)), int(metrics.DirectionFirstSeen))},
+		Interfaces: []IntfDirUdn{NewIntfDirUdn(
+			interfaceNamer(int(metrics.IfIndexFirstSeen)),
+			int(metrics.DirectionFirstSeen),
+			s)},
 	}
 	if metrics.AdditionalMetrics != nil {
 		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
-			record.Interfaces = append(record.Interfaces, NewIntfDir(
+			record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
 				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
 				int(metrics.AdditionalMetrics.ObservedIntf[i].Direction),
+				s,
 			))
 		}
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
@@ -97,16 +107,72 @@ func NewRecord(
 			record.DNSLatency = time.Duration(metrics.AdditionalMetrics.DnsRecord.Latency)
 		}
 	}
-	record.NetworkMonitorEventsMD = make([]config.GenericMap, 0)
+	if s != nil && metrics.AdditionalMetrics != nil {
+		seen := make(map[string]bool)
+		record.NetworkMonitorEventsMD = make([]map[string]string, 0)
+		for _, metadata := range metrics.AdditionalMetrics.NetworkEvents {
+			if !AllZerosMetaData(metadata) {
+				var cm map[string]string
+				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
+					acl, ok := md.(*ovnmodel.ACLEvent)
+					mdStr := md.String()
+					if !seen[mdStr] {
+						if ok {
+							cm = map[string]string{
+								"Action":    acl.Action,
+								"Type":      acl.Actor,
+								"Feature":   "acl",
+								"Name":      acl.Name,
+								"Namespace": acl.Namespace,
+								"Direction": acl.Direction,
+							}
+						} else {
+							cm = map[string]string{
+								"Message": mdStr,
+							}
+						}
+						record.NetworkMonitorEventsMD = append(record.NetworkMonitorEventsMD, cm)
+						seen[mdStr] = true
+					}
+				}
+			}
+		}
+	}
 	return &record
 }
 
-type IntfDir struct {
+type IntfDirUdn struct {
 	Interface string
 	Direction int
+	Udn       string
 }
 
-func NewIntfDir(intf string, dir int) IntfDir { return IntfDir{Interface: intf, Direction: dir} }
+func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder) IntfDirUdn {
+	var udn string
+	if s == nil {
+		return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+	}
+
+	// Load UDN cache if empty
+	if len(udnsCache) == 0 {
+		m, err := s.GetInterfaceUDNs()
+		if err != nil {
+			return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+		}
+		udnsCache = m
+	}
+
+	// Look up the interface in the cache
+	if v, ok := udnsCache[intf]; ok {
+		if v != "" {
+			udn = v
+		} else {
+			udn = "default"
+		}
+	}
+
+	return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
+}
 
 func networkEventsMDExist(events [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8, md [NetworkEventsMaxEventsMD]uint8) bool {
 	for _, e := range events {

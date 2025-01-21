@@ -4,11 +4,8 @@ import (
 	"encoding/binary"
 	"net"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
-	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,10 +15,10 @@ var protoLog = logrus.WithField("component", "pbflow")
 
 // FlowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
 // into protobuf-encoded messages ready to be sent to the collector via GRPC
-func FlowsToPB(inputRecords []*model.Record, maxLen int, s *ovnobserv.SampleDecoder) []*Records {
+func FlowsToPB(inputRecords []*model.Record, maxLen int) []*Records {
 	entries := make([]*Record, 0, len(inputRecords))
 	for _, record := range inputRecords {
-		entries = append(entries, FlowToPB(record, s))
+		entries = append(entries, FlowToPB(record))
 	}
 	var records []*Records
 	for len(entries) > 0 {
@@ -37,7 +34,7 @@ func FlowsToPB(inputRecords []*model.Record, maxLen int, s *ovnobserv.SampleDeco
 
 // FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
-func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
+func FlowToPB(fr *model.Record) *Record {
 	var pbflowRecord = Record{
 		EthProtocol: uint32(fr.Metrics.EthProtocol),
 		Direction:   Direction(fr.Metrics.DirectionFirstSeen),
@@ -93,6 +90,7 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 		pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
 			Interface: intf.Interface,
 			Direction: Direction(intf.Direction),
+			Udn:       intf.Udn,
 		})
 	}
 	if fr.Metrics.EthProtocol == model.IPv6Type {
@@ -110,42 +108,13 @@ func FlowToPB(fr *model.Record, s *ovnobserv.SampleDecoder) *Record {
 			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr)}}
 		}
 	}
-	if s != nil && fr.Metrics.AdditionalMetrics != nil {
-		seen := make(map[string]bool)
+
+	if len(fr.NetworkMonitorEventsMD) != 0 {
 		pbflowRecord.NetworkEventsMetadata = make([]*NetworkEvent, 0)
-		for _, metadata := range fr.Metrics.AdditionalMetrics.NetworkEvents {
-			var pbEvent NetworkEvent
-			if !model.AllZerosMetaData(metadata) {
-				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
-					acl, ok := md.(*ovnmodel.ACLEvent)
-					mdStr := md.String()
-					protoLog.Debugf("Network Events Metadata %v decoded Cookie: %v decoded string: %s", metadata, md, mdStr)
-					if !seen[mdStr] {
-						if ok {
-							pbEvent = NetworkEvent{
-								Events: map[string]string{
-									"Action":    acl.Action,
-									"Type":      acl.Actor,
-									"Feature":   "acl",
-									"Name":      acl.Name,
-									"Namespace": acl.Namespace,
-									"Direction": acl.Direction,
-								},
-							}
-						} else {
-							pbEvent = NetworkEvent{
-								Events: map[string]string{
-									"Message": mdStr,
-								},
-							}
-						}
-						pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, &pbEvent)
-						seen[mdStr] = true
-					}
-				} else {
-					protoLog.Errorf("unable to decode Network events cookie: %v", err)
-				}
-			}
+		for _, networkEvent := range fr.NetworkMonitorEventsMD {
+			pbflowRecord.NetworkEventsMetadata = append(pbflowRecord.NetworkEventsMetadata, &NetworkEvent{
+				Events: networkEvent,
+			})
 		}
 	}
 	return &pbflowRecord
@@ -208,13 +177,17 @@ func PBToFlow(pb *Record) *model.Record {
 
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
-			out.Interfaces = append(out.Interfaces, model.NewIntfDir(entry.Interface, int(entry.Direction)))
+			out.Interfaces = append(out.Interfaces, model.IntfDirUdn{
+				Interface: entry.Interface,
+				Direction: int(entry.Direction),
+				Udn:       entry.Udn,
+			})
 		}
 	}
 
 	if len(pb.GetNetworkEventsMetadata()) != 0 {
 		for _, e := range pb.GetNetworkEventsMetadata() {
-			m := config.GenericMap{}
+			m := map[string]string{}
 			for k, v := range e.Events {
 				m[k] = v
 			}

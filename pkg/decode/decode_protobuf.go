@@ -69,12 +69,17 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 
 	var directions []int
 	var interfaces []string
+	var udns []string
 	for _, intf := range fr.Interfaces {
 		directions = append(directions, intf.Direction)
 		interfaces = append(interfaces, intf.Interface)
+		udns = append(udns, intf.Udn)
 	}
 	out["IfDirections"] = directions
 	out["Interfaces"] = interfaces
+	if len(udns) != 0 {
+		out["Udns"] = udns
+	}
 
 	if fr.Metrics.Bytes != 0 {
 		out["Bytes"] = fr.Metrics.Bytes
@@ -87,6 +92,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	if fr.Metrics.Sampling != 0 {
 		out["Sampling"] = fr.Metrics.Sampling
 	}
+
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
 		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
 		out["DstAddr"] = model.IP(fr.ID.DstIp).String()
