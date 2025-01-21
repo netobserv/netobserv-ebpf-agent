@@ -3,12 +3,9 @@
 BC_IMAGE_TAG_BASE ?= quay.io/${IMAGE_ORG}/ebpf-bytecode
 BC_IMAGE ?= $(BC_IMAGE_TAG_BASE):$(VERSION)
 
-# build a single arch target provided as argument
-define build_bc_target
-	echo 'building bytecode image for arch $(1)'; \
-
-	# PROGRAMS is a list of <program name>:<program type> tuples
-	PROGRAMS='{
+# PROGRAMS is a list of <program name>:<program type> tuples
+define PROGRAMS
+{
 	"tcx_ingress_flow_parse":"tcx",
 	"tcx_egress_flow_parse":"tcx",
 	"tc_ingress_flow_parse":"tc",
@@ -22,11 +19,12 @@ define build_bc_target
 	"kfree_skb":"tracepoint",
 	"rh_network_events_monitoring":"kprobe",
 	"nf_nat_manip_pkt":"kprobe"
-	}'; \
-	echo "${PROGRAMS}" | jq empty || { echo "Invalid JSON in PROGRAMS"; exit 1; }; \
+}
+endef
 
-	# MAPS is a list of <map name>:<map type> tuples
-	MAPS='{
+# MAPS is a list of <map name>:<map type> tuples
+define MAPS
+{
 	"direct_flows":"ringbuf",
 	"aggregated_flows":"hash",
 	"additional_flow_metrics":"per_cpu_hash",
@@ -34,9 +32,15 @@ define build_bc_target
 	"dns_flows":"hash",
 	"global_counters":"per_cpu_array",
 	"filter_map":"lpm_trie"
-	}'; \
-	echo "${MAPS}" | jq empty || { echo "Invalid JSON in MAPS"; exit 1; }; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg PROGRAMS="${PROGRAMS}" --build-arg MAPS="${MAPS}" --build-arg BC_AMD64_EL=bpf_x86_bpfel.o --build-arg BC_ARM64_EL=bpf_arm64_bpfel.o --build-arg BC_S390X_EB=bpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=bpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} -t ${BC_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
+}
+endef
+
+# build a single arch target provided as argument
+define build_bc_target
+	echo 'building bytecode image for arch $(1)'; \
+	echo '${PROGRAMS}' | jq empty || { echo "Invalid JSON in PROGRAMS"; exit 1; }; \
+	echo '${MAPS}' | jq empty || { echo "Invalid JSON in MAPS"; exit 1; }; \
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg PROGRAMS='${PROGRAMS}' --build-arg MAPS='${MAPS}' --build-arg BC_AMD64_EL=bpf_x86_bpfel.o --build-arg BC_ARM64_EL=bpf_arm64_bpfel.o --build-arg BC_S390X_EB=bpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=bpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} -t ${BC_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
 endef
 
 # push a single arch target image
