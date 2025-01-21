@@ -52,46 +52,48 @@
  */
 #include "pkt_translation.h"
 
-static inline void add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
+// return 0 on success, 1 if capacity reached
+static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                      u8 direction) {
-    u8 nb_observed_intf = value->nb_observed_intf;
-    if (nb_observed_intf < MAX_OBSERVED_INTERFACES) {
-        for (u8 i = 0; i < nb_observed_intf; i++) {
-            if (value->observed_intf[i] == if_index) {
-                // Interface already seen -> skip (we don't check for direction to avoid reaching the max too frequently, as a tradeoff)
-                return;
-            }
-        }
-        bpf_spin_lock(&value->lock);
-        value->observed_intf[nb_observed_intf] = if_index;
-        value->observed_direction[nb_observed_intf] = direction;
-        value->nb_observed_intf++;
-        // We can also update end time / flags regardless of which interface is used
-        value->end_mono_time_ts = pkt->current_ts;
-        value->flags |= pkt->flags;
-        bpf_spin_unlock(&value->lock);
-    } else {
-        increase_counter(OBSERVED_INTF_MISSED);
+    if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
         BPF_PRINTK("observed interface missed (array capacity reached) for ifindex %d\n", if_index);
+        return 1;
     }
+    for (u8 i = 0; i < value->nb_observed_intf; i++) {
+        if (value->observed_intf[i] == if_index) {
+            // Interface already seen -> skip (we don't check for direction to avoid reaching the max too frequently, as a tradeoff)
+            return 0;
+        }
+    }
+    value->observed_intf[value->nb_observed_intf] = if_index;
+    value->observed_direction[value->nb_observed_intf] = direction;
+    value->nb_observed_intf++;
+    // We can also update end time / flags regardless of which interface is used
+    value->end_mono_time_ts = pkt->current_ts;
+    value->flags |= pkt->flags;
+    return 0;
 }
 
 static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt,
                                                  u64 len, u32 sampling, u32 if_index,
                                                  u8 direction) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
+    int maxReached = 0;
+    bpf_spin_lock(&aggregate_flow->lock);
     if (aggregate_flow->if_index_first_seen == if_index) {
-        bpf_spin_lock(&aggregate_flow->lock);
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += len;
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
         aggregate_flow->flags |= pkt->flags;
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
-        bpf_spin_unlock(&aggregate_flow->lock);
     } else if (if_index != 0) {
         // Only add info that we've seen this interface
-        add_observed_intf(aggregate_flow, pkt, if_index, direction);
+        maxReached = add_observed_intf(aggregate_flow, pkt, if_index, direction);
+    }
+    bpf_spin_unlock(&aggregate_flow->lock);
+    if (maxReached > 0) {
+        increase_counter(OBSERVED_INTF_MISSED);
     }
 }
 
