@@ -54,23 +54,25 @@
 
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
-                                     u8 direction) {
+                                             u8 direction) {
     if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
         BPF_PRINTK("observed interface missed (array capacity reached) for ifindex %d\n", if_index);
         return 1;
     }
     for (u8 i = 0; i < value->nb_observed_intf; i++) {
         if (value->observed_intf[i] == if_index) {
-            // Interface already seen -> skip (we don't check for direction to avoid reaching the max too frequently, as a tradeoff)
+            if (value->observed_direction[i] != direction &&
+                value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
+                // Same interface seen on a different direction => mark as both directions
+                value->observed_direction[i] = OBSERVED_DIRECTION_BOTH;
+            }
+            // Interface already seen -> skip
             return 0;
         }
     }
     value->observed_intf[value->nb_observed_intf] = if_index;
     value->observed_direction[value->nb_observed_intf] = direction;
     value->nb_observed_intf++;
-    // We can also update end time / flags regardless of which interface is used
-    value->end_mono_time_ts = pkt->current_ts;
-    value->flags |= pkt->flags;
     return 0;
 }
 
@@ -88,7 +90,9 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
     } else if (if_index != 0) {
-        // Only add info that we've seen this interface
+        // Only add info that we've seen this interface (we can also update end time & flags)
+        aggregate_flow->end_mono_time_ts = pkt->current_ts;
+        aggregate_flow->flags |= pkt->flags;
         maxReached = add_observed_intf(aggregate_flow, pkt, if_index, direction);
     }
     bpf_spin_unlock(&aggregate_flow->lock);

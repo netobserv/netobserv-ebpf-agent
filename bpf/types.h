@@ -67,6 +67,7 @@ typedef __u64 u64;
 #define MAX_EVENT_MD 8
 #define MAX_NETWORK_EVENTS 4
 #define MAX_OBSERVED_INTERFACES 6
+#define OBSERVED_DIRECTION_BOTH 3
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {

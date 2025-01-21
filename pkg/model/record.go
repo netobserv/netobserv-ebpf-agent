@@ -90,7 +90,6 @@ func NewRecord(
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
 	}
-<<<<<<< HEAD
 	if s != nil {
 		record.UdnsCache = make(map[string]string)
 	}
@@ -98,24 +97,15 @@ func NewRecord(
 		int(metrics.DirectionFirstSeen),
 		s, record.UdnsCache)}
 
-	if metrics.AdditionalMetrics != nil {
-		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
-			record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
-				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
-				int(metrics.AdditionalMetrics.ObservedIntf[i].Direction),
-				s, record.UdnsCache,
-			))
-		}
-=======
 	for i := uint8(0); i < record.Metrics.NbObservedIntf; i++ {
 		record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
 			interfaceNamer(int(metrics.ObservedIntf[i])),
 			int(metrics.ObservedDirection[i]),
-			s,
+			s, record.UdnsCache,
 		))
 	}
+
 	if metrics.AdditionalMetrics != nil {
->>>>>>> a74449f9 (Improve performances by moving observed interfaces to main map)
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
 			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}
