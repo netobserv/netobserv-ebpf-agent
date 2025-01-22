@@ -175,3 +175,102 @@ func TestConvertFilterPortsToInstr(t *testing.T) {
 		require.Equal(t, intstr.FromString(portsStr), result)
 	})
 }
+
+func TestBuildFilterKey(t *testing.T) {
+	tests := []struct {
+		name      string
+		cidr      string
+		ipStr     string
+		wantKey   ebpf.BpfFilterKeyT
+		wantError bool
+	}{
+		{
+			name:  "Valid CIDR IPv4",
+			cidr:  "192.168.1.0/24",
+			ipStr: "",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{192, 168, 1, 0},
+				PrefixLen: 24,
+			},
+			wantError: false,
+		},
+		{
+			name:  "Valid default IPv4 CIDR",
+			cidr:  "0.0.0.0/0",
+			ipStr: "",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{0},
+				PrefixLen: 0,
+			},
+			wantError: false,
+		},
+		{
+			name:  "Valid CIDR IPv6",
+			cidr:  "2001:db8::/48",
+			ipStr: "",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{0x20, 0x01, 0x0d, 0xb8},
+				PrefixLen: 48,
+			},
+			wantError: false,
+		},
+		{
+			name:  "Valid default IPv6 CIDR",
+			cidr:  "0::0/0",
+			ipStr: "",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{0},
+				PrefixLen: 0,
+			},
+			wantError: false,
+		},
+		{
+			name:  "Valid IP string IPv4",
+			cidr:  "",
+			ipStr: "192.168.1.1",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{192, 168, 1, 1},
+				PrefixLen: 32,
+			},
+			wantError: false,
+		},
+		{
+			name:  "Valid IP string IPv6",
+			cidr:  "",
+			ipStr: "2001:db8::1",
+			wantKey: ebpf.BpfFilterKeyT{
+				IpData:    [16]byte{0x20, 0x01, 0x0d, 0xb8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
+				PrefixLen: 128,
+			},
+			wantError: false,
+		},
+		{
+			name:      "Invalid CIDR",
+			cidr:      "invalidCIDR",
+			ipStr:     "",
+			wantKey:   ebpf.BpfFilterKeyT{},
+			wantError: true,
+		},
+		{
+			name:      "Empty input",
+			cidr:      "",
+			ipStr:     "",
+			wantKey:   ebpf.BpfFilterKeyT{},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterObj := Filter{}
+			key, err := filterObj.buildFilterKey(tt.cidr, tt.ipStr)
+
+			if tt.wantError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantKey, key)
+			}
+		})
+	}
+}

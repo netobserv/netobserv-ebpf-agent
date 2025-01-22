@@ -22,6 +22,7 @@ type FilterConfig struct {
 	FilterIcmpType        int
 	FilterIcmpCode        int
 	FilterPeerIP          string
+	FilterPeerCIDR        string
 	FilterAction          string
 	FilterTCPFlags        string
 	FilterDrops           bool
@@ -49,6 +50,18 @@ func (f *Filter) ProgramFilter(objects *ebpf.BpfObjects) error {
 			return fmt.Errorf("failed to get filter value: %w", err)
 		}
 
+		if val.DoPeerCIDR_lookup == 1 {
+			peerVal := uint8(1)
+			peerKey, err := f.getPeerFilterKey(config)
+			if err != nil {
+				return fmt.Errorf("failed to get peer filter key: %w", err)
+			}
+			err = objects.PeerFilterMap.Update(peerKey, peerVal, cilium.UpdateAny)
+			if err != nil {
+				return fmt.Errorf("failed to update peer filter map: %w", err)
+			}
+			log.Infof("Programmed filter with PeerCIDR: %v", peerKey)
+		}
 		err = objects.FilterMap.Update(key, val, cilium.UpdateAny)
 		if err != nil {
 			return fmt.Errorf("failed to update filter map: %w", err)
@@ -59,24 +72,42 @@ func (f *Filter) ProgramFilter(objects *ebpf.BpfObjects) error {
 	return nil
 }
 
-func (f *Filter) getFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
+func (f *Filter) buildFilterKey(cidr, ipStr string) (ebpf.BpfFilterKeyT, error) {
 	key := ebpf.BpfFilterKeyT{}
+	if cidr != "" {
+		ip, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return key, fmt.Errorf("failed to parse CIDR: %w", err)
+		}
+		if ip.To4() != nil {
+			copy(key.IpData[:], ip.To4())
+		} else {
+			copy(key.IpData[:], ip.To16())
+		}
+		pfLen, _ := ipNet.Mask.Size()
+		key.PrefixLen = uint32(pfLen)
+	} else if ipStr != "" {
+		ip := net.ParseIP(ipStr)
+		if ip.To4() != nil {
+			copy(key.IpData[:], ip.To4())
+			key.PrefixLen = 32
+		} else {
+			copy(key.IpData[:], ip.To16())
+			key.PrefixLen = 128
+		}
+	}
+	return key, nil
+}
+
+func (f *Filter) getFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
 	if config.FilterIPCIDR == "" {
 		config.FilterIPCIDR = "0.0.0.0/0"
 	}
-	ip, ipNet, err := net.ParseCIDR(config.FilterIPCIDR)
-	if err != nil {
-		return key, fmt.Errorf("failed to parse FlowFilterIPCIDR: %w", err)
-	}
-	if ip.To4() != nil {
-		copy(key.IpData[:], ip.To4())
-	} else {
-		copy(key.IpData[:], ip.To16())
-	}
-	pfLen, _ := ipNet.Mask.Size()
-	key.PrefixLen = uint32(pfLen)
+	return f.buildFilterKey(config.FilterIPCIDR, "")
+}
 
-	return key, nil
+func (f *Filter) getPeerFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
+	return f.buildFilterKey(config.FilterPeerCIDR, config.FilterPeerIP)
 }
 
 // nolint:cyclop
@@ -123,15 +154,6 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 	val.IcmpType = uint8(config.FilterIcmpType)
 	val.IcmpCode = uint8(config.FilterIcmpCode)
 
-	if config.FilterPeerIP != "" {
-		ip := net.ParseIP(config.FilterPeerIP)
-		if ip.To4() != nil {
-			copy(val.Ip[:], ip.To4())
-		} else {
-			copy(val.Ip[:], ip.To16())
-		}
-	}
-
 	switch config.FilterTCPFlags {
 	case "SYN":
 		val.TcpFlags = ebpf.BpfTcpFlagsTSYN_FLAG
@@ -163,6 +185,9 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 
 	if config.FilterSample != 0 {
 		val.Sample = config.FilterSample
+	}
+	if config.FilterPeerCIDR != "" || config.FilterPeerIP != "" {
+		val.DoPeerCIDR_lookup = 1
 	}
 	return val, nil
 }

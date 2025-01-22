@@ -34,6 +34,7 @@ Rule-base filtering is a method to control the flow of packets cached in the eBP
 - `FILTER_ICMP_TYPE` - ICMP type of the flow filter rule.
 - `FILTER_ICMP_CODE` - ICMP code of the flow filter rule.
 - `FILTER_PEER_IP` - Specific Peer IP address of the flow filter rule.
+- `FILTER_PEER_CIDR` - Specific Peer IP CIDR of the flow filter rule.
 - `FILTER_TCP_FLAGS` - Filter based on TCP flags Possible values are SYN, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE, CWR, FIN-ACK, RST_ACK
 - `FILTER_DROPS` - Filter flows when packets drop feature is enabled to filter only flows with drop cause not 0.
 
@@ -50,17 +51,18 @@ of each packet against a CIDR range specified in the `FILTER_IP_CIDR` parameter.
 If the packet's source or destination IP address falls within the specified CIDR range, the filter takes action based on the configured rules. 
 This action could involve allowing the packet to be cached in an eBPF flow table or blocking it.
 
-### Matching Specific Endpoints with `FILTER_PEER_IP`
+### Matching Specific Endpoints with `FILTER_PEER_IP` or `FILTER_PEER_CIDR`
 
-The `FILTER_PEER_IP` parameter specifies the IP address of a specific endpoint.
+The `FILTER_PEER_IP` parameter specifies the IP address of a specific endpoint, while
+`FILTER_PEER_CIDR` specifies subnet for range of endpoints.
 Depending on whether the traffic is ingress (incoming) or egress (outgoing), this IP address is used to further refine
 the filtering process:
-- In ingress traffic filtering, the `FILTER_PEER_IP` is used to match against the destination IP address of the packet. 
+- In ingress traffic filtering, the `FILTER_PEER_IP`/`FILTER_PEER_CIDR` is used to match against the destination IP(s) address of the packet. 
 After the initial CIDR matching, the filter then narrows down the scope to packets destined for a specific endpoint
 specified by `FLOW_FILTER_PEER_IP`.
-- In egress traffic filtering, the `FILTER_PEER_IP` is used to match against the source IP address of the packet.
-After the initial CIDR matching, the filter narrows down the scope to packets originating from a specific endpoint
-specified by `FILTER_PEER_IP`.
+- In egress traffic filtering, the `FILTER_PEER_IP`/`FILTER_PEER_CIDR` is used to match against the source IP(s) address of the packet.
+After the initial CIDR matching, the filter narrows down the scope to packets originating from a specific endpoint(s)
+specified by `FILTER_PEER_IP` or `FILTER_PEER_CIDR`.
 
 ### How to fine-tune the flow filter rule configuration?
 
@@ -130,5 +132,5 @@ for that we can use the following configuration:
     FILTER_ACTION=Accept
     FILTER_PROTOCOL=TCP
     FILTER_PORT=80
-    FILTER_PEER_IP=1.2.1.10
+    FILTER_PEER_CIDR=1.2.1.10/32
 ```
