@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"reflect"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
+	"github.com/sirupsen/logrus"
 )
 
 // Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
@@ -25,6 +27,8 @@ const (
 	MaxNetworkEvents         = 4
 	MaxObservedInterfaces    = 4
 )
+
+var recordLog = logrus.WithField("component", "model")
 
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
@@ -148,18 +152,20 @@ type IntfDirUdn struct {
 }
 
 func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder) IntfDirUdn {
-	var udn string
+	udn := ""
 	if s == nil {
-		return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+		return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 	}
 
 	// Load UDN cache if empty
 	if len(udnsCache) == 0 {
 		m, err := s.GetInterfaceUDNs()
 		if err != nil {
-			return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+			recordLog.Errorf("failed to get udns to interfaces map : %v", err)
+			return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 		}
-		udnsCache = m
+		maps.Copy(udnsCache, m)
+		recordLog.Tracef("GetInterfaceUDNS map: %v", udnsCache)
 	}
 
 	// Look up the interface in the cache
@@ -170,7 +176,7 @@ func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder) IntfDirUdn 
 			udn = "default"
 		}
 	}
-
+	recordLog.Debugf("intf %s dir %d udn %s", intf, dir, udn)
 	return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 }
 
