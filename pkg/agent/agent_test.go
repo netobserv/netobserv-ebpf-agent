@@ -1,3 +1,7 @@
+//go:build !race
+
+// (This test isn't thread-safe due to reading agent.status)
+
 package agent
 
 import (
