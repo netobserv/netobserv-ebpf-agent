@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"reflect"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
+	"github.com/sirupsen/logrus"
 )
 
 // Values according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
@@ -25,6 +27,8 @@ const (
 	MaxNetworkEvents         = 4
 	MaxObservedInterfaces    = 4
 )
+
+var recordLog = logrus.WithField("component", "model")
 
 type HumanBytes uint64
 type MacAddr [MacLen]uint8
@@ -66,9 +70,8 @@ type Record struct {
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
 	NetworkMonitorEventsMD []map[string]string
+	UdnsCache              map[string]string
 }
-
-var udnsCache map[string]string
 
 func NewRecord(
 	key ebpf.BpfFlowId,
@@ -77,7 +80,6 @@ func NewRecord(
 	monotonicCurrentTime uint64,
 	s *ovnobserv.SampleDecoder,
 ) *Record {
-	udnsCache = make(map[string]string)
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
 
@@ -87,17 +89,20 @@ func NewRecord(
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
-		Interfaces: []IntfDirUdn{NewIntfDirUdn(
-			interfaceNamer(int(metrics.IfIndexFirstSeen)),
-			int(metrics.DirectionFirstSeen),
-			s)},
 	}
+	if s != nil {
+		record.UdnsCache = make(map[string]string)
+	}
+	record.Interfaces = []IntfDirUdn{NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen)),
+		int(metrics.DirectionFirstSeen),
+		s, record.UdnsCache)}
+
 	if metrics.AdditionalMetrics != nil {
 		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
 			record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
 				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
 				int(metrics.AdditionalMetrics.ObservedIntf[i].Direction),
-				s,
+				s, record.UdnsCache,
 			))
 		}
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
@@ -147,30 +152,32 @@ type IntfDirUdn struct {
 	Udn       string
 }
 
-func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder) IntfDirUdn {
-	var udn string
+func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder, cache map[string]string) IntfDirUdn {
+	udn := ""
 	if s == nil {
-		return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+		return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 	}
 
 	// Load UDN cache if empty
-	if len(udnsCache) == 0 {
+	if len(cache) == 0 {
 		m, err := s.GetInterfaceUDNs()
 		if err != nil {
-			return IntfDirUdn{Interface: intf, Direction: dir, Udn: ""}
+			recordLog.Errorf("failed to get udns to interfaces map : %v", err)
+			return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 		}
-		udnsCache = m
+		maps.Copy(cache, m)
+		recordLog.Tracef("GetInterfaceUDNS map: %v", cache)
 	}
 
 	// Look up the interface in the cache
-	if v, ok := udnsCache[intf]; ok {
+	if v, ok := cache[intf]; ok {
 		if v != "" {
 			udn = v
 		} else {
 			udn = "default"
 		}
 	}
-
+	recordLog.Debugf("intf %s dir %d udn %s", intf, dir, udn)
 	return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 }
 
