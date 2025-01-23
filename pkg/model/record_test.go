@@ -3,8 +3,11 @@ package model
 import (
 	"bytes"
 	"encoding/binary"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/gavv/monotime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -72,6 +75,19 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	// assert that IP addresses are interpreted as IPv4 addresses
 	assert.Equal(t, "6.7.8.9", IP(fr.Id.SrcIp).String())
 	assert.Equal(t, "10.11.12.13", IP(fr.Id.DstIp).String())
+}
+
+func TestParallelNewRecord(t *testing.T) {
+	wg := sync.WaitGroup{}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}, time.Now(), uint64(monotime.Now()), nil)
+			assert.NotNil(t, r)
+		}()
+	}
+	wg.Wait()
 }
 
 func TestAdditionalMetricsBinaryEncoding(t *testing.T) {

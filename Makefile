@@ -151,6 +151,11 @@ test: ## Test code using go test
 	@echo "### Testing code"
 	GOOS=$(GOOS) go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out
 
+.PHONY: test-race
+test-race: ## Test code using go test -race
+	@echo "### Testing code for race conditions"
+	GOOS=$(GOOS) go test -race -mod vendor ./pkg/... ./cmd/...
+
 .PHONY: cov-exclude-generated
 cov-exclude-generated:
 	grep -vE "(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)" cover.all.out > cover.out
