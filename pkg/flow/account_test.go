@@ -111,7 +111,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			},
 			TimeFlowStart: now.Add(-(1000 - 123) * time.Nanosecond),
 			TimeFlowEnd:   now.Add(-(1000 - 789) * time.Nanosecond),
-			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
+			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil, nil)},
 		},
 		k2: {
 			ID: k2,
@@ -122,7 +122,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 			},
 			TimeFlowStart: now.Add(-(1000 - 456) * time.Nanosecond),
 			TimeFlowEnd:   now.Add(-(1000 - 456) * time.Nanosecond),
-			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
+			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil, nil)},
 		},
 	}, received)
 }
@@ -191,7 +191,7 @@ func TestEvict_Period(t *testing.T) {
 		},
 		TimeFlowStart: now.Add(-1000 + 123),
 		TimeFlowEnd:   now.Add(-1000 + 789),
-		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
+		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil, nil)},
 	}, *records[0])
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
@@ -208,7 +208,7 @@ func TestEvict_Period(t *testing.T) {
 		},
 		TimeFlowStart: now.Add(-1000 + 1123),
 		TimeFlowEnd:   now.Add(-1000 + 1456),
-		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
+		Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil, nil)},
 	}, *records[0])
 
 	// no more flows are evicted

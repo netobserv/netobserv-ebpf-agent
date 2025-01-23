@@ -123,7 +123,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	for i := 0; i < 25000; i++ {
 		input = append(input, &model.Record{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
-		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil)}})
+		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil, nil)}})
 	}
 	flows <- input
 	go exporter.ExportFlows(flows)
