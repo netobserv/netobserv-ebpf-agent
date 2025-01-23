@@ -20,7 +20,8 @@ jobs:
     - name: Install make
       run: sudo apt -y install make
     - name: Run verification and tests
-      run: make lint test cov-exclude-generated
+      # note: we run both test and test-race because some tests are excluded from -race builds
+      run: make lint test test-race cov-exclude-generated
     - name: check clean generate
       run: make docker-generate && git add -A && git diff HEAD --exit-code
     - name: check clean vendors
