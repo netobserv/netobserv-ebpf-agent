@@ -56,7 +56,6 @@
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                              u8 direction) {
     if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
-        BPF_PRINTK("observed interface missed (array capacity reached) for ifindex %d\n", if_index);
         return 1;
     }
     for (u8 i = 0; i < value->nb_observed_intf; i++) {
@@ -97,7 +96,15 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
     }
     bpf_spin_unlock(&aggregate_flow->lock);
     if (maxReached > 0) {
-        increase_counter(OBSERVED_INTF_MISSED);
+        BPF_PRINTK("observed interface missed (array capacity reached); ifindex=%d, eth_type=%d, "
+                   "proto=%d, sport=%d, dport=%d\n",
+                   if_index, aggregate_flow->eth_protocol, pkt->id->transport_protocol,
+                   pkt->id->src_port, pkt->id->dst_port);
+        if (pkt->id->transport_protocol != 0 &&
+            (pkt->id->src_port != 0 || pkt->id->dst_port != 0)) {
+            // Only raise counter on non-zero proto/ports; zero proto/ports traffic is very likely to have its interface max count reached
+            increase_counter(OBSERVED_INTF_MISSED);
+        }
     }
 }
 
