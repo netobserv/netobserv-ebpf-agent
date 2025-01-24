@@ -36,13 +36,13 @@ static void __always_inline parse_tuple(struct nf_conntrack_tuple *t,
         case AF_INET:
             __builtin_memcpy(flow->saddr, ip4in6, sizeof(ip4in6));
             __builtin_memcpy(flow->daddr, ip4in6, sizeof(ip4in6));
-            bpf_probe_read(flow->daddr + sizeof(ip4in6), sizeof(u32), &t->src.u3.in.s_addr);
-            bpf_probe_read(flow->saddr + sizeof(ip4in6), sizeof(u32), &t->dst.u3.in.s_addr);
+            bpf_probe_read_kernel(flow->daddr + sizeof(ip4in6), sizeof(u32), &t->src.u3.in.s_addr);
+            bpf_probe_read_kernel(flow->saddr + sizeof(ip4in6), sizeof(u32), &t->dst.u3.in.s_addr);
             break;
 
         case AF_INET6:
-            bpf_probe_read(flow->daddr, IP_MAX_LEN, &t->src.u3.in6.s6_addr);
-            bpf_probe_read(flow->saddr, IP_MAX_LEN, &t->dst.u3.in6.s6_addr);
+            bpf_probe_read_kernel(flow->daddr, IP_MAX_LEN, &t->src.u3.in6.s6_addr);
+            bpf_probe_read_kernel(flow->saddr, IP_MAX_LEN, &t->dst.u3.in6.s6_addr);
             break;
         }
     } else {
@@ -55,13 +55,13 @@ static void __always_inline parse_tuple(struct nf_conntrack_tuple *t,
         case AF_INET:
             __builtin_memcpy(flow->saddr, ip4in6, sizeof(ip4in6));
             __builtin_memcpy(flow->daddr, ip4in6, sizeof(ip4in6));
-            bpf_probe_read(flow->daddr + sizeof(ip4in6), sizeof(u32), &t->dst.u3.in.s_addr);
-            bpf_probe_read(flow->saddr + sizeof(ip4in6), sizeof(u32), &t->src.u3.in.s_addr);
+            bpf_probe_read_kernel(flow->daddr + sizeof(ip4in6), sizeof(u32), &t->dst.u3.in.s_addr);
+            bpf_probe_read_kernel(flow->saddr + sizeof(ip4in6), sizeof(u32), &t->src.u3.in.s_addr);
             break;
 
         case AF_INET6:
-            bpf_probe_read(flow->daddr, IP_MAX_LEN, &t->dst.u3.in6.s6_addr);
-            bpf_probe_read(flow->saddr, IP_MAX_LEN, &t->src.u3.in6.s6_addr);
+            bpf_probe_read_kernel(flow->daddr, IP_MAX_LEN, &t->dst.u3.in6.s6_addr);
+            bpf_probe_read_kernel(flow->saddr, IP_MAX_LEN, &t->src.u3.in6.s6_addr);
             break;
         }
     }
@@ -133,10 +133,10 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     }
     __builtin_memset(&id, 0, sizeof(id));
 
-    bpf_probe_read(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
+    bpf_probe_read_kernel(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
 
-    bpf_probe_read(&zone_id, sizeof(zone_id), &ct->zone.id);
-    bpf_probe_read(&zone_id, sizeof(zone_id), &ct->zone.id);
+    bpf_probe_read_kernel(&zone_id, sizeof(zone_id), &ct->zone.id);
+    bpf_probe_read_kernel(&zone_id, sizeof(zone_id), &ct->zone.id);
 
     struct nf_conntrack_tuple *orig_tuple = &tuplehash[IP_CT_DIR_ORIGINAL].tuple;
     struct nf_conntrack_tuple *reply_tuple = &tuplehash[IP_CT_DIR_REPLY].tuple;
@@ -176,7 +176,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
 
     BPF_PRINTK("Xlat: protocol %d flags 0x%x family %d dscp %d\n", protocol, flags, family, dscp);
 
-    bpf_probe_read(&zone_id, sizeof(zone_id), &ct->zone.id);
+    bpf_probe_read_kernel(&zone_id, sizeof(zone_id), &ct->zone.id);
     ret = translate_lookup_and_update_flow(&id, flags, orig_tuple, reply_tuple, zone_id, family,
                                            eth_protocol);
 

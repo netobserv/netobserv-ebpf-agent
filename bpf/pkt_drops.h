@@ -118,7 +118,7 @@ int kfree_skb(struct trace_event_raw_kfree_skb *args) {
         u8 state = 0;
         if (sk) {
             // pull in details from the packet headers and the sock struct
-            bpf_probe_read(&state, sizeof(u8), (u8 *)&sk->__sk_common.skc_state);
+            bpf_probe_read_kernel(&state, sizeof(u8), (u8 *)&sk->__sk_common.skc_state);
         }
         return trace_pkt_drop(args, state, skb, reason);
     }

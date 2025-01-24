@@ -33,7 +33,7 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
                                                                  u8 *user_cookie) {
     u8 cookie[MAX_EVENT_MD];
 
-    bpf_probe_read(cookie, md_len, user_cookie);
+    bpf_probe_read_kernel(cookie, md_len, user_cookie);
 
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
@@ -112,7 +112,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
         .eth_protocol = eth_protocol,
         .network_events_idx = 0,
     };
-    bpf_probe_read(new_flow.network_events[0], md_len, user_cookie);
+    bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);
     new_flow.network_events_idx++;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
