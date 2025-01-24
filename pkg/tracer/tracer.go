@@ -890,7 +890,9 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows", metrics.HighSeverity).Inc()
 			continue
 		}
-		flows[id] = model.NewBpfFlowContent(baseMetrics)
+		ptrBaseMetrics := &ebpf.BpfFlowMetrics{}
+		*ptrBaseMetrics = baseMetrics
+		flows[id] = model.NewBpfFlowContent(ptrBaseMetrics)
 	}
 
 	// Reiterate on additional metrics

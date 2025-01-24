@@ -25,7 +25,9 @@ func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.Bp
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't delete flow entry")
 			met.Errors.WithErrorName("flow-fetcher-legacy", "CannotDeleteFlows", metrics.HighSeverity).Inc()
 		}
-		flows[id] = model.NewBpfFlowContent(baseMetrics)
+		ptrBaseMetrics := &ebpf.BpfFlowMetrics{}
+		*ptrBaseMetrics = baseMetrics
+		flows[id] = model.NewBpfFlowContent(ptrBaseMetrics)
 	}
 	met.BufferSizeGauge.WithBufferName("hashmap-legacy-total").Set(float64(count))
 	met.BufferSizeGauge.WithBufferName("hashmap-legacy-unique").Set(float64(len(flows)))

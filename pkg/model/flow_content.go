@@ -9,8 +9,8 @@ type BpfFlowContent struct {
 	AdditionalMetrics *ebpf.BpfAdditionalMetrics
 }
 
-func NewBpfFlowContent(metrics ebpf.BpfFlowMetrics) BpfFlowContent {
-	return BpfFlowContent{BpfFlowMetrics: &metrics}
+func NewBpfFlowContent(metrics *ebpf.BpfFlowMetrics) BpfFlowContent {
+	return BpfFlowContent{BpfFlowMetrics: metrics}
 }
 
 func (p *BpfFlowContent) AccumulateBase(other *ebpf.BpfFlowMetrics) {
