@@ -100,9 +100,8 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
                    "proto=%d, sport=%d, dport=%d\n",
                    if_index, aggregate_flow->eth_protocol, pkt->id->transport_protocol,
                    pkt->id->src_port, pkt->id->dst_port);
-        if (pkt->id->transport_protocol != 0 &&
-            (pkt->id->src_port != 0 || pkt->id->dst_port != 0)) {
-            // Only raise counter on non-zero proto/ports; zero proto/ports traffic is very likely to have its interface max count reached
+        if (pkt->id->transport_protocol != 0) {
+            // Only raise counter on non-zero proto; zero proto traffic is very likely to have its interface max count reached
             increase_counter(OBSERVED_INTF_MISSED);
         }
     }
