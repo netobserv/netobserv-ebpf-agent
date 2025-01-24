@@ -6,13 +6,10 @@
     to/from an interface.
 
     Logic:
-        1) Store flow information in a per-cpu hash map.
-        2) Upon flow completion (tcp->fin event), evict the entry from map, and
-           send to userspace through ringbuffer.
-           Eviction for non-tcp flows need to done by userspace
-        3) When the map is full, we send the new flow entry to userspace via ringbuffer,
+        1) Store flow information in a hash map.
+        2) Periodically evict the entry from map from userspace.
+        3) When the map is full/busy, we send the new flow entry to userspace via ringbuffer,
             until an entry is available.
-        4) When hash collision is detected, we send the new entry to userpace via ringbuffer.
 */
 #include <vmlinux.h>
 #include <bpf_helpers.h>
@@ -55,16 +52,59 @@
  */
 #include "pkt_translation.h"
 
-static inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, u64 len,
-                                        u32 sampling) {
+// return 0 on success, 1 if capacity reached
+static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
+                                             u8 direction) {
+    if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
+        return 1;
+    }
+    for (u8 i = 0; i < value->nb_observed_intf; i++) {
+        if (value->observed_intf[i] == if_index) {
+            if (value->observed_direction[i] != direction &&
+                value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
+                // Same interface seen on a different direction => mark as both directions
+                value->observed_direction[i] = OBSERVED_DIRECTION_BOTH;
+            }
+            // Interface already seen -> skip
+            return 0;
+        }
+    }
+    value->observed_intf[value->nb_observed_intf] = if_index;
+    value->observed_direction[value->nb_observed_intf] = direction;
+    value->nb_observed_intf++;
+    return 0;
+}
+
+static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt,
+                                                 u64 len, u32 sampling, u32 if_index,
+                                                 u8 direction) {
+    // Count only packets seen from the same interface as previously to avoid duplicate counts
+    int maxReached = 0;
     bpf_spin_lock(&aggregate_flow->lock);
-    aggregate_flow->packets += 1;
-    aggregate_flow->bytes += len;
-    aggregate_flow->end_mono_time_ts = pkt->current_ts;
-    aggregate_flow->flags |= pkt->flags;
-    aggregate_flow->dscp = pkt->dscp;
-    aggregate_flow->sampling = sampling;
+    if (aggregate_flow->if_index_first_seen == if_index) {
+        aggregate_flow->packets += 1;
+        aggregate_flow->bytes += len;
+        aggregate_flow->end_mono_time_ts = pkt->current_ts;
+        aggregate_flow->flags |= pkt->flags;
+        aggregate_flow->dscp = pkt->dscp;
+        aggregate_flow->sampling = sampling;
+    } else if (if_index != 0) {
+        // Only add info that we've seen this interface (we can also update end time & flags)
+        aggregate_flow->end_mono_time_ts = pkt->current_ts;
+        aggregate_flow->flags |= pkt->flags;
+        maxReached = add_observed_intf(aggregate_flow, pkt, if_index, direction);
+    }
     bpf_spin_unlock(&aggregate_flow->lock);
+    if (maxReached > 0) {
+        BPF_PRINTK("observed interface missed (array capacity reached); ifindex=%d, eth_type=%d, "
+                   "proto=%d, sport=%d, dport=%d\n",
+                   if_index, aggregate_flow->eth_protocol, pkt->id->transport_protocol,
+                   pkt->id->src_port, pkt->id->dst_port);
+        if (pkt->id->transport_protocol != 0) {
+            // Only raise counter on non-zero proto; zero proto traffic is very likely to have its interface max count reached
+            increase_counter(OBSERVED_INTF_MISSED);
+        }
+    }
 }
 
 static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, int dns_errno) {
@@ -76,23 +116,6 @@ static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, 
     }
     if (dns_errno != 0) {
         extra_metrics->dns_record.errno = dns_errno;
-    }
-}
-
-static inline void add_observed_intf(additional_metrics *value, u32 if_index, u8 direction) {
-    if (value->nb_observed_intf < MAX_OBSERVED_INTERFACES) {
-        for (u8 i = 0; i < value->nb_observed_intf; i++) {
-            if (value->observed_intf[i].if_index == if_index &&
-                value->observed_intf[i].direction == direction) {
-                return;
-            }
-        }
-        value->observed_intf[value->nb_observed_intf].if_index = if_index;
-        value->observed_intf[value->nb_observed_intf].direction = direction;
-        value->nb_observed_intf++;
-    } else {
-        increase_counter(OBSERVED_INTF_MISSED);
-        BPF_PRINTK("observed interface missed (array capacity reached) for ifindex %d\n", if_index);
     }
 }
 
@@ -151,34 +174,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        if (aggregate_flow->if_index_first_seen == skb->ifindex) {
-            update_existing_flow(aggregate_flow, &pkt, len, filter_sampling);
-        } else if (skb->ifindex != 0) {
-            // Only add info that we've seen this interface
-            additional_metrics *extra_metrics =
-                (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
-            if (extra_metrics != NULL) {
-                add_observed_intf(extra_metrics, skb->ifindex, direction);
-            } else {
-                additional_metrics new_metrics = {
-                    .eth_protocol = eth_protocol,
-                    .start_mono_time_ts = pkt.current_ts,
-                    .end_mono_time_ts = pkt.current_ts,
-                };
-                add_observed_intf(&new_metrics, skb->ifindex, direction);
-                long ret =
-                    bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
-                if (ret == -EEXIST) {
-                    extra_metrics =
-                        (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
-                    if (extra_metrics != NULL) {
-                        add_observed_intf(extra_metrics, skb->ifindex, direction);
-                    }
-                } else if (ret != 0 && trace_messages) {
-                    bpf_printk("error creating new observed_intf: %d\n", ret);
-                }
-            }
-        }
+        update_existing_flow(aggregate_flow, &pkt, len, filter_sampling, skb->ifindex, direction);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow;
@@ -205,7 +201,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 flow_metrics *aggregate_flow =
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
-                    update_existing_flow(aggregate_flow, &pkt, len, filter_sampling);
+                    update_existing_flow(aggregate_flow, &pkt, len, filter_sampling, skb->ifindex,
+                                         direction);
                 } else {
                     if (trace_messages) {
                         bpf_printk("failed to update an exising flow\n");

@@ -25,7 +25,7 @@ const (
 	IPv6Type                 = 0x86DD
 	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
-	MaxObservedInterfaces    = 4
+	MaxObservedInterfaces    = 6
 )
 
 var recordLog = logrus.WithField("component", "model")
@@ -97,14 +97,15 @@ func NewRecord(
 		int(metrics.DirectionFirstSeen),
 		s, record.UdnsCache)}
 
+	for i := uint8(0); i < record.Metrics.NbObservedIntf; i++ {
+		record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
+			interfaceNamer(int(metrics.ObservedIntf[i])),
+			int(metrics.ObservedDirection[i]),
+			s, record.UdnsCache,
+		))
+	}
+
 	if metrics.AdditionalMetrics != nil {
-		for i := uint8(0); i < record.Metrics.AdditionalMetrics.NbObservedIntf; i++ {
-			record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
-				interfaceNamer(int(metrics.AdditionalMetrics.ObservedIntf[i].IfIndex)),
-				int(metrics.AdditionalMetrics.ObservedIntf[i].Direction),
-				s, record.UdnsCache,
-			))
-		}
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
 			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}

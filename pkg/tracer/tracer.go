@@ -887,7 +887,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 				return m.legacyLookupAndDeleteMap(met)
 			}
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete flow entry")
-			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows").Inc()
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows", metrics.HighSeverity).Inc()
 			continue
 		}
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
@@ -911,7 +911,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 				return m.legacyLookupAndDeleteMap(met)
 			}
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
-			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric").Inc()
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric", metrics.HighSeverity).Inc()
 			continue
 		}
 		flow, found := flows[id]
@@ -959,7 +959,7 @@ func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
-		ebpf.BpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached"),
+		ebpf.BpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
 	for key := ebpf.BpfGlobalCountersKeyT(0); key < ebpf.BpfGlobalCountersKeyTMAX_COUNTERS; key++ {
@@ -1723,7 +1723,7 @@ func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte
 				return p.legacyLookupAndDeleteMap(met)
 			}
 			log.WithError(err).WithField("packetID", id).Warnf("couldn't delete entry")
-			met.Errors.WithErrorName("pkt-fetcher", "CannotDeleteEntry").Inc()
+			met.Errors.WithErrorName("pkt-fetcher", "CannotDeleteEntry", metrics.HighSeverity).Inc()
 		}
 		packets[id] = packet
 	}

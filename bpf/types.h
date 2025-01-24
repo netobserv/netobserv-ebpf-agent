@@ -66,7 +66,8 @@ typedef __u64 u64;
 #define MAX_FILTER_ENTRIES 16
 #define MAX_EVENT_MD 8
 #define MAX_NETWORK_EVENTS 4
-#define MAX_OBSERVED_INTERFACES 4
+#define MAX_OBSERVED_INTERFACES 6
+#define OBSERVED_DIRECTION_BOTH 3
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
@@ -104,6 +105,9 @@ typedef struct flow_metrics_t {
     // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
     u8 errno;
     u8 dscp;
+    u8 nb_observed_intf;
+    u8 observed_direction[MAX_OBSERVED_INTERFACES];
+    u32 observed_intf[MAX_OBSERVED_INTERFACES];
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF
@@ -134,13 +138,8 @@ typedef struct additional_metrics_t {
         u16 dport;
         u16 zone_id;
     } translated_flow;
-    struct observed_intf_t {
-        u8 direction;
-        u32 if_index;
-    } observed_intf[MAX_OBSERVED_INTERFACES];
     u16 eth_protocol;
     u8 network_events_idx;
-    u8 nb_observed_intf;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
