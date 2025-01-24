@@ -65,18 +65,18 @@ func TestFlowsAgent_Decoration(t *testing.T) {
 		BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000,
 			IfIndexFirstSeen:   1,
 			DirectionFirstSeen: 1,
-		},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{NbObservedIntf: 1,
-			ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{{IfIndex: 3, Direction: 0}},
+			NbObservedIntf:     1,
+			ObservedIntf:       [model.MaxObservedInterfaces]uint32{3},
+			ObservedDirection:  [model.MaxObservedInterfaces]uint8{0},
 		},
 	}
 	metrics2 := model.BpfFlowContent{
 		BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000,
 			IfIndexFirstSeen:   4,
 			DirectionFirstSeen: 0,
-		},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{NbObservedIntf: 2,
-			ObservedIntf: [model.MaxObservedInterfaces]ebpf.BpfObservedIntfT{{IfIndex: 1, Direction: 1}, {IfIndex: 99, Direction: 1}},
+			NbObservedIntf:     2,
+			ObservedIntf:       [model.MaxObservedInterfaces]uint32{1, 99},
+			ObservedDirection:  [model.MaxObservedInterfaces]uint8{1, 1},
 		},
 	}
 	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{

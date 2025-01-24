@@ -39,10 +39,20 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x13, 0x14, 0x15, 0x16, // u32 if_index_first_seen
 		0x00, 0x00, 0x00, 0x00, // u32 lock
 		0x02, 0x00, 0x00, 0x00, // u32 sampling
-		0x03,                         // u8 direction_first_seen
-		0x33,                         // u8 errno
-		0x60,                         // u8 dscp
-		0x00, 0x00, 0x00, 0x00, 0x00, // 5 bytes padding
+		0x03,                               // u8 direction_first_seen
+		0x33,                               // u8 errno
+		0x60,                               // u8 dscp
+		0x02,                               // u8 nb_observed_intf
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, // observed_direction[6]
+		0x00, 0x00, // 2 bytes padding
+		// observed_intf[6]
+		0x07, 0x00, 0x00, 0x00,
+		0x08, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, // 4 bytes padding
 	}))
 	require.NoError(t, err)
 
@@ -70,6 +80,9 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			Errno:              0x33,
 			Dscp:               0x60,
 			Sampling:           0x02,
+			NbObservedIntf:     2,
+			ObservedIntf:       [MaxObservedInterfaces]uint32{7, 8},
+			ObservedDirection:  [MaxObservedInterfaces]uint8{1, 0},
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses
@@ -121,16 +134,9 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 		0x00, 0x00,
 		0x00, 0x00,
 		0x02, 0x00,
-		0x00, 0x00, // 2bytes padding
-		// observed_intf_t[4]
-		0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, // [0]: u8 direction + 3 bytes padding + u32 if_index
-		0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, // [1]: u8 direction + 3 bytes padding + u32 if_index
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // [2]: u8 direction + 3 bytes padding + u32 if_index
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // [3]: u8 direction + 3 bytes padding + u32 if_index
 		0x03, 0x00, // u16 eth_protocol
-		0x01,                   // u8 network_events_idx
-		0x02,                   // u8 nb_observed_intf
-		0x00, 0x00, 0x00, 0x00, // 4 bytes padding
+		0x01,                                     // u8 network_events_idx
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 7 bytes padding
 	}
 	var addmet ebpf.BpfAdditionalMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
@@ -166,11 +172,6 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 			Sport:  0,
 			Dport:  0,
 			ZoneId: 2,
-		},
-		NbObservedIntf: 2,
-		ObservedIntf: [MaxObservedInterfaces]ebpf.BpfObservedIntfT{
-			{Direction: 1, IfIndex: 7},
-			{Direction: 0, IfIndex: 8},
 		},
 	}, addmet)
 }
