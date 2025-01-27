@@ -71,12 +71,12 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     }
 
     u64 current_time = bpf_ktime_get_ns();
-    additional_metrics new_flow = {
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .eth_protocol = eth_protocol,
-        .flow_rtt = rtt,
-    };
+    additional_metrics new_flow;
+    __builtin_memset(&new_flow, 0, sizeof(new_flow));
+    new_flow.start_mono_time_ts = current_time;
+    new_flow.end_mono_time_ts = current_time;
+    new_flow.eth_protocol = eth_protocol;
+    new_flow.flow_rtt = rtt;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
