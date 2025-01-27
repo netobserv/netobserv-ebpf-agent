@@ -94,11 +94,11 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     }
 
     // there is no matching flows so lets create new one and add the xlation
-    additional_metrics new_extra_metrics = {
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .eth_protocol = eth_protocol,
-    };
+    additional_metrics new_extra_metrics;
+    __builtin_memset(&new_extra_metrics, 0, sizeof(new_extra_metrics));
+    new_extra_metrics.start_mono_time_ts = current_time;
+    new_extra_metrics.end_mono_time_ts = current_time;
+    new_extra_metrics.eth_protocol = eth_protocol;
     parse_tuple(reply_t, &new_extra_metrics.translated_flow, zone_id, family,
                 id->transport_protocol, true);
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_extra_metrics, BPF_NOEXIST);
