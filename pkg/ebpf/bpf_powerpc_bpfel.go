@@ -217,9 +217,10 @@ func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
 type BpfSpecs struct {
 	BpfProgramSpecs
 	BpfMapSpecs
+	BpfVariableSpecs
 }
 
-// BpfSpecs contains programs before they are loaded into the kernel.
+// BpfProgramSpecs contains programs before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
@@ -252,12 +253,47 @@ type BpfMapSpecs struct {
 	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
 }
 
+// BpfVariableSpecs contains global variables before they are loaded into the kernel.
+//
+// It can be passed ebpf.CollectionSpec.Assign.
+type BpfVariableSpecs struct {
+	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
+	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
+	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
+	EnableNetworkEventsMonitoring  *ebpf.VariableSpec `ebpf:"enable_network_events_monitoring"`
+	EnablePca                      *ebpf.VariableSpec `ebpf:"enable_pca"`
+	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
+	EnableRtt                      *ebpf.VariableSpec `ebpf:"enable_rtt"`
+	FilterKey                      *ebpf.VariableSpec `ebpf:"filter_key"`
+	FilterValue                    *ebpf.VariableSpec `ebpf:"filter_value"`
+	HasFilterSampling              *ebpf.VariableSpec `ebpf:"has_filter_sampling"`
+	Ip4in6                         *ebpf.VariableSpec `ebpf:"ip4in6"`
+	NetworkEventsMonitoringGroupid *ebpf.VariableSpec `ebpf:"network_events_monitoring_groupid"`
+	Sampling                       *ebpf.VariableSpec `ebpf:"sampling"`
+	TraceMessages                  *ebpf.VariableSpec `ebpf:"trace_messages"`
+	Unused0                        *ebpf.VariableSpec `ebpf:"unused0"`
+	Unused1                        *ebpf.VariableSpec `ebpf:"unused1"`
+	Unused10                       *ebpf.VariableSpec `ebpf:"unused10"`
+	Unused11                       *ebpf.VariableSpec `ebpf:"unused11"`
+	Unused12                       *ebpf.VariableSpec `ebpf:"unused12"`
+	Unused13                       *ebpf.VariableSpec `ebpf:"unused13"`
+	Unused2                        *ebpf.VariableSpec `ebpf:"unused2"`
+	Unused3                        *ebpf.VariableSpec `ebpf:"unused3"`
+	Unused4                        *ebpf.VariableSpec `ebpf:"unused4"`
+	Unused5                        *ebpf.VariableSpec `ebpf:"unused5"`
+	Unused6                        *ebpf.VariableSpec `ebpf:"unused6"`
+	Unused7                        *ebpf.VariableSpec `ebpf:"unused7"`
+	Unused8                        *ebpf.VariableSpec `ebpf:"unused8"`
+	Unused9                        *ebpf.VariableSpec `ebpf:"unused9"`
+}
+
 // BpfObjects contains all objects after they have been loaded into the kernel.
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfObjects struct {
 	BpfPrograms
 	BpfMaps
+	BpfVariables
 }
 
 func (o *BpfObjects) Close() error {
@@ -292,6 +328,40 @@ func (m *BpfMaps) Close() error {
 		m.PacketRecord,
 		m.PeerFilterMap,
 	)
+}
+
+// BpfVariables contains all global variables after they have been loaded into the kernel.
+//
+// It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
+type BpfVariables struct {
+	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
+	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
+	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
+	EnableNetworkEventsMonitoring  *ebpf.Variable `ebpf:"enable_network_events_monitoring"`
+	EnablePca                      *ebpf.Variable `ebpf:"enable_pca"`
+	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`
+	EnableRtt                      *ebpf.Variable `ebpf:"enable_rtt"`
+	FilterKey                      *ebpf.Variable `ebpf:"filter_key"`
+	FilterValue                    *ebpf.Variable `ebpf:"filter_value"`
+	HasFilterSampling              *ebpf.Variable `ebpf:"has_filter_sampling"`
+	Ip4in6                         *ebpf.Variable `ebpf:"ip4in6"`
+	NetworkEventsMonitoringGroupid *ebpf.Variable `ebpf:"network_events_monitoring_groupid"`
+	Sampling                       *ebpf.Variable `ebpf:"sampling"`
+	TraceMessages                  *ebpf.Variable `ebpf:"trace_messages"`
+	Unused0                        *ebpf.Variable `ebpf:"unused0"`
+	Unused1                        *ebpf.Variable `ebpf:"unused1"`
+	Unused10                       *ebpf.Variable `ebpf:"unused10"`
+	Unused11                       *ebpf.Variable `ebpf:"unused11"`
+	Unused12                       *ebpf.Variable `ebpf:"unused12"`
+	Unused13                       *ebpf.Variable `ebpf:"unused13"`
+	Unused2                        *ebpf.Variable `ebpf:"unused2"`
+	Unused3                        *ebpf.Variable `ebpf:"unused3"`
+	Unused4                        *ebpf.Variable `ebpf:"unused4"`
+	Unused5                        *ebpf.Variable `ebpf:"unused5"`
+	Unused6                        *ebpf.Variable `ebpf:"unused6"`
+	Unused7                        *ebpf.Variable `ebpf:"unused7"`
+	Unused8                        *ebpf.Variable `ebpf:"unused8"`
+	Unused9                        *ebpf.Variable `ebpf:"unused9"`
 }
 
 // BpfPrograms contains all programs after they have been loaded into the kernel.
