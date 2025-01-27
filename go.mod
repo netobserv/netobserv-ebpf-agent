@@ -21,7 +21,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
-	github.com/vishvananda/netns v0.0.4
+	github.com/vishvananda/netns v0.0.5
 	github.com/vladimirvivien/gexe v0.4.1
 	github.com/vmware/go-ipfix v0.12.0
 	golang.org/x/sys v0.28.0
