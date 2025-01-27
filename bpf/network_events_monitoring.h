@@ -106,12 +106,12 @@ static inline int trace_network_events(struct sk_buff *skb, struct rh_psample_me
 
     // there is no matching flows so lets create new one and add the network event metadata
     u64 current_time = bpf_ktime_get_ns();
-    additional_metrics new_flow = {
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .eth_protocol = eth_protocol,
-        .network_events_idx = 0,
-    };
+    additional_metrics new_flow;
+    __builtin_memset(&new_flow, 0, sizeof(new_flow));
+    new_flow.start_mono_time_ts = current_time;
+    new_flow.end_mono_time_ts = current_time;
+    new_flow.eth_protocol = eth_protocol;
+    new_flow.network_events_idx = 0;
     bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);
     new_flow.network_events_idx++;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);

@@ -239,15 +239,15 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (extra_metrics != NULL) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
-            additional_metrics new_metrics = {
-                .start_mono_time_ts = pkt.current_ts,
-                .end_mono_time_ts = pkt.current_ts,
-                .eth_protocol = eth_protocol,
-                .dns_record.id = pkt.dns_id,
-                .dns_record.flags = pkt.dns_flags,
-                .dns_record.latency = pkt.dns_latency,
-                .dns_record.errno = dns_errno,
-            };
+            additional_metrics new_metrics;
+            __builtin_memset(&new_metrics, 0, sizeof(new_metrics));
+            new_metrics.start_mono_time_ts = pkt.current_ts;
+            new_metrics.end_mono_time_ts = pkt.current_ts;
+            new_metrics.eth_protocol = eth_protocol;
+            new_metrics.dns_record.id = pkt.dns_id;
+            new_metrics.dns_record.flags = pkt.dns_flags;
+            new_metrics.dns_record.latency = pkt.dns_latency;
+            new_metrics.dns_record.errno = dns_errno;
             long ret =
                 bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
             if (ret != 0) {
