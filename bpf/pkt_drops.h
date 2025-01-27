@@ -75,16 +75,16 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
     }
     // there is no matching flows so lets create new one and add the drops
     u64 current_time = bpf_ktime_get_ns();
-    additional_metrics new_flow = {
-        .start_mono_time_ts = current_time,
-        .end_mono_time_ts = current_time,
-        .eth_protocol = eth_protocol,
-        .pkt_drops.packets = 1,
-        .pkt_drops.bytes = len,
-        .pkt_drops.latest_state = state,
-        .pkt_drops.latest_flags = flags,
-        .pkt_drops.latest_drop_cause = reason,
-    };
+    additional_metrics new_flow;
+    __builtin_memset(&new_flow, 0, sizeof(new_flow));
+    new_flow.start_mono_time_ts = current_time;
+    new_flow.end_mono_time_ts = current_time;
+    new_flow.eth_protocol = eth_protocol;
+    new_flow.pkt_drops.packets = 1;
+    new_flow.pkt_drops.bytes = len;
+    new_flow.pkt_drops.latest_state = state;
+    new_flow.pkt_drops.latest_flags = flags;
+    new_flow.pkt_drops.latest_drop_cause = reason;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
