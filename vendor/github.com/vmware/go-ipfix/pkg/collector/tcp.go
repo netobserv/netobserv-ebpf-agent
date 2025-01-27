@@ -54,7 +54,10 @@ func (cp *CollectingProcess) startTCPServer() {
 				}
 			}
 			cp.wg.Add(1)
-			go cp.handleTCPClient(conn)
+			go func() {
+				defer cp.wg.Done()
+				cp.handleTCPClient(conn)
+			}()
 		}
 	}(cp.stopChan)
 	<-cp.stopChan
@@ -63,12 +66,27 @@ func (cp *CollectingProcess) startTCPServer() {
 
 func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 	address := conn.RemoteAddr().String()
-	client := cp.createClient()
-	cp.addClient(address, client)
-	defer cp.wg.Done()
+	session := newTCPSession(address)
+	func() {
+		cp.mutex.Lock()
+		defer cp.mutex.Unlock()
+		cp.sessions[address] = session
+	}()
+	defer func() {
+		cp.mutex.Lock()
+		defer cp.mutex.Unlock()
+		delete(cp.sessions, address)
+	}()
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	doneCh := make(chan struct{})
+	cp.wg.Add(1)
+	// We read from the connection in a separate goroutine, so we can stop immediately when
+	// cp.StopChan is closed. An alternative would be to use a read deadline, and check
+	// cp.StopChan at every iteration.
 	go func() {
-		reader := bufio.NewReader(conn)
+		defer cp.wg.Done()
+		defer close(doneCh)
 		for {
 			length, err := getMessageLength(reader)
 			if errors.Is(err, io.EOF) {
@@ -77,26 +95,32 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 			}
 			if err != nil {
 				klog.ErrorS(err, "Error when retrieving message length")
-				cp.deleteClient(address)
 				return
 			}
 			buff := make([]byte, length)
 			_, err = io.ReadFull(reader, buff)
 			if err != nil {
 				klog.ErrorS(err, "Error when reading the message")
-				cp.deleteClient(address)
 				return
 			}
-			message, err := cp.decodePacket(bytes.NewBuffer(buff), address)
+			message, err := cp.decodePacket(session, bytes.NewBuffer(buff), address)
 			if err != nil {
-				klog.ErrorS(err, "Error when decoding packet")
-				continue
+				// This can be an invalid template record, or invalid data record.
+				// We close the connection, which is the best way to let the client
+				// (exporter) know that something is wrong.
+				klog.ErrorS(err, "Error when decoding packet, closing connection")
+				return
 			}
 			klog.V(4).InfoS("Processed message from exporter",
 				"observationDomainID", message.GetObsDomainID(), "setType", message.GetSet().GetSetType(), "numRecords", message.GetSet().GetNumberOfRecords())
 		}
 	}()
-	<-cp.stopChan
+	select {
+	case <-cp.stopChan:
+		break
+	case <-doneCh:
+		break
+	}
 }
 
 func (cp *CollectingProcess) createServerConfig() (*tls.Config, error) {
