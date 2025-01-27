@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"reflect"
 	"time"
@@ -70,7 +69,6 @@ type Record struct {
 	// Calculated RTT which is set when record is created by calling NewRecord
 	TimeFlowRtt            time.Duration
 	NetworkMonitorEventsMD []map[string]string
-	UdnsCache              map[string]string
 }
 
 func NewRecord(
@@ -79,6 +77,7 @@ func NewRecord(
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
 	s *ovnobserv.SampleDecoder,
+	udnsCache map[string]string,
 ) *Record {
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
@@ -90,18 +89,15 @@ func NewRecord(
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
 	}
-	if s != nil {
-		record.UdnsCache = make(map[string]string)
-	}
 	record.Interfaces = []IntfDirUdn{NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen)),
 		int(metrics.DirectionFirstSeen),
-		s, record.UdnsCache)}
+		udnsCache)}
 
 	for i := uint8(0); i < record.Metrics.NbObservedIntf; i++ {
 		record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
 			interfaceNamer(int(metrics.ObservedIntf[i])),
 			int(metrics.ObservedDirection[i]),
-			s, record.UdnsCache,
+			udnsCache,
 		))
 	}
 
@@ -153,21 +149,10 @@ type IntfDirUdn struct {
 	Udn       string
 }
 
-func NewIntfDirUdn(intf string, dir int, s *ovnobserv.SampleDecoder, cache map[string]string) IntfDirUdn {
+func NewIntfDirUdn(intf string, dir int, cache map[string]string) IntfDirUdn {
 	udn := ""
-	if s == nil {
-		return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
-	}
-
-	// Load UDN cache if empty
 	if len(cache) == 0 {
-		m, err := s.GetInterfaceUDNs()
-		if err != nil {
-			recordLog.Errorf("failed to get udns to interfaces map : %v", err)
-			return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
-		}
-		maps.Copy(cache, m)
-		recordLog.Tracef("GetInterfaceUDNS map: %v", cache)
+		return IntfDirUdn{Interface: intf, Direction: dir, Udn: udn}
 	}
 
 	// Look up the interface in the cache
