@@ -31,13 +31,36 @@ import (
 	"github.com/vmware/go-ipfix/pkg/util"
 )
 
+// DecodingMode specifies how unknown information elements (in templates) are handled when decoding.
+// Unknown information elements are elements which are not part of the static registry included with
+// the library.
+// Note that regardless of the DecodingMode, data sets must always match the corresponding template.
+type DecodingMode string
+
+const (
+	// DecodingModeStrict will cause decoding to fail when an unknown IE is encountered in a template.
+	DecodingModeStrict DecodingMode = "Strict"
+	// DecodingModeLenientKeepUnknown will accept unknown IEs in templates. When decoding the
+	// corresponding field in a data record, the value will be preserved (as an octet array).
+	DecodingModeLenientKeepUnknown DecodingMode = "LenientKeepUnknown"
+	// DecodingModeLenientDropUnknown will accept unknown IEs in templates. When decoding the
+	// corresponding field in a data record, the value will be dropped (information element will
+	// not be present in the resulting Record). Be careful when using this mode as the IEs
+	// included in the resulting Record will no longer match the received template.
+	DecodingModeLenientDropUnknown DecodingMode = "LenientDropUnknown"
+)
+
+type template struct {
+	ies         []*entities.InfoElement
+	expiryTime  time.Time
+	expiryTimer timer
+}
+
 type CollectingProcess struct {
-	// for each obsDomainID, there is a map of templates
-	templatesMap map[uint32]map[uint16][]*entities.InfoElement
 	// mutex allows multiple readers or one writer at the same time
 	mutex sync.RWMutex
 	// template lifetime
-	templateTTL uint32
+	templateTTL time.Duration
 	// server information
 	address string
 	// server protocol
@@ -50,19 +73,24 @@ type CollectingProcess struct {
 	stopChan chan struct{}
 	// messageChan is the channel to output message
 	messageChan chan *entities.Message
-	// maps each client to its client handler (required channels)
-	clients map[string]*clientHandler
+	// a map of all transport sessions (clients) identified by the remote client address
+	sessions map[string]*transportSession
 	// isEncrypted indicates whether to use TLS/DTLS for communication
 	isEncrypted bool
 	// numExtraElements specifies number of elements that could be added after
 	// decoding the IPFIX data packet.
 	numExtraElements int
+	// decodingMode specifies how unknown information elements (in templates) are handled when
+	// decoding.
+	decodingMode DecodingMode
 	// caCert, serverCert and serverKey are for storing encryption info when using TLS/DTLS
 	caCert               []byte
 	serverCert           []byte
 	serverKey            []byte
 	wg                   sync.WaitGroup
 	numOfRecordsReceived uint64
+	// clock implementation: enables injecting a fake clock for testing
+	clock clock
 }
 
 type CollectorInput struct {
@@ -80,33 +108,53 @@ type CollectorInput struct {
 	ServerCert       []byte
 	ServerKey        []byte
 	NumExtraElements int
+	// DecodingMode specifies how unknown information elements (in templates) are handled when
+	// decoding. The default value is DecodingModeStrict for historical reasons. For most uses,
+	// DecodingModeLenientKeepUnknown is the most appropriate mode.
+	DecodingMode DecodingMode
 }
 
-type clientHandler struct {
-	packetChan chan *bytes.Buffer
-}
-
-func InitCollectingProcess(input CollectorInput) (*CollectingProcess, error) {
-	collectProc := &CollectingProcess{
-		templatesMap:     make(map[uint32]map[uint16][]*entities.InfoElement),
+func initCollectingProcess(input CollectorInput, clock clock) (*CollectingProcess, error) {
+	templateTTLSeconds := input.TemplateTTL
+	if input.Protocol == "udp" && templateTTLSeconds == 0 {
+		templateTTLSeconds = entities.TemplateTTL
+	}
+	templateTTL := time.Duration(templateTTLSeconds) * time.Second
+	decodingMode := input.DecodingMode
+	if decodingMode == "" {
+		decodingMode = DecodingModeStrict
+	}
+	klog.InfoS(
+		"Initializing the collecting process",
+		"encrypted", input.IsEncrypted, "address", input.Address, "protocol", input.Protocol, "maxBufferSize", input.MaxBufferSize,
+		"templateTTL", templateTTL, "numExtraElements", input.NumExtraElements, "decodingMode", decodingMode,
+	)
+	cp := &CollectingProcess{
 		mutex:            sync.RWMutex{},
-		templateTTL:      input.TemplateTTL,
+		templateTTL:      templateTTL,
 		address:          input.Address,
 		protocol:         input.Protocol,
 		maxBufferSize:    input.MaxBufferSize,
 		stopChan:         make(chan struct{}),
 		messageChan:      make(chan *entities.Message),
-		clients:          make(map[string]*clientHandler),
+		sessions:         make(map[string]*transportSession),
 		isEncrypted:      input.IsEncrypted,
 		caCert:           input.CACert,
 		serverCert:       input.ServerCert,
 		serverKey:        input.ServerKey,
 		numExtraElements: input.NumExtraElements,
+		decodingMode:     decodingMode,
+		clock:            clock,
 	}
-	return collectProc, nil
+	return cp, nil
+}
+
+func InitCollectingProcess(input CollectorInput) (*CollectingProcess, error) {
+	return initCollectingProcess(input, realClock{})
 }
 
 func (cp *CollectingProcess) Start() {
+	klog.Info("Starting the collecting process")
 	if cp.protocol == "tcp" {
 		cp.startTCPServer()
 	} else if cp.protocol == "udp" {
@@ -118,7 +166,9 @@ func (cp *CollectingProcess) Stop() {
 	close(cp.stopChan)
 	// wait for all connections to be safely deleted and returned
 	cp.wg.Wait()
-	klog.Info("stopping the collecting process")
+	// the message channel can only be closed AFTER all goroutines have returned
+	close(cp.messageChan)
+	klog.Info("Stopped the collecting process")
 }
 
 func (cp *CollectingProcess) GetAddress() net.Addr {
@@ -127,14 +177,8 @@ func (cp *CollectingProcess) GetAddress() net.Addr {
 	return cp.netAddress
 }
 
-func (cp *CollectingProcess) GetMsgChan() chan *entities.Message {
+func (cp *CollectingProcess) GetMsgChan() <-chan *entities.Message {
 	return cp.messageChan
-}
-
-func (cp *CollectingProcess) CloseMsgChan() {
-	cp.mutex.Lock()
-	defer cp.mutex.Unlock()
-	close(cp.messageChan)
 }
 
 func (cp *CollectingProcess) GetNumRecordsReceived() int64 {
@@ -146,7 +190,7 @@ func (cp *CollectingProcess) GetNumRecordsReceived() int64 {
 func (cp *CollectingProcess) GetNumConnToCollector() int64 {
 	cp.mutex.RLock()
 	defer cp.mutex.RUnlock()
-	return int64(len(cp.clients))
+	return int64(len(cp.sessions))
 }
 
 func (cp *CollectingProcess) incrementNumRecordsReceived() {
@@ -155,25 +199,7 @@ func (cp *CollectingProcess) incrementNumRecordsReceived() {
 	cp.numOfRecordsReceived = cp.numOfRecordsReceived + 1
 }
 
-func (cp *CollectingProcess) createClient() *clientHandler {
-	return &clientHandler{
-		packetChan: make(chan *bytes.Buffer),
-	}
-}
-
-func (cp *CollectingProcess) addClient(address string, client *clientHandler) {
-	cp.mutex.Lock()
-	defer cp.mutex.Unlock()
-	cp.clients[address] = client
-}
-
-func (cp *CollectingProcess) deleteClient(name string) {
-	cp.mutex.Lock()
-	defer cp.mutex.Unlock()
-	delete(cp.clients, name)
-}
-
-func (cp *CollectingProcess) decodePacket(packetBuffer *bytes.Buffer, exportAddress string) (*entities.Message, error) {
+func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffer *bytes.Buffer, exportAddress string) (*entities.Message, error) {
 	var length, version, setID, setLen uint16
 	var exportTime, sequencNum, obsDomainID uint32
 	if err := util.Decode(packetBuffer, binary.BigEndian, &version, &length, &exportTime, &sequencNum, &obsDomainID, &setID, &setLen); err != nil {
@@ -200,12 +226,12 @@ func (cp *CollectingProcess) decodePacket(packetBuffer *bytes.Buffer, exportAddr
 	var set entities.Set
 	var err error
 	if setID == entities.TemplateSetID {
-		set, err = cp.decodeTemplateSet(packetBuffer, obsDomainID)
+		set, err = cp.decodeTemplateSet(session, packetBuffer, obsDomainID)
 		if err != nil {
 			return nil, fmt.Errorf("error in decoding message: %v", err)
 		}
 	} else {
-		set, err = cp.decodeDataSet(packetBuffer, obsDomainID, setID)
+		set, err = cp.decodeDataSet(session, packetBuffer, obsDomainID, setID)
 		if err != nil {
 			return nil, fmt.Errorf("error in decoding message: %v", err)
 		}
@@ -218,19 +244,14 @@ func (cp *CollectingProcess) decodePacket(packetBuffer *bytes.Buffer, exportAddr
 	return message, nil
 }
 
-func (cp *CollectingProcess) decodeTemplateSet(templateBuffer *bytes.Buffer, obsDomainID uint32) (entities.Set, error) {
+func (cp *CollectingProcess) decodeTemplateSet(session *transportSession, templateBuffer *bytes.Buffer, obsDomainID uint32) (entities.Set, error) {
 	var templateID uint16
 	var fieldCount uint16
 	if err := util.Decode(templateBuffer, binary.BigEndian, &templateID, &fieldCount); err != nil {
 		return nil, err
 	}
 
-	templateSet := entities.NewSet(true)
-	if err := templateSet.PrepareSet(entities.Template, templateID); err != nil {
-		return nil, err
-	}
-	elementsWithValue := make([]entities.InfoElementWithValue, int(fieldCount))
-	for i := 0; i < int(fieldCount); i++ {
+	decodeField := func() (entities.InfoElementWithValue, error) {
 		var element *entities.InfoElement
 		var enterpriseID uint32
 		var elementID uint16
@@ -247,7 +268,11 @@ func (cp *CollectingProcess) decodeTemplateSet(templateBuffer *bytes.Buffer, obs
 			enterpriseID = registry.IANAEnterpriseID
 			element, err = registry.GetInfoElementFromID(elementID, enterpriseID)
 			if err != nil {
-				return nil, err
+				if cp.decodingMode == DecodingModeStrict {
+					return nil, err
+				}
+				klog.InfoS("Template includes an information element that is not present in registry", "obsDomainID", obsDomainID, "templateID", templateID, "enterpriseID", enterpriseID, "elementID", elementID)
+				element = entities.NewInfoElement("", elementID, entities.OctetArray, enterpriseID, elementLength)
 			}
 		} else {
 			/*
@@ -273,24 +298,53 @@ func (cp *CollectingProcess) decodeTemplateSet(templateBuffer *bytes.Buffer, obs
 			elementID = binary.BigEndian.Uint16(elementid)
 			element, err = registry.GetInfoElementFromID(elementID, enterpriseID)
 			if err != nil {
-				return nil, err
+				if cp.decodingMode == DecodingModeStrict {
+					return nil, err
+				}
+				klog.InfoS("Template includes an information element that is not present in registry", "obsDomainID", obsDomainID, "templateID", templateID, "enterpriseID", enterpriseID, "elementID", elementID)
+				element = entities.NewInfoElement("", elementID, entities.OctetArray, enterpriseID, elementLength)
 			}
 		}
-		if elementsWithValue[i], err = entities.DecodeAndCreateInfoElementWithValue(element, nil); err != nil {
-			return nil, err
-		}
+
+		return entities.DecodeAndCreateInfoElementWithValue(element, nil)
 	}
-	err := templateSet.AddRecordV2(elementsWithValue, templateID)
+
+	elementsWithValue, err := func() ([]entities.InfoElementWithValue, error) {
+		elementsWithValue := make([]entities.InfoElementWithValue, int(fieldCount))
+		for i := range fieldCount {
+			elementWithValue, err := decodeField()
+			if err != nil {
+				return nil, err
+			}
+			elementsWithValue[i] = elementWithValue
+		}
+		return elementsWithValue, nil
+	}()
 	if err != nil {
+		// Delete existing template (if one exists) from template map if the new one is invalid.
+		// This is particularly useful for UDP collection, as there is no feedback mechanism
+		// to let the sender know that the new template is invalid (while with TCP, we can close
+		// the connection). If we keep the old template and the sender sends data records
+		// which use the new template, we would try to decode them according to the old
+		// template, which would cause issues.
+		session.deleteTemplate(obsDomainID, templateID)
 		return nil, err
 	}
-	cp.addTemplate(obsDomainID, templateID, elementsWithValue)
+
+	templateSet := entities.NewSet(true)
+	if err := templateSet.PrepareSet(entities.Template, templateID); err != nil {
+		return nil, err
+	}
+	if err := templateSet.AddRecordV2(elementsWithValue, templateID); err != nil {
+		return nil, err
+	}
+	session.addTemplate(cp.clock, obsDomainID, templateID, elementsWithValue, cp.templateTTL)
 	return templateSet, nil
 }
 
-func (cp *CollectingProcess) decodeDataSet(dataBuffer *bytes.Buffer, obsDomainID uint32, templateID uint16) (entities.Set, error) {
+func (cp *CollectingProcess) decodeDataSet(session *transportSession, dataBuffer *bytes.Buffer, obsDomainID uint32, templateID uint16) (entities.Set, error) {
 	// make sure template exists
-	template, err := cp.getTemplate(obsDomainID, templateID)
+	template, err := session.getTemplateIEs(obsDomainID, templateID)
 	if err != nil {
 		return nil, fmt.Errorf("template %d with obsDomainID %d does not exist", templateID, obsDomainID)
 	}
@@ -300,17 +354,24 @@ func (cp *CollectingProcess) decodeDataSet(dataBuffer *bytes.Buffer, obsDomainID
 	}
 
 	for dataBuffer.Len() > 0 {
-		elements := make([]entities.InfoElementWithValue, len(template), len(template)+cp.numExtraElements)
-		for i, element := range template {
+		elements := make([]entities.InfoElementWithValue, 0, len(template)+cp.numExtraElements)
+		for _, ie := range template {
 			var length int
-			if element.Len == entities.VariableLength { // string
+			if ie.Len == entities.VariableLength { // string / octet array
 				length = getFieldLength(dataBuffer)
 			} else {
-				length = int(element.Len)
+				length = int(ie.Len)
 			}
-			if elements[i], err = entities.DecodeAndCreateInfoElementWithValue(element, dataBuffer.Next(length)); err != nil {
+			element, err := entities.DecodeAndCreateInfoElementWithValue(ie, dataBuffer.Next(length))
+			if err != nil {
 				return nil, err
 			}
+			// A missing name means an unknown element was received
+			if cp.decodingMode == DecodingModeLenientDropUnknown && ie.Name == "" {
+				klog.V(5).InfoS("Dropping field for unknown information element", "obsDomainID", obsDomainID, "ie", ie)
+				continue
+			}
+			elements = append(elements, element)
 		}
 		err = dataSet.AddRecordV2(elements, templateID)
 		if err != nil {
@@ -318,54 +379,6 @@ func (cp *CollectingProcess) decodeDataSet(dataBuffer *bytes.Buffer, obsDomainID
 		}
 	}
 	return dataSet, nil
-}
-
-func (cp *CollectingProcess) addTemplate(obsDomainID uint32, templateID uint16, elementsWithValue []entities.InfoElementWithValue) {
-	cp.mutex.Lock()
-	defer cp.mutex.Unlock()
-	if _, exists := cp.templatesMap[obsDomainID]; !exists {
-		cp.templatesMap[obsDomainID] = make(map[uint16][]*entities.InfoElement)
-	}
-	elements := make([]*entities.InfoElement, 0)
-	for _, elementWithValue := range elementsWithValue {
-		elements = append(elements, elementWithValue.GetInfoElement())
-	}
-	cp.templatesMap[obsDomainID][templateID] = elements
-	// template lifetime management
-	if cp.protocol == "tcp" {
-		return
-	}
-
-	// Handle udp template expiration
-	if cp.templateTTL == 0 {
-		cp.templateTTL = entities.TemplateTTL // Default value
-	}
-	go func() {
-		ticker := time.NewTicker(time.Duration(cp.templateTTL) * time.Second)
-		defer ticker.Stop()
-		select {
-		case <-ticker.C:
-			klog.Infof("Template with id %d, and obsDomainID %d is expired.", templateID, obsDomainID)
-			cp.deleteTemplate(obsDomainID, templateID)
-			break
-		}
-	}()
-}
-
-func (cp *CollectingProcess) getTemplate(obsDomainID uint32, templateID uint16) ([]*entities.InfoElement, error) {
-	cp.mutex.RLock()
-	defer cp.mutex.RUnlock()
-	if elements, exists := cp.templatesMap[obsDomainID][templateID]; exists {
-		return elements, nil
-	} else {
-		return nil, fmt.Errorf("template %d with obsDomainID %d does not exist", templateID, obsDomainID)
-	}
-}
-
-func (cp *CollectingProcess) deleteTemplate(obsDomainID uint32, templateID uint16) {
-	cp.mutex.Lock()
-	defer cp.mutex.Unlock()
-	delete(cp.templatesMap[obsDomainID], templateID)
 }
 
 func (cp *CollectingProcess) updateAddress(address net.Addr) {
