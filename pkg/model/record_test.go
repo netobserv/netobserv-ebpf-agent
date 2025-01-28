@@ -96,7 +96,7 @@ func TestParallelNewRecord(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}, time.Now(), uint64(monotime.Now()), nil)
+			r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}, time.Now(), uint64(monotime.Now()), nil, map[string]string{})
 			assert.NotNil(t, r)
 		}()
 	}

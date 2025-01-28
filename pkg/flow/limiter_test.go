@@ -19,7 +19,7 @@ func TestCapacityLimiter_NoDrop(t *testing.T) {
 
 	// WHEN it buffers less elements than it's maximum capacity
 	for i := 0; i < 33; i++ {
-		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil, nil)}}}
+		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
 
 	// THEN it is able to retrieve all the buffered elements
@@ -45,7 +45,7 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	// WHEN it receives more elements than its maximum capacity
 	// (it's not blocking)
 	for i := 0; i < limiterLen*2; i++ {
-		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil, nil)}}}
+		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
 
 	// THEN it is only able to retrieve all the nth first buffered elements
