@@ -112,6 +112,11 @@ type FlowFetcherConfig struct {
 	FilterConfig                   []*FilterConfig
 }
 
+type variablesMapping struct {
+	key   string
+	value interface{}
+}
+
 // nolint:golint,cyclop
 func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
@@ -151,64 +156,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 			spec.Maps[m].Pinning = 0
 		}
 
-		traceMsgs := 0
-		if cfg.Debug {
-			traceMsgs = 1
-		}
-
-		enableRtt := 0
-		if cfg.EnableRTT {
-			enableRtt = 1
-		}
-
-		enableDNSTracking := 0
-		dnsTrackerPort := uint16(dnsDefaultPort)
-		if cfg.EnableDNSTracker {
-			enableDNSTracking = 1
-			if cfg.DNSTrackerPort != 0 {
-				dnsTrackerPort = cfg.DNSTrackerPort
-			}
-		}
-
-		if enableDNSTracking == 0 {
-			spec.Maps[dnsLatencyMap].MaxEntries = 1
-		}
-
-		enableFlowFiltering := 0
-		hasFilterSampling := uint8(0)
-		if filter != nil {
-			enableFlowFiltering = 1
-			hasFilterSampling = filter.hasSampling()
-		} else {
-			spec.Maps[filterMap].MaxEntries = 1
-			spec.Maps[peerFilterMap].MaxEntries = 1
-		}
-		enableNetworkEventsMonitoring := 0
-		if cfg.EnableNetworkEventsMonitoring {
-			enableNetworkEventsMonitoring = 1
-		}
-		networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
-		if cfg.NetworkEventsMonitoringGroupID > 0 {
-			networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
-		}
-		enablePktTranslation := 0
-		if cfg.EnablePktTranslation {
-			enablePktTranslation = 1
-		}
-		if err := spec.RewriteConstants(map[string]interface{}{
-			// When adding constants here, remember to delete them in NewPacketFetcher
-			constSampling:                       uint32(cfg.Sampling),
-			constHasFilterSampling:              hasFilterSampling,
-			constTraceMessages:                  uint8(traceMsgs),
-			constEnableRtt:                      uint8(enableRtt),
-			constEnableDNSTracking:              uint8(enableDNSTracking),
-			constDNSTrackingPort:                dnsTrackerPort,
-			constEnableFlowFiltering:            uint8(enableFlowFiltering),
-			constEnableNetworkEventsMonitoring:  uint8(enableNetworkEventsMonitoring),
-			constNetworkEventsMonitoringGroupID: uint8(networkEventsMonitoringGroupID),
-			constEnablePktTranslation:           uint8(enablePktTranslation),
-		}); err != nil {
-			return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
+		if err := configureFlowSpecVariables(spec, cfg, filter); err != nil {
+			return nil, fmt.Errorf("loading flow spec variables: %w", err)
 		}
 
 		oldKernel := kernel.IsKernelOlderThan("5.14.0")
@@ -1354,12 +1303,15 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	if cfg.EnablePCA {
 		pcaEnable = 1
 	}
+	variables := []variablesMapping{
+		{constSampling, uint32(cfg.Sampling)},
+		{constPcaEnable, uint8(pcaEnable)},
+	}
 
-	if err := spec.RewriteConstants(map[string]interface{}{
-		constSampling:  uint32(cfg.Sampling),
-		constPcaEnable: uint8(pcaEnable),
-	}); err != nil {
-		return nil, fmt.Errorf("rewriting BPF constants definition: %w", err)
+	for _, mapping := range variables {
+		if err := setVariable(spec, mapping.key, mapping.value); err != nil {
+			return nil, fmt.Errorf("failed to set variable %s: %w", mapping.key, err)
+		}
 	}
 
 	// remove pinning from all maps
@@ -1836,4 +1788,75 @@ func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte
 	}
 
 	return packets
+}
+
+func setVariable(spec *cilium.CollectionSpec, key string, value interface{}) error {
+	if err := spec.Variables[key].Set(value); err != nil {
+		return fmt.Errorf("setting %s: %w", key, err)
+	}
+	return nil
+}
+
+func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, filter *Filter) error {
+	traceMsgs := 0
+	if cfg.Debug {
+		traceMsgs = 1
+	}
+	enableRtt := 0
+	if cfg.EnableRTT {
+		enableRtt = 1
+	}
+	enableDNSTracking := 0
+	dnsTrackerPort := uint16(dnsDefaultPort)
+	if cfg.EnableDNSTracker {
+		enableDNSTracking = 1
+		if cfg.DNSTrackerPort != 0 {
+			dnsTrackerPort = cfg.DNSTrackerPort
+		}
+	}
+	if enableDNSTracking == 0 {
+		spec.Maps[dnsLatencyMap].MaxEntries = 1
+	}
+	enableFlowFiltering := 0
+	hasFilterSampling := uint8(0)
+	if filter != nil {
+		enableFlowFiltering = 1
+		hasFilterSampling = filter.hasSampling()
+	} else {
+		spec.Maps[filterMap].MaxEntries = 1
+		spec.Maps[peerFilterMap].MaxEntries = 1
+	}
+	enableNetworkEventsMonitoring := 0
+	if cfg.EnableNetworkEventsMonitoring {
+		enableNetworkEventsMonitoring = 1
+	}
+	networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
+	if cfg.NetworkEventsMonitoringGroupID > 0 {
+		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
+	}
+	enablePktTranslation := 0
+	if cfg.EnablePktTranslation {
+		enablePktTranslation = 1
+	}
+	// When adding constants here, remember to delete them in NewPacketFetcher
+	variables := []variablesMapping{
+		{constSampling, uint32(cfg.Sampling)},
+		{constHasFilterSampling, hasFilterSampling},
+		{constTraceMessages, uint8(traceMsgs)},
+		{constEnableRtt, uint8(enableRtt)},
+		{constEnableDNSTracking, uint8(enableDNSTracking)},
+		{constDNSTrackingPort, dnsTrackerPort},
+		{constEnableFlowFiltering, uint8(enableFlowFiltering)},
+		{constEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
+		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
+		{constEnablePktTranslation, uint8(enablePktTranslation)},
+	}
+
+	for _, mapping := range variables {
+		if err := setVariable(spec, mapping.key, mapping.value); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
