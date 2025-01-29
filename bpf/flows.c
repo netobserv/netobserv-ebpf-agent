@@ -52,6 +52,11 @@
  */
 #include "pkt_translation.h"
 
+/*
+ * Defines ipsec tracker
+ */
+#include "ipsec.h"
+
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                              u8 direction) {
