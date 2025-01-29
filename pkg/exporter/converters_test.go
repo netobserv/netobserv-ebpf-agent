@@ -53,6 +53,7 @@ func TestConversions(t *testing.T) {
 						DnsRecord: ebpf.BpfDnsRecordT{
 							Errno: 0,
 						},
+						FlowEncrypted: true,
 					},
 				},
 				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
@@ -80,6 +81,8 @@ func TestConversions(t *testing.T) {
 				"Interfaces":      []string{"eth0"},
 				"Udns":            []string{""},
 				"AgentIP":         "10.11.12.13",
+				"IPSecSuccess":    true,
+				"IPSecRetCode":    0,
 			},
 		},
 		{
@@ -345,6 +348,7 @@ func TestConversions(t *testing.T) {
 							LatestState:     6,
 							LatestDropCause: 5,
 						},
+						FlowEncrypted: true,
 					},
 				},
 				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
@@ -383,6 +387,8 @@ func TestConversions(t *testing.T) {
 				"DnsFlags":               0x8001,
 				"DnsFlagsResponseCode":   "FormErr",
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
+				"IPSecSuccess":           true,
+				"IPSecRetCode":           0,
 			},
 		},
 		{
@@ -409,6 +415,7 @@ func TestConversions(t *testing.T) {
 						DnsRecord: ebpf.BpfDnsRecordT{
 							Errno: 0,
 						},
+						FlowEncrypted: true,
 					},
 				},
 				Interfaces: []model.IntfDirUdn{
@@ -438,6 +445,8 @@ func TestConversions(t *testing.T) {
 				"Interfaces":      []string{"5e6e92caa1d51cf", "eth0"},
 				"Udns":            []string{"", ""},
 				"AgentIP":         "10.11.12.13",
+				"IPSecSuccess":    true,
+				"IPSecRetCode":    0,
 			},
 		},
 	}

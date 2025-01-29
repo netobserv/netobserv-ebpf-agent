@@ -117,6 +117,13 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 	if !AllZeroIP(IP(other.TranslatedFlow.Saddr)) && !AllZeroIP(IP(other.TranslatedFlow.Daddr)) {
 		p.AdditionalMetrics.TranslatedFlow = other.TranslatedFlow
 	}
+	// IPSec
+	if other.FlowEncrypted && other.FlowEncryptedRet == 0 {
+		p.AdditionalMetrics.FlowEncrypted = other.FlowEncrypted
+	}
+	if p.AdditionalMetrics.FlowEncryptedRet != other.FlowEncryptedRet {
+		p.AdditionalMetrics.FlowEncryptedRet = other.FlowEncryptedRet
+	}
 }
 
 func allZerosMac(s [6]uint8) bool {
