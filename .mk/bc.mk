@@ -18,7 +18,11 @@ define PROGRAMS
 	"tcp_rcv_kprobe":"kprobe",
 	"kfree_skb":"tracepoint",
 	"network_events_monitoring":"kprobe",
-	"track_nat_manip_pkt":"kprobe"
+	"track_nat_manip_pkt":"kprobe",
+	"xfrm_input_kprobe": "kprobe",
+	"xfrm_input_kretprobe": "kretprobe",
+	"xfrm_output_kprobe": "kprobe",
+	"xfrm_output_kretprobe": "kretprobe"
 }
 endef
 
@@ -32,7 +36,9 @@ define MAPS
 	"dns_flows":"hash",
 	"global_counters":"per_cpu_array",
 	"filter_map":"lpm_trie",
-	"peer_filter_map":"lpm_trie"
+	"peer_filter_map":"lpm_trie",
+	"ipsec_ingress_map":"hash",
+	"ipsec_egress_map":"hash"
 }
 endef
 
