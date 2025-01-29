@@ -141,6 +141,10 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 			out["XlatSrcAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr).String()
 			out["XlatDstAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr).String()
 		}
+		if fr.Metrics.AdditionalMetrics.FlowEncrypted || fr.Metrics.AdditionalMetrics.FlowEncryptedRet != 0 {
+			out["IPSecSuccess"] = fr.Metrics.AdditionalMetrics.FlowEncrypted
+			out["IPSecRetCode"] = fr.Metrics.AdditionalMetrics.FlowEncryptedRet
+		}
 	}
 
 	if fr.TimeFlowRtt != 0 {
