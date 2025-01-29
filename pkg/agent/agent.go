@@ -237,6 +237,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 		EnablePktTranslation:           cfg.EnablePktTranslationTracking,
 		UseEbpfManager:                 cfg.EbpfProgramManagerMode,
 		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
+		EnableIPsecTracker:             cfg.EnableIPsecTracking,
 		FilterConfig:                   filterRules,
 	}
 
