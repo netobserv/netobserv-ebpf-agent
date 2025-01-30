@@ -30,7 +30,7 @@ typedef enum tcp_flags_t {
 } tcp_flags;
 
 // Force emitting enums/structs into the ELF
-const enum tcp_flags_t *unused0 __attribute__((unused));
+const static enum tcp_flags_t *unused0 __attribute__((unused));
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&                                 \
     __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -77,9 +77,9 @@ typedef enum direction_t {
 } direction;
 
 // Force emitting enums/structs into the ELF
-const enum direction_t *unused1 __attribute__((unused));
+const static enum direction_t *unused1 __attribute__((unused));
 
-const u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+const static u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 typedef struct flow_metrics_t {
     // Flow start and end times as monotomic timestamps in nanoseconds
@@ -111,7 +111,7 @@ typedef struct flow_metrics_t {
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF
-const struct flow_metrics_t *unused2 __attribute__((unused));
+const static struct flow_metrics_t *unused2 __attribute__((unused));
 
 typedef struct additional_metrics_t {
     u64 start_mono_time_ts;
@@ -143,11 +143,11 @@ typedef struct additional_metrics_t {
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
-const struct additional_metrics_t *unused3 __attribute__((unused));
-const struct dns_record_t *unused4 __attribute__((unused));
-const struct pkt_drops_t *unused5 __attribute__((unused));
-const struct translated_flow_t *unused6 __attribute__((unused));
-const struct observed_intf_t *unused13 __attribute__((unused));
+const static struct additional_metrics_t *unused3 __attribute__((unused));
+const static struct dns_record_t *unused4 __attribute__((unused));
+const static struct pkt_drops_t *unused5 __attribute__((unused));
+const static struct translated_flow_t *unused6 __attribute__((unused));
+const static struct observed_intf_t *unused13 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
@@ -166,7 +166,7 @@ typedef struct flow_id_t {
 } flow_id;
 
 // Force emitting enums/structs into the ELF
-const struct flow_id_t *unused7 __attribute__((unused));
+const static struct flow_id_t *unused7 __attribute__((unused));
 
 // Flow record is a tuple containing both flow identifier and metrics. It is used to send
 // a complete flow via ring buffer when only when the accounting hashmap is full.
@@ -233,7 +233,7 @@ struct filter_key_t {
 } filter_key;
 
 // Force emitting enums/structs into the ELF
-const struct filter_key_t *unused10 __attribute__((unused));
+const static struct filter_key_t *unused10 __attribute__((unused));
 
 // Enum to define filter action
 typedef enum filter_action_t {
@@ -243,7 +243,7 @@ typedef enum filter_action_t {
 } filter_action;
 
 // Force emitting enums/structs into the ELF
-const enum filter_action_t *unused11 __attribute__((unused));
+const static enum filter_action_t *unused11 __attribute__((unused));
 
 // filter value used as value from LPM map lookup to filter out flows that are not interesting for the user
 struct filter_value_t {
@@ -271,6 +271,6 @@ struct filter_value_t {
 } filter_value;
 
 // Force emitting enums/structs into the ELF
-const struct filter_value_t *unused12 __attribute__((unused));
+const static struct filter_value_t *unused12 __attribute__((unused));
 
 #endif /* __TYPES_H__ */
