@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
-	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 )
@@ -114,26 +114,11 @@ func NewRecord(
 		record.NetworkMonitorEventsMD = make([]map[string]string, 0)
 		for _, metadata := range metrics.AdditionalMetrics.NetworkEvents {
 			if !AllZerosMetaData(metadata) {
-				var cm map[string]string
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
-					acl, ok := md.(*ovnmodel.ACLEvent)
 					mdStr := md.String()
 					if !seen[mdStr] {
-						if ok {
-							cm = map[string]string{
-								"Action":    acl.Action,
-								"Type":      acl.Actor,
-								"Feature":   "acl",
-								"Name":      acl.Name,
-								"Namespace": acl.Namespace,
-								"Direction": acl.Direction,
-							}
-						} else {
-							cm = map[string]string{
-								"Message": mdStr,
-							}
-						}
-						record.NetworkMonitorEventsMD = append(record.NetworkMonitorEventsMD, cm)
+						asMap := utils.NetworkEventToMap(md)
+						record.NetworkMonitorEventsMD = append(record.NetworkMonitorEventsMD, asMap)
 						seen[mdStr] = true
 					}
 				}

@@ -178,6 +178,8 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 			if s, err = ovnobserv.NewSampleDecoderWithDefaultCollector(context.Background(), networkEventsDBPath,
 				networkEventsOwnerName, cfg.NetworkEventsMonitoringGroupID); err != nil {
 				alog.Warnf("failed to create Network Events sample decoder: %v for id: %d", err, cfg.NetworkEventsMonitoringGroupID)
+			} else {
+				alog.Info("Network Events sample decoder successfully created")
 			}
 		} else {
 			alog.Warn("old kernel doesn't support network events monitoring skip")
