@@ -9,6 +9,7 @@ type BpfFlowContent struct {
 	AdditionalMetrics *ebpf.BpfAdditionalMetrics
 }
 
+// nolint:gocritic // hugeParam: metric is reported as heavy; but it needs to be copied anyway, we don't want a pointer here
 func NewBpfFlowContent(metrics ebpf.BpfFlowMetrics) BpfFlowContent {
 	return BpfFlowContent{BpfFlowMetrics: &metrics}
 }
