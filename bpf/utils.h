@@ -6,7 +6,7 @@
 #include "maps_definition.h"
 #include "flows_filter.h"
 
-static u8 do_sampling = 0;
+static u64 do_sampling = 0;
 
 // Update global counter for hashmap update errors
 static inline void increase_counter(u32 key) {
