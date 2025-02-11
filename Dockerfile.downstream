@@ -5,7 +5,7 @@ ARG COMMIT
 FROM --platform=linux/$TARGETARCH brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23 as builder
 
 ARG TARGETARCH=amd64
-ARG VERSION="unknown"
+ARG BUILDVERSION="1.8.0"
 ARG COMMIT
 
 WORKDIR /opt/app-root
@@ -19,7 +19,7 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 
 # Build
-RUN GOARCH=$TARGETARCH go build -ldflags "-X 'main.buildVersion=${VERSION}-${COMMIT}' -X 'main.buildDate=`date +%Y-%m-%d\ %H:%M`'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
+RUN GOARCH=$TARGETARCH go build -ldflags "-X 'main.buildVersion=${BUILDVERSION}' -X 'main.buildDate=`date +%Y-%m-%d\ %H:%M`'" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 # Create final image from minimal + built binary
 FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:9.5-1738816775
@@ -38,7 +38,7 @@ LABEL io.k8s.description="Network Observability eBPF Agent"
 LABEL summary="Network Observability eBPF Agent"
 LABEL maintainer="support@redhat.com"
 LABEL io.openshift.tags="network-observability-ebpf-agent"
-LABEL upstream-vcs-ref="$COMMIT"
+LABEL upstream-vcs-ref=$COMMIT
 LABEL upstream-vcs-type="git"
 LABEL description="The Network Observability eBPF Agent allows collecting and aggregating all the ingress and egress flows on a Linux host."
-LABEL version="1.8.0"
+LABEL version=$BUILDVERSION
