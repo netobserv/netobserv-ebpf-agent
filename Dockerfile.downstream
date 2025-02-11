@@ -21,7 +21,7 @@ COPY .mk/ .mk/
 RUN make compile
 
 # Create final image from minimal + built binary
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5-1738816775
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
