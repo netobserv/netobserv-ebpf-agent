@@ -460,6 +460,7 @@ type GatewayConfig struct {
 	// NodeportEnable sets whether to provide Kubernetes NodePort service or not
 	NodeportEnable bool `gcfg:"nodeport"`
 	// DisableSNATMultipleGws sets whether to disable SNAT of egress traffic in namespaces annotated with routing-external-gws
+	// only applicable to the default network not for UDNs
 	DisableSNATMultipleGWs bool `gcfg:"disable-snat-multiple-gws"`
 	// V4JoinSubnet to be used in the cluster
 	V4JoinSubnet string `gcfg:"v4-join-subnet"`
@@ -659,6 +660,12 @@ func PrepareTestConfig() error {
 
 	if err := completeConfig(); err != nil {
 		return err
+	}
+
+	// set klog level here as some tests will not call InitConfig
+	var level klog.Level
+	if err := level.Set(strconv.Itoa(Logging.Level)); err != nil {
+		return fmt.Errorf("failed to set klog log level %v", err)
 	}
 
 	// Don't pick up defaults from the environment
