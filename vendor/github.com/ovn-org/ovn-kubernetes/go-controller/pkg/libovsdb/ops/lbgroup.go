@@ -2,7 +2,6 @@ package ops
 
 import (
 	"context"
-
 	libovsdbclient "github.com/ovn-org/libovsdb/client"
 	"github.com/ovn-org/libovsdb/ovsdb"
 	libovsdb "github.com/ovn-org/libovsdb/ovsdb"
@@ -28,6 +27,35 @@ func CreateOrUpdateLoadBalancerGroupOps(nbClient libovsdbclient.Client, ops []ov
 		return nil, err
 	}
 	return ops, nil
+}
+
+// DeleteLoadBalancerGroupsOps DeleteLoadBalncerGroupOps creates the operations for deleting load balancer groups
+func DeleteLoadBalancerGroupsOps(nbClient libovsdbclient.Client, ops []libovsdb.Operation, groups ...*nbdb.LoadBalancerGroup) ([]ovsdb.Operation, error) {
+	opModels := make([]operationModel, 0, len(groups))
+	for i := range groups {
+		// can't use i in the predicate, for loop replaces it in-memory
+		lb := groups[i]
+		opModel := operationModel{
+			Model:       lb,
+			ErrNotFound: false,
+			BulkOp:      false,
+		}
+		opModels = append(opModels, opModel)
+	}
+
+	modelClient := newModelClient(nbClient)
+	return modelClient.DeleteOps(ops, opModels...)
+}
+
+// DeleteLoadBalancerGroups deletes the provided load balancer groups
+func DeleteLoadBalancerGroups(nbClient libovsdbclient.Client, groups []*nbdb.LoadBalancerGroup) error {
+	ops, err := DeleteLoadBalancerGroupsOps(nbClient, nil, groups...)
+	if err != nil {
+		return err
+	}
+
+	_, err = TransactAndCheck(nbClient, ops)
+	return err
 }
 
 // AddLoadBalancersToGroupOps adds the provided load balancers to the provided
