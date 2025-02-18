@@ -362,4 +362,12 @@ static inline bool is_transport_protocol(u8 protocol) {
     return false;
 }
 
+static inline bool is_ipv4(u8 *ip) {
+    for (int i = 0; i < IP_MAX_LEN; i++) {
+        if (ip[i] == 255) {
+            return true;
+        }
+    }
+    return false;
+}
 #endif // __UTILS_H__
