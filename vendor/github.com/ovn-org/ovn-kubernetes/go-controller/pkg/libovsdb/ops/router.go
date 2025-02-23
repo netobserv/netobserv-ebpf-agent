@@ -614,16 +614,29 @@ func GetRouterLogicalRouterStaticRoutesWithPredicate(nbClient libovsdbclient.Cli
 	lrsrs := []*nbdb.LogicalRouterStaticRoute{}
 	for _, uuid := range r.StaticRoutes {
 		lrsr := &nbdb.LogicalRouterStaticRoute{UUID: uuid}
-		err := nbClient.Get(context.Background(), lrsr)
+		validRoute, err := routeExistsWithPredicate(nbClient, lrsr, p)
 		if err != nil {
 			return nil, err
 		}
-		if p(lrsr) {
+		if validRoute {
 			lrsrs = append(lrsrs, lrsr)
 		}
 	}
 
 	return lrsrs, nil
+}
+
+func routeExistsWithPredicate(nbClient libovsdbclient.Client, lrsr *nbdb.LogicalRouterStaticRoute, p logicalRouterStaticRoutePredicate) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), config.Default.OVSDBTxnTimeout)
+	defer cancel()
+	err := nbClient.Get(ctx, lrsr)
+	if err != nil {
+		return false, err
+	}
+	if p(lrsr) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // CreateOrUpdateLogicalRouterStaticRoutesWithPredicateOps looks up a logical
