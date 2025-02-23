@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/cilium/ebpf v0.16.0
+	github.com/cilium/ebpf v0.17.3
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/gopacket/gopacket v1.3.1
@@ -24,7 +24,7 @@ require (
 	github.com/vishvananda/netns v0.0.5
 	github.com/vladimirvivien/gexe v0.4.1
 	github.com/vmware/go-ipfix v0.12.0
-	golang.org/x/sys v0.29.0
+	golang.org/x/sys v0.30.0
 	google.golang.org/grpc v1.67.1
 	google.golang.org/protobuf v1.36.4
 	gopkg.in/yaml.v2 v2.4.0
@@ -129,7 +129,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
