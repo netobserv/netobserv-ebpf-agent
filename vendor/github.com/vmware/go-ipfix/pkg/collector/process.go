@@ -28,7 +28,6 @@ import (
 
 	"github.com/vmware/go-ipfix/pkg/entities"
 	"github.com/vmware/go-ipfix/pkg/registry"
-	"github.com/vmware/go-ipfix/pkg/util"
 )
 
 // DecodingMode specifies how unknown information elements (in templates) are handled when decoding.
@@ -84,11 +83,16 @@ type CollectingProcess struct {
 	// decoding.
 	decodingMode DecodingMode
 	// caCert, serverCert and serverKey are for storing encryption info when using TLS/DTLS
-	caCert               []byte
-	serverCert           []byte
-	serverKey            []byte
-	wg                   sync.WaitGroup
-	numOfRecordsReceived uint64
+	caCert     []byte
+	serverCert []byte
+	serverKey  []byte
+	wg         sync.WaitGroup
+	// stats for IPFIX objects received
+	numOfMessagesReceived        uint64
+	numOfTemplateSetsReceived    uint64
+	numOfDataSetsReceived        uint64
+	numOfTemplateRecordsReceived uint64
+	numOfDataRecordsReceived     uint64
 	// clock implementation: enables injecting a fake clock for testing
 	clock clock
 }
@@ -181,10 +185,18 @@ func (cp *CollectingProcess) GetMsgChan() <-chan *entities.Message {
 	return cp.messageChan
 }
 
+// GetNumRecordsReceived returns the number of data records received by the collector.
 func (cp *CollectingProcess) GetNumRecordsReceived() int64 {
 	cp.mutex.RLock()
 	defer cp.mutex.RUnlock()
-	return int64(cp.numOfRecordsReceived)
+	return int64(cp.numOfDataRecordsReceived)
+}
+
+// GetNumMessagesReceived returns the number of IPFIX messages received by the collector.
+func (cp *CollectingProcess) GetNumMessagesReceived() int64 {
+	cp.mutex.RLock()
+	defer cp.mutex.RUnlock()
+	return int64(cp.numOfMessagesReceived)
 }
 
 func (cp *CollectingProcess) GetNumConnToCollector() int64 {
@@ -193,17 +205,46 @@ func (cp *CollectingProcess) GetNumConnToCollector() int64 {
 	return int64(len(cp.sessions))
 }
 
-func (cp *CollectingProcess) incrementNumRecordsReceived() {
+func (cp *CollectingProcess) incrementReceivedStats(numMessages, numTemplateSets, numDataSets, numTemplateRecords, numDataRecords uint64) {
 	cp.mutex.Lock()
 	defer cp.mutex.Unlock()
-	cp.numOfRecordsReceived = cp.numOfRecordsReceived + 1
+	cp.numOfMessagesReceived += numMessages
+	cp.numOfTemplateSetsReceived += numTemplateSets
+	cp.numOfDataSetsReceived += numDataSets
+	cp.numOfTemplateRecordsReceived += numTemplateRecords
+	cp.numOfDataRecordsReceived += numDataRecords
+}
+
+func decodeMessageHeader(buf *bytes.Buffer, version *uint16, length *uint16, exportTime *uint32, sequenceNum *uint32, obsDomainID *uint32) error {
+	data := buf.Next(entities.MsgHeaderLength)
+	if len(data) < entities.MsgHeaderLength {
+		return fmt.Errorf("buffer too short")
+	}
+	bigEndian := binary.BigEndian
+	*version = bigEndian.Uint16(data)
+	*length = bigEndian.Uint16(data[2:])
+	*exportTime = bigEndian.Uint32(data[4:])
+	*sequenceNum = bigEndian.Uint32(data[8:])
+	*obsDomainID = bigEndian.Uint32(data[12:])
+	return nil
+}
+
+func decodeSetHeader(buf *bytes.Buffer, setID, setLen *uint16) error {
+	data := buf.Next(entities.SetHeaderLen)
+	if len(data) < entities.SetHeaderLen {
+		return fmt.Errorf("buffer too short")
+	}
+	bigEndian := binary.BigEndian
+	*setID = bigEndian.Uint16(data)
+	*setLen = bigEndian.Uint16(data[2:])
+	return nil
 }
 
 func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffer *bytes.Buffer, exportAddress string) (*entities.Message, error) {
 	var length, version, setID, setLen uint16
-	var exportTime, sequencNum, obsDomainID uint32
-	if err := util.Decode(packetBuffer, binary.BigEndian, &version, &length, &exportTime, &sequencNum, &obsDomainID, &setID, &setLen); err != nil {
-		return nil, err
+	var exportTime, sequenceNum, obsDomainID uint32
+	if err := decodeMessageHeader(packetBuffer, &version, &length, &exportTime, &sequenceNum, &obsDomainID); err != nil {
+		return nil, fmt.Errorf("failed to decode IPFIX message header: %w", err)
 	}
 	if version != uint16(10) {
 		return nil, fmt.Errorf("collector only supports IPFIX (v10); invalid version %d received", version)
@@ -213,7 +254,7 @@ func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffe
 	message.SetVersion(version)
 	message.SetMessageLen(length)
 	message.SetExportTime(exportTime)
-	message.SetSequenceNum(sequencNum)
+	message.SetSequenceNum(sequenceNum)
 	message.SetObsDomainID(obsDomainID)
 
 	// handle IPv6 address which may involve []
@@ -223,6 +264,16 @@ func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffe
 	exportAddress = strings.Replace(exportAddress, "]", "", -1)
 	message.SetExportAddress(exportAddress)
 
+	// At the moment we assume exactly one set per IPFIX message.
+	if packetBuffer.Len() == 0 {
+		return nil, fmt.Errorf("empty IPFIX message")
+	}
+	if err := decodeSetHeader(packetBuffer, &setID, &setLen); err != nil {
+		return nil, fmt.Errorf("failed to decode set header: %w", err)
+	}
+
+	var numTemplateSets, numDataSets, numTemplateRecords, numDataRecords uint64
+
 	var set entities.Set
 	var err error
 	if setID == entities.TemplateSetID {
@@ -230,42 +281,93 @@ func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffe
 		if err != nil {
 			return nil, fmt.Errorf("error in decoding message: %v", err)
 		}
+		numTemplateSets += 1
+		numTemplateRecords += uint64(set.GetNumberOfRecords())
 	} else {
 		set, err = cp.decodeDataSet(session, packetBuffer, obsDomainID, setID)
 		if err != nil {
 			return nil, fmt.Errorf("error in decoding message: %v", err)
 		}
+		numDataSets += 1
+		numDataRecords += uint64(set.GetNumberOfRecords())
 	}
 	message.AddSet(set)
 
+	cp.incrementReceivedStats(1, numTemplateSets, numDataSets, numTemplateRecords, numDataRecords)
+
 	// the thread(s)/client(s) executing the code will get blocked until the message is consumed/read in other goroutines.
 	cp.messageChan <- message
-	cp.incrementNumRecordsReceived()
 	return message, nil
 }
 
+func decodeTemplateRecordHeader(buf *bytes.Buffer, templateID, fieldCount *uint16) error {
+	data := buf.Next(entities.TemplateRecordHeaderLength)
+	if len(data) < entities.TemplateRecordHeaderLength {
+		return fmt.Errorf("buffer too short")
+	}
+	bigEndian := binary.BigEndian
+	*templateID = bigEndian.Uint16(data)
+	*fieldCount = bigEndian.Uint16(data[2:])
+	return nil
+}
+
+func decodeTemplateRecordField(buf *bytes.Buffer, elementID, elementLength *uint16, enterpriseID *uint32) error {
+	data := buf.Next(4)
+	if len(data) < 4 {
+		return fmt.Errorf("buffer too short")
+	}
+	bigEndian := binary.BigEndian
+	*elementID = bigEndian.Uint16(data)
+	*elementLength = bigEndian.Uint16(data[2:])
+	// check whether enterprise ID is 0 or not
+	isNonIANARegistry := (*elementID & 0x8000) > 0
+	if isNonIANARegistry {
+		/*
+			Encoding format for Enterprise-Specific Information Elements:
+			 0                   1                   2                   3
+			 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+			+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+			|1| Information element id. = 15 | Field Length = 4  (16 bits)  |
+			+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+			| Enterprise number (32 bits)                                   |
+			+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+			1: 1 bit
+			Information element id: 15 bits
+			Field Length: 16 bits
+			Enterprise ID: 32 bits
+			(Reference: https://tools.ietf.org/html/rfc7011#appendix-A.2.2)
+		*/
+		data = buf.Next(4)
+		if len(data) < 4 {
+			return fmt.Errorf("buffer too short")
+		}
+		*enterpriseID = bigEndian.Uint32(data)
+		// clear enterprise bit
+		*elementID &= 0x7fff
+	} else {
+		*enterpriseID = registry.IANAEnterpriseID
+	}
+	return nil
+}
+
 func (cp *CollectingProcess) decodeTemplateSet(session *transportSession, templateBuffer *bytes.Buffer, obsDomainID uint32) (entities.Set, error) {
+	// At the moment we assume exactly one record per template set.
 	var templateID uint16
 	var fieldCount uint16
-	if err := util.Decode(templateBuffer, binary.BigEndian, &templateID, &fieldCount); err != nil {
-		return nil, err
+	if err := decodeTemplateRecordHeader(templateBuffer, &templateID, &fieldCount); err != nil {
+		return nil, fmt.Errorf("failed to decode template record header: %w", err)
 	}
 
 	decodeField := func() (entities.InfoElementWithValue, error) {
 		var element *entities.InfoElement
-		var enterpriseID uint32
 		var elementID uint16
-		// check whether enterprise ID is 0 or not
-		elementid := make([]byte, 2)
 		var elementLength uint16
-		err := util.Decode(templateBuffer, binary.BigEndian, &elementid, &elementLength)
-		if err != nil {
-			return nil, err
+		var enterpriseID uint32
+		if err := decodeTemplateRecordField(templateBuffer, &elementID, &elementLength, &enterpriseID); err != nil {
+			return nil, fmt.Errorf("failed to decode template record field: %w", err)
 		}
-		isNonIANARegistry := elementid[0]>>7 == 1
-		if !isNonIANARegistry {
-			elementID = binary.BigEndian.Uint16(elementid)
-			enterpriseID = registry.IANAEnterpriseID
+		var err error
+		if enterpriseID == registry.IANAEnterpriseID {
 			element, err = registry.GetInfoElementFromID(elementID, enterpriseID)
 			if err != nil {
 				if cp.decodingMode == DecodingModeStrict {
@@ -275,27 +377,6 @@ func (cp *CollectingProcess) decodeTemplateSet(session *transportSession, templa
 				element = entities.NewInfoElement("", elementID, entities.OctetArray, enterpriseID, elementLength)
 			}
 		} else {
-			/*
-				Encoding format for Enterprise-Specific Information Elements:
-				 0                   1                   2                   3
-				 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-				+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-				|1| Information element id. = 15 | Field Length = 4  (16 bits)  |
-				+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-				| Enterprise number (32 bits)                                   |
-				+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-				1: 1 bit
-				Information element id: 15 bits
-				Field Length: 16 bits
-				Enterprise ID: 32 bits
-				(Reference: https://tools.ietf.org/html/rfc7011#appendix-A.2.2)
-			*/
-			err = util.Decode(templateBuffer, binary.BigEndian, &enterpriseID)
-			if err != nil {
-				return nil, err
-			}
-			elementid[0] = elementid[0] ^ 0x80
-			elementID = binary.BigEndian.Uint16(elementid)
 			element, err = registry.GetInfoElementFromID(elementID, enterpriseID)
 			if err != nil {
 				if cp.decodingMode == DecodingModeStrict {
@@ -358,7 +439,11 @@ func (cp *CollectingProcess) decodeDataSet(session *transportSession, dataBuffer
 		for _, ie := range template {
 			var length int
 			if ie.Len == entities.VariableLength { // string / octet array
-				length = getFieldLength(dataBuffer)
+				var err error
+				length, err = getFieldLength(dataBuffer)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read variable field length: %w", err)
+				}
 			} else {
 				length = int(ie.Len)
 			}
@@ -393,22 +478,22 @@ func getMessageLength(reader *bufio.Reader) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var msgLen uint16
-	err = util.Decode(bytes.NewBuffer(partialHeader[2:]), binary.BigEndian, &msgLen)
-	if err != nil {
-		return 0, fmt.Errorf("cannot decode message: %w", err)
-	}
-	return int(msgLen), nil
+	return int(binary.BigEndian.Uint16(partialHeader[2:])), nil
 }
 
 // getFieldLength returns string field length for data record
 // (encoding reference: https://tools.ietf.org/html/rfc7011#appendix-A.5)
-func getFieldLength(dataBuffer *bytes.Buffer) int {
-	oneByte, _ := dataBuffer.ReadByte()
-	if oneByte < 255 { // string length is less than 255
-		return int(oneByte)
+func getFieldLength(dataBuffer *bytes.Buffer) (int, error) {
+	oneByte, err := dataBuffer.ReadByte()
+	if err != nil {
+		return 0, err
 	}
-	var lengthTwoBytes uint16
-	util.Decode(dataBuffer, binary.BigEndian, &lengthTwoBytes)
-	return int(lengthTwoBytes)
+	if oneByte < 255 { // string length is less than 255
+		return int(oneByte), nil
+	}
+	twoBytes := dataBuffer.Next(2)
+	if len(twoBytes) < 2 {
+		return 0, fmt.Errorf("buffer too short")
+	}
+	return int(binary.BigEndian.Uint16(twoBytes)), nil
 }
