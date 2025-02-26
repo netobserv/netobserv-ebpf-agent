@@ -153,3 +153,61 @@ func TestPBFlowToMap(t *testing.T) {
 		"ZoneId":      uint16(100),
 	}, out)
 }
+
+func TestPBFlowToMapDropEvent(t *testing.T) {
+	someTime := time.Now()
+	flow := &pbflow.Record{
+		EthProtocol:   2048,
+		Bytes:         12,
+		Packets:       34,
+		TimeFlowStart: timestamppb.New(someTime),
+		TimeFlowEnd:   timestamppb.New(someTime),
+		Network:       &pbflow.Network{},
+		Transport:     &pbflow.Transport{},
+		NetworkEventsMetadata: []*pbflow.NetworkEvent{
+			{
+				Events: map[string]string{
+					"Action":    "drop",
+					"Actor":     "AdminNetworkPolicy",
+					"Direction": "ingress",
+					"Name":      "my-policy",
+				},
+			},
+		},
+	}
+
+	out := PBFlowToMap(flow)
+	assert.NotZero(t, out["TimeReceived"])
+	delete(out, "TimeReceived")
+
+	var nilIntArr []int
+	var nilStrArr []string
+
+	assert.Equal(t, config.GenericMap{
+		"Bytes":                  uint64(12),
+		"SrcAddr":                "0.0.0.0",
+		"DstAddr":                "0.0.0.0",
+		"Dscp":                   uint8(0),
+		"DstMac":                 "00:00:00:00:00:00",
+		"SrcMac":                 "00:00:00:00:00:00",
+		"Packets":                uint32(34),
+		"Proto":                  uint8(0),
+		"TimeFlowStartMs":        someTime.UnixMilli(),
+		"TimeFlowEndMs":          someTime.UnixMilli(),
+		"AgentIP":                "0.0.0.0",
+		"PktDropBytes":           uint64(12),
+		"PktDropPackets":         uint32(34),
+		"PktDropLatestDropCause": "OVS_DROP_EXPLICIT",
+		"Etype":                  uint16(2048),
+		"IfDirections":           nilIntArr,
+		"Interfaces":             nilStrArr,
+		"NetworkEvents": []map[string]string{
+			{
+				"Action":    "drop",
+				"Actor":     "AdminNetworkPolicy",
+				"Direction": "ingress",
+				"Name":      "my-policy",
+			},
+		},
+	}, out)
+}
