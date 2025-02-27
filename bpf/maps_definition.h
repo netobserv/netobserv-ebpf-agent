@@ -79,4 +79,24 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } peer_filter_map SEC(".maps");
 
+// HashMap to store ingress flowid to be able to retrieve them from kretprobe hook
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1 << 20); // Will take around 64MB of space.
+    __type(key, u64);
+    __type(value, flow_id);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ipsec_ingress_map SEC(".maps");
+
+// HashMap to store egress flowid to be able to retrieve them from kretprobe hook
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1 << 20); // Will take around 64MB of space.
+    __type(key, u64);
+    __type(value, flow_id);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ipsec_egress_map SEC(".maps");
+
 #endif //__MAPS_DEFINITION_H__

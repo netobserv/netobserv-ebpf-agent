@@ -84,6 +84,10 @@ func FlowToPB(fr *model.Record) *Record {
 			DstPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport),
 			ZoneId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId),
 		}
+		pbflowRecord.FlowEncryptedRet = uint32(fr.Metrics.AdditionalMetrics.FlowEncryptedRet)
+		if fr.Metrics.AdditionalMetrics.FlowEncrypted {
+			pbflowRecord.FlowEncrypted = uint32(1)
+		}
 	}
 	pbflowRecord.DupList = make([]*DupMapEntry, 0)
 	for _, intf := range fr.Interfaces {
@@ -166,6 +170,7 @@ func PBToFlow(pb *Record) *model.Record {
 					Dport:  uint16(pb.Xlat.GetDstPort()),
 					ZoneId: uint16(pb.Xlat.GetZoneId()),
 				},
+				FlowEncryptedRet: uint8(pb.FlowEncryptedRet),
 			},
 		},
 		TimeFlowStart: pb.TimeFlowStart.AsTime(),
@@ -174,7 +179,9 @@ func PBToFlow(pb *Record) *model.Record {
 		TimeFlowRtt:   pb.TimeFlowRtt.AsDuration(),
 		DNSLatency:    pb.DnsLatency.AsDuration(),
 	}
-
+	if pb.FlowEncrypted != 0 {
+		out.Metrics.AdditionalMetrics.FlowEncrypted = true
+	}
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
 			out.Interfaces = append(out.Interfaces, model.IntfDirUdn{
