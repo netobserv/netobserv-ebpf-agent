@@ -357,7 +357,7 @@ github.com/ovn-org/libovsdb/model
 github.com/ovn-org/libovsdb/ovsdb
 github.com/ovn-org/libovsdb/ovsdb/serverdb
 github.com/ovn-org/libovsdb/updates
-# github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250215040159-dd2a70c928d3
+# github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250227173154-57a2590a1d16
 ## explicit; go 1.22.0
 github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model
 github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/ovsdb
