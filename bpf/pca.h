@@ -3,37 +3,39 @@
 
 #include "utils.h"
 
-static int attach_packet_payload(void *data, void *data_end, struct __sk_buff *skb) {
-    payload_meta meta;
-    u64 flags = BPF_F_CURRENT_CPU;
-    // Enable the flag to add packet header
-    // Packet payload follows immediately after the meta struct
-    u32 packetSize = (u32)(data_end - data);
+static inline void attach_packet_payload(struct __sk_buff *skb) {
+    payload_meta *event;
+    u32 packetSize = skb->len;
 
-    // Record the current time.
-    u64 current_time = bpf_ktime_get_ns();
-
-    // For packets which are allocated non-linearly struct __sk_buff does not necessarily
-    // has all data lined up in memory but instead can be part of scatter gather lists.
-    // This command pulls data from the buffer but incurs data copying penalty.
-    if (packetSize <= skb->len) {
-        packetSize = skb->len;
-        if (bpf_skb_pull_data(skb, skb->len)) {
-            return TC_ACT_UNSPEC;
-        };
+    event = bpf_ringbuf_reserve(&packet_record, sizeof(payload_meta), 0);
+    if (!event) {
+        return;
     }
-    // Set flag's upper 32 bits with the size of the paylaod and the bpf_perf_event_output will
-    // attach the specified amount of bytes from packet to the perf event
-    // https://github.com/xdp-project/xdp-tutorial/tree/9b25f0a039179aca1f66cba5492744d9f09662c1/tracing04-xdp-tcpdump
-    flags |= (u64)packetSize << 32;
 
-    meta.if_index = skb->ifindex;
-    meta.pkt_len = packetSize;
-    meta.timestamp = current_time;
-    if (bpf_perf_event_output(skb, &packet_record, flags, &meta, sizeof(meta))) {
-        return TC_ACT_OK;
+    if (!packetSize) {
+        // Release reserved ringbuf location
+        bpf_ringbuf_discard(event, 0);
+        return;
     }
-    return TC_ACT_UNSPEC;
+
+    if (packetSize > MAX_PAYLOAD_SIZE) {
+        packetSize = MAX_PAYLOAD_SIZE;
+    }
+
+    event->if_index = skb->ifindex;
+    event->pkt_len = packetSize;
+    event->timestamp = bpf_ktime_get_ns();
+    // bpf_skb_load_bytes will handle cases when packets are allocated linearly or none-linearly where
+    // struct __sk_buff does not necessarily has all data lined up in memory but instead
+    // can be part of scatter gather lists.
+    // so no need to use bpf_skb_pull_data() which has performance side effects for the rest of that skb's lifetime.
+    if (bpf_skb_load_bytes(skb, 0, event->payload, packetSize)) {
+        // Release reserved ringbuf location
+        bpf_ringbuf_discard(event, 0);
+        return;
+    }
+    bpf_ringbuf_submit(event, 0);
+    return;
 }
 
 static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
@@ -62,19 +64,18 @@ static inline bool validate_pca_filter(struct __sk_buff *skb, direction dir) {
     return true;
 }
 
-static inline int export_packet_payload(struct __sk_buff *skb, direction dir) {
+static inline void export_packet_payload(struct __sk_buff *skb, direction dir) {
+    if (!enable_pca) {
+        return;
+    }
     // If sampling is defined, will only parse 1 out of "sampling" flows
     if (sampling > 1 && (bpf_get_prandom_u32() % sampling) != 0) {
-        return 0;
+        return;
     }
-
-    void *data_end = (void *)(long)skb->data_end;
-    void *data = (void *)(long)skb->data;
 
     if (validate_pca_filter(skb, dir)) {
-        return attach_packet_payload(data, data_end, skb);
+        attach_packet_payload(skb);
     }
-    return 0;
 }
 
 SEC("classifier/tc_pca_ingress")
