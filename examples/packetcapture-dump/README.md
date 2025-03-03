@@ -19,7 +19,8 @@ Start the packetcapture-client using: (in a secondary shell)
 
 Start the agent using:
 ```bash
-sudo TARGET_HOST=localhost TARGET_PORT=9990 ENABLE_PCA="true" FILTER_IP_CIDR="0.0.0.0/0" FILTER_PROTOCOL="TCP" FILTER_PORT=22 FILTER_ACTION="Accept" ./bin/netobserv-ebpf-agent
+sudo TARGET_HOST=localhost TARGET_PORT=9990 ENABLE_PCA="true" FLOW_FILTER_RULES='[{"ip_cidr":"0.0.0.0/0","protocol":"TCP","action":"Accept"}]' ./bin/netobserv-ebpf-agent
+
 ```
 
 You should see output such as:

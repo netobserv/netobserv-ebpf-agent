@@ -16,7 +16,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/sirupsen/logrus"
 )
 
@@ -43,7 +43,7 @@ type ebpfPacketFetcher interface {
 	io.Closer
 	tcAttacher
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
-	ReadPerf() (perf.Record, error)
+	ReadPerf() (ringbuf.Record, error)
 }
 
 // PacketsAgent instantiates a new agent, given a configuration.
