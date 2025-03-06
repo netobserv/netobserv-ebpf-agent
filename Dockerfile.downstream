@@ -5,7 +5,7 @@ ARG COMMIT
 FROM --platform=linux/$TARGETARCH brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23 as builder
 
 ARG TARGETARCH=amd64
-ARG BUILDVERSION="1.8.0"
+ARG BUILDVERSION="1.9.0"
 ARG COMMIT
 
 WORKDIR /opt/app-root
