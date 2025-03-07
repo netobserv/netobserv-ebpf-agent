@@ -18,6 +18,10 @@ var (
 			Name:  "my-network",
 			Index: map[string]any{"mac": nil},
 		},
+		{
+			Name:  "ovn-udn",
+			Index: map[string]any{"udn": nil},
+		},
 	}
 )
 
@@ -176,8 +180,8 @@ func (f *FakeInformers) InitFromConfig(_ api.NetworkTransformKubeConfig, _ *oper
 }
 
 func (f *FakeInformers) GetInfo(keys []cni.SecondaryNetKey, ip string) (*Info, error) {
-	if len(keys) > 0 {
-		i := f.customKeysInfo[keys[0].Key]
+	for _, key := range keys {
+		i := f.customKeysInfo[key.Key]
 		if i != nil {
 			return i, nil
 		}
@@ -191,8 +195,7 @@ func (f *FakeInformers) GetInfo(keys []cni.SecondaryNetKey, ip string) (*Info, e
 }
 
 func (f *FakeInformers) BuildSecondaryNetworkKeys(flow config.GenericMap, rule *api.K8sRule) []cni.SecondaryNetKey {
-	m := cni.MultusHandler{}
-	return m.BuildKeys(flow, rule, secondaryNetConfig)
+	return buildSecondaryNetworkKeys(flow, rule, secondaryNetConfig, true, true)
 }
 
 func (f *FakeInformers) GetNodeInfo(n string) (*Info, error) {
