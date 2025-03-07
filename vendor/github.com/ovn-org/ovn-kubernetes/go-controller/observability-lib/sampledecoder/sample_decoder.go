@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ovn-org/libovsdb/client"
+
 	"github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/ovsdb"
 	libovsdbops "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/libovsdb/ops"
