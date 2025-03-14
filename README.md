@@ -199,3 +199,17 @@ You'd need either:
    tested the eBPF Agent in EKS with the [Bottlerocket](https://aws.amazon.com/es/bottlerocket/)
    Linux distribution, without requiring any extra configuration.
 
+## Licenses
+
+Two licenses are used for the source code in this repository:
+
+- [GPL v2](./bpf/LICENSE) covers the eBPF code in `./bpf` directory.
+- [Apache v2](./LICENSE) covers everything else.
+
+## Discussions and contributions
+
+Discussions related to NetObserv are welcome on [GitHub discussions](https://github.com/orgs/netobserv/discussions) as well as on the [#netobserv-project](http://cloud-native.slack.com/) channel from CNCF slack.
+
+If you'd like to reach out because you've found a security issue, please do not share sensitive details publicly. Please follow the instructions described on the [Red Hat Customer Portal](https://access.redhat.com/security/team/contact/?extIdCarryOver=true&sc_cid=701f2000001Css5AAC).
+
+Refer to the [NetObserv projects contribution guide](https://github.com/netobserv/documents/blob/main/CONTRIBUTING.md) for more details on contributions.
