@@ -28,6 +28,9 @@ ARG COMMIT
 
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
+COPY LICENSE .
+COPY bpf/LICENSE ./LICENSE-GPL
+COPY README.downstream ./README
 USER 65532:65532
 
 ENTRYPOINT ["/netobserv-ebpf-agent"]
