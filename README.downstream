@@ -1,0 +1,8 @@
+Network Observability eBPF Agent
+
+Licenses
+
+Two licenses are used for the source code in this repository:
+
+- GPL v2 (file: LICENSE-GPL) covers only the eBPF code in `./bpf` source code directory.
+- Apache v2 (file: LICENSE) covers everything else.
