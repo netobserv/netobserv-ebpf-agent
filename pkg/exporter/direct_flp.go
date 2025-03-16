@@ -8,7 +8,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode/packets"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // DirectFLP flow exporter
