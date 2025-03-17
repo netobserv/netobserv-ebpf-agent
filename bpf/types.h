@@ -82,6 +82,8 @@ const static enum direction_t *unused1 __attribute__((unused));
 const static u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
 
 typedef struct flow_metrics_t {
+    // struct bpf_spin_lock need to be 1st field
+    struct bpf_spin_lock lock;
     // Flow start and end times as monotomic timestamps in nanoseconds
     // as output from bpf_ktime_get_ns()
     u64 start_mono_time_ts;
@@ -96,7 +98,6 @@ typedef struct flow_metrics_t {
     u8 dst_mac[ETH_ALEN];
     // OS interface index
     u32 if_index_first_seen;
-    struct bpf_spin_lock lock;
     u32 sampling;
     u8 direction_first_seen;
     // The positive errno of a failed map insertion that caused a flow
