@@ -18,7 +18,7 @@ define PROGRAMS
 	"tcp_rcv_kprobe":"kprobe",
 	"kfree_skb":"tracepoint",
 	"rh_network_events_monitoring":"kprobe",
-	"nf_nat_manip_pkt":"kprobe"
+	"track_nat_manip_pkt":"kprobe"
 }
 endef
 
