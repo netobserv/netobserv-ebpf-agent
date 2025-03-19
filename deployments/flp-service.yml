@@ -110,11 +110,11 @@ data:
             rules:
               - type: add_kubernetes
                 kubernetes:
-                  input: SrcAddr
+                  ipField: SrcAddr
                   output: SrcK8S
               - type: add_kubernetes
                 kubernetes:
-                  input: DstAddr
+                  ipField: DstAddr
                   output: DstK8S
       - name: loki
         write:
