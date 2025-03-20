@@ -247,7 +247,6 @@ spec:
       operator: in
       values:
       - "true"
-
   - name: build-source-image
     params:
     - name: BINARY_IMAGE
@@ -290,6 +289,28 @@ spec:
         value: deprecated-image-check
       - name: bundle
         value: quay.io/konflux-ci/tekton-catalog/task-deprecated-image-check:0.5@sha256:5d63b920b71192906fe4d6c4903f594e6f34c5edcff9d21714a08b5edcfbc667
+      - name: kind
+        value: task
+      resolver: bundles
+    when:
+    - input: $(params.skip-checks)
+      operator: in
+      values:
+      - "false"
+  - name: rpms-signature-scan
+    params:
+    - name: image-url
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: image-digest
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    runAfter:
+    - build-image-index
+    taskRef:
+      params:
+      - name: name
+        value: rpms-signature-scan
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:d00d159c370e3c99447516970c316ef57dfd27c29e0ce3cff50727c9c40936d8
       - name: kind
         value: task
       resolver: bundles
@@ -358,28 +379,6 @@ spec:
         value: sast-snyk-check-oci-ta
       - name: bundle
         value: quay.io/konflux-ci/tekton-catalog/task-sast-snyk-check-oci-ta:0.3@sha256:540f585f8abc3790e9e1285330d5610c1101173d9b26a61924586c220e4024e6
-      - name: kind
-        value: task
-      resolver: bundles
-    when:
-    - input: $(params.skip-checks)
-      operator: in
-      values:
-      - "false"
-  - name: rpms-signature-scan
-    params:
-    - name: image-url
-      value: $(tasks.build-image-index.results.IMAGE_URL)
-    - name: image-digest
-      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
-    runAfter:
-    - build-image-index
-    taskRef:
-      params:
-      - name: name
-        value: rpms-signature-scan
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:d00d159c370e3c99447516970c316ef57dfd27c29e0ce3cff50727c9c40936d8
       - name: kind
         value: task
       resolver: bundles

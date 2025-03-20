@@ -26,24 +26,11 @@ spec:
     value: quay.io/redhat-user-workloads/ocp-network-observab-tenant/netobserv-operator/netobserv-ebpf-agent:on-pr-{{revision}}
   - name: image-expires-after
     value: 5d
+  - name: build-args-file
+    value: Dockerfile-args.downstream
   - name: dockerfile
     value: Dockerfile.downstream
+  - name: build-platforms
+    value: ["linux/x86_64"]
   pipelineRef:
     name: build-pipeline
-  taskRunTemplate: {}
-  workspaces:
-  - name: workspace
-    volumeClaimTemplate:
-      metadata:
-        creationTimestamp: null
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-      status: {}
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
-status: {}
