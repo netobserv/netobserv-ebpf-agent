@@ -19,7 +19,6 @@ import (
 	cilium "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/gavv/monotime"
@@ -1279,7 +1278,7 @@ type PacketFetcher struct {
 	qdiscs                   map[ifaces.Interface]*netlink.GenericQdisc
 	egressFilters            map[ifaces.Interface]*netlink.BpfFilter
 	ingressFilters           map[ifaces.Interface]*netlink.BpfFilter
-	perfReader               *perf.Reader
+	perfReader               *ringbuf.Reader
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
@@ -1392,7 +1391,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 
 	// read packets from igress+egress perf array
-	packets, err := perf.NewReader(objects.PacketRecord, os.Getpagesize())
+	packets, err := ringbuf.NewReader(objects.BpfMaps.PacketRecord)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to perf: %w", err)
 	}
@@ -1752,7 +1751,7 @@ func (p *PacketFetcher) Close() error {
 	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
 }
 
-func (p *PacketFetcher) ReadPerf() (perf.Record, error) {
+func (p *PacketFetcher) ReadPerf() (ringbuf.Record, error) {
 	return p.perfReader.Read()
 }
 
