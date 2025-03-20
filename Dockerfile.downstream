@@ -24,6 +24,9 @@ ARG BUILDVERSION
 
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
+COPY LICENSE /licenses/
+COPY bpf/LICENSE /licenses/LICENSE-GPL
+COPY README.downstream /licenses/README
 USER 65532:65532
 
 ENTRYPOINT ["/netobserv-ebpf-agent"]
