@@ -751,8 +751,8 @@ github.com/openzipkin/zipkin-go v0.2.1/go.mod h1:NaW6tEwdmWMaCDZzg8sh+IBNOxHMPnh
 github.com/openzipkin/zipkin-go v0.2.2/go.mod h1:NaW6tEwdmWMaCDZzg8sh+IBNOxHMPnhQw8ySjnjRyN4=
 github.com/ovn-org/libovsdb v0.7.1-0.20240820095311-ce1951614a20 h1:OoDvzyaK7F/ZANIIFOgb4Haj7mye3Hle0fYZZNdidSs=
 github.com/ovn-org/libovsdb v0.7.1-0.20240820095311-ce1951614a20/go.mod h1:dJbxEaalQl83nn904K32FaMjlH/qOObZ0bj4ejQ78AI=
-github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250227173154-57a2590a1d16 h1:t4NphP6IIFRe5/2NGc1MD0e72pLYIzaG9YizrYyk84Y=
-github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250227173154-57a2590a1d16/go.mod h1:MzFM3OEsLM2w/4MBMOCsxGR6ZBUvJfOxvQHB8LIKSv4=
+github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250314182307-95b6ca544bdf h1:WArJXO/EVSMMXDgM4PlIECs46aD6aoKTBMQjjkVUyMQ=
+github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250314182307-95b6ca544bdf/go.mod h1:MzFM3OEsLM2w/4MBMOCsxGR6ZBUvJfOxvQHB8LIKSv4=
 github.com/pact-foundation/pact-go v1.0.4/go.mod h1:uExwJY4kCzNPcHRj+hCR/HBbOOIwwtUjcrb0b5/5kLM=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
