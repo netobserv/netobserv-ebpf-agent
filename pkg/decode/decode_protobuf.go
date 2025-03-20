@@ -149,6 +149,14 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 
 	if len(fr.NetworkMonitorEventsMD) != 0 {
 		out["NetworkEvents"] = fr.NetworkMonitorEventsMD
+		for _, event := range fr.NetworkMonitorEventsMD {
+			// override drop fields when network event action is dropped
+			if event["Action"] == "drop" {
+				out["PktDropBytes"] = fr.Metrics.Bytes
+				out["PktDropPackets"] = fr.Metrics.Packets
+				out["PktDropLatestDropCause"] = "OVS_DROP_EXPLICIT"
+			}
+		}
 	}
 
 	return out
