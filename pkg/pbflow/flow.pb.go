@@ -276,8 +276,7 @@ type Record struct {
 	Bytes     uint64     `protobuf:"varint,8,opt,name=bytes,proto3" json:"bytes,omitempty"`
 	Packets   uint64     `protobuf:"varint,9,opt,name=packets,proto3" json:"packets,omitempty"`
 	Interface string     `protobuf:"bytes,10,opt,name=interface,proto3" json:"interface,omitempty"`
-	// if true, the same flow has been recorded via another interface.
-	// From all the duplicate flows, one will set this value to false and the rest will be true.
+	// Deprecated / unused
 	Duplicate bool `protobuf:"varint,11,opt,name=duplicate,proto3" json:"duplicate,omitempty"`
 	// Agent IP address to help identifying the source of the flow
 	AgentIp                *IP                  `protobuf:"bytes,12,opt,name=agent_ip,json=agentIp,proto3" json:"agent_ip,omitempty"`
