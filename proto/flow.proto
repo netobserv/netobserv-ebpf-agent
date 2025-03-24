@@ -45,8 +45,7 @@ message Record {
   uint64 packets = 9;
   string interface = 10;
   
-  // if true, the same flow has been recorded via another interface.
-  // From all the duplicate flows, one will set this value to false and the rest will be true.
+  // Deprecated / unused
   bool duplicate = 11;
 
   // Agent IP address to help identifying the source of the flow
