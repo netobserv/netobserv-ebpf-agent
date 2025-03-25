@@ -14,8 +14,13 @@ func TestIskernelOlderthan514(t *testing.T) {
 		wantError     bool
 	}{
 		{
-			name:          "Kernel version < 5.14.0",
+			name:          "Kernel version < 5.14.0, current version 5.13.0-100",
 			kernelVersion: "5.13.0-100",
+			want:          true,
+		},
+		{
+			name:          "Kernel version < 5.14.0, current version 5.13.0-500",
+			kernelVersion: "5.13.0-500",
 			want:          true,
 		},
 		{
@@ -24,7 +29,12 @@ func TestIskernelOlderthan514(t *testing.T) {
 			want:          false,
 		},
 		{
-			name:          "Kernel version > 5.14.0",
+			name:          "Kernel version > 5.14.0, current version 5.14.0-500",
+			kernelVersion: "5.14.0-500",
+			want:          false,
+		},
+		{
+			name:          "Kernel version > 5.14.0, current version 5.15.0",
 			kernelVersion: "5.15.0",
 			want:          false,
 		},
@@ -45,6 +55,7 @@ func TestIskernelOlderthan514(t *testing.T) {
 			}
 			kernelVersion = versionUint
 			got := IsKernelOlderThan("5.14.0")
+			t.Log("name", tt.name, "kernelVersion", kernelVersion, "got", got, "want", tt.want)
 			if got != tt.want {
 				t.Errorf("%s: IskernelOlderthan514() = %v, want %v", tt.name, got, tt.want)
 			}

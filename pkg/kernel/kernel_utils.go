@@ -14,7 +14,7 @@ import (
 var (
 	versionRegex  = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?`)
 	rtRegex       = regexp.MustCompile(`[.-]rt`)
-	kernelVersion uint32
+	kernelVersion uint64
 	log           = logrus.WithField("component", "kernel")
 )
 
@@ -37,8 +37,8 @@ func IsKernelOlderThan(version string) bool {
 
 // kernelVersionFromReleaseString converts a release string with format
 // 4.4.2[-1] to a kernel version number in LINUX_VERSION_CODE format.
-// That is, for kernel "a.b.c-d", the version number will be (a<<24 + b<<16 + c<<8 + d)
-func kernelVersionFromReleaseString(releaseString string) (uint32, error) {
+// That is, for kernel "a.b.c-d", the version number will be (a<<32 + b<<24 + c<<16 + d)
+func kernelVersionFromReleaseString(releaseString string) (uint64, error) {
 	versionParts := versionRegex.FindStringSubmatch(releaseString)
 	if len(versionParts) == 0 {
 		return 0, fmt.Errorf("got invalid release version %q (expected format '4.3.2-1')", releaseString)
@@ -64,11 +64,11 @@ func kernelVersionFromReleaseString(releaseString string) (uint32, error) {
 			return 0, err
 		}
 	}
-	out := major*256*256*256 + minor*256*256 + patch*256 + (extraNumeric & 0xFF)
-	return uint32(out), nil
+	out := uint64((major << 32) + (minor << 24) + (patch << 16) + (extraNumeric & 0xFFFF))
+	return out, nil
 }
 
-func currentKernelVersion() (uint32, error) {
+func currentKernelVersion() (uint64, error) {
 	var buf syscall.Utsname
 	if err := syscall.Uname(&buf); err != nil {
 		return 0, err

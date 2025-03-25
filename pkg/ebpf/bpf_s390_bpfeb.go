@@ -224,19 +224,19 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
-	KfreeSkb                  *ebpf.ProgramSpec `ebpf:"kfree_skb"`
-	RhNetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"rh_network_events_monitoring"`
-	TcEgressFlowParse         *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
-	TcEgressPcaParse          *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
-	TcIngressFlowParse        *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
-	TcIngressPcaParse         *ebpf.ProgramSpec `ebpf:"tc_ingress_pca_parse"`
-	TcpRcvFentry              *ebpf.ProgramSpec `ebpf:"tcp_rcv_fentry"`
-	TcpRcvKprobe              *ebpf.ProgramSpec `ebpf:"tcp_rcv_kprobe"`
-	TcxEgressFlowParse        *ebpf.ProgramSpec `ebpf:"tcx_egress_flow_parse"`
-	TcxEgressPcaParse         *ebpf.ProgramSpec `ebpf:"tcx_egress_pca_parse"`
-	TcxIngressFlowParse       *ebpf.ProgramSpec `ebpf:"tcx_ingress_flow_parse"`
-	TcxIngressPcaParse        *ebpf.ProgramSpec `ebpf:"tcx_ingress_pca_parse"`
-	TrackNatManipPkt          *ebpf.ProgramSpec `ebpf:"track_nat_manip_pkt"`
+	KfreeSkb                *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
+	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
+	TcEgressPcaParse        *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
+	TcIngressFlowParse      *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
+	TcIngressPcaParse       *ebpf.ProgramSpec `ebpf:"tc_ingress_pca_parse"`
+	TcpRcvFentry            *ebpf.ProgramSpec `ebpf:"tcp_rcv_fentry"`
+	TcpRcvKprobe            *ebpf.ProgramSpec `ebpf:"tcp_rcv_kprobe"`
+	TcxEgressFlowParse      *ebpf.ProgramSpec `ebpf:"tcx_egress_flow_parse"`
+	TcxEgressPcaParse       *ebpf.ProgramSpec `ebpf:"tcx_egress_pca_parse"`
+	TcxIngressFlowParse     *ebpf.ProgramSpec `ebpf:"tcx_ingress_flow_parse"`
+	TcxIngressPcaParse      *ebpf.ProgramSpec `ebpf:"tcx_ingress_pca_parse"`
+	TrackNatManipPkt        *ebpf.ProgramSpec `ebpf:"track_nat_manip_pkt"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -342,25 +342,25 @@ type BpfVariables struct {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
-	KfreeSkb                  *ebpf.Program `ebpf:"kfree_skb"`
-	RhNetworkEventsMonitoring *ebpf.Program `ebpf:"rh_network_events_monitoring"`
-	TcEgressFlowParse         *ebpf.Program `ebpf:"tc_egress_flow_parse"`
-	TcEgressPcaParse          *ebpf.Program `ebpf:"tc_egress_pca_parse"`
-	TcIngressFlowParse        *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
-	TcIngressPcaParse         *ebpf.Program `ebpf:"tc_ingress_pca_parse"`
-	TcpRcvFentry              *ebpf.Program `ebpf:"tcp_rcv_fentry"`
-	TcpRcvKprobe              *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
-	TcxEgressFlowParse        *ebpf.Program `ebpf:"tcx_egress_flow_parse"`
-	TcxEgressPcaParse         *ebpf.Program `ebpf:"tcx_egress_pca_parse"`
-	TcxIngressFlowParse       *ebpf.Program `ebpf:"tcx_ingress_flow_parse"`
-	TcxIngressPcaParse        *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
-	TrackNatManipPkt          *ebpf.Program `ebpf:"track_nat_manip_pkt"`
+	KfreeSkb                *ebpf.Program `ebpf:"kfree_skb"`
+	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
+	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
+	TcEgressPcaParse        *ebpf.Program `ebpf:"tc_egress_pca_parse"`
+	TcIngressFlowParse      *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
+	TcIngressPcaParse       *ebpf.Program `ebpf:"tc_ingress_pca_parse"`
+	TcpRcvFentry            *ebpf.Program `ebpf:"tcp_rcv_fentry"`
+	TcpRcvKprobe            *ebpf.Program `ebpf:"tcp_rcv_kprobe"`
+	TcxEgressFlowParse      *ebpf.Program `ebpf:"tcx_egress_flow_parse"`
+	TcxEgressPcaParse       *ebpf.Program `ebpf:"tcx_egress_pca_parse"`
+	TcxIngressFlowParse     *ebpf.Program `ebpf:"tcx_ingress_flow_parse"`
+	TcxIngressPcaParse      *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
+	TrackNatManipPkt        *ebpf.Program `ebpf:"track_nat_manip_pkt"`
 }
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.KfreeSkb,
-		p.RhNetworkEventsMonitoring,
+		p.NetworkEventsMonitoring,
 		p.TcEgressFlowParse,
 		p.TcEgressPcaParse,
 		p.TcIngressFlowParse,
