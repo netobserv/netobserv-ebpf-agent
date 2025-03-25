@@ -59,7 +59,6 @@ const (
 	tcIngressFilterName                 = "tc/tc_ingress_flow_parse"
 	tcpFentryHook                       = "tcp_rcv_fentry"
 	tcpRcvKprobe                        = "tcp_rcv_kprobe"
-	rhNetworkEventsMonitoringHook       = "rh_psample_sample_packet"
 	networkEventsMonitoringHook         = "psample_sample_packet"
 	defaultNetworkEventsGroupID         = 10
 )
@@ -168,7 +167,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		if rtOldKernel {
 			log.Infof("kernel is realtime and older than 5.14.0-292 not all hooks are supported")
 		}
-		supportNetworkEvents := !kernel.IsKernelOlderThan("5.14.0-427")
+		supportNetworkEvents := !kernel.IsKernelOlderThan("5.14.0-570")
 		objects, err = kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, spec, pinDir)
 		if err != nil {
 			return nil, err
@@ -192,24 +191,13 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 
 		if cfg.EnableNetworkEventsMonitoring {
 			if supportNetworkEvents {
-				// Enable the following logic with RHEL9.6 when its available
-				if !kernel.IsKernelOlderThan("5.16.0") {
-					//revive:disable
-					/*
-						networkEventsMonitoringLink, err = link.Kprobe(networkEventsMonitoringHook, objects.NetworkEventsMonitoring, nil)
-						if err != nil {
-							return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
-						}
-					*/
-				} else {
-					log.Infof("kernel older than 5.16.0 detected: use custom network_events_monitoring hook")
-					networkEventsMonitoringLink, err = link.Kprobe(rhNetworkEventsMonitoringHook, objects.RhNetworkEventsMonitoring, nil)
-					if err != nil {
-						return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
-					}
+				log.Infof("kernel is 5.14.0-570 detected: use kapi network_events_monitoring hook")
+				networkEventsMonitoringLink, err = link.Kprobe(networkEventsMonitoringHook, objects.NetworkEventsMonitoring, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to attach the BPF program network events monitoring kprobe: %w", err)
 				}
 			} else {
-				log.Infof("kernel older than 5.14.0-427 detected: it does not support network_events_monitoring hook, skip")
+				log.Infof("kernel older than 5.14.0-570 detected: it does not support network_events_monitoring hook, skip")
 			}
 		}
 
@@ -1035,7 +1023,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 	// Helper to remove common hooks
 	removeCommonHooks := func() {
 		delete(spec.Programs, pktDropHook)
-		delete(spec.Programs, rhNetworkEventsMonitoringHook)
+		delete(spec.Programs, networkEventsMonitoringHook)
 	}
 
 	// Helper to load and assign BPF objects
@@ -1079,19 +1067,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 		objects = ebpf.BpfObjects{
 			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:         newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:        newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:        newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:       newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:          newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
-				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
-				TcpRcvKprobe:              nil,
-				TcpRcvFentry:              nil,
-				KfreeSkb:                  nil,
-				RhNetworkEventsMonitoring: nil,
+				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+				TcpRcvKprobe:            nil,
+				TcpRcvFentry:            nil,
+				KfreeSkb:                nil,
+				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1131,19 +1119,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 		objects = ebpf.BpfObjects{
 			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:         newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:        newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:        newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:       newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:          newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
-				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
-				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
-				TcpRcvFentry:              nil,
-				KfreeSkb:                  nil,
-				RhNetworkEventsMonitoring: nil,
+				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+				TcpRcvKprobe:            newObjects.TCPRcvKprobe,
+				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+				TcpRcvFentry:            nil,
+				KfreeSkb:                nil,
+				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1183,19 +1171,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 		objects = ebpf.BpfObjects{
 			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:         newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:        newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:        newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:       newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:          newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
-				TcpRcvFentry:              newObjects.TCPRcvFentry,
-				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
-				TcpRcvKprobe:              nil,
-				KfreeSkb:                  nil,
-				RhNetworkEventsMonitoring: nil,
+				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+				TcpRcvFentry:            newObjects.TCPRcvFentry,
+				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+				TcpRcvKprobe:            nil,
+				KfreeSkb:                nil,
+				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1228,7 +1216,6 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			ebpf.BpfMaps
 		}
 		var newObjects newBpfObjects
-		delete(spec.Programs, rhNetworkEventsMonitoringHook)
 
 		if err := loadAndAssign(&newObjects); err != nil {
 			return objects, err
@@ -1236,19 +1223,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 		objects = ebpf.BpfObjects{
 			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:         newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:        newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:        newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:       newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:          newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:         newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
-				TcpRcvFentry:              newObjects.TCPRcvFentry,
-				TcpRcvKprobe:              newObjects.TCPRcvKprobe,
-				KfreeSkb:                  newObjects.KfreeSkb,
-				TrackNatManipPkt:          newObjects.TrackNatManipPkt,
-				RhNetworkEventsMonitoring: nil,
+				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+				TcpRcvFentry:            newObjects.TCPRcvFentry,
+				TcpRcvKprobe:            newObjects.TCPRcvKprobe,
+				KfreeSkb:                newObjects.KfreeSkb,
+				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1339,7 +1326,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 	var newObjects newBpfObjects
 	delete(spec.Programs, pktDropHook)
-	delete(spec.Programs, rhNetworkEventsMonitoringHook)
+	delete(spec.Programs, networkEventsMonitoringHook)
 	delete(spec.Programs, tcpRcvKprobe)
 	delete(spec.Programs, tcpFentryHook)
 	delete(spec.Programs, aggregatedFlowsMap)
@@ -1366,18 +1353,18 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 
 	objects = ebpf.BpfObjects{
 		BpfPrograms: ebpf.BpfPrograms{
-			TcEgressPcaParse:          newObjects.TcEgressPcaParse,
-			TcIngressPcaParse:         newObjects.TcIngressPcaParse,
-			TcxEgressPcaParse:         newObjects.TcxEgressPcaParse,
-			TcxIngressPcaParse:        newObjects.TcxIngressPcaParse,
-			TcEgressFlowParse:         nil,
-			TcIngressFlowParse:        nil,
-			TcxEgressFlowParse:        nil,
-			TcxIngressFlowParse:       nil,
-			TcpRcvFentry:              nil,
-			TcpRcvKprobe:              nil,
-			KfreeSkb:                  nil,
-			RhNetworkEventsMonitoring: nil,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TcEgressFlowParse:       nil,
+			TcIngressFlowParse:      nil,
+			TcxEgressFlowParse:      nil,
+			TcxIngressFlowParse:     nil,
+			TcpRcvFentry:            nil,
+			TcpRcvKprobe:            nil,
+			KfreeSkb:                nil,
+			NetworkEventsMonitoring: nil,
 		},
 		BpfMaps: ebpf.BpfMaps{
 			PacketRecord:  newObjects.PacketRecord,
