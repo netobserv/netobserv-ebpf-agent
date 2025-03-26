@@ -24,7 +24,7 @@ require (
 	github.com/vishvananda/netns v0.0.5
 	github.com/vladimirvivien/gexe v0.4.1
 	github.com/vmware/go-ipfix v0.13.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.71.0
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v2 v2.4.0
