@@ -11,10 +11,10 @@ metadata:
       == "main"
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: netobserv-operator
-    appstudio.openshift.io/component: netobserv-ebpf-agent
+    appstudio.openshift.io/application: netobserv-ystream
+    appstudio.openshift.io/component: netobserv-ebpf-agent-ystream
     pipelines.appstudio.openshift.io/type: build
-  name: netobserv-ebpf-agent-on-pull-request
+  name: netobserv-ebpf-agent-ystream-on-pull-request
   namespace: ocp-network-observab-tenant
 spec:
   params:
