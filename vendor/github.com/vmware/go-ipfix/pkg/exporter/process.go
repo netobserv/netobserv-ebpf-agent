@@ -451,9 +451,6 @@ func (ep *ExportingProcess) NewTemplateID() uint16 {
 // createAndSendIPFIXMsg takes in a set as input, creates the IPFIX message, and sends it out.
 // TODO: This method will change when we support sending multiple sets.
 func (ep *ExportingProcess) createAndSendIPFIXMsg(set entities.Set, buf *bytes.Buffer) (int, error) {
-	if set.GetSetType() == entities.Data {
-		ep.seqNumber = ep.seqNumber + set.GetNumberOfRecords()
-	}
 	n, err := WriteIPFIXMsgToBuffer(set, ep.obsDomainID, ep.seqNumber, time.Now(), buf)
 	if err != nil {
 		return 0, err
@@ -469,6 +466,10 @@ func (ep *ExportingProcess) createAndSendIPFIXMsg(set entities.Set, buf *bytes.B
 		return bytesSent, fmt.Errorf("error when sending message on the connection: %v", err)
 	} else if bytesSent != n {
 		return bytesSent, fmt.Errorf("could not send the complete message on the connection")
+	}
+
+	if set.GetSetType() == entities.Data {
+		ep.seqNumber = ep.seqNumber + set.GetNumberOfRecords()
 	}
 
 	return bytesSent, nil
