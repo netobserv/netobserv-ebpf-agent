@@ -27,7 +27,7 @@ var log = logrus.WithField("component", "ifaces.Watcher")
 type Watcher struct {
 	bufLen     int
 	current    map[Interface]struct{}
-	interfaces func(handle netns.NsHandle) ([]Interface, error)
+	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
 	linkSubscriberAt func(ns netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
@@ -114,11 +114,11 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	// before sending netlink updates, send all the existing interfaces at the moment of starting
 	// the Watcher
 	if netnsHandle.IsOpen() || netnsHandle.Equal(netns.None()) {
-		if names, err := w.interfaces(netnsHandle); err != nil {
+		if names, err := w.interfaces(netnsHandle, ns); err != nil {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
 			for _, name := range names {
-				iface := Interface{Name: name.Name, Index: name.Index, NetNS: netnsHandle}
+				iface := Interface{Name: name.Name, Index: name.Index, NetNS: netnsHandle, NSName: ns}
 				w.mutex.Lock()
 				w.current[iface] = struct{}{}
 				w.mutex.Unlock()
@@ -133,7 +133,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debug("received link update without attributes. Ignoring")
 			continue
 		}
-		iface := Interface{Name: attrs.Name, Index: attrs.Index, NetNS: netnsHandle}
+		iface := Interface{Name: attrs.Name, Index: attrs.Index, NetNS: netnsHandle, NSName: ns}
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{

@@ -13,7 +13,7 @@ import (
 type Poller struct {
 	period     time.Duration
 	current    map[Interface]struct{}
-	interfaces func(handle netns.NsHandle) ([]Interface, error)
+	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	bufLen     int
 }
 
@@ -58,7 +58,7 @@ func (np *Poller) pollForEvents(ctx context.Context, ns string, out chan Event) 
 
 	defer ticker.Stop()
 	for {
-		if ifaces, err := np.interfaces(netnsHandle); err != nil {
+		if ifaces, err := np.interfaces(netnsHandle, ns); err != nil {
 			log.WithError(err).Warn("fetching interface names")
 		} else {
 			log.WithField("names", ifaces).Debug("fetched interface names")

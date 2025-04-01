@@ -19,8 +19,8 @@ func TestWatcher(t *testing.T) {
 
 	watcher := NewWatcher(10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
-	watcher.interfaces = func(_ netns.NsHandle) ([]Interface, error) {
-		return []Interface{{"foo", 1, netns.None()}, {"bar", 2, netns.None()}, {"baz", 3, netns.None()}}, nil
+	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		return []Interface{{"foo", 1, netns.None(), ""}, {"bar", 2, netns.None(), ""}, {"baz", 3, netns.None(), ""}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -37,23 +37,23 @@ func TestWatcher(t *testing.T) {
 
 	// initial set of fetched elements
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None()}},
+		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None()}},
+		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"baz", 3, netns.None()}},
+		Event{Type: EventAdded, Interface: Interface{"baz", 3, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 
 	// updates
 	inputLinks <- upAndRunning("bae", 4, netns.None())
 	inputLinks <- down("bar", 2, netns.None())
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 4, netns.None()}},
+		Event{Type: EventAdded, Interface: Interface{"bae", 4, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None()}},
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces
