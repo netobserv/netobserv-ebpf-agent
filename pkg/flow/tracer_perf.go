@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
@@ -24,7 +24,7 @@ type PerfTracer struct {
 }
 
 type perfReader interface {
-	ReadPerf() (perf.Record, error)
+	ReadPerf() (ringbuf.Record, error)
 }
 
 func NewPerfTracer(
@@ -46,7 +46,7 @@ func (m *PerfTracer) TraceLoop(ctx context.Context) node.StartFunc[*model.Packet
 			default:
 				if err := m.listenAndForwardPerf(out); err != nil {
 
-					if errors.Is(err, perf.ErrClosed) {
+					if errors.Is(err, ringbuf.ErrClosed) {
 						pblog.Debug("Received signal, exiting..")
 						return
 					}
