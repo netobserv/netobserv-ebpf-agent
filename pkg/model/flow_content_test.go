@@ -204,6 +204,126 @@ func TestAccumulate(t *testing.T) {
 				PktDrops:        ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1},
 			},
 		},
+	}, {
+		name:      "IPsec: missing + success",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 0,
+			},
+			{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+		},
+	}, {
+		name:      "IPsec: success + missing",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 0,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+		},
+	}, {
+		name:      "IPsec: missing + error",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 0,
+			},
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
+	}, {
+		name:      "IPsec: error + missing",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 0,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
+	}, {
+		name:      "IPsec: success + error",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
+	}, {
+		name:      "IPsec: error + success",
+		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+		inputAdditional: []ebpf.BpfAdditionalMetrics{
+			{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+			{
+				FlowEncrypted:    true,
+				FlowEncryptedRet: 0,
+			},
+		},
+		expected: BpfFlowContent{
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+				FlowEncrypted:    false,
+				FlowEncryptedRet: 2,
+			},
+		},
 	}}
 	for i, tc := range tcs {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
