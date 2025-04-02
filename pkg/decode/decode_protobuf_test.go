@@ -96,6 +96,8 @@ func TestPBFlowToMap(t *testing.T) {
 			DstPort: 2,
 			ZoneId:  100,
 		},
+		FlowEncrypted:    1,
+		FlowEncryptedRet: 0,
 	}
 
 	out := PBFlowToMap(flow)
@@ -146,10 +148,12 @@ func TestPBFlowToMap(t *testing.T) {
 				"Direction": "egress",
 			},
 		},
-		"XlatSrcAddr": "1.2.3.4",
-		"XlatDstAddr": "5.6.7.8",
-		"XlatSrcPort": uint16(1),
-		"XlatDstPort": uint16(2),
-		"ZoneId":      uint16(100),
+		"XlatSrcAddr":  "1.2.3.4",
+		"XlatDstAddr":  "5.6.7.8",
+		"XlatSrcPort":  uint16(1),
+		"XlatDstPort":  uint16(2),
+		"ZoneId":       uint16(100),
+		"IPSecSuccess": true,
+		"IPSecRetCode": uint8(0),
 	}, out)
 }

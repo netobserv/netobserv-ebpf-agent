@@ -236,6 +236,8 @@ type Config struct {
 	BpfManBpfFSPath string `env:"BPFMAN_BPF_FS_PATH" envDefault:"/run/netobserv/maps"`
 	// EnableUDNMapping to allow mapping pod's interface to udn label
 	EnableUDNMapping bool `env:"ENABLE_UDN_MAPPING" envDefault:"false"`
+	// EnableIPsecTracking enable tracking IPsec flows encryption
+	EnableIPsecTracking bool `env:"ENABLE_IPSEC_TRACKING" envDefault:"false"`
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

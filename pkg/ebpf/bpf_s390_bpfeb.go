@@ -22,7 +22,9 @@ type BpfAdditionalMetrics struct {
 	TranslatedFlow   BpfTranslatedFlowT
 	EthProtocol      uint16
 	NetworkEventsIdx uint8
-	_                [7]byte
+	FlowEncrypted    bool
+	FlowEncryptedRet uint8
+	_                [5]byte
 }
 
 type BpfDirectionT uint32
@@ -237,6 +239,10 @@ type BpfProgramSpecs struct {
 	TcxIngressFlowParse     *ebpf.ProgramSpec `ebpf:"tcx_ingress_flow_parse"`
 	TcxIngressPcaParse      *ebpf.ProgramSpec `ebpf:"tcx_ingress_pca_parse"`
 	TrackNatManipPkt        *ebpf.ProgramSpec `ebpf:"track_nat_manip_pkt"`
+	XfrmInputKprobe         *ebpf.ProgramSpec `ebpf:"xfrm_input_kprobe"`
+	XfrmInputKretprobe      *ebpf.ProgramSpec `ebpf:"xfrm_input_kretprobe"`
+	XfrmOutputKprobe        *ebpf.ProgramSpec `ebpf:"xfrm_output_kprobe"`
+	XfrmOutputKretprobe     *ebpf.ProgramSpec `ebpf:"xfrm_output_kretprobe"`
 }
 
 // BpfMapSpecs contains maps before they are loaded into the kernel.
@@ -249,6 +255,8 @@ type BpfMapSpecs struct {
 	DnsFlows              *ebpf.MapSpec `ebpf:"dns_flows"`
 	FilterMap             *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.MapSpec `ebpf:"global_counters"`
+	IpsecEgressMap        *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
+	IpsecIngressMap       *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
 }
@@ -260,6 +268,7 @@ type BpfVariableSpecs struct {
 	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
+	EnableIpsec                    *ebpf.VariableSpec `ebpf:"enable_ipsec"`
 	EnableNetworkEventsMonitoring  *ebpf.VariableSpec `ebpf:"enable_network_events_monitoring"`
 	EnablePca                      *ebpf.VariableSpec `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
@@ -300,6 +309,8 @@ type BpfMaps struct {
 	DnsFlows              *ebpf.Map `ebpf:"dns_flows"`
 	FilterMap             *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.Map `ebpf:"global_counters"`
+	IpsecEgressMap        *ebpf.Map `ebpf:"ipsec_egress_map"`
+	IpsecIngressMap       *ebpf.Map `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.Map `ebpf:"peer_filter_map"`
 }
@@ -312,6 +323,8 @@ func (m *BpfMaps) Close() error {
 		m.DnsFlows,
 		m.FilterMap,
 		m.GlobalCounters,
+		m.IpsecEgressMap,
+		m.IpsecIngressMap,
 		m.PacketRecord,
 		m.PeerFilterMap,
 	)
@@ -324,6 +337,7 @@ type BpfVariables struct {
 	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
+	EnableIpsec                    *ebpf.Variable `ebpf:"enable_ipsec"`
 	EnableNetworkEventsMonitoring  *ebpf.Variable `ebpf:"enable_network_events_monitoring"`
 	EnablePca                      *ebpf.Variable `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`
@@ -355,6 +369,10 @@ type BpfPrograms struct {
 	TcxIngressFlowParse     *ebpf.Program `ebpf:"tcx_ingress_flow_parse"`
 	TcxIngressPcaParse      *ebpf.Program `ebpf:"tcx_ingress_pca_parse"`
 	TrackNatManipPkt        *ebpf.Program `ebpf:"track_nat_manip_pkt"`
+	XfrmInputKprobe         *ebpf.Program `ebpf:"xfrm_input_kprobe"`
+	XfrmInputKretprobe      *ebpf.Program `ebpf:"xfrm_input_kretprobe"`
+	XfrmOutputKprobe        *ebpf.Program `ebpf:"xfrm_output_kprobe"`
+	XfrmOutputKretprobe     *ebpf.Program `ebpf:"xfrm_output_kretprobe"`
 }
 
 func (p *BpfPrograms) Close() error {
@@ -372,6 +390,10 @@ func (p *BpfPrograms) Close() error {
 		p.TcxIngressFlowParse,
 		p.TcxIngressPcaParse,
 		p.TrackNatManipPkt,
+		p.XfrmInputKprobe,
+		p.XfrmInputKretprobe,
+		p.XfrmOutputKprobe,
+		p.XfrmOutputKretprobe,
 	)
 }
 
