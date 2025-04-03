@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/ocp-network-observab-tenant/etobserv-ebpf-agent-ystream:on-pr-{{revision}}
+    value: quay.io/redhat-user-workloads/ocp-network-observab-tenant/netobserv-ebpf-agent-ystream:on-pr-{{revision}}
   - name: image-expires-after
     value: 5d
   - name: build-args-file
