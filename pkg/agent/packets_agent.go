@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -21,7 +22,7 @@ import (
 
 // Packets reporting agent
 type Packets struct {
-	cfg *Config
+	cfg *config.Agent
 
 	// input data providers
 	interfaces ifaces.Informer
@@ -51,11 +52,11 @@ type ebpfPacketFetcher interface {
 }
 
 // PacketsAgent instantiates a new agent, given a configuration.
-func PacketsAgent(cfg *Config) (*Packets, error) {
+func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 	plog.Info("initializing Packets agent")
 
 	// manage deprecated configs
-	manageDeprecatedConfigs(cfg)
+	config.ManageDeprecatedConfigs(cfg)
 
 	// configure informer for new interfaces
 	informer := configureInformer(cfg, plog)
@@ -78,7 +79,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 		debug = true
 	}
 	filterRules := make([]*tracer.FilterConfig, 0)
-	var flowFilters []*FlowFilter
+	var flowFilters []*config.FlowFilter
 	if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
 		return nil, err
 	}
@@ -119,7 +120,7 @@ func PacketsAgent(cfg *Config) (*Packets, error) {
 }
 
 // packetssAgent is a private constructor with injectable dependencies, usable for tests
-func packetsAgent(cfg *Config,
+func packetsAgent(cfg *config.Agent,
 	informer ifaces.Informer,
 	fetcher ebpfPacketFetcher,
 	packetexporter node.TerminalFunc[[]*model.PacketRecord],
@@ -175,7 +176,7 @@ func packetsAgent(cfg *Config,
 	}, nil
 }
 
-func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
+func buildGRPCPacketExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port for PCA: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -189,7 +190,7 @@ func buildGRPCPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketReco
 	return pcapStreamer.ExportGRPCPackets, nil
 }
 
-func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
+func buildPacketExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCPacketExporter(cfg)
@@ -200,7 +201,7 @@ func buildPacketExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord],
 	}
 }
 
-func buildPacketDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.PacketRecord], error) {
+func buildPacketDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
 	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
 	if err != nil {
 		return nil, err
