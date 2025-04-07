@@ -1,4 +1,4 @@
-package agent
+package config
 
 import (
 	"time"
@@ -80,7 +80,7 @@ type FlowFilter struct {
 	FilterPeerCIDR string `json:"peer_cidr,omitempty"`
 }
 
-type Config struct {
+type Agent struct {
 	// AgentIP allows overriding the reported Agent IP address on each flow.
 	AgentIP string `env:"AGENT_IP"`
 	// AgentIPIface specifies which interface should the agent pick the IP address from in order to
@@ -250,7 +250,7 @@ type Config struct {
 	PCAServerPort int `env:"PCA_SERVER_PORT"`
 }
 
-func manageDeprecatedConfigs(cfg *Config) {
+func ManageDeprecatedConfigs(cfg *Agent) {
 	if len(cfg.FlowsTargetHost) != 0 {
 		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
 		cfg.TargetHost = cfg.FlowsTargetHost

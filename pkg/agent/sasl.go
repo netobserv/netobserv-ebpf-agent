@@ -5,12 +5,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
 )
 
-func buildSASLConfig(cfg *Config) (sasl.Mechanism, error) {
+func buildSASLConfig(cfg *config.Agent) (sasl.Mechanism, error) {
 	// Read client ID
 	id, err := os.ReadFile(cfg.KafkaSASLClientIDPath)
 	if err != nil {

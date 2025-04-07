@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netobserv/gopipes/pkg/node"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
@@ -66,14 +67,14 @@ func (s Status) String() string {
 	}
 }
 
-func configureInformer(cfg *Config, log *logrus.Entry) ifaces.Informer {
+func configureInformer(cfg *config.Agent, log *logrus.Entry) ifaces.Informer {
 	var informer ifaces.Informer
 	switch cfg.ListenInterfaces {
-	case ListenPoll:
+	case config.ListenPoll:
 		log.WithField("period", cfg.ListenPollPeriod).
 			Debug("listening for new interfaces: use polling")
 		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
-	case ListenWatch:
+	case config.ListenWatch:
 		log.Debug("listening for new interfaces: use watching")
 		informer = ifaces.NewWatcher(cfg.BuffersLength)
 	default:
@@ -107,7 +108,7 @@ func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slo
 
 // Flows reporting agent
 type Flows struct {
-	cfg *Config
+	cfg *config.Agent
 
 	// input data providers
 	interfaces ifaces.Informer
@@ -140,11 +141,11 @@ type ebpfFlowFetcher interface {
 }
 
 // FlowsAgent instantiates a new agent, given a configuration.
-func FlowsAgent(cfg *Config) (*Flows, error) {
+func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	alog.Info("initializing Flows agent")
 
 	// manage deprecated configs
-	manageDeprecatedConfigs(cfg)
+	config.ManageDeprecatedConfigs(cfg)
 
 	// configure informer for new interfaces
 	var informer = configureInformer(cfg, alog)
@@ -199,7 +200,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 	}
 	filterRules := make([]*tracer.FilterConfig, 0)
 	if cfg.EnableFlowFilter {
-		var flowFilters []*FlowFilter
+		var flowFilters []*config.FlowFilter
 		if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
 			return nil, err
 		}
@@ -250,7 +251,7 @@ func FlowsAgent(cfg *Config) (*Flows, error) {
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
-func flowsAgent(cfg *Config, m *metrics.Metrics,
+func flowsAgent(cfg *config.Agent, m *metrics.Metrics,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
@@ -318,13 +319,13 @@ func flowsAgent(cfg *Config, m *metrics.Metrics,
 	}, nil
 }
 
-func flowDirections(cfg *Config) (ingress, egress bool) {
+func flowDirections(cfg *config.Agent) (ingress, egress bool) {
 	switch cfg.Direction {
-	case DirectionIngress:
+	case config.DirectionIngress:
 		return true, false
-	case DirectionEgress:
+	case config.DirectionEgress:
 		return false, true
-	case DirectionBoth:
+	case config.DirectionBoth:
 		return true, true
 	default:
 		alog.Warnf("unknown DIRECTION %q. Tracing both ingress and egress traffic", cfg.Direction)
@@ -332,7 +333,7 @@ func flowDirections(cfg *Config) (ingress, egress bool) {
 	}
 }
 
-func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildFlowExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCExporter(cfg, m)
@@ -349,7 +350,7 @@ func buildFlowExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*mo
 	}
 }
 
-func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -361,7 +362,7 @@ func buildGRPCExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*mo
 	return grpcExporter.ExportFlows, nil
 }
 
-func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.Record], error) {
+func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.Record], error) {
 	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
 	if err != nil {
 		return nil, err
@@ -369,7 +370,7 @@ func buildFlowDirectFLPExporter(cfg *Config) (node.TerminalFunc[[]*model.Record]
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
 	if len(cfg.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -419,7 +420,7 @@ func buildKafkaExporter(cfg *Config, m *metrics.Metrics) (node.TerminalFunc[[]*m
 	}).ExportFlows, nil
 }
 
-func buildIPFIXExporter(cfg *Config, proto string) (node.TerminalFunc[[]*model.Record], error) {
+func buildIPFIXExporter(cfg *config.Agent, proto string) (node.TerminalFunc[[]*model.Record], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
