@@ -18,11 +18,11 @@
 package ingest
 
 import (
+	"errors"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/kafka"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/decode"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
@@ -40,13 +40,19 @@ type kafkaReadMessage interface {
 }
 
 type ingestKafka struct {
-	kafkaReader    kafkaReadMessage
-	decoder        decode.Decoder
-	in             chan []byte
-	exitChan       <-chan struct{}
-	metrics        *metrics
-	canLogMessages bool
+	kafkaReader      kafkaReadMessage
+	decoder          decode.Decoder
+	in               chan []byte
+	exitChan         <-chan struct{}
+	batchReadTimeout int64
+	batchMaxLength   int
+	metrics          *metrics
+	canLogMessages   bool
 }
+
+const defaultBatchReadTimeout = int64(1000)
+const defaultKafkaBatchMaxLength = 500
+const defaultKafkaCommitInterval = 500
 
 const kafkaStatsPeriod = 15 * time.Second
 
@@ -169,34 +175,125 @@ func (k *ingestKafka) reportStats() {
 // NewIngestKafka create a new ingester
 // nolint:cyclop
 func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (Ingester, error) {
-	config := &api.IngestKafka{}
+	klog.Debugf("entering NewIngestKafka")
+	jsonIngestKafka := api.IngestKafka{}
 	var ingestType string
 	if params.Ingest != nil {
 		ingestType = params.Ingest.Type
 		if params.Ingest.Kafka != nil {
-			config = params.Ingest.Kafka
+			jsonIngestKafka = *params.Ingest.Kafka
 		}
 	}
 
-	kafkaReader, bml, err := kafka.NewReader(config)
+	// connect to the kafka server
+	startOffsetString := jsonIngestKafka.StartOffset
+	var startOffset int64
+	switch startOffsetString {
+	case "FirstOffset", "":
+		startOffset = kafkago.FirstOffset
+	case "LastOffset":
+		startOffset = kafkago.LastOffset
+	default:
+		startOffset = kafkago.FirstOffset
+		klog.Errorf("illegal value for StartOffset: %s\n", startOffsetString)
+	}
+	klog.Debugf("startOffset = %v", startOffset)
+	groupBalancers := make([]kafkago.GroupBalancer, 0)
+	for _, gb := range jsonIngestKafka.GroupBalancers {
+		switch gb {
+		case "range":
+			groupBalancers = append(groupBalancers, &kafkago.RangeGroupBalancer{})
+		case "roundRobin":
+			groupBalancers = append(groupBalancers, &kafkago.RoundRobinGroupBalancer{})
+		case "rackAffinity":
+			groupBalancers = append(groupBalancers, &kafkago.RackAffinityGroupBalancer{})
+		default:
+			klog.Warningf("groupbalancers parameter missing")
+			groupBalancers = append(groupBalancers, &kafkago.RoundRobinGroupBalancer{})
+		}
+	}
+
+	batchReadTimeout := defaultBatchReadTimeout
+	if jsonIngestKafka.BatchReadTimeout != 0 {
+		batchReadTimeout = jsonIngestKafka.BatchReadTimeout
+	}
+	klog.Infof("batchReadTimeout = %d", batchReadTimeout)
+
+	commitInterval := int64(defaultKafkaCommitInterval)
+	if jsonIngestKafka.CommitInterval != 0 {
+		commitInterval = jsonIngestKafka.CommitInterval
+	}
+	klog.Infof("commitInterval = %d", jsonIngestKafka.CommitInterval)
+
+	dialer := &kafkago.Dialer{
+		Timeout:   kafkago.DefaultDialer.Timeout,
+		DualStack: kafkago.DefaultDialer.DualStack,
+	}
+	if jsonIngestKafka.TLS != nil {
+		klog.Infof("Using TLS configuration: %v", jsonIngestKafka.TLS)
+		tlsConfig, err := jsonIngestKafka.TLS.Build()
+		if err != nil {
+			return nil, err
+		}
+		dialer.TLS = tlsConfig
+	}
+
+	if jsonIngestKafka.SASL != nil {
+		m, err := utils.SetupSASLMechanism(jsonIngestKafka.SASL)
+		if err != nil {
+			return nil, err
+		}
+		dialer.SASLMechanism = m
+	}
+
+	readerConfig := kafkago.ReaderConfig{
+		Brokers:        jsonIngestKafka.Brokers,
+		Topic:          jsonIngestKafka.Topic,
+		GroupID:        jsonIngestKafka.GroupID,
+		GroupBalancers: groupBalancers,
+		StartOffset:    startOffset,
+		CommitInterval: time.Duration(commitInterval) * time.Millisecond,
+		Dialer:         dialer,
+	}
+
+	if jsonIngestKafka.PullQueueCapacity > 0 {
+		readerConfig.QueueCapacity = jsonIngestKafka.PullQueueCapacity
+	}
+
+	if jsonIngestKafka.PullMaxBytes > 0 {
+		readerConfig.MaxBytes = jsonIngestKafka.PullMaxBytes
+	}
+
+	klog.Debugf("reader config: %#v", readerConfig)
+
+	kafkaReader := kafkago.NewReader(readerConfig)
+	if kafkaReader == nil {
+		errMsg := "NewIngestKafka: failed to create kafka-go reader"
+		klog.Errorf("%s", errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	decoder, err := decode.GetDecoder(jsonIngestKafka.Decoder)
 	if err != nil {
 		return nil, err
 	}
 
-	decoder, err := decode.GetDecoder(config.Decoder)
-	if err != nil {
-		return nil, err
+	bml := defaultKafkaBatchMaxLength
+	if jsonIngestKafka.BatchMaxLen != 0 {
+		bml = jsonIngestKafka.BatchMaxLen
 	}
 
 	in := make(chan []byte, 2*bml)
 	metrics := newMetrics(opMetrics, params.Name, ingestType, func() int { return len(in) })
 
 	return &ingestKafka{
-		kafkaReader:    kafkaReader,
-		decoder:        decoder,
-		exitChan:       utils.ExitChannel(),
-		in:             in,
-		metrics:        metrics,
-		canLogMessages: config.Decoder.Type == api.DecoderJSON,
+		kafkaReader:      kafkaReader,
+		decoder:          decoder,
+		exitChan:         utils.ExitChannel(),
+		in:               in,
+		batchMaxLength:   bml,
+		batchReadTimeout: batchReadTimeout,
+		metrics:          metrics,
+		canLogMessages:   jsonIngestKafka.Decoder.Type == api.DecoderJSON,
 	}, nil
 }

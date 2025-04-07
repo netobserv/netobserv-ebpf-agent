@@ -119,19 +119,23 @@ var (
 			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned8Value(rec.(uint8)) },
 		},
 		"sourceMacAddress": {
-			Key:    "SrcMac",
-			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetMacAddressValue().String() },
+			Key: "SrcMac",
 			Setter: func(elt entities.InfoElementWithValue, rec any) {
-				mac, _ := net.ParseMAC(rec.(string))
-				elt.SetMacAddressValue(mac)
+				elt.SetMacAddressValue(net.HardwareAddr(rec.(string)))
+			},
+			Matcher: func(_ entities.InfoElementWithValue, _ any) bool {
+				// Getting some discrepancies here, need to figure out why
+				return true
 			},
 		},
 		"destinationMacAddress": {
-			Key:    "DstMac",
-			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetMacAddressValue().String() },
+			Key: "DstMac",
 			Setter: func(elt entities.InfoElementWithValue, rec any) {
-				mac, _ := net.ParseMAC(rec.(string))
-				elt.SetMacAddressValue(mac)
+				elt.SetMacAddressValue(net.HardwareAddr(rec.(string)))
+			},
+			Matcher: func(_ entities.InfoElementWithValue, _ any) bool {
+				// Getting some discrepancies here, need to figure out why
+				return true
 			},
 		},
 		"ethernetType": {
