@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 
 	_ "net/http/pprof"
 )
@@ -38,7 +39,7 @@ func terminateAgent() (ctx context.Context) {
 
 func main() {
 	logrus.Infof("starting NetObserv eBPF Agent [build version: %s, build date: %s]", buildVersion, buildDate)
-	config := agent.Config{}
+	config := config.Agent{}
 	if err := env.Parse(&config); err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
@@ -78,7 +79,7 @@ func main() {
 	}
 }
 
-func setLoggerVerbosity(cfg *agent.Config) {
+func setLoggerVerbosity(cfg *config.Agent) {
 	lvl, err := logrus.ParseLevel(cfg.LogLevel)
 	if err != nil {
 		logrus.WithError(err).Warn("assuming 'info' logger level as default")

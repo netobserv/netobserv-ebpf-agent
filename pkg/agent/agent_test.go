@@ -12,6 +12,7 @@ import (
 
 	"github.com/gavv/monotime"
 	test2 "github.com/mariomac/guara/pkg/test"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -27,19 +28,19 @@ const timeout = 2 * time.Second
 func TestFlowsAgent_InvalidConfigs(t *testing.T) {
 	for _, tc := range []struct {
 		d string
-		c Config
+		c config.Agent
 	}{{
 		d: "invalid export type",
-		c: Config{Export: "foo"},
+		c: config.Agent{Export: "foo"},
 	}, {
 		d: "GRPC: missing host",
-		c: Config{Export: "grpc", TargetPort: 3333},
+		c: config.Agent{Export: "grpc", TargetPort: 3333},
 	}, {
 		d: "GRPC: missing port",
-		c: Config{Export: "grpc", TargetHost: "flp"},
+		c: config.Agent{Export: "grpc", TargetHost: "flp"},
 	}, {
 		d: "Kafka: missing brokers",
-		c: Config{Export: "kafka"},
+		c: config.Agent{Export: "kafka"},
 	}} {
 		t.Run(tc.d, func(t *testing.T) {
 			_, err := FlowsAgent(&tc.c)
@@ -111,7 +112,7 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 	ebpfTracer := test.NewTracerFake()
 	export := test.NewExporterFake()
 	agent, err := flowsAgent(
-		&Config{
+		&config.Agent{
 			CacheActiveTimeout: 10 * time.Millisecond,
 			CacheMaxFlows:      100,
 		},

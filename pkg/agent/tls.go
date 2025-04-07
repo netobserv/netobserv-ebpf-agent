@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"os"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 )
 
-func buildTLSConfig(cfg *Config) (*tls.Config, error) {
+func buildTLSConfig(cfg *config.Agent) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: cfg.KafkaTLSInsecureSkipVerify,
 	}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 )
 
 // dependencies that can be injected from testing
@@ -22,7 +24,7 @@ var (
 //   - AgentIPIface specifies which interface this function should look into in order to pickup an address.
 //   - AgentIPType specifies which type of IP address should the agent pickup ("any" to pickup whichever
 //     ipv4 or ipv6 address is found first)
-func fetchAgentIP(cfg *Config) (net.IP, error) {
+func fetchAgentIP(cfg *config.Agent) (net.IP, error) {
 	if cfg.AgentIP != "" {
 		if ip := net.ParseIP(cfg.AgentIP); ip != nil {
 			return ip, nil
@@ -30,25 +32,25 @@ func fetchAgentIP(cfg *Config) (net.IP, error) {
 		return nil, fmt.Errorf("can't parse provided IP %v", cfg.AgentIP)
 	}
 
-	if cfg.AgentIPType != IPTypeAny &&
-		cfg.AgentIPType != IPTypeIPV6 &&
-		cfg.AgentIPType != IPTypeIPV4 {
+	if cfg.AgentIPType != config.IPTypeAny &&
+		cfg.AgentIPType != config.IPTypeIPV6 &&
+		cfg.AgentIPType != config.IPTypeIPV4 {
 		return nil, fmt.Errorf("invalid IP type %q. Valid values are: %s, %s or %s",
-			cfg.AgentIPType, IPTypeIPV4, IPTypeIPV6, IPTypeAny)
+			cfg.AgentIPType, config.IPTypeIPV4, config.IPTypeIPV6, config.IPTypeAny)
 	}
 
 	switch cfg.AgentIPIface {
-	case IPIfaceLocal:
+	case config.IPIfaceLocal:
 		return fromLocal(cfg.AgentIPType)
-	case IPIfaceExternal:
+	case config.IPIfaceExternal:
 		return fromExternal(cfg.AgentIPType)
 	default:
-		if !strings.HasPrefix(cfg.AgentIPIface, IPIfaceNamedPrefix) {
+		if !strings.HasPrefix(cfg.AgentIPIface, config.IPIfaceNamedPrefix) {
 			return nil, fmt.Errorf(
 				"invalid IP interface %q. Valid values are: %s, %s or %s<iface_name>",
-				cfg.AgentIPIface, IPIfaceLocal, IPIfaceExternal, IPIfaceNamedPrefix)
+				cfg.AgentIPIface, config.IPIfaceLocal, config.IPIfaceExternal, config.IPIfaceNamedPrefix)
 		}
-		return fromInterface(cfg.AgentIPIface[len(IPIfaceNamedPrefix):], cfg.AgentIPType)
+		return fromInterface(cfg.AgentIPIface[len(config.IPIfaceNamedPrefix):], cfg.AgentIPType)
 	}
 }
 
@@ -84,8 +86,8 @@ func fromExternal(ipType string) (net.IP, error) {
 	// host address
 	addrStr := "8.8.8.8:80"
 	// When IPType is "any" and we have interface with IPv6 address only then use ipv6 dns address
-	ip, _ := fromLocal(IPTypeIPV4)
-	if ipType == IPTypeIPV6 || (ipType == IPTypeAny && ip == nil) {
+	ip, _ := fromLocal(config.IPTypeIPV4)
+	if ipType == config.IPTypeIPV6 || (ipType == config.IPTypeAny && ip == nil) {
 		addrStr = "[2001:4860:4860::8888]:80"
 	}
 	conn, err := dial("udp", addrStr)
@@ -117,11 +119,11 @@ func getIP(pip net.IP, ipType string) (net.IP, bool) {
 		return nil, false
 	}
 	switch ipType {
-	case IPTypeIPV4:
+	case config.IPTypeIPV4:
 		if ip := pip.To4(); ip != nil {
 			return ip, true
 		}
-	case IPTypeIPV6:
+	case config.IPTypeIPV6:
 		// as any IP4 address can be converted to IP6, we only return any
 		// address that can be converted to IP6 but not to IP4
 		if ip := pip.To16(); ip != nil && pip.To4() == nil {
