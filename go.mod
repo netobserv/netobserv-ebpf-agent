@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/cilium/ebpf v0.17.3
+	github.com/cilium/ebpf v0.18.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/gopacket/gopacket v1.3.1
