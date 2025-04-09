@@ -18,6 +18,7 @@ static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_r
             if (extra_metrics->flow_encrypted) {
                 extra_metrics->flow_encrypted = false;
             }
+            increase_counter(IPSEC_OPERATION_ERR);
         }
         return 0;
     }
@@ -63,7 +64,11 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
     new_flow.end_mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.flow_encrypted_ret = flow_encrypted_ret;
-    new_flow.flow_encrypted = flow_encrypted_ret == 0 ? true : false;
+    if (flow_encrypted_ret == 0) {
+        new_flow.flow_encrypted = true;
+    } else {
+        increase_counter(IPSEC_OPERATION_ERR);
+    }
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (ret != -EEXIST) {

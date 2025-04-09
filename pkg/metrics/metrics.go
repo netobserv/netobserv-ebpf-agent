@@ -135,6 +135,13 @@ var (
 		"hasNetEvents",
 		"hasXlat",
 	)
+	ipsecOperationErrCounter = defineMetric(
+		"ipsec_operation_err_total",
+		"IPSec operation errors",
+		TypeCounter,
+		"source",
+		"reason",
+	)
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -167,6 +174,7 @@ type Metrics struct {
 	BufferSizeGauge       *BufferSizeGauge
 	Errors                *ErrorCounter
 	FlowEnrichmentCounter *FlowEnrichmentCounter
+	IPSecErrorCounter     *EvictionCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
@@ -182,6 +190,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.BufferSizeGauge = &BufferSizeGauge{vec: m.NewGaugeVec(&bufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounterCounter)}
+	m.IPSecErrorCounter = &EvictionCounter{vec: m.NewCounterVec(&ipsecOperationErrCounter)}
 	return m
 }
 
