@@ -1959,6 +1959,10 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	if cfg.EnableIPsecTracker {
 		enableIPsec = 1
 	}
+	if enableIPsec == 0 {
+		spec.Maps[ipsecInputMap].MaxEntries = 1
+		spec.Maps[ipsecOutputMap].MaxEntries = 1
+	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
 		{constSampling, uint32(cfg.Sampling)},
