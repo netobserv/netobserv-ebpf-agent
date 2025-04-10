@@ -273,13 +273,14 @@ type FlowEnrichmentCounter struct {
 	vec *prometheus.CounterVec
 }
 
-func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents, hasXlat bool) {
+func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents, hasXlat, hasIPSec bool) {
 	c.vec.WithLabelValues(
 		strconv.FormatBool(hasDNS),
 		strconv.FormatBool(hasRTT),
 		strconv.FormatBool(hasDrops),
 		strconv.FormatBool(hasNetEvents),
 		strconv.FormatBool(hasXlat),
+		strconv.FormatBool(hasIPSec),
 	).Inc()
 }
 
