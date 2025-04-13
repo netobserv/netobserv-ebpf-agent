@@ -195,7 +195,7 @@ github.com/google/uuid
 ## explicit; go 1.22.0
 github.com/gopacket/gopacket
 github.com/gopacket/gopacket/layers
-# github.com/gorilla/websocket v1.5.0
+# github.com/gorilla/websocket v1.5.3
 ## explicit; go 1.12
 github.com/gorilla/websocket
 # github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1
