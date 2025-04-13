@@ -93,7 +93,7 @@ require (
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/netobserv/loki-client-go v0.0.0-20220927092034-f37122a54500 // indirect
-	github.com/netsampler/goflow2 v1.3.7 // indirect
+	github.com/netsampler/goflow2/v2 v2.2.2 // indirect
 	github.com/ovn-org/libovsdb v0.7.1-0.20240820095311-ce1951614a20 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pion/dtls/v2 v2.2.12 // indirect
