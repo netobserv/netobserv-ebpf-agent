@@ -6,7 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/cilium/ebpf v0.16.0
+	github.com/cilium/ebpf v0.18.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/gopacket/gopacket v1.3.1
@@ -131,7 +131,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
