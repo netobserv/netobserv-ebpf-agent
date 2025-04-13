@@ -247,7 +247,7 @@ github.com/libp2p/go-reuseport
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
-# github.com/mariomac/guara v0.0.0-20250306093316-0985019a30d4
+# github.com/mariomac/guara v0.0.0-20250408105519-1e4dbdfb7136
 ## explicit; go 1.18
 github.com/mariomac/guara/pkg/test
 # github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
