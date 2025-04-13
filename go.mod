@@ -22,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.5
-	github.com/vladimirvivien/gexe v0.4.1
+	github.com/vladimirvivien/gexe v0.5.0
 	github.com/vmware/go-ipfix v0.12.0
 	golang.org/x/sys v0.30.0
 	google.golang.org/grpc v1.70.0
