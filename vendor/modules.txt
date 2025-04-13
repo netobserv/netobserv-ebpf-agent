@@ -374,7 +374,7 @@ github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types
 # github.com/paulbellamy/ratecounter v0.2.0
 ## explicit
 github.com/paulbellamy/ratecounter
-# github.com/pierrec/lz4/v4 v4.1.21
+# github.com/pierrec/lz4/v4 v4.1.22
 ## explicit; go 1.14
 github.com/pierrec/lz4/v4
 github.com/pierrec/lz4/v4/internal/lz4block
