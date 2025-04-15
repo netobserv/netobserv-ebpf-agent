@@ -25,7 +25,7 @@ require (
 	github.com/vladimirvivien/gexe v0.4.1
 	github.com/vmware/go-ipfix v0.13.0
 	golang.org/x/sys v0.32.0
-	google.golang.org/grpc v1.71.0
+	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.32.3
