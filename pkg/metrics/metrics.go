@@ -134,6 +134,7 @@ var (
 		"hasDrops",
 		"hasNetEvents",
 		"hasXlat",
+		"hasIPSec",
 	)
 )
 
