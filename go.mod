@@ -14,7 +14,7 @@ require (
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/netobserv/flowlogs-pipeline v1.7.0-community.0.20250407055901-c9a2490f9235
 	github.com/netobserv/gopipes v0.3.0
-	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250227173154-57a2590a1d16
+	github.com/ovn-org/ovn-kubernetes/go-controller 8ca7a17e9ab3
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/prometheus/client_golang v1.21.1
 	github.com/segmentio/kafka-go v0.4.47
