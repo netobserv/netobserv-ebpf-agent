@@ -186,7 +186,6 @@ func encodeSetHeader(buf []byte, templateID, length uint16) {
 
 func (m *bufferedMessage) sendMessage() (int, error) {
 	now := time.Now()
-	m.ep.seqNumber = m.ep.seqNumber + uint32(m.numRecords)
 	msgLen := len(m.buffer)
 	encodeMessageHeader(m.buffer, 10, uint16(msgLen), uint32(now.Unix()), m.ep.seqNumber, m.ep.obsDomainID)
 	encodeSetHeader(m.buffer[entities.MsgHeaderLength:], m.templateID, uint16(msgLen-entities.MsgHeaderLength))
@@ -194,6 +193,7 @@ func (m *bufferedMessage) sendMessage() (int, error) {
 	if err != nil {
 		return n, err
 	}
+	m.ep.seqNumber = m.ep.seqNumber + uint32(m.numRecords)
 	m.reset()
 	return n, nil
 }

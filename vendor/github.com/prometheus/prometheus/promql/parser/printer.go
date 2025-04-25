@@ -14,14 +14,16 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/prometheus/common/model"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 // Tree returns a string of the tree structure of the given node.
@@ -62,16 +64,7 @@ func (es Expressions) String() (s string) {
 }
 
 func (node *AggregateExpr) String() string {
-	aggrString := node.Op.String()
-
-	if node.Without {
-		aggrString += fmt.Sprintf(" without(%s) ", strings.Join(node.Grouping, ", "))
-	} else {
-		if len(node.Grouping) > 0 {
-			aggrString += fmt.Sprintf(" by(%s) ", strings.Join(node.Grouping, ", "))
-		}
-	}
-
+	aggrString := node.getAggOpStr()
 	aggrString += "("
 	if node.Op.IsAggregatorWithParam() {
 		aggrString += fmt.Sprintf("%s, ", node.Param)
@@ -81,65 +74,165 @@ func (node *AggregateExpr) String() string {
 	return aggrString
 }
 
-func (node *BinaryExpr) String() string {
-	returnBool := ""
-	if node.ReturnBool {
-		returnBool = " bool"
+func (node *AggregateExpr) ShortString() string {
+	aggrString := node.getAggOpStr()
+	return aggrString
+}
+
+func (node *AggregateExpr) getAggOpStr() string {
+	aggrString := node.Op.String()
+
+	switch {
+	case node.Without:
+		aggrString += fmt.Sprintf(" without (%s) ", joinLabels(node.Grouping))
+	case len(node.Grouping) > 0:
+		aggrString += fmt.Sprintf(" by (%s) ", joinLabels(node.Grouping))
 	}
 
+	return aggrString
+}
+
+func joinLabels(ss []string) string {
+	var bytea [1024]byte // On stack to avoid memory allocation while building the output.
+	b := bytes.NewBuffer(bytea[:0])
+
+	for i, s := range ss {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if !model.IsValidLegacyMetricName(string(model.LabelValue(s))) {
+			b.Write(strconv.AppendQuote(b.AvailableBuffer(), s))
+		} else {
+			b.WriteString(s)
+		}
+	}
+	return b.String()
+}
+
+func (node *BinaryExpr) returnBool() string {
+	if node.ReturnBool {
+		return " bool"
+	}
+	return ""
+}
+
+func (node *BinaryExpr) String() string {
+	matching := node.getMatchingStr()
+	return fmt.Sprintf("%s %s%s%s %s", node.LHS, node.Op, node.returnBool(), matching, node.RHS)
+}
+
+func (node *BinaryExpr) ShortString() string {
+	return fmt.Sprintf("%s%s%s", node.Op, node.returnBool(), node.getMatchingStr())
+}
+
+func (node *BinaryExpr) getMatchingStr() string {
 	matching := ""
 	vm := node.VectorMatching
 	if vm != nil && (len(vm.MatchingLabels) > 0 || vm.On) {
+		vmTag := "ignoring"
 		if vm.On {
-			matching = fmt.Sprintf(" on(%s)", strings.Join(vm.MatchingLabels, ", "))
-		} else {
-			matching = fmt.Sprintf(" ignoring(%s)", strings.Join(vm.MatchingLabels, ", "))
+			vmTag = "on"
 		}
+		matching = fmt.Sprintf(" %s (%s)", vmTag, strings.Join(vm.MatchingLabels, ", "))
+
 		if vm.Card == CardManyToOne || vm.Card == CardOneToMany {
-			matching += " group_"
+			vmCard := "right"
 			if vm.Card == CardManyToOne {
-				matching += "left"
-			} else {
-				matching += "right"
+				vmCard = "left"
 			}
-			matching += fmt.Sprintf("(%s)", strings.Join(vm.Include, ", "))
+			matching += fmt.Sprintf(" group_%s (%s)", vmCard, strings.Join(vm.Include, ", "))
 		}
 	}
-	return fmt.Sprintf("%s %s%s%s %s", node.LHS, node.Op, returnBool, matching, node.RHS)
+	return matching
 }
 
 func (node *Call) String() string {
 	return fmt.Sprintf("%s(%s)", node.Func.Name, node.Args)
 }
 
+func (node *Call) ShortString() string {
+	return node.Func.Name
+}
+
+func (node *MatrixSelector) atOffset() (string, string) {
+	// Copy the Vector selector before changing the offset
+	vecSelector := node.VectorSelector.(*VectorSelector)
+	offset := ""
+	switch {
+	case vecSelector.OriginalOffset > time.Duration(0):
+		offset = fmt.Sprintf(" offset %s", model.Duration(vecSelector.OriginalOffset))
+	case vecSelector.OriginalOffset < time.Duration(0):
+		offset = fmt.Sprintf(" offset -%s", model.Duration(-vecSelector.OriginalOffset))
+	}
+	at := ""
+	switch {
+	case vecSelector.Timestamp != nil:
+		at = fmt.Sprintf(" @ %.3f", float64(*vecSelector.Timestamp)/1000.0)
+	case vecSelector.StartOrEnd == START:
+		at = " @ start()"
+	case vecSelector.StartOrEnd == END:
+		at = " @ end()"
+	}
+	return at, offset
+}
+
 func (node *MatrixSelector) String() string {
+	at, offset := node.atOffset()
 	// Copy the Vector selector before changing the offset
 	vecSelector := *node.VectorSelector.(*VectorSelector)
-	offset := ""
-	if vecSelector.Offset != time.Duration(0) {
-		offset = fmt.Sprintf(" offset %s", model.Duration(vecSelector.Offset))
-	}
+	// Do not print the @ and offset twice.
+	offsetVal, atVal, preproc := vecSelector.OriginalOffset, vecSelector.Timestamp, vecSelector.StartOrEnd
+	vecSelector.OriginalOffset = 0
+	vecSelector.Timestamp = nil
+	vecSelector.StartOrEnd = 0
 
-	// Do not print the offset twice.
-	vecSelector.Offset = 0
+	str := fmt.Sprintf("%s[%s]%s%s", vecSelector.String(), model.Duration(node.Range), at, offset)
 
-	return fmt.Sprintf("%s[%s]%s", vecSelector.String(), model.Duration(node.Range), offset)
+	vecSelector.OriginalOffset, vecSelector.Timestamp, vecSelector.StartOrEnd = offsetVal, atVal, preproc
+
+	return str
+}
+
+func (node *MatrixSelector) ShortString() string {
+	at, offset := node.atOffset()
+	return fmt.Sprintf("[%s]%s%s", model.Duration(node.Range), at, offset)
 }
 
 func (node *SubqueryExpr) String() string {
+	return fmt.Sprintf("%s%s", node.Expr.String(), node.getSubqueryTimeSuffix())
+}
+
+func (node *SubqueryExpr) ShortString() string {
+	return node.getSubqueryTimeSuffix()
+}
+
+// getSubqueryTimeSuffix returns the '[<range>:<step>] @ <timestamp> offset <offset>' suffix of the subquery.
+func (node *SubqueryExpr) getSubqueryTimeSuffix() string {
 	step := ""
 	if node.Step != 0 {
 		step = model.Duration(node.Step).String()
 	}
 	offset := ""
-	if node.Offset != time.Duration(0) {
-		offset = fmt.Sprintf(" offset %s", model.Duration(node.Offset))
+	switch {
+	case node.OriginalOffset > time.Duration(0):
+		offset = fmt.Sprintf(" offset %s", model.Duration(node.OriginalOffset))
+	case node.OriginalOffset < time.Duration(0):
+		offset = fmt.Sprintf(" offset -%s", model.Duration(-node.OriginalOffset))
 	}
-	return fmt.Sprintf("%s[%s:%s]%s", node.Expr.String(), model.Duration(node.Range), step, offset)
+	at := ""
+	switch {
+	case node.Timestamp != nil:
+		at = fmt.Sprintf(" @ %.3f", float64(*node.Timestamp)/1000.0)
+	case node.StartOrEnd == START:
+		at = " @ start()"
+	case node.StartOrEnd == END:
+		at = " @ end()"
+	}
+	return fmt.Sprintf("[%s:%s]%s%s", model.Duration(node.Range), step, at, offset)
 }
 
 func (node *NumberLiteral) String() string {
-	return fmt.Sprint(node.Val)
+	return strconv.FormatFloat(node.Val, 'f', -1, 64)
 }
 
 func (node *ParenExpr) String() string {
@@ -154,23 +247,42 @@ func (node *UnaryExpr) String() string {
 	return fmt.Sprintf("%s%s", node.Op, node.Expr)
 }
 
+func (node *UnaryExpr) ShortString() string {
+	return node.Op.String()
+}
+
 func (node *VectorSelector) String() string {
-	labelStrings := make([]string, 0, len(node.LabelMatchers)-1)
+	var labelStrings []string
+	if len(node.LabelMatchers) > 1 {
+		labelStrings = make([]string, 0, len(node.LabelMatchers)-1)
+	}
 	for _, matcher := range node.LabelMatchers {
-		// Only include the __name__ label if its equality matching and matches the name.
-		if matcher.Name == labels.MetricName && matcher.Type == labels.MatchEqual && matcher.Value == node.Name {
+		// Only include the __name__ label if its equality matching and matches the name, but don't skip if it's an explicit empty name matcher.
+		if matcher.Name == labels.MetricName && matcher.Type == labels.MatchEqual && matcher.Value == node.Name && matcher.Value != "" {
 			continue
 		}
 		labelStrings = append(labelStrings, matcher.String())
 	}
 	offset := ""
-	if node.Offset != time.Duration(0) {
-		offset = fmt.Sprintf(" offset %s", model.Duration(node.Offset))
+	switch {
+	case node.OriginalOffset > time.Duration(0):
+		offset = fmt.Sprintf(" offset %s", model.Duration(node.OriginalOffset))
+	case node.OriginalOffset < time.Duration(0):
+		offset = fmt.Sprintf(" offset -%s", model.Duration(-node.OriginalOffset))
+	}
+	at := ""
+	switch {
+	case node.Timestamp != nil:
+		at = fmt.Sprintf(" @ %.3f", float64(*node.Timestamp)/1000.0)
+	case node.StartOrEnd == START:
+		at = " @ start()"
+	case node.StartOrEnd == END:
+		at = " @ end()"
 	}
 
 	if len(labelStrings) == 0 {
-		return fmt.Sprintf("%s%s", node.Name, offset)
+		return fmt.Sprintf("%s%s%s", node.Name, at, offset)
 	}
 	sort.Strings(labelStrings)
-	return fmt.Sprintf("%s{%s}%s", node.Name, strings.Join(labelStrings, ","), offset)
+	return fmt.Sprintf("%s{%s}%s%s", node.Name, strings.Join(labelStrings, ","), at, offset)
 }
