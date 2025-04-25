@@ -8,7 +8,7 @@ COPY . .
 
 RUN go build -mod vendor examples/performance/server/packet-counter-collector.go
 
-FROM fedora:39
+FROM fedora:42
 
 WORKDIR /
 COPY --from=builder /app/packet-counter-collector .
