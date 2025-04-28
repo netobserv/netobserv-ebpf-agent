@@ -75,7 +75,6 @@ func capacityLimiterPipe() (chan<- []*model.Record, <-chan []*model.Record) {
 
 	init := node.AsInit(func(initOut chan<- []*model.Record) {
 		for i := range inCh {
-			// fmt.Printf("in: %s\n", i[0].Interfaces[0].Interface)
 			initOut <- i
 		}
 	})
