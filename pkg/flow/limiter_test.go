@@ -100,7 +100,6 @@ func capacityLimiterPipe() (chan<- []*model.Record, <-chan []*model.Record) {
 
 		// Start output
 		for i := range termIn {
-			// fmt.Printf("out: %s\n", i[0].Interfaces[0].Interface)
 			outCh <- i
 		}
 	}, node.ChannelBufferLen(limiterLen))
