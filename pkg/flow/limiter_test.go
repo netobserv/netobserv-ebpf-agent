@@ -2,6 +2,7 @@ package flow
 
 import (
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/netobserv/gopipes/pkg/node"
@@ -15,15 +16,16 @@ const limiterLen = 50
 
 func TestCapacityLimiter_NoDrop(t *testing.T) {
 	// GIVEN a limiter-enabled pipeline
-	pipeIn, pipeOut := capacityLimiterPipe()
+	pipeIn, pipeOut, allIn := capacityLimiterPipe()
 
-	// WHEN it buffers less elements than it's maximum capacity
-	for i := 0; i < 33; i++ {
+	// WHEN it buffers less elements than its maximum capacity
+	for i := 0; i < limiterLen-1; i++ {
 		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
+	allIn.Done()
 
 	// THEN it is able to retrieve all the buffered elements
-	for i := 0; i < 33; i++ {
+	for i := 0; i < limiterLen-1; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
 		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
@@ -40,17 +42,17 @@ func TestCapacityLimiter_NoDrop(t *testing.T) {
 
 func TestCapacityLimiter_Drop(t *testing.T) {
 	// GIVEN a limiter-enabled pipeline
-	pipeIn, pipeOut := capacityLimiterPipe()
+	pipeIn, pipeOut, allIn := capacityLimiterPipe()
 
 	// WHEN it receives more elements than its maximum capacity
 	// (it's not blocking)
-	for i := 0; i < limiterLen*2; i++ {
+	for i := 0; i < limiterLen+2; i++ {
 		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
+	allIn.Done()
 
 	// THEN it is only able to retrieve all the nth first buffered elements
-	// (plus the single element that is buffered in the output channel)
-	for i := 0; i < limiterLen+1; i++ {
+	for i := 0; i < limiterLen; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
 		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
@@ -59,23 +61,33 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	// BUT not a single extra element
 	select {
 	case elem := <-pipeOut:
-		assert.Failf(t, "unexpected element", "%#v", elem)
+		var first *model.Record
+		if len(elem) > 0 {
+			first = elem[0]
+		}
+		assert.Failf(t, "unexpected element", "size: %d, first: %#v", len(elem), first)
 	default:
 		// ok!
 	}
 }
 
-func capacityLimiterPipe() (in chan<- []*model.Record, out <-chan []*model.Record) {
+func capacityLimiterPipe() (chan<- []*model.Record, <-chan []*model.Record, *sync.WaitGroup) {
+	allIn := sync.WaitGroup{}
+	allIn.Add(1)
 	inCh, outCh := make(chan []*model.Record), make(chan []*model.Record)
 
 	init := node.AsInit(func(initOut chan<- []*model.Record) {
 		for i := range inCh {
+			// fmt.Printf("in: %s\n", i[0].Interfaces[0].Interface)
 			initOut <- i
 		}
 	})
 	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NewMetrics(&metrics.Settings{}))).Limit)
 	term := node.AsTerminal(func(termIn <-chan []*model.Record) {
 		for i := range termIn {
+			// Wait that all is in before starting output
+			allIn.Wait()
+			// fmt.Printf("out: %s\n", i[0].Interfaces[0].Interface)
 			outCh <- i
 		}
 	}, node.ChannelBufferLen(limiterLen))
@@ -85,5 +97,5 @@ func capacityLimiterPipe() (in chan<- []*model.Record, out <-chan []*model.Recor
 
 	init.Start()
 
-	return inCh, outCh
+	return inCh, outCh, &allIn
 }
