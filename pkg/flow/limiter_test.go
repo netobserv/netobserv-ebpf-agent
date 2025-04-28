@@ -2,7 +2,9 @@ package flow
 
 import (
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
@@ -17,13 +19,13 @@ func TestCapacityLimiter_NoDrop(t *testing.T) {
 	// GIVEN a limiter-enabled pipeline
 	pipeIn, pipeOut := capacityLimiterPipe()
 
-	// WHEN it buffers less elements than it's maximum capacity
-	for i := 0; i < 33; i++ {
+	// WHEN it buffers less elements than its maximum capacity
+	for i := 0; i < limiterLen-1; i++ {
 		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
 
 	// THEN it is able to retrieve all the buffered elements
-	for i := 0; i < 33; i++ {
+	for i := 0; i < limiterLen-1; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
 		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
@@ -44,13 +46,12 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 
 	// WHEN it receives more elements than its maximum capacity
 	// (it's not blocking)
-	for i := 0; i < limiterLen*2; i++ {
+	for i := 0; i < limiterLen+2; i++ {
 		pipeIn <- []*model.Record{{Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn(strconv.Itoa(i), 0, nil)}}}
 	}
 
 	// THEN it is only able to retrieve all the nth first buffered elements
-	// (plus the single element that is buffered in the output channel)
-	for i := 0; i < limiterLen+1; i++ {
+	for i := 0; i < limiterLen; i++ {
 		elem := <-pipeOut
 		require.Len(t, elem, 1)
 		assert.Equal(t, strconv.Itoa(i), elem[0].Interfaces[0].Interface)
@@ -59,13 +60,17 @@ func TestCapacityLimiter_Drop(t *testing.T) {
 	// BUT not a single extra element
 	select {
 	case elem := <-pipeOut:
-		assert.Failf(t, "unexpected element", "%#v", elem)
+		var first *model.Record
+		if len(elem) > 0 {
+			first = elem[0]
+		}
+		assert.Failf(t, "unexpected element", "size: %d, first: %#v", len(elem), first)
 	default:
 		// ok!
 	}
 }
 
-func capacityLimiterPipe() (in chan<- []*model.Record, out <-chan []*model.Record) {
+func capacityLimiterPipe() (chan<- []*model.Record, <-chan []*model.Record) {
 	inCh, outCh := make(chan []*model.Record), make(chan []*model.Record)
 
 	init := node.AsInit(func(initOut chan<- []*model.Record) {
@@ -75,6 +80,25 @@ func capacityLimiterPipe() (in chan<- []*model.Record, out <-chan []*model.Recor
 	})
 	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NewMetrics(&metrics.Settings{}))).Limit)
 	term := node.AsTerminal(func(termIn <-chan []*model.Record) {
+		// Let records accumulate in the channel, and release only when the flow stops growing
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prev := -1
+			for {
+				n := len(termIn)
+				if n == prev {
+					// No new record
+					return
+				}
+				prev = n
+				time.Sleep(50 * time.Millisecond)
+			}
+		}()
+		wg.Wait()
+
+		// Start output
 		for i := range termIn {
 			outCh <- i
 		}
