@@ -1,11 +1,9 @@
 package filters
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 )
@@ -69,6 +67,41 @@ func NotEqual(key string, filterValue any, convertString bool) Predicate {
 	return func(flow config.GenericMap) bool { return !pred(flow) }
 }
 
+func NumEquals(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i == filterValue })
+}
+
+func NumNotEquals(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i != filterValue })
+}
+
+func LessThan(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i < filterValue })
+}
+
+func GreaterThan(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i > filterValue })
+}
+
+func LessOrEqualThan(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i <= filterValue })
+}
+
+func GreaterOrEqualThan(key string, filterValue int) Predicate {
+	return castIntAndCheck(key, func(i int) bool { return i >= filterValue })
+}
+
+func castIntAndCheck(key string, check func(int) bool) Predicate {
+	return func(flow config.GenericMap) bool {
+		if val, found := flow[key]; found {
+			if cast, err := utils.ConvertToInt(val); err == nil {
+				return check(cast)
+			}
+		}
+		return false
+	}
+}
+
 func Regex(key string, filterRegex *regexp.Regexp) Predicate {
 	return func(flow config.GenericMap) bool {
 		if val, found := flow[key]; found {
@@ -112,42 +145,4 @@ func injectVars(flow config.GenericMap, filterValue string, varLookups [][]strin
 		injected = strings.ReplaceAll(injected, matchGroup[0], value)
 	}
 	return injected
-}
-
-func FromKeepEntry(from *api.KeepEntryRule) (Predicate, error) {
-	switch from.Type {
-	case api.KeepEntryIfExists:
-		return Presence(from.KeepEntry.Input), nil
-	case api.KeepEntryIfDoesntExist:
-		return Absence(from.KeepEntry.Input), nil
-	case api.KeepEntryIfEqual:
-		return Equal(from.KeepEntry.Input, from.KeepEntry.Value, true), nil
-	case api.KeepEntryIfNotEqual:
-		return NotEqual(from.KeepEntry.Input, from.KeepEntry.Value, true), nil
-	case api.KeepEntryIfRegexMatch:
-		if r, err := compileRegex(from.KeepEntry); err != nil {
-			return nil, err
-		} else {
-			return Regex(from.KeepEntry.Input, r), nil
-		}
-	case api.KeepEntryIfNotRegexMatch:
-		if r, err := compileRegex(from.KeepEntry); err != nil {
-			return nil, err
-		} else {
-			return NotRegex(from.KeepEntry.Input, r), nil
-		}
-	}
-	return nil, fmt.Errorf("keep entry rule type not recognized: %s", from.Type)
-}
-
-func compileRegex(from *api.TransformFilterGenericRule) (*regexp.Regexp, error) {
-	s, ok := from.Value.(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid regex keep rule: rule value must be a string [%v]", from)
-	}
-	r, err := regexp.Compile(s)
-	if err != nil {
-		return nil, fmt.Errorf("invalid regex keep rule: cannot compile regex [%w]", err)
-	}
-	return r, nil
 }
