@@ -27,6 +27,7 @@ import (
 	"github.com/Knetic/govaluate"
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/flowlogs-pipeline/pkg/dsl"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils/filters"
 	"github.com/sirupsen/logrus"
@@ -39,12 +40,12 @@ var (
 
 type Filter struct {
 	Rules     []api.TransformFilterRule
-	KeepRules []predicatesRule
+	KeepRules []predicateRule
 }
 
-type predicatesRule struct {
-	predicates []filters.Predicate
-	sampling   uint16
+type predicateRule struct {
+	predicate filters.Predicate
+	sampling  uint16
 }
 
 // Transform transforms a flow; if false is returned as a second argument, the entry is dropped
@@ -55,7 +56,7 @@ func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	if len(f.KeepRules) > 0 {
 		keep := false
 		for _, r := range f.KeepRules {
-			if applyPredicates(outputEntry, r) {
+			if applyPredicate(outputEntry, r) {
 				keep = true
 				break
 			}
@@ -162,9 +163,9 @@ func applyRule(entry config.GenericMap, labels map[string]string, rule *api.Tran
 		return !isRemoveEntrySatisfied(entry, rule.RemoveEntryAllSatisfied)
 	case api.ConditionalSampling:
 		return sample(entry, rule.ConditionalSampling)
-	case api.KeepEntryAllSatisfied:
+	case api.KeepEntryQuery:
 		// This should be processed only in "applyPredicates". Failure to do so is a bug.
-		tlog.Panicf("unexpected KeepEntryAllSatisfied: %v", rule)
+		tlog.Panicf("unexpected KeepEntryQuery: %v", rule)
 	default:
 		tlog.Panicf("unknown type %s for transform.Filter rule: %v", rule.Type, rule)
 	}
@@ -181,16 +182,11 @@ func isRemoveEntrySatisfied(entry config.GenericMap, rules []*api.RemoveEntryRul
 	return true
 }
 
-func applyPredicates(entry config.GenericMap, rule predicatesRule) bool {
+func applyPredicate(entry config.GenericMap, rule predicateRule) bool {
 	if !rollSampling(rule.sampling) {
 		return false
 	}
-	for _, p := range rule.predicates {
-		if !p(entry) {
-			return false
-		}
-	}
-	return true
+	return rule.predicate(entry)
 }
 
 func sample(entry config.GenericMap, rules []*api.SamplingCondition) bool {
@@ -209,22 +205,21 @@ func rollSampling(value uint16) bool {
 // NewTransformFilter create a new filter transform
 func NewTransformFilter(params config.StageParam) (Transformer, error) {
 	tlog.Debugf("entering NewTransformFilter")
-	keepRules := []predicatesRule{}
+	keepRules := []predicateRule{}
 	rules := []api.TransformFilterRule{}
 	if params.Transform != nil && params.Transform.Filter != nil {
 		params.Transform.Filter.Preprocess()
 		for i := range params.Transform.Filter.Rules {
 			baseRules := &params.Transform.Filter.Rules[i]
-			if baseRules.Type == api.KeepEntryAllSatisfied {
-				pr := predicatesRule{sampling: baseRules.KeepEntrySampling}
-				for _, keepRule := range baseRules.KeepEntryAllSatisfied {
-					pred, err := filters.FromKeepEntry(keepRule)
-					if err != nil {
-						return nil, err
-					}
-					pr.predicates = append(pr.predicates, pred)
+			if baseRules.Type == api.KeepEntryQuery {
+				predicate, err := dsl.Parse(baseRules.KeepEntryQuery)
+				if err != nil {
+					return nil, err
 				}
-				keepRules = append(keepRules, pr)
+				keepRules = append(keepRules, predicateRule{
+					sampling:  baseRules.KeepEntrySampling,
+					predicate: predicate,
+				})
 			} else {
 				rules = append(rules, *baseRules)
 			}
