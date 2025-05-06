@@ -157,19 +157,17 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    u32 filter_sampling = 0;
     bool skip =
-        check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling, direction);
-    if (has_filter_sampling) {
-        if (filter_sampling == 0) {
-            filter_sampling = sampling;
+        check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &flow_sampling, direction);
+    if (has_filter_sampling) { 
+        if (flow_sampling == 0) {
+            flow_sampling = sampling;
         }
         // If sampling is defined, will only parse 1 out of "sampling" flows
-        if (filter_sampling > 1 && (bpf_get_prandom_u32() % filter_sampling) != 0) {
+        if (flow_sampling > 1 && (bpf_get_prandom_u32() % flow_sampling) != 0) {
             do_sampling = 0;
             return TC_ACT_OK;
         }
-        flow_sampling = filter_sampling;
         do_sampling = 1;
     }
     if (skip) {
