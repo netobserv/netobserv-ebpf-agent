@@ -125,6 +125,7 @@ static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, 
 }
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
+    u32 flow_sampling = 0;
     if (!has_filter_sampling) {
         // When no filter sampling is defined, run the sampling check at the earliest for better performances
         // If sampling is defined, will only parse 1 out of "sampling" flows
@@ -132,6 +133,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             do_sampling = 0;
             return TC_ACT_OK;
         }
+        flow_sampling = sampling;
         do_sampling = 1;
     }
 
@@ -155,15 +157,14 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    u32 filter_sampling = 0;
     bool skip =
-        check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &filter_sampling, direction);
+        check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &flow_sampling, direction);
     if (has_filter_sampling) {
-        if (filter_sampling == 0) {
-            filter_sampling = sampling;
+        if (flow_sampling == 0) {
+            flow_sampling = sampling;
         }
         // If sampling is defined, will only parse 1 out of "sampling" flows
-        if (filter_sampling > 1 && (bpf_get_prandom_u32() % filter_sampling) != 0) {
+        if (flow_sampling > 1 && (bpf_get_prandom_u32() % flow_sampling) != 0) {
             do_sampling = 0;
             return TC_ACT_OK;
         }
@@ -179,7 +180,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len, filter_sampling, skb->ifindex, direction);
+        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow;
@@ -193,7 +194,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         new_flow.end_mono_time_ts = pkt.current_ts;
         new_flow.flags = pkt.flags;
         new_flow.dscp = pkt.dscp;
-        new_flow.sampling = filter_sampling;
+        new_flow.sampling = flow_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
 
@@ -206,7 +207,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 flow_metrics *aggregate_flow =
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
-                    update_existing_flow(aggregate_flow, &pkt, len, filter_sampling, skb->ifindex,
+                    update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex,
                                          direction);
                 } else {
                     if (trace_messages) {
