@@ -29,7 +29,6 @@ spec:
               - BPF
               - PERFMON
               - NET_ADMIN
-              - SYS_RESOURCE
           runAsUser: 0
         env:
           - name: TARGET_HOST
