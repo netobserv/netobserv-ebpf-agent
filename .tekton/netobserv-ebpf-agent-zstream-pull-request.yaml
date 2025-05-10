@@ -31,6 +31,10 @@ spec:
   - name: dockerfile
     value: Dockerfile.downstream
   - name: build-platforms
-    value: ["linux/x86_64"]
+    value:
+    - linux/x86_64
   pipelineRef:
     name: build-pipeline
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-netobserv-ebpf-agent-zstream
+status: {}
