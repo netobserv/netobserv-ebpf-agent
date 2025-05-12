@@ -1501,6 +1501,10 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			TcpRcvKprobe:            nil,
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
+			XfrmInputKretprobe:      nil,
+			XfrmOutputKretprobe:     nil,
+			XfrmInputKprobe:         nil,
+			XfrmOutputKprobe:        nil,
 		},
 		BpfMaps: ebpf.BpfMaps{
 			PacketRecord:  newObjects.PacketRecord,
