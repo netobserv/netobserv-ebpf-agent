@@ -1439,7 +1439,10 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		filterMap,
 		peerFilterMap,
 		globalCountersMap,
-		pcaRecordsMap} {
+		pcaRecordsMap,
+		ipsecInputMap,
+		ipsecOutputMap,
+	} {
 		spec.Maps[m].Pinning = 0
 	}
 
@@ -1460,6 +1463,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, tcpFentryHook)
 	delete(spec.Programs, aggregatedFlowsMap)
 	delete(spec.Programs, additionalFlowMetrics)
+	delete(spec.Programs, ipsecInputMap)
+	delete(spec.Programs, ipsecOutputMap)
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constHasFilterSampling)
 	delete(spec.Programs, constTraceMessages)
