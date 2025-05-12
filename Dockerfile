@@ -17,7 +17,7 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 
 # Build
-RUN CGO_ENABLED=0 GOARCH=$TARGETARCH go build -ldflags "$LDFLAGS" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
+RUN GOARCH=$TARGETARCH go build -ldflags "$LDFLAGS" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 # Create final image from minimal + built binary
 FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:9.5-1742914212
