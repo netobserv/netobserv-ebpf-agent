@@ -12,8 +12,11 @@ MULTIARCH_TARGETS ?= amd64
 # In CI, to be replaced by `netobserv`
 IMAGE_ORG ?= $(USER)
 
+# Image registry such as quay or docker
+IMAGE_REGISTRY ?= quay.io
+
 # IMAGE_TAG_BASE defines the namespace and part of the image name for remote images.
-IMAGE_TAG_BASE ?= quay.io/$(IMAGE_ORG)/netobserv-ebpf-agent
+IMAGE_TAG_BASE ?= $(IMAGE_REGISTRY)/$(IMAGE_ORG)/netobserv-ebpf-agent
 
 # Image URL to use all building/pushing image targets
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
