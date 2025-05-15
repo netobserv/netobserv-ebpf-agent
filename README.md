@@ -82,9 +82,12 @@ To deploy it as a Pod, you can check the [deployment examples](./deployments).
 
 The Agent needs to be executed either with:
 
-1. The following [Linux capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html)
-   (recommended way): `BPF`, `PERFMON`, `NET_ADMIN`, `SYS_RESOURCE`. If you
-   [deploy it in Kubernetes or OpenShift](./deployments/flp-daemonset-cap.yml),
+1. The following [Linux capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html):
+   - `BPF`: Needed to use eBPF programs and maps.
+   - `PERFMON`: Needed to access perf monitoring and profiling features.
+   - `NET_ADMIN`: Needed for TC programs to attach/detach to/from qdisc and for TCX hooks.
+
+   If you [deploy it in Kubernetes or OpenShift](./deployments/flp-daemonset-cap.yml),
    the container running the Agent needs to define the following `securityContext`:
    ```yaml
    securityContext:
@@ -94,10 +97,9 @@ The Agent needs to be executed either with:
          - BPF
          - PERFMON
          - NET_ADMIN
-         - SYS_RESOURCE
    ```
    (Please notice that the `runAsUser: 0` is still needed).
-2. Administrative privileges. If you
+2. Or full administrative privileges. If you
    [deploy it in Kubernetes or OpenShift](./deployments/flp-daemonset.yml),
    the container running the Agent needs to define the following `securityContext`:
    ```yaml
@@ -105,9 +107,8 @@ The Agent needs to be executed either with:
      privileged: true
      runAsUser: 0
    ```
-   This option is only recommended if your Kernel does not recognize some of the above capabilities.
-   We found some Kubernetes distributions (e.g. K3s) that do not recognize the `BPF` and
-   `PERFMON` capabilities.
+
+While the first option is safer (principle of least privilege), it also has its drawbacks, notably that you can't monitor all secondary interfaces. Full privileged mode may also be needed if running on a Linux kernel that does not recognize some of the above capabilities (some older Kubernetes distributions might not recognize the `BPF` and `PERFMON` capabilities).
 
 Here is a list of distributions where we tested both full privileges and capability approaches,
 and whether they worked (✅) or did not (❌):
