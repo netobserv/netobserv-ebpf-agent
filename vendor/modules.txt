@@ -478,7 +478,7 @@ github.com/russross/blackfriday/v2
 # github.com/safchain/ethtool v0.5.10
 ## explicit; go 1.16
 github.com/safchain/ethtool
-# github.com/segmentio/kafka-go v0.4.47
+# github.com/segmentio/kafka-go v0.4.48
 ## explicit; go 1.15
 github.com/segmentio/kafka-go
 github.com/segmentio/kafka-go/compress
