@@ -10,21 +10,31 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-const timeout = 5 * time.Second
+const (
+	timeout = 5 * time.Second
+)
+
+var (
+	macFoo        = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
+	macBar        = [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07}
+	macBaz        = [6]uint8{0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	macBae        = [6]uint8{0x04, 0x05, 0x06, 0x07, 0x08, 0x09}
+	macOverlapped = [6]uint8{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
+)
 
 func TestPoller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// fake net.Interfaces implementation that returns two different sets of
-	// interfaces on successive invocations
+	// interfaces on successive invocations, with overlapping Index
 	firstInvocation := true
 	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
-			return []Interface{{"foo", 1, netns.None(), ""}, {"bar", 2, netns.None(), ""}}, nil
+			return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"bae", 4, macBae, netns.None(), ""}}, nil
 		}
-		return []Interface{{"foo", 1, netns.None(), ""}, {"bae", 3, netns.None(), ""}}, nil
+		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}, {"ovlp", 4, macOverlapped, netns.None(), ""}}, nil
 	}
 	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
@@ -33,17 +43,26 @@ func TestPoller(t *testing.T) {
 	require.NoError(t, err)
 	// first poll: two interfaces are added
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"foo", 1, macFoo, netns.None(), ""}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
 		getEvent(t, updates, timeout))
 	// second poll: one interface is added and another is removed
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 3, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"baz", 3, macBaz, netns.None(), ""}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"ovlp", 4, macOverlapped, netns.None(), ""}},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventDeleted, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
 		getEvent(t, updates, timeout))
 	// successive polls: no more events are forwarded
 	select {
