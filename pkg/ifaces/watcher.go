@@ -3,6 +3,7 @@ package ifaces
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -118,7 +119,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
 			for _, name := range names {
-				iface := Interface{Name: name.Name, Index: name.Index, NetNS: netnsHandle, NSName: ns}
+				iface := Interface{Name: name.Name, Index: name.Index, MAC: name.MAC, NetNS: netnsHandle, NSName: ns}
 				w.mutex.Lock()
 				w.current[iface] = struct{}{}
 				w.mutex.Unlock()
@@ -133,7 +134,12 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debug("received link update without attributes. Ignoring")
 			continue
 		}
-		iface := Interface{Name: attrs.Name, Index: attrs.Index, NetNS: netnsHandle, NSName: ns}
+		mac, err := macToFixed6(attrs.HardwareAddr)
+		if err != nil {
+			log.WithField("link", link).Debugf("ignoring link update with invalid MAC: %s", err.Error())
+			continue
+		}
+		iface := Interface{Name: attrs.Name, Index: attrs.Index, MAC: mac, NetNS: netnsHandle, NSName: ns}
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{
@@ -248,4 +254,14 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 	if err != nil {
 		log.Warningf("failed to add watcher to netns directory err: %v [Ignore if the agent privileged flag is not set]", err)
 	}
+}
+
+func macToFixed6(in net.HardwareAddr) ([6]uint8, error) {
+	if in == nil {
+		return [6]uint8{}, fmt.Errorf("MAC is nil")
+	}
+	if len(in) < 6 {
+		return [6]uint8{}, fmt.Errorf("MAC too small: %v", in)
+	}
+	return [6]uint8(in[0:6]), nil
 }

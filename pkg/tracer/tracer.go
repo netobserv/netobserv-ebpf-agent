@@ -221,10 +221,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 				if err == nil {
 					goto next
 				}
-				if err != nil {
-					log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
-					// Fall through to use kprobe
-				}
+				log.Warningf("failed to attach the BPF program to tcpReceiveFentry: %v fallback to use kprobe", err)
+				// Fall through to use kprobe
 			}
 			// try to use kprobe for older kernels
 			if !rtOldKernel {

@@ -112,7 +112,7 @@ type Flows struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     InterfaceFilter
+	filter     ifaces.Filter
 	ebpf       ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -148,7 +148,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	config.ManageDeprecatedConfigs(cfg)
 
 	// configure informer for new interfaces
-	var informer = configureInformer(cfg, alog)
+	informer := configureInformer(cfg, alog)
 
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
@@ -251,40 +251,24 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
-func flowsAgent(cfg *config.Agent, m *metrics.Metrics,
+func flowsAgent(
+	cfg *config.Agent,
+	m *metrics.Metrics,
 	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
 	agentIP net.IP,
 	s *ovnobserv.SampleDecoder,
 ) (*Flows, error) {
-	var filter InterfaceFilter
 
-	switch {
-	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
-		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
-
-	case len(cfg.InterfaceIPs) > 0:
-		// configure ip interface filter
-		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
-		if err != nil {
-			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
-		}
-		filter = &f
-
-	default:
-		// configure allow/deny regexp interfaces filter
-		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-		if err != nil {
-			return nil, fmt.Errorf("configuring interface filters: %w", err)
-		}
-		filter = &f
+	filter, err := ifaces.FromConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
-
 	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
 
-	interfaceNamer := func(ifIndex int) string {
-		iface, ok := registerer.IfaceNameForIndex(ifIndex)
+	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
+		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
 		if !ok {
 			return "unknown"
 		}

@@ -1,4 +1,4 @@
-package agent
+package ifaces
 
 import (
 	"net/netip"

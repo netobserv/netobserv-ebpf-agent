@@ -18,7 +18,7 @@ func TestRegisterer(t *testing.T) {
 	registry := NewRegisterer(watcher, 10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
-		return []Interface{{"foo", 1, netns.None(), ""}, {"bar", 2, netns.None(), ""}, {"baz", 3, netns.None(), ""}}, nil
+		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -37,31 +37,36 @@ func TestRegisterer(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		getEvent(t, outputEvents, timeout)
 	}
-	assert.Equal(t, "foo", registry.ifaces[1])
-	assert.Equal(t, "bar", registry.ifaces[2])
-	assert.Equal(t, "baz", registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo"}, registry.ifaces[1])
+	assert.Equal(t, map[[6]uint8]string{macBar: "bar"}, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
 
 	// updates
-	inputLinks <- upAndRunning("bae", 4, netns.None())
-	inputLinks <- down("bar", 2, netns.None())
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
 	for i := 0; i < 2; i++ {
 		getEvent(t, outputEvents, timeout)
 	}
 
-	assert.Equal(t, "foo", registry.ifaces[1])
-	assert.NotContains(t, registry.ifaces, 2)
-	assert.Equal(t, "baz", registry.ifaces[3])
-	assert.Equal(t, "bae", registry.ifaces[4])
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
 
-	// repeated updates that do not involve a change in the current track of interfaces
-	// will be ignored
-	inputLinks <- upAndRunning("fiu", 1, netns.None())
-	inputLinks <- down("foo", 1, netns.None())
-	for i := 0; i < 2; i++ {
-		getEvent(t, outputEvents, timeout)
-	}
+	inputLinks <- upAndRunning("fiu", 1, macOverlapped[:], netns.None())
+	getEvent(t, outputEvents, timeout)
 
-	assert.Equal(t, "fiu", registry.ifaces[1])
-	assert.Equal(t, "baz", registry.ifaces[3])
-	assert.Equal(t, "bae", registry.ifaces[4])
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo", macOverlapped: "fiu"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
+
+	inputLinks <- down("foo", 1, macFoo[:], netns.None())
+	getEvent(t, outputEvents, timeout)
+
+	assert.Equal(t, map[[6]uint8]string{macOverlapped: "fiu"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
+
 }
