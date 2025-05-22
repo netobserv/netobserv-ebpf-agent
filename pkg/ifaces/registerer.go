@@ -87,6 +87,16 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 		if ok {
 			return name, true
 		}
+		// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
+		// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
+		// doesn't match the actual interface MAC, we'll hardcode that.
+		if mac[0] == 0x0a && mac[1] == 0x58 && len(macs) > 1 {
+			for _, name := range macs {
+				if name == "eth0" {
+					return name, true
+				}
+			}
+		}
 	}
 	// Fallback if not found, interfaces lookup
 	iface, err := net.InterfaceByIndex(idx)
