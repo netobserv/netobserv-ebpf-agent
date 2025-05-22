@@ -73,28 +73,34 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 // has not been previously registered
 func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, bool) {
 	r.m.RLock()
-	macs, ok := r.ifaces[idx]
+	macsMap, ok := r.ifaces[idx]
 	r.m.RUnlock()
 	if ok {
-		if len(macs) == 1 {
-			// No risk of collusion, just return entry without checking for MAC
-			for _, name := range macs {
+		if len(macsMap) == 1 {
+			// No risk of collision, just return entry without checking for MAC
+			for _, name := range macsMap {
 				return name, true
 			}
-		}
-		// Several entries, need to disambiguate by MAC
-		name, ok := macs[mac]
-		if ok {
-			return name, true
-		}
-		// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
-		// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
-		// doesn't match the actual interface MAC, we'll hardcode that.
-		if mac[0] == 0x0a && mac[1] == 0x58 && len(macs) > 1 {
-			for _, name := range macs {
-				if name == "eth0" {
-					return name, true
+		} else if len(macsMap) > 1 {
+			// Several entries, need to disambiguate by MAC
+			name, ok := macsMap[mac]
+			if ok {
+				return name, true
+			}
+			// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
+			// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
+			// doesn't match the actual interface MAC, we'll hardcode that.
+			if mac[0] == 0x0a && mac[1] == 0x58 {
+				for _, name := range macsMap {
+					if name == "eth0" {
+						return name, true
+					}
 				}
+			}
+			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
+			for _, name := range macsMap {
+				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
+				return name, true
 			}
 		}
 	}
