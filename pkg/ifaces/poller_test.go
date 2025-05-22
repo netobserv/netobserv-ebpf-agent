@@ -58,12 +58,17 @@ func TestPoller(t *testing.T) {
 	assert.Equal(t,
 		Event{Type: EventAdded, Interface: Interface{"ovlp", 4, macOverlapped, netns.None(), ""}},
 		getEvent(t, updates, timeout))
-	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
-		getEvent(t, updates, timeout))
-	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
-		getEvent(t, updates, timeout))
+	// Order isn't guaranteed for next events, so use assert.ElementsMatch
+	next1 := getEvent(t, updates, timeout)
+	next2 := getEvent(t, updates, timeout)
+	assert.ElementsMatch(t,
+		[]Event{next1, next2},
+		[]Event{
+			{Type: EventDeleted, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
+			{Type: EventDeleted, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
+		},
+	)
+
 	// successive polls: no more events are forwarded
 	select {
 	case ev := <-updates:
