@@ -18,12 +18,12 @@ type PacketRecord struct {
 // NewPacketRecord contains packet bytes
 func NewPacketRecord(
 	stream []byte,
-	len uint32,
+	length uint32,
 	ts time.Time,
 ) *PacketRecord {
 	pr := PacketRecord{}
 	pr.Time = ts
-	pr.Stream = make([]byte, len)
+	pr.Stream = make([]byte, length)
 	pr.Stream = stream
 	return &pr
 }

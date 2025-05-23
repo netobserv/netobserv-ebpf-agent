@@ -39,11 +39,11 @@ type Direction uint8
 // (same behavior as Go's net.IP type)
 type IPAddr [net.IPv6len]uint8
 
-type InterfaceNamer func(ifIndex int) string
+type InterfaceNamer func(ifIndex int, mac MacAddr) string
 
 var (
 	agentIP        net.IP
-	interfaceNamer InterfaceNamer = func(ifIndex int) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
+	interfaceNamer InterfaceNamer = func(ifIndex int, _ MacAddr) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
 )
 
 func SetGlobals(ip net.IP, ifaceNamer InterfaceNamer) {
@@ -89,13 +89,17 @@ func NewRecord(
 		TimeFlowEnd:   currentTime.Add(-endDelta),
 		AgentIP:       agentIP,
 	}
-	record.Interfaces = []IntfDirUdn{NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen)),
+	lMAC := metrics.SrcMac
+	if metrics.DirectionFirstSeen == 0 {
+		lMAC = metrics.DstMac
+	}
+	record.Interfaces = []IntfDirUdn{NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
 		int(metrics.DirectionFirstSeen),
 		udnsCache)}
 
 	for i := uint8(0); i < record.Metrics.NbObservedIntf; i++ {
 		record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
-			interfaceNamer(int(metrics.ObservedIntf[i])),
+			interfaceNamer(int(metrics.ObservedIntf[i]), lMAC),
 			int(metrics.ObservedDirection[i]),
 			udnsCache,
 		))
@@ -185,7 +189,8 @@ func (ia *IPAddr) MarshalJSON() ([]byte, error) {
 }
 
 func (m *MacAddr) String() string {
-	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5])
+	t := net.HardwareAddr(m[:])
+	return t.String()
 }
 
 func (m *MacAddr) MarshalJSON() ([]byte, error) {
