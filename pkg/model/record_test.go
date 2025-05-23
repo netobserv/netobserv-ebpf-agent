@@ -88,6 +88,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	// assert that IP addresses are interpreted as IPv4 addresses
 	assert.Equal(t, "6.7.8.9", IP(fr.Id.SrcIp).String())
 	assert.Equal(t, "10.11.12.13", IP(fr.Id.DstIp).String())
+	mac := MacAddr(fr.Metrics.SrcMac)
+	assert.Equal(t, "04:05:06:07:08:09", mac.String())
 }
 
 func TestParallelNewRecord(t *testing.T) {
