@@ -144,6 +144,7 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     return 0;
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_input.c#L463
 SEC("kprobe/xfrm_input")
 int BPF_KPROBE(xfrm_input_kprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -156,6 +157,7 @@ int BPF_KPROBE(xfrm_input_kprobe) {
     return enter_xfrm_func(skb, INGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_input.c#L463
 SEC("kretprobe/xfrm_input")
 int BPF_KRETPROBE(xfrm_input_kretprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -165,6 +167,7 @@ int BPF_KRETPROBE(xfrm_input_kretprobe) {
     return update_flow_with_ipsec_return(xfrm_ret, INGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_output.c#L743
 SEC("kprobe/xfrm_output")
 int BPF_KPROBE(xfrm_output_kprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -177,6 +180,7 @@ int BPF_KPROBE(xfrm_output_kprobe) {
     return enter_xfrm_func(skb, EGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_output.c#L743
 SEC("kretprobe/xfrm_output")
 int BPF_KRETPROBE(xfrm_output_kretprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {

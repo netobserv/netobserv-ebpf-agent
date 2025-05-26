@@ -23,8 +23,8 @@ type BpfAdditionalMetrics struct {
 	EthProtocol       uint16
 	NetworkEventsIdx  uint8
 	IpsecEncrypted    bool
-	IpsecEncryptedRet uint8
-	_                 [5]byte
+	_                 [2]byte
+	IpsecEncryptedRet int32
 }
 
 type BpfDirectionT uint32

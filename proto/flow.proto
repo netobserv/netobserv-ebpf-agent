@@ -68,7 +68,7 @@ message Record {
   Xlat xlat = 28;
   uint32 sampling = 29;
   uint32 ipsec_encrypted = 30;
-  uint32 ipsec_encrypted_ret = 31;
+  int32 ipsec_encrypted_ret = 31;
 }
 
 message DataLink {

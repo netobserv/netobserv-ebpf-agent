@@ -84,7 +84,7 @@ func FlowToPB(fr *model.Record) *Record {
 			DstPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport),
 			ZoneId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId),
 		}
-		pbflowRecord.IpsecEncryptedRet = uint32(fr.Metrics.AdditionalMetrics.IpsecEncryptedRet)
+		pbflowRecord.IpsecEncryptedRet = fr.Metrics.AdditionalMetrics.IpsecEncryptedRet
 		if fr.Metrics.AdditionalMetrics.IpsecEncrypted {
 			pbflowRecord.IpsecEncrypted = uint32(1)
 		}
@@ -170,7 +170,7 @@ func PBToFlow(pb *Record) *model.Record {
 					Dport:  uint16(pb.Xlat.GetDstPort()),
 					ZoneId: uint16(pb.Xlat.GetZoneId()),
 				},
-				IpsecEncryptedRet: uint8(pb.IpsecEncryptedRet),
+				IpsecEncryptedRet: pb.IpsecEncryptedRet,
 			},
 		},
 		TimeFlowStart: pb.TimeFlowStart.AsTime(),

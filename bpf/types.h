@@ -141,7 +141,7 @@ typedef struct additional_metrics_t {
     u16 eth_protocol;
     u8 network_events_idx;
     bool ipsec_encrypted;
-    u8 ipsec_encrypted_ret;
+    int ipsec_encrypted_ret;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
