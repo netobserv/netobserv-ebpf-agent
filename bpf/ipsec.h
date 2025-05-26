@@ -14,9 +14,9 @@ static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_r
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         extra_metrics->eth_protocol = eth_protocol;
         if (flow_encrypted_ret != 0) {
-            extra_metrics->flow_encrypted_ret = flow_encrypted_ret;
-            if (extra_metrics->flow_encrypted) {
-                extra_metrics->flow_encrypted = false;
+            extra_metrics->ipsec_encrypted_ret = flow_encrypted_ret;
+            if (extra_metrics->ipsec_encrypted) {
+                extra_metrics->ipsec_encrypted = false;
             }
         }
         return 0;
@@ -47,8 +47,7 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
         eth_protocol = ETH_P_IPV6;
     }
 
-    BPF_PRINTK("found encrypted flow dir: %d encrypted: %d\n", dir,
-               flow_encrypted_ret == 0 ? true : false);
+    BPF_PRINTK("found encrypted flow dir: %d ret: %d\n", dir, flow_encrypted_ret);
 
     // update flow with ipsec info
     ret = ipsec_lookup_and_update_flow(id, flow_encrypted_ret, eth_protocol);
@@ -62,8 +61,8 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
     new_flow.start_mono_time_ts = current_time;
     new_flow.end_mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
-    new_flow.flow_encrypted_ret = flow_encrypted_ret;
-    new_flow.flow_encrypted = flow_encrypted_ret == 0 ? true : false;
+    new_flow.ipsec_encrypted_ret = flow_encrypted_ret;
+    new_flow.ipsec_encrypted = flow_encrypted_ret == 0 ? true : false;
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (ret != -EEXIST) {

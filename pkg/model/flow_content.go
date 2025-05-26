@@ -118,13 +118,13 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 		p.AdditionalMetrics.TranslatedFlow = other.TranslatedFlow
 	}
 	// IPSec
-	if p.AdditionalMetrics.FlowEncryptedRet < other.FlowEncryptedRet {
-		p.AdditionalMetrics.FlowEncrypted = other.FlowEncrypted
-		p.AdditionalMetrics.FlowEncryptedRet = other.FlowEncryptedRet
+	if p.AdditionalMetrics.IpsecEncryptedRet < other.IpsecEncryptedRet {
+		p.AdditionalMetrics.IpsecEncrypted = other.IpsecEncrypted
+		p.AdditionalMetrics.IpsecEncryptedRet = other.IpsecEncryptedRet
 	}
-	if p.AdditionalMetrics.FlowEncryptedRet == other.FlowEncryptedRet {
-		if other.FlowEncrypted {
-			p.AdditionalMetrics.FlowEncrypted = other.FlowEncrypted
+	if p.AdditionalMetrics.IpsecEncryptedRet == other.IpsecEncryptedRet {
+		if other.IpsecEncrypted {
+			p.AdditionalMetrics.IpsecEncrypted = other.IpsecEncrypted
 		}
 	}
 }

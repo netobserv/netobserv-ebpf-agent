@@ -67,8 +67,8 @@ message Record {
   repeated NetworkEvent network_events_metadata = 27;
   Xlat xlat = 28;
   uint32 sampling = 29;
-  uint32 flow_encrypted = 30;
-  uint32 flow_encrypted_ret = 31;
+  uint32 ipsec_encrypted = 30;
+  uint32 ipsec_encrypted_ret = 31;
 }
 
 message DataLink {

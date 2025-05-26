@@ -209,19 +209,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 0,
 			},
 			{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 		},
 	}, {
@@ -229,19 +229,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 0,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 		},
 	}, {
@@ -249,19 +249,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 0,
 			},
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 	}, {
@@ -269,19 +269,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 0,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 	}, {
@@ -289,19 +289,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 	}, {
@@ -309,19 +309,19 @@ func TestAccumulate(t *testing.T) {
 		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 		inputAdditional: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 			{
-				FlowEncrypted:    true,
-				FlowEncryptedRet: 0,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
 			},
 		},
 		expected: BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				FlowEncrypted:    false,
-				FlowEncryptedRet: 2,
+				IpsecEncrypted:    false,
+				IpsecEncryptedRet: 2,
 			},
 		},
 	}}
