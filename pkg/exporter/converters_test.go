@@ -82,6 +82,7 @@ func TestConversions(t *testing.T) {
 				"Udns":            []string{""},
 				"AgentIP":         "10.11.12.13",
 				"IPSecRetCode":    0,
+				"IPSecStatus":     "success",
 			},
 		},
 		{
@@ -387,6 +388,7 @@ func TestConversions(t *testing.T) {
 				"DnsFlagsResponseCode":   "FormErr",
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
 				"IPSecRetCode":           0,
+				"IPSecStatus":            "success",
 			},
 		},
 		{
@@ -444,6 +446,7 @@ func TestConversions(t *testing.T) {
 				"Udns":            []string{"", ""},
 				"AgentIP":         "10.11.12.13",
 				"IPSecRetCode":    0,
+				"IPSecStatus":     "success",
 			},
 		},
 	}
