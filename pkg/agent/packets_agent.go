@@ -86,18 +86,18 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 
 	for _, r := range flowFilters {
 		filterRules = append(filterRules, &tracer.FilterConfig{
-			FilterAction:          r.FilterAction,
-			FilterDirection:       r.FilterDirection,
-			FilterIPCIDR:          r.FilterIPCIDR,
-			FilterProtocol:        r.FilterProtocol,
-			FilterPeerIP:          r.FilterPeerIP,
-			FilterPeerCIDR:        r.FilterPeerCIDR,
-			FilterDestinationPort: tracer.ConvertFilterPortsToInstr(r.FilterDestinationPort, r.FilterDestinationPortRange, r.FilterDestinationPorts),
-			FilterSourcePort:      tracer.ConvertFilterPortsToInstr(r.FilterSourcePort, r.FilterSourcePortRange, r.FilterSourcePorts),
-			FilterPort:            tracer.ConvertFilterPortsToInstr(r.FilterPort, r.FilterPortRange, r.FilterPorts),
-			FilterTCPFlags:        r.FilterTCPFlags,
-			FilterDrops:           r.FilterDrops,
-			FilterSample:          r.FilterSample,
+			Action:          r.Action,
+			Direction:       r.Direction,
+			IPCIDR:          r.IPCIDR,
+			Protocol:        r.Protocol,
+			PeerIP:          r.PeerIP,
+			PeerCIDR:        r.PeerCIDR,
+			DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
+			SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
+			Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
+			TCPFlags:        r.TCPFlags,
+			Drops:           r.Drops,
+			Sample:          r.Sample,
 		})
 	}
 	ebpfConfig := &tracer.FlowFetcherConfig{
