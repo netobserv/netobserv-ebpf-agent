@@ -84,22 +84,8 @@ The following environment variables are available to configure the NetObserv eBP
   * `METRICS_TLS_CERT_PATH` (default: unset). Path to the certificate file for the TLS connection.
   * `METRICS_TLS_KEY_PATH` (default: unset). Path to the private key file for the TLS connection.
   * `METRICS_PREFIX` (default: `ebpf-agent`). Prefix for the exported metrics.
-* `ENABLE_FLOW_FILTER` (default: `false`). If `true`, the agent will filter flows based on the configured `FLOW_FILTER`.
-  See [docs](./flow_filtering.md) for more details on this feature.
-  * `FLOW_FILTER_DIRECTION` (default: unset). Direction of the flows to be filtered. Accepted values are `ingress`, `egress`, this is optional configuration.
-  * `FLOW_FILTER_IP_CIDR` (default: unset). IP CIDR to be filtered. Accepted format: `192.168.1.0/24` this field is mandatory.
-  * `FLOW_FILTER_PROTOCOL` (default: unset). Protocol to be filtered. Accepted values are `TCP`, `UDP`, `SCTP`, `ICMP`, `ICMPv6`, this is optional configuration.
-  * `FLOW_FILTER_SOURCE_PORT` (default: unset). Source port to be filtered. Accepted format: `80` this field is optional.
-  * `FLOW_FILTER_DESTINATION_PORT` (default: unset). Destination port to be filtered. Accepted format: `80` this field is optional.
-  * `FLOW_FILTER_PORT` (default: unset). Port to be filtered can be either source or dst port. Accepted format: `80` this field is optional.
-  * `FLOW_FILTER_SOURCE_PORT_RANGE` (default: unset). Source port range to be filtered. Accepted format: `80-90` this field is optional.
-  * `FLOW_FILTER_DESTINATION_PORT_RANGE` (default: unset). Destination port range to be filtered. Accepted format: `80-90` this field is optional.
-  * `FLOW_FILTER_PORT_RANGE` (default: unset). Port range to be filtered can be either source or dst port. Accepted format: `80-90` this field
-  * `FLOW_FILTER_ICMP_TYPE` (default: unset). ICMP type to be filtered. Accepted format: `8` this field is optional.
-  * `FLOW_FILTER_ICMP_CODE` (default: unset). ICMP code to be filtered. Accepted format: `8` this field is optional.
-  * `FLOW_FILTER_PEER_IP` (default: unset). Peer IP address to be filtered. Accepted format: `192.168.1.1` this field is optional.
-  * `FLOW_FILTER_ACTION` (default: unset). Action to be taken when the flow is filtered. Accepted values are `Accept`, `Reject`.
-
+* `ENABLE_FLOW_FILTER` (default: `false`). If `true`, the agent will filter flows based on the configured `FLOW_FILTER_RULES`.
+  * `FLOW_FILTER_RULES` (default: unset). Filtering rules, in JSON format. See [docs](./flow_filtering.md) for details.
 
 ## Development-only variables
 
