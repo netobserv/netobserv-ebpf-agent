@@ -265,7 +265,10 @@ func flowsAgent(
 	if err != nil {
 		return nil, err
 	}
-	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
+	registerer, err := ifaces.NewRegisterer(informer, cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
 		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)

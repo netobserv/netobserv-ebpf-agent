@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -15,7 +16,9 @@ func TestRegisterer(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10)
-	registry := NewRegisterer(watcher, 10)
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10})
+	require.NoError(t, err)
+
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}}, nil
@@ -82,7 +85,9 @@ func TestRegisterer_Lookup(t *testing.T) {
 	)
 
 	watcher := NewWatcher(10)
-	registry := NewRegisterer(watcher, 10)
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"})
+	require.NoError(t, err)
+
 	// Set conflicting interfaces on ifindex 2 (they would have different netns, but that's not important for this test)
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{
@@ -135,4 +140,74 @@ func TestRegisterer_Lookup(t *testing.T) {
 	// test no match (wrong ifindex)
 	_, ok = registry.IfaceNameForIndexAndMAC(5, [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
 	assert.False(t, ok)
+}
+
+func TestRegisterer_PreferredInterfacesEdgeCases(t *testing.T) {
+	pref, err := newPreferredInterfaces("")
+	require.NoError(t, err)
+	require.Len(t, pref, 0)
+
+	pref, err = newPreferredInterfaces("invalid")
+	require.ErrorContains(t, err, "bad format 'invalid'; expected 'mac_prefix=name'")
+	require.Len(t, pref, 0)
+
+	pref, err = newPreferredInterfaces("invalid=interface")
+	require.ErrorContains(t, err, "bad MAC prefix 'invalid'; encoding/hex:")
+	require.Len(t, pref, 0)
+
+	pref, err = newPreferredInterfaces("=interface")
+	require.ErrorContains(t, err, "empty MAC prefix in '=interface'")
+	require.Len(t, pref, 0)
+
+	pref, err = newPreferredInterfaces("aaaaaaaaaaaaaa=interface")
+	require.ErrorContains(t, err, "MAC prefix too big 'aaaaaaaaaaaaaa'")
+	require.Len(t, pref, 0)
+}
+
+func TestRegisterer_PreferredInterfacesNominal(t *testing.T) {
+	var allowList = map[[6]uint8]string{
+		{1}: "if1",
+		{2}: "if2",
+		{3}: "if3",
+	}
+	pref, err := newPreferredInterfaces("0a:58=if1,0b59=if2,0b62=if2bis,0c:60:80:=if3")
+	require.NoError(t, err)
+	assert.Equal(t, []preferredInterface{
+		{
+			macPrefix: []uint8{0x0a, 0x58},
+			intf:      "if1",
+		},
+		{
+			macPrefix: []uint8{0x0b, 0x59},
+			intf:      "if2",
+		},
+		{
+			macPrefix: []uint8{0x0b, 0x62},
+			intf:      "if2bis",
+		},
+		{
+			macPrefix: []uint8{0x0c, 0x60, 0x80},
+			intf:      "if3",
+		},
+	}, pref)
+
+	// Matches 0a:58=if1
+	name, ok := pref[0].matches([6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}, allowList)
+	assert.True(t, ok)
+	assert.Equal(t, "if1", name)
+
+	// No match 0b59=if2
+	name, ok = pref[1].matches([6]uint8{0x0b, 0x62, 0x90, 0x15, 0xba, 0x83}, allowList)
+	assert.False(t, ok)
+	assert.Empty(t, name)
+
+	// No match 0b62=if2bis because if2bis isn't in allow list
+	name, ok = pref[2].matches([6]uint8{0x0b, 0x62, 0x90, 0x15, 0xba, 0x83}, allowList)
+	assert.False(t, ok)
+	assert.Empty(t, name)
+
+	// Matches 0c:60:80:=if3
+	name, ok = pref[3].matches([6]uint8{0x0c, 0x60, 0x80, 0x04, 0x05, 0x06}, allowList)
+	assert.True(t, ok)
+	assert.Equal(t, "if3", name)
 }

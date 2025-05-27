@@ -2,9 +2,13 @@ package ifaces
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -13,18 +17,24 @@ var rlog = logrus.WithField("component", "ifaces.Registerer")
 // Registerer is an informer that wraps another informer implementation, and keeps track of
 // the currently existing interfaces in the system, accessible through the IfaceNameForIndex method.
 type Registerer struct {
-	m      sync.RWMutex
-	inner  Informer
-	ifaces map[int]map[[6]uint8]string
-	bufLen int
+	m                   sync.RWMutex
+	inner               Informer
+	ifaces              map[int]map[[6]uint8]string
+	bufLen              int
+	preferredInterfaces []preferredInterface
 }
 
-func NewRegisterer(inner Informer, bufLen int) *Registerer {
-	return &Registerer{
-		inner:  inner,
-		bufLen: bufLen,
-		ifaces: map[int]map[[6]uint8]string{},
+func NewRegisterer(inner Informer, cfg *config.Agent) (*Registerer, error) {
+	pref, err := newPreferredInterfaces(cfg.PreferredInterfaceForMACPrefix)
+	if err != nil {
+		return nil, err
 	}
+	return &Registerer{
+		inner:               inner,
+		bufLen:              cfg.BuffersLength,
+		ifaces:              map[int]map[[6]uint8]string{},
+		preferredInterfaces: pref,
+	}, nil
 }
 
 func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
@@ -90,11 +100,9 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 			// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
 			// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
 			// doesn't match the actual interface MAC, we'll hardcode that.
-			if mac[0] == 0x0a && mac[1] == 0x58 {
-				for _, name := range macsMap {
-					if name == "eth0" {
-						return name, true
-					}
+			for i := range r.preferredInterfaces {
+				if name, ok = r.preferredInterfaces[i].matches(mac, macsMap); ok {
+					return name, true
 				}
 			}
 			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
@@ -121,4 +129,50 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 	}
 	r.m.Unlock()
 	return iface.Name, true
+}
+
+type preferredInterface struct {
+	macPrefix []uint8
+	intf      string
+}
+
+func newPreferredInterfaces(s string) ([]preferredInterface, error) {
+	var ret []preferredInterface
+	if len(s) == 0 {
+		return nil, nil
+	}
+	all := strings.Split(s, ",")
+	for _, kv := range all {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("PreferredInterfaceForMACPrefix, bad format '%s'; expected 'mac_prefix=name'", kv)
+		}
+		macChars := strings.ReplaceAll(parts[0], ":", "")
+		data, err := hex.DecodeString(macChars)
+		if err != nil {
+			return nil, fmt.Errorf("PreferredInterfaceForMACPrefix, bad MAC prefix '%s'; %w", parts[0], err)
+		}
+		if len(data) == 0 {
+			return nil, fmt.Errorf("PreferredInterfaceForMACPrefix, empty MAC prefix in '%s'", kv)
+		}
+		if len(data) > 6 {
+			return nil, fmt.Errorf("PreferredInterfaceForMACPrefix, MAC prefix too big '%s'", parts[0])
+		}
+		ret = append(ret, preferredInterface{macPrefix: data, intf: parts[1]})
+	}
+	return ret, nil
+}
+
+func (p *preferredInterface) matches(mac [6]uint8, macsMap map[[6]uint8]string) (string, bool) {
+	for i := range p.macPrefix {
+		if mac[i] != p.macPrefix[i] {
+			return "", false
+		}
+	}
+	for _, name := range macsMap {
+		if name == p.intf {
+			return name, true
+		}
+	}
+	return "", false
 }

@@ -238,6 +238,12 @@ type Agent struct {
 	EnableUDNMapping bool `env:"ENABLE_UDN_MAPPING" envDefault:"false"`
 	// EnableIPsecTracking enable tracking IPsec flows encryption
 	EnableIPsecTracking bool `env:"ENABLE_IPSEC_TRACKING" envDefault:"false"`
+	// PreferredInterfaceForMACPrefix is a comma-separated list of key=value pairs.
+	// It allows to specify a preference when retrieving interface names per flow in case of index collision, when using multiple network namespaces are used.
+	// This setting is only used when the interface name could not be found for a given index and MAC.
+	// E.g. "0a:58=eth0" (used for ovn-kubernetes)
+	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
+
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */
