@@ -13,20 +13,20 @@ import (
 )
 
 type FilterConfig struct {
-	FilterDirection       string
-	FilterIPCIDR          string
-	FilterProtocol        string
-	FilterSourcePort      intstr.IntOrString
-	FilterDestinationPort intstr.IntOrString
-	FilterPort            intstr.IntOrString
-	FilterIcmpType        int
-	FilterIcmpCode        int
-	FilterPeerIP          string
-	FilterPeerCIDR        string
-	FilterAction          string
-	FilterTCPFlags        string
-	FilterDrops           bool
-	FilterSample          uint32
+	Direction       string
+	IPCIDR          string
+	Protocol        string
+	SourcePort      intstr.IntOrString
+	DestinationPort intstr.IntOrString
+	Port            intstr.IntOrString
+	IcmpType        int
+	IcmpCode        int
+	PeerIP          string
+	PeerCIDR        string
+	Action          string
+	TCPFlags        string
+	Drops           bool
+	Sample          uint32
 }
 
 type Filter struct {
@@ -100,21 +100,21 @@ func (f *Filter) buildFilterKey(cidr, ipStr string) (ebpf.BpfFilterKeyT, error) 
 }
 
 func (f *Filter) getFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
-	if config.FilterIPCIDR == "" {
-		config.FilterIPCIDR = "0.0.0.0/0"
+	if config.IPCIDR == "" {
+		config.IPCIDR = "0.0.0.0/0"
 	}
-	return f.buildFilterKey(config.FilterIPCIDR, "")
+	return f.buildFilterKey(config.IPCIDR, "")
 }
 
 func (f *Filter) getPeerFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
-	return f.buildFilterKey(config.FilterPeerCIDR, config.FilterPeerIP)
+	return f.buildFilterKey(config.PeerCIDR, config.PeerIP)
 }
 
 // nolint:cyclop
 func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, error) {
 	val := ebpf.BpfFilterValueT{}
 
-	switch config.FilterDirection {
+	switch config.Direction {
 	case "Ingress":
 		val.Direction = ebpf.BpfDirectionTINGRESS
 	case "Egress":
@@ -123,7 +123,7 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 		val.Direction = ebpf.BpfDirectionTMAX_DIRECTION
 	}
 
-	switch config.FilterAction {
+	switch config.Action {
 	case "Reject":
 		val.Action = ebpf.BpfFilterActionTREJECT
 	case "Accept":
@@ -132,7 +132,7 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 		val.Action = ebpf.BpfFilterActionTMAX_FILTER_ACTIONS
 	}
 
-	switch config.FilterProtocol {
+	switch config.Protocol {
 	case "TCP":
 		val.Protocol = syscall.IPPROTO_TCP
 	case "UDP":
@@ -151,10 +151,10 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 	val.SrcPort1, val.SrcPort2 = getSrcPorts(config)
 	val.PortStart, val.PortEnd = getPortsRange(config)
 	val.Port1, val.Port2 = getPorts(config)
-	val.IcmpType = uint8(config.FilterIcmpType)
-	val.IcmpCode = uint8(config.FilterIcmpCode)
+	val.IcmpType = uint8(config.IcmpType)
+	val.IcmpCode = uint8(config.IcmpCode)
 
-	switch config.FilterTCPFlags {
+	switch config.TCPFlags {
 	case "SYN":
 		val.TcpFlags = ebpf.BpfTcpFlagsTSYN_FLAG
 	case "SYN-ACK":
@@ -179,24 +179,24 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 		val.TcpFlags = ebpf.BpfTcpFlagsTRST_ACK_FLAG
 	}
 
-	if config.FilterDrops {
+	if config.Drops {
 		val.FilterDrops = 1
 	}
 
-	if config.FilterSample != 0 {
-		val.Sample = config.FilterSample
+	if config.Sample != 0 {
+		val.Sample = config.Sample
 	}
-	if config.FilterPeerCIDR != "" || config.FilterPeerIP != "" {
+	if config.PeerCIDR != "" || config.PeerIP != "" {
 		val.DoPeerCIDR_lookup = 1
 	}
 	return val, nil
 }
 
 func getSrcPortsRange(config *FilterConfig) (uint16, uint16) {
-	if config.FilterSourcePort.Type == intstr.Int {
-		return uint16(config.FilterSourcePort.IntVal), 0
+	if config.SourcePort.Type == intstr.Int {
+		return uint16(config.SourcePort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FilterSourcePort.String(), "-")
+	start, end, err := getPortsFromString(config.SourcePort.String(), "-")
 	if err != nil {
 		return 0, 0
 	}
@@ -204,7 +204,7 @@ func getSrcPortsRange(config *FilterConfig) (uint16, uint16) {
 }
 
 func getSrcPorts(config *FilterConfig) (uint16, uint16) {
-	port1, port2, err := getPortsFromString(config.FilterSourcePort.String(), ",")
+	port1, port2, err := getPortsFromString(config.SourcePort.String(), ",")
 	if err != nil {
 		return 0, 0
 	}
@@ -212,10 +212,10 @@ func getSrcPorts(config *FilterConfig) (uint16, uint16) {
 }
 
 func getDstPortsRange(config *FilterConfig) (uint16, uint16) {
-	if config.FilterDestinationPort.Type == intstr.Int {
-		return uint16(config.FilterDestinationPort.IntVal), 0
+	if config.DestinationPort.Type == intstr.Int {
+		return uint16(config.DestinationPort.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FilterDestinationPort.String(), "-")
+	start, end, err := getPortsFromString(config.DestinationPort.String(), "-")
 	if err != nil {
 		return 0, 0
 	}
@@ -223,7 +223,7 @@ func getDstPortsRange(config *FilterConfig) (uint16, uint16) {
 }
 
 func getDstPorts(config *FilterConfig) (uint16, uint16) {
-	port1, port2, err := getPortsFromString(config.FilterDestinationPort.String(), ",")
+	port1, port2, err := getPortsFromString(config.DestinationPort.String(), ",")
 	if err != nil {
 		return 0, 0
 	}
@@ -231,10 +231,10 @@ func getDstPorts(config *FilterConfig) (uint16, uint16) {
 }
 
 func getPortsRange(config *FilterConfig) (uint16, uint16) {
-	if config.FilterPort.Type == intstr.Int {
-		return uint16(config.FilterPort.IntVal), 0
+	if config.Port.Type == intstr.Int {
+		return uint16(config.Port.IntVal), 0
 	}
-	start, end, err := getPortsFromString(config.FilterPort.String(), "-")
+	start, end, err := getPortsFromString(config.Port.String(), "-")
 	if err != nil {
 		return 0, 0
 	}
@@ -242,7 +242,7 @@ func getPortsRange(config *FilterConfig) (uint16, uint16) {
 }
 
 func getPorts(config *FilterConfig) (uint16, uint16) {
-	port1, port2, err := getPortsFromString(config.FilterPort.String(), ",")
+	port1, port2, err := getPortsFromString(config.Port.String(), ",")
 	if err != nil {
 		return 0, 0
 	}
@@ -286,7 +286,7 @@ func ConvertFilterPortsToInstr(intPort int32, rangePorts, ports string) intstr.I
 
 func (f *Filter) hasSampling() uint8 {
 	for _, r := range f.config {
-		if r.FilterSample > 0 {
+		if r.Sample > 0 {
 			return 1
 		}
 	}

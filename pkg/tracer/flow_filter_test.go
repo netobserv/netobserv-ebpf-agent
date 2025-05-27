@@ -61,7 +61,7 @@ func TestGetPortsFromString(t *testing.T) {
 func TestFilter_getFlowFilterKey(t *testing.T) {
 	f := Filter{}
 	config := &FilterConfig{
-		FilterIPCIDR: "192.168.1.0/24",
+		IPCIDR: "192.168.1.0/24",
 	}
 	expectedIP := net.ParseIP("192.168.1.0").To4()
 	expectedPrefixLen := uint32(24)
@@ -76,11 +76,11 @@ func TestFilter_getFlowFilterKey(t *testing.T) {
 func TestFilter_getFlowFilterValue(t *testing.T) {
 	f := Filter{}
 	config := &FilterConfig{
-		FilterDirection:       "Ingress",
-		FilterProtocol:        "TCP",
-		FilterSourcePort:      intstr.FromInt32(8080),
-		FilterDestinationPort: intstr.FromString("8000-9000"),
-		FilterPort:            intstr.FromString("3000,4000"),
+		Direction:       "Ingress",
+		Protocol:        "TCP",
+		SourcePort:      intstr.FromInt32(8080),
+		DestinationPort: intstr.FromString("8000-9000"),
+		Port:            intstr.FromString("3000,4000"),
 	}
 
 	value, err := f.getFilterValue(config)
@@ -98,7 +98,7 @@ func TestFilter_getFlowFilterValue(t *testing.T) {
 
 func TestGetSrcPortsRange(t *testing.T) {
 	config := &FilterConfig{
-		FilterSourcePort: intstr.FromString("8000-9000"),
+		SourcePort: intstr.FromString("8000-9000"),
 	}
 	start, end := getSrcPortsRange(config)
 
@@ -108,7 +108,7 @@ func TestGetSrcPortsRange(t *testing.T) {
 
 func TestGetSrcPorts(t *testing.T) {
 	config := &FilterConfig{
-		FilterSourcePort: intstr.FromString("8000,9000"),
+		SourcePort: intstr.FromString("8000,9000"),
 	}
 	p1, p2 := getSrcPorts(config)
 
@@ -118,7 +118,7 @@ func TestGetSrcPorts(t *testing.T) {
 
 func TestGetDstPortsRange(t *testing.T) {
 	config := &FilterConfig{
-		FilterDestinationPort: intstr.FromInt32(8080),
+		DestinationPort: intstr.FromInt32(8080),
 	}
 	start, end := getDstPortsRange(config)
 
@@ -128,7 +128,7 @@ func TestGetDstPortsRange(t *testing.T) {
 
 func TestGetDstPorts(t *testing.T) {
 	config := &FilterConfig{
-		FilterDestinationPort: intstr.FromString("8080,9000"),
+		DestinationPort: intstr.FromString("8080,9000"),
 	}
 	p1, p2 := getDstPorts(config)
 
@@ -138,7 +138,7 @@ func TestGetDstPorts(t *testing.T) {
 
 func TestGetPortsRange(t *testing.T) {
 	config := &FilterConfig{
-		FilterPort: intstr.FromString("8080-9000"),
+		Port: intstr.FromString("8080-9000"),
 	}
 	start, end := getPortsRange(config)
 
@@ -148,7 +148,7 @@ func TestGetPortsRange(t *testing.T) {
 
 func TestGetPorts(t *testing.T) {
 	config := &FilterConfig{
-		FilterPort: intstr.FromString("7000,8000"),
+		Port: intstr.FromString("7000,8000"),
 	}
 	p1, p2 := getPorts(config)
 
