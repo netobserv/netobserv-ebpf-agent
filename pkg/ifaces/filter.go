@@ -1,4 +1,4 @@
-package agent
+package ifaces
 
 import (
 	"fmt"
@@ -6,10 +6,35 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 )
 
-type InterfaceFilter interface {
+type Filter interface {
 	Allowed(iface string) (bool, error)
+}
+
+func FromConfig(cfg *config.Agent) (Filter, error) {
+	switch {
+	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
+		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
+
+	case len(cfg.InterfaceIPs) > 0:
+		// configure ip interface filter
+		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
+		}
+		return &f, nil
+
+	default:
+		// configure allow/deny regexp interfaces filter
+		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
+		if err != nil {
+			return nil, fmt.Errorf("configuring interface filters: %w", err)
+		}
+		return &f, nil
+	}
 }
 
 type ipInterfaceFilter struct {

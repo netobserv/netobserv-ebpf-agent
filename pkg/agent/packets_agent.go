@@ -26,7 +26,7 @@ type Packets struct {
 
 	// input data providers
 	interfaces ifaces.Informer
-	filter     InterfaceFilter
+	filter     ifaces.Filter
 	ebpf       ebpfPacketFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
@@ -120,39 +120,25 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 }
 
 // packetssAgent is a private constructor with injectable dependencies, usable for tests
-func packetsAgent(cfg *config.Agent,
+func packetsAgent(
+	cfg *config.Agent,
 	informer ifaces.Informer,
 	fetcher ebpfPacketFetcher,
 	packetexporter node.TerminalFunc[[]*model.PacketRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
-	var filter InterfaceFilter
 
-	switch {
-	case len(cfg.InterfaceIPs) > 0 && (len(cfg.Interfaces) > 0 || len(cfg.ExcludeInterfaces) > 0):
-		return nil, fmt.Errorf("INTERFACES/EXCLUDE_INTERFACES and INTERFACE_IPS are mutually exclusive")
-
-	case len(cfg.InterfaceIPs) > 0:
-		// configure ip interface filter
-		f, err := initIPInterfaceFilter(cfg.InterfaceIPs, IPsFromInterface)
-		if err != nil {
-			return nil, fmt.Errorf("configuring interface ip filter: %w", err)
-		}
-		filter = &f
-
-	default:
-		// configure allow/deny regexp interfaces filter
-		f, err := initRegexpInterfaceFilter(cfg.Interfaces, cfg.ExcludeInterfaces)
-		if err != nil {
-			return nil, fmt.Errorf("configuring interface filters: %w", err)
-		}
-		filter = &f
+	filter, err := ifaces.FromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	registerer, err := ifaces.NewRegisterer(informer, cfg)
+	if err != nil {
+		return nil, err
 	}
 
-	registerer := ifaces.NewRegisterer(informer, cfg.BuffersLength)
-
-	interfaceNamer := func(ifIndex int) string {
-		iface, ok := registerer.IfaceNameForIndex(ifIndex)
+	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
+		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
 		if !ok {
 			return "unknown"
 		}
