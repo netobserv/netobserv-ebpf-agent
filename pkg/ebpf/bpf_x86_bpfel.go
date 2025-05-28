@@ -13,18 +13,18 @@ import (
 )
 
 type BpfAdditionalMetrics struct {
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	DnsRecord        BpfDnsRecordT
-	PktDrops         BpfPktDropsT
-	FlowRtt          uint64
-	NetworkEvents    [4][8]uint8
-	TranslatedFlow   BpfTranslatedFlowT
-	EthProtocol      uint16
-	NetworkEventsIdx uint8
-	FlowEncrypted    bool
-	FlowEncryptedRet uint8
-	_                [5]byte
+	StartMonoTimeTs   uint64
+	EndMonoTimeTs     uint64
+	DnsRecord         BpfDnsRecordT
+	PktDrops          BpfPktDropsT
+	FlowRtt           uint64
+	NetworkEvents     [4][8]uint8
+	TranslatedFlow    BpfTranslatedFlowT
+	EthProtocol       uint16
+	NetworkEventsIdx  uint8
+	IpsecEncrypted    bool
+	_                 [2]byte
+	IpsecEncryptedRet int32
 }
 
 type BpfDirectionT uint32

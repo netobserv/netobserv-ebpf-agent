@@ -14,9 +14,9 @@ static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_r
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         extra_metrics->eth_protocol = eth_protocol;
         if (flow_encrypted_ret != 0) {
-            extra_metrics->flow_encrypted_ret = flow_encrypted_ret;
-            if (extra_metrics->flow_encrypted) {
-                extra_metrics->flow_encrypted = false;
+            extra_metrics->ipsec_encrypted_ret = flow_encrypted_ret;
+            if (extra_metrics->ipsec_encrypted) {
+                extra_metrics->ipsec_encrypted = false;
             }
         }
         return 0;
@@ -47,8 +47,7 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
         eth_protocol = ETH_P_IPV6;
     }
 
-    BPF_PRINTK("found encrypted flow dir: %d encrypted: %d\n", dir,
-               flow_encrypted_ret == 0 ? true : false);
+    BPF_PRINTK("found encrypted flow dir: %d ret: %d\n", dir, flow_encrypted_ret);
 
     // update flow with ipsec info
     ret = ipsec_lookup_and_update_flow(id, flow_encrypted_ret, eth_protocol);
@@ -62,8 +61,8 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
     new_flow.start_mono_time_ts = current_time;
     new_flow.end_mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
-    new_flow.flow_encrypted_ret = flow_encrypted_ret;
-    new_flow.flow_encrypted = flow_encrypted_ret == 0 ? true : false;
+    new_flow.ipsec_encrypted_ret = flow_encrypted_ret;
+    new_flow.ipsec_encrypted = flow_encrypted_ret == 0 ? true : false;
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (ret != -EEXIST) {
@@ -145,6 +144,7 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     return 0;
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_input.c#L463
 SEC("kprobe/xfrm_input")
 int BPF_KPROBE(xfrm_input_kprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -157,6 +157,7 @@ int BPF_KPROBE(xfrm_input_kprobe) {
     return enter_xfrm_func(skb, INGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_input.c#L463
 SEC("kretprobe/xfrm_input")
 int BPF_KRETPROBE(xfrm_input_kretprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -166,6 +167,7 @@ int BPF_KRETPROBE(xfrm_input_kretprobe) {
     return update_flow_with_ipsec_return(xfrm_ret, INGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_output.c#L743
 SEC("kprobe/xfrm_output")
 int BPF_KPROBE(xfrm_output_kprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
@@ -178,6 +180,7 @@ int BPF_KPROBE(xfrm_output_kprobe) {
     return enter_xfrm_func(skb, EGRESS);
 }
 
+// https://elixir.bootlin.com/linux/v6.14.8/source/net/xfrm/xfrm_output.c#L743
 SEC("kretprobe/xfrm_output")
 int BPF_KRETPROBE(xfrm_output_kretprobe) {
     if (do_sampling == 0 || enable_ipsec == 0) {
