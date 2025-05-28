@@ -20,7 +20,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.48
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	github.com/vishvananda/netlink v1.3.1-0.20250425193846-9d88d8385bf9
+	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	github.com/vladimirvivien/gexe v0.5.0
 	github.com/vmware/go-ipfix v0.14.0
