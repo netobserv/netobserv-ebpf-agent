@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"net"
 	"syscall"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestWatcher(t *testing.T) {
 	watcher := NewWatcher(10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
-		return []Interface{{"foo", 1, netns.None(), ""}, {"bar", 2, netns.None(), ""}, {"baz", 3, netns.None(), ""}}, nil
+		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -37,31 +38,31 @@ func TestWatcher(t *testing.T) {
 
 	// initial set of fetched elements
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"foo", 1, macFoo, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"baz", 3, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"baz", 3, macBaz, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 
 	// updates
-	inputLinks <- upAndRunning("bae", 4, netns.None())
-	inputLinks <- down("bar", 2, netns.None())
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 4, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: Interface{"bar", 2, netns.None(), ""}},
+		Event{Type: EventDeleted, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
 		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces
 	// will be ignored
-	inputLinks <- upAndRunning("bae", 4, netns.None())
-	inputLinks <- upAndRunning("foo", 1, netns.None())
-	inputLinks <- down("bar", 2, netns.None())
-	inputLinks <- down("eth0", 3, netns.None())
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- upAndRunning("foo", 1, macFoo[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
+	inputLinks <- down("eth0", 3, macBaz[:], netns.None())
 
 	select {
 	case ev := <-outputEvents:
@@ -71,15 +72,31 @@ func TestWatcher(t *testing.T) {
 	}
 }
 
-func upAndRunning(name string, index int, netNS netns.NsHandle) netlink.LinkUpdate {
+func upAndRunning(name string, index int, mac net.HardwareAddr, netNS netns.NsHandle) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
 		IfInfomsg: nl.IfInfomsg{IfInfomsg: unix.IfInfomsg{Flags: syscall.IFF_UP | syscall.IFF_RUNNING}},
-		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS, OperState: netlink.OperUp}},
+		Link:      &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS, OperState: netlink.OperUp, HardwareAddr: mac}},
 	}
 }
 
-func down(name string, index int, netNS netns.NsHandle) netlink.LinkUpdate {
+func down(name string, index int, mac net.HardwareAddr, netNS netns.NsHandle) netlink.LinkUpdate {
 	return netlink.LinkUpdate{
-		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS}},
+		Link: &netlink.GenericLink{LinkAttrs: netlink.LinkAttrs{Name: name, Index: index, Namespace: netNS, HardwareAddr: mac}},
 	}
+}
+
+func TestMACToFixed(t *testing.T) {
+	mac, err := net.ParseMAC("01:02:03:04:05:06")
+	assert.NoError(t, err)
+	fixed, err := macToFixed6(mac)
+	assert.NoError(t, err)
+	assert.Equal(t, macFoo, fixed)
+	fixed, err = macToFixed6([]uint8{1, 2, 3, 4, 5, 6})
+	assert.NoError(t, err)
+	assert.Equal(t, macFoo, fixed)
+	fixed, err = macToFixed6([]uint8{1, 2, 3, 4, 5, 6, 7, 8})
+	assert.NoError(t, err)
+	assert.Equal(t, macFoo, fixed)
+	_, err = macToFixed6([]uint8{1, 2, 3, 4})
+	assert.Equal(t, "MAC too small: 01:02:03:04", err.Error())
 }

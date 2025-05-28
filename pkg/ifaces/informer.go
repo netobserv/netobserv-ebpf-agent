@@ -3,6 +3,7 @@ package ifaces
 import (
 	"context"
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -38,6 +39,7 @@ type Event struct {
 type Interface struct {
 	Name   string
 	Index  int
+	MAC    [6]uint8
 	NetNS  netns.NsHandle
 	NSName string
 }
@@ -64,7 +66,12 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 
 	names := make([]Interface, len(links))
 	for i, link := range links {
-		names[i] = Interface{Name: link.Attrs().Name, Index: link.Attrs().Index, NetNS: nsh, NSName: ns}
+		mac, err := macToFixed6(link.Attrs().HardwareAddr)
+		if err != nil {
+			log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
+			continue
+		}
+		names[i] = Interface{Name: link.Attrs().Name, Index: link.Attrs().Index, MAC: mac, NetNS: nsh, NSName: ns}
 	}
 	return names, nil
 }
