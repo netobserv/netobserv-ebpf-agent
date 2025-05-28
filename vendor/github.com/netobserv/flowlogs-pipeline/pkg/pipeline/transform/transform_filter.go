@@ -39,8 +39,9 @@ var (
 )
 
 type Filter struct {
-	Rules     []api.TransformFilterRule
-	KeepRules []predicateRule
+	Rules         []api.TransformFilterRule
+	KeepRules     []predicateRule
+	SamplingField string
 }
 
 type predicateRule struct {
@@ -56,7 +57,7 @@ func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	if len(f.KeepRules) > 0 {
 		keep := false
 		for _, r := range f.KeepRules {
-			if applyPredicate(outputEntry, r) {
+			if applyKeepPredicate(outputEntry, r, f.SamplingField) {
 				keep = true
 				break
 			}
@@ -182,11 +183,21 @@ func isRemoveEntrySatisfied(entry config.GenericMap, rules []*api.RemoveEntryRul
 	return true
 }
 
-func applyPredicate(entry config.GenericMap, rule predicateRule) bool {
-	if !rollSampling(rule.sampling) {
-		return false
+// Returns true if flow must be kept. If sampling is configured, set the Sampling field on that flow.
+func applyKeepPredicate(entry config.GenericMap, rule predicateRule, samplingField string) bool {
+	if rule.predicate(entry) {
+		if rule.sampling > 0 {
+			if rollSampling(rule.sampling) {
+				if len(samplingField) > 0 {
+					storeSampling(entry, int(rule.sampling), samplingField)
+				}
+				return true // predicate true and sampled-in
+			}
+			return false // sampled-out
+		}
+		return true // predicate true / no sampling
 	}
-	return rule.predicate(entry)
+	return false // predicate false
 }
 
 func sample(entry config.GenericMap, rules []*api.SamplingCondition) bool {
@@ -202,12 +213,27 @@ func rollSampling(value uint16) bool {
 	return value == 0 || (rndgen.Intn(int(value)) == 0)
 }
 
+func storeSampling(entry config.GenericMap, value int, samplingField string) {
+	if current, found := entry[samplingField]; found {
+		if cast, err := utils.ConvertToInt(current); err == nil {
+			if cast == 0 {
+				cast = 1
+			}
+			entry[samplingField] = cast * value
+		}
+	} else {
+		entry[samplingField] = value
+	}
+}
+
 // NewTransformFilter create a new filter transform
 func NewTransformFilter(params config.StageParam) (Transformer, error) {
 	tlog.Debugf("entering NewTransformFilter")
 	keepRules := []predicateRule{}
 	rules := []api.TransformFilterRule{}
+	var samplingField string
 	if params.Transform != nil && params.Transform.Filter != nil {
+		samplingField = params.Transform.Filter.SamplingField
 		params.Transform.Filter.Preprocess()
 		for i := range params.Transform.Filter.Rules {
 			baseRules := &params.Transform.Filter.Rules[i]
@@ -226,8 +252,9 @@ func NewTransformFilter(params config.StageParam) (Transformer, error) {
 		}
 	}
 	transformFilter := &Filter{
-		Rules:     rules,
-		KeepRules: keepRules,
+		Rules:         rules,
+		KeepRules:     keepRules,
+		SamplingField: samplingField,
 	}
 	return transformFilter, nil
 }

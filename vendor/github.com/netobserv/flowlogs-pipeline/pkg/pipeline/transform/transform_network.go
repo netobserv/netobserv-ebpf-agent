@@ -70,10 +70,6 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 				outputEntry[rule.AddSubnet.Output] = ipv4Net.String()
 			}
 		case api.NetworkAddLocation:
-			if rule.AddLocation == nil {
-				log.Errorf("Missing add location configuration")
-				continue
-			}
 			var locationInfo *location.Info
 			locationInfo, err := location.GetLocation(util.ConvertToString(outputEntry[rule.AddLocation.Input]))
 			if err != nil {
@@ -175,7 +171,7 @@ func (n *Network) applySubnetLabel(strIP string) string {
 //
 //nolint:cyclop
 func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metrics) (Transformer, error) {
-	var needToInitLocationDB = false
+	var locationDBConfig *api.NetworkAddLocationRule
 	var needToInitKubeData = false
 	var needToInitNetworkServices = false
 
@@ -186,7 +182,10 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 	for _, rule := range jsonNetworkTransform.Rules {
 		switch rule.Type {
 		case api.NetworkAddLocation:
-			needToInitLocationDB = true
+			if rule.AddLocation == nil {
+				return nil, fmt.Errorf("missing configuration for '%s' rule", api.NetworkAddLocation)
+			}
+			locationDBConfig = rule.AddLocation
 		case api.NetworkAddKubernetes:
 			needToInitKubeData = true
 		case api.NetworkAddKubernetesInfra:
@@ -206,8 +205,8 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 		}
 	}
 
-	if needToInitLocationDB {
-		err := location.InitLocationDB()
+	if locationDBConfig != nil {
+		err := location.InitLocationDB(locationDBConfig.FilePath)
 		if err != nil {
 			log.Debugf("location.InitLocationDB error: %v", err)
 		}
