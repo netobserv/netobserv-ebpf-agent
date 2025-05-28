@@ -70,6 +70,7 @@ func RenderMessage(message *goflowpb.FlowMessage) (map[string]interface{}, error
 	}
 	outputMap["DstAddr"] = goflowCommonFormat.RenderIP(message.DstAddr)
 	outputMap["SrcAddr"] = goflowCommonFormat.RenderIP(message.SrcAddr)
+	outputMap["SamplerAddress"] = goflowCommonFormat.RenderIP(message.SamplerAddress)
 	outputMap["DstMac"] = renderMac(message.DstMac)
 	outputMap["SrcMac"] = renderMac(message.SrcMac)
 	return outputMap, nil
