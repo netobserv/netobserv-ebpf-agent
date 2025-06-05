@@ -78,9 +78,37 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 	return out, nil
 }
 
-// IfaceNameForIndex gets the interface name given an index as recorded by the underlying
-// interfaces' informer. It backs up into the net.InterfaceByIndex function if the interface
-// has not been previously registered
+// IfaceNameForIndexAndMAC returns the interface name for a given
+// interface index and MAC address, using the cached data from prior
+// events observed by the underlying interfaces informer. It returns
+// the interface name and true if a match is found, or an empty string
+// and false if not.
+//
+// If multiple MACs are associated with the same index, this function
+// attempts to disambiguate using the provided MAC. If no exact match
+// is found, it applies heuristics (e.g., preferred MAC prefix rules)
+// to choose a preferred interface name. As a last resort, if no MAC
+// match is possible, it returns the first name associated with the
+// index to avoid falling back to a syscall.
+//
+// A fallback to net.InterfaceByIndex is performed only if the index
+// is not present in the cache, or the MAC does not match any known
+// entry and no heuristic rule applies.
+//
+// Concurrency note:
+//
+// Without double-checked locking, the following sequence may occur:
+//
+//  1. Goroutine A acquires RLock, sees r.ifaces[idx][mac] is missing
+//  2. Goroutine B does the same (also sees entry missing)
+//  3. Both release RLock and call net.InterfaceByIndex(idx)
+//  4. Both prepare to insert iface.Name into r.ifaces[idx][mac]
+//  5. Goroutine A acquires Lock and writes to the map
+//  6. Goroutine B acquires Lock and overwrites A's result
+//
+// This results in a lost update. To prevent this, the function uses
+// double-checked locking: it re-checks under Lock before inserting,
+// ensuring that only one goroutine updates the cache.
 func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, bool) {
 	r.m.RLock()
 	macsMap, ok := r.ifaces[idx]
@@ -121,13 +149,21 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 	if err != nil {
 		return "", false
 	}
+
 	r.m.Lock()
+	defer r.m.Unlock()
+
 	if current, ok := r.ifaces[idx]; ok {
+		if existing, exists := current[foundMAC]; exists {
+			// The entry was populated concurrently during
+			// our fallback path. Respect the existing
+			// value to avoid a lost update.
+			return existing, true
+		}
 		current[foundMAC] = iface.Name
 	} else {
 		r.ifaces[idx] = map[[6]uint8]string{foundMAC: iface.Name}
 	}
-	r.m.Unlock()
 	return iface.Name, true
 }
 
