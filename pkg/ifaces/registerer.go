@@ -110,40 +110,9 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 // double-checked locking: it re-checks under Lock before inserting,
 // ensuring that only one goroutine updates the cache.
 func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, bool) {
-	r.m.RLock()
-	macsMap, ok := r.ifaces[idx]
-	if ok {
-		if len(macsMap) == 1 {
-			// No risk of collision, just return entry without checking for MAC
-			for _, name := range macsMap {
-				r.m.RUnlock()
-				return name, true
-			}
-		} else if len(macsMap) > 1 {
-			// Several entries, need to disambiguate by MAC
-			name, ok := macsMap[mac]
-			if ok {
-				r.m.RUnlock()
-				return name, true
-			}
-			// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
-			// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
-			// doesn't match the actual interface MAC, we'll hardcode that.
-			for i := range r.preferredInterfaces {
-				if name, ok = r.preferredInterfaces[i].matches(mac, macsMap); ok {
-					r.m.RUnlock()
-					return name, true
-				}
-			}
-			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
-			for _, name := range macsMap {
-				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
-				r.m.RUnlock()
-				return name, true
-			}
-		}
+	if name, found := r.ifaceCacheLookup(idx, mac); found {
+		return name, found
 	}
-	r.m.RUnlock()
 	// Fallback if not found, interfaces lookup
 	iface, err := net.InterfaceByIndex(idx)
 	if err != nil {
@@ -169,6 +138,41 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 		r.ifaces[idx] = map[[6]uint8]string{foundMAC: iface.Name}
 	}
 	return iface.Name, true
+}
+
+func (r *Registerer) ifaceCacheLookup(idx int, mac [6]uint8) (string, bool) {
+	r.m.RLock()
+	defer r.m.RUnlock()
+
+	macsMap, ok := r.ifaces[idx]
+	if ok {
+		if len(macsMap) == 1 {
+			// No risk of collision, just return entry without checking for MAC
+			for _, name := range macsMap {
+				return name, true
+			}
+		} else if len(macsMap) > 1 {
+			// Several entries, need to disambiguate by MAC
+			name, ok := macsMap[mac]
+			if ok {
+				return name, true
+			}
+			// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
+			// eth0 & ens5 often collide; MAC starting with 0A:58 should be eth0 and not ens5, but since the MAC captured in flow
+			// doesn't match the actual interface MAC, we'll hardcode that.
+			for i := range r.preferredInterfaces {
+				if name, ok = r.preferredInterfaces[i].matches(mac, macsMap); ok {
+					return name, true
+				}
+			}
+			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
+			for _, name := range macsMap {
+				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
+				return name, true
+			}
+		}
+	}
+	return "", false
 }
 
 type preferredInterface struct {
