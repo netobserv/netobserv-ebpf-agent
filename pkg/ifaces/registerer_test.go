@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
@@ -73,16 +74,15 @@ func TestRegisterer(t *testing.T) {
 	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
 }
 
-func TestRegisterer_Lookup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+var (
+	macEth0      = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
+	macEns5      = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
+	macOVN       = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
+	macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
+)
 
-	var (
-		macEth0      = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
-		macEns5      = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
-		macOVN       = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
-		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
-	)
+func setupRegisterer(ctx context.Context, t *testing.T) *Registerer {
+	t.Helper()
 
 	watcher := NewWatcher(10)
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"})
@@ -114,6 +114,15 @@ func TestRegisterer_Lookup(t *testing.T) {
 		getEvent(t, outputEvents, timeout)
 	}
 
+	return registry
+}
+
+func TestRegisterer_Lookup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := setupRegisterer(ctx, t)
+
 	// test perfect match without collision
 	name, ok := registry.IfaceNameForIndexAndMAC(10, macOVN)
 	assert.True(t, ok)
@@ -140,6 +149,29 @@ func TestRegisterer_Lookup(t *testing.T) {
 	// test no match (wrong ifindex)
 	_, ok = registry.IfaceNameForIndexAndMAC(5, [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
 	assert.False(t, ok)
+}
+
+func TestRegisterer_LookupSyscallFallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := setupRegisterer(ctx, t)
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			// test perfect match without collision
+			name, ok := registry.IfaceNameForIndexAndMAC(10, macOVN)
+			assert.True(t, ok)
+			assert.Equal(t, "a_pod_interface@if2", name)
+
+			// test fallback
+			_, _ = registry.IfaceNameForIndexAndMAC(3, macEns5)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 func TestRegisterer_PreferredInterfacesEdgeCases(t *testing.T) {
