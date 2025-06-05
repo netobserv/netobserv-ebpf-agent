@@ -112,17 +112,18 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, bool) {
 	r.m.RLock()
 	macsMap, ok := r.ifaces[idx]
-	r.m.RUnlock()
 	if ok {
 		if len(macsMap) == 1 {
 			// No risk of collision, just return entry without checking for MAC
 			for _, name := range macsMap {
+				r.m.RUnlock()
 				return name, true
 			}
 		} else if len(macsMap) > 1 {
 			// Several entries, need to disambiguate by MAC
 			name, ok := macsMap[mac]
 			if ok {
+				r.m.RUnlock()
 				return name, true
 			}
 			// Not found => before falling back to syscall lookup that is CPU intensive, run this quick ovn optimization:
@@ -130,16 +131,19 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 			// doesn't match the actual interface MAC, we'll hardcode that.
 			for i := range r.preferredInterfaces {
 				if name, ok = r.preferredInterfaces[i].matches(mac, macsMap); ok {
+					r.m.RUnlock()
 					return name, true
 				}
 			}
 			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
 			for _, name := range macsMap {
 				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
+				r.m.RUnlock()
 				return name, true
 			}
 		}
 	}
+	r.m.RUnlock()
 	// Fallback if not found, interfaces lookup
 	iface, err := net.InterfaceByIndex(idx)
 	if err != nil {
