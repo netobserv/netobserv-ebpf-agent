@@ -74,15 +74,16 @@ func TestRegisterer(t *testing.T) {
 	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
 }
 
-var (
-	macEth0      = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
-	macEns5      = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
-	macOVN       = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
-	macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
-)
+func TestRegisterer_Lookup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-func setupRegisterer(ctx context.Context, t *testing.T) *Registerer {
-	t.Helper()
+	var (
+		macEth0      = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
+		macEns5      = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
+		macOVN       = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
+		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
+	)
 
 	watcher := NewWatcher(10)
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"})
@@ -114,15 +115,6 @@ func setupRegisterer(ctx context.Context, t *testing.T) *Registerer {
 		getEvent(t, outputEvents, timeout)
 	}
 
-	return registry
-}
-
-func TestRegisterer_Lookup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	registry := setupRegisterer(ctx, t)
-
 	// test perfect match without collision
 	name, ok := registry.IfaceNameForIndexAndMAC(10, macOVN)
 	assert.True(t, ok)
@@ -151,26 +143,59 @@ func TestRegisterer_Lookup(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestRegisterer_LookupSyscallFallback(t *testing.T) {
+func TestRace_Registerer_LookupSyscallFallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	registry := setupRegisterer(ctx, t)
+	watcher := NewWatcher(10)
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10})
+	require.NoError(t, err)
+
+	// Start with empty interfaces
+	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		return []Interface{}, nil
+	}
+	inputLinks := make(chan netlink.LinkUpdate, 10)
+	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
+		go func() {
+			for link := range inputLinks {
+				ch <- link
+			}
+		}()
+		return nil
+	}
+
+	outputEvents, err := registry.Subscribe(ctx)
+	require.NoError(t, err)
+
 	wg := sync.WaitGroup{}
 
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			// test perfect match without collision
-			name, ok := registry.IfaceNameForIndexAndMAC(10, macOVN)
-			assert.True(t, ok)
-			assert.Equal(t, "a_pod_interface@if2", name)
+			defer wg.Done()
+			_, _ = registry.IfaceNameForIndexAndMAC(1, macFoo)
+			_, _ = registry.IfaceNameForIndexAndMAC(2, macBar)
+			_, _ = registry.IfaceNameForIndexAndMAC(3, macBaz)
+			_, _ = registry.IfaceNameForIndexAndMAC(3, macBae)
+		}()
 
-			// test fallback
-			_, _ = registry.IfaceNameForIndexAndMAC(3, macEns5)
-			wg.Done()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			inputLinks <- upAndRunning("bae", 3, macBae[:], netns.None())
+			inputLinks <- upAndRunning("bar", 2, macBar[:], netns.None())
+			inputLinks <- down("bae", 3, macBae[:], netns.None())
+			inputLinks <- down("bar", 2, macBar[:], netns.None())
 		}()
 	}
+
+	go func() {
+		for {
+			getEvent(t, outputEvents, timeout)
+		}
+	}()
+
 	wg.Wait()
 }
 
