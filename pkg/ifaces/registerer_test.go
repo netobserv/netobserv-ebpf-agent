@@ -143,7 +143,8 @@ func TestRegisterer_Lookup(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestRace_Registerer_Lookup(t *testing.T) {
+func TestRegisterer_LookupRace(t *testing.T) {
+	// No assertion here, purpose being to catch races
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -165,8 +166,14 @@ func TestRace_Registerer_Lookup(t *testing.T) {
 		return nil
 	}
 
-	outputEvents, err := registry.Subscribe(ctx)
+	// Process & consume interface events
+	eventsCh, err := registry.Subscribe(ctx)
 	require.NoError(t, err)
+	go func() {
+		for {
+			<-eventsCh
+		}
+	}()
 
 	wg := sync.WaitGroup{}
 
@@ -189,12 +196,6 @@ func TestRace_Registerer_Lookup(t *testing.T) {
 			inputLinks <- down("bar", 2, macBar[:], netns.None())
 		}()
 	}
-
-	go func() {
-		for {
-			getEvent(t, outputEvents, timeout)
-		}
-	}()
 
 	wg.Wait()
 }
