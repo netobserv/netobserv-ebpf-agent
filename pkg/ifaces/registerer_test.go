@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
@@ -140,6 +141,63 @@ func TestRegisterer_Lookup(t *testing.T) {
 	// test no match (wrong ifindex)
 	_, ok = registry.IfaceNameForIndexAndMAC(5, [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
 	assert.False(t, ok)
+}
+
+func TestRegisterer_LookupRace(t *testing.T) {
+	// No assertion here, purpose being to catch races
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	watcher := NewWatcher(10)
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10})
+	require.NoError(t, err)
+
+	// Start with empty interfaces
+	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		return []Interface{}, nil
+	}
+	inputLinks := make(chan netlink.LinkUpdate, 10)
+	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
+		go func() {
+			for link := range inputLinks {
+				ch <- link
+			}
+		}()
+		return nil
+	}
+
+	// Process & consume interface events
+	eventsCh, err := registry.Subscribe(ctx)
+	require.NoError(t, err)
+	go func() {
+		for {
+			<-eventsCh
+		}
+	}()
+
+	wg := sync.WaitGroup{}
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = registry.IfaceNameForIndexAndMAC(1, macFoo)
+			_, _ = registry.IfaceNameForIndexAndMAC(2, macBar)
+			_, _ = registry.IfaceNameForIndexAndMAC(3, macBaz)
+			_, _ = registry.IfaceNameForIndexAndMAC(3, macBae)
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			inputLinks <- upAndRunning("bae", 3, macBae[:], netns.None())
+			inputLinks <- upAndRunning("bar", 2, macBar[:], netns.None())
+			inputLinks <- down("bae", 3, macBae[:], netns.None())
+			inputLinks <- down("bar", 2, macBar[:], netns.None())
+		}()
+	}
+
+	wg.Wait()
 }
 
 func TestRegisterer_PreferredInterfacesEdgeCases(t *testing.T) {
