@@ -1,0 +1,8 @@
+{
+	"pipeline":[
+		{"name": "writer","follows": "preset-ingester"}
+	],
+	"parameters":[
+		{"name": "writer","write": {"type": "stdout"}}
+	]
+}

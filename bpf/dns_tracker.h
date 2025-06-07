@@ -10,6 +10,7 @@
 #define DNS_QR_FLAG 0x8000
 #define UDP_MAXMSG 512
 
+// See https://www.rfc-editor.org/rfc/rfc1035 4.1.1. Header section format
 struct dns_header {
     u16 id;
     u16 flags;
