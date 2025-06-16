@@ -16,7 +16,7 @@ import (
 func (cp *CollectingProcess) startTCPServer() {
 	var listener net.Listener
 	if cp.isEncrypted { // use TLS
-		config, err := cp.createServerConfig()
+		config, err := cp.createServerTLSConfig()
 		if err != nil {
 			klog.Error(err)
 			return
@@ -82,8 +82,8 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 	doneCh := make(chan struct{})
 	cp.wg.Add(1)
 	// We read from the connection in a separate goroutine, so we can stop immediately when
-	// cp.StopChan is closed. An alternative would be to use a read deadline, and check
-	// cp.StopChan at every iteration.
+	// cp.stopChan is closed. An alternative would be to use a read deadline, and check
+	// cp.stopChan at every iteration.
 	go func() {
 		defer cp.wg.Done()
 		defer close(doneCh)
@@ -93,6 +93,13 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 			if errors.Is(err, io.EOF) {
 				klog.V(2).InfoS("Connection was closed by client")
 				return
+			}
+			// If cp.stopChan is closed, server was stopped and any error can be ignored.
+			select {
+			case <-cp.stopChan:
+				return
+			default:
+				break
 			}
 			if err != nil {
 				klog.ErrorS(err, "Error when retrieving message length")
@@ -133,26 +140,32 @@ func (cp *CollectingProcess) handleTCPClient(conn net.Conn) {
 	}
 }
 
-func (cp *CollectingProcess) createServerConfig() (*tls.Config, error) {
+func (cp *CollectingProcess) createServerTLSConfig() (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(cp.serverCert, cp.serverKey)
 	if err != nil {
 		return nil, err
 	}
-	if cp.caCert == nil {
-		return &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		}, nil
+	tlsMinVersion := cp.tlsMinVersion
+	// This should already be the default value for tls.Config, but we duplicate the earlier
+	// implementation, which was explicitly setting it to 1.2.
+	if tlsMinVersion == 0 {
+		tlsMinVersion = tls.VersionTLS12
 	}
-	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM(cp.caCert)
-	if !ok {
-		return nil, fmt.Errorf("failed to parse root certificate")
-	}
-	return &tls.Config{
+	// #nosec G402: client is in charge of setting the min TLS version. We use 1.2 as the
+	// default, which is secure.
+	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    roots,
-		MinVersion:   tls.VersionTLS12,
-	}, nil
+		MinVersion:   tlsMinVersion,
+	}
+	if cp.caCert == nil {
+		return tlsConfig, nil
+	}
+	clientCAs := x509.NewCertPool()
+	ok := clientCAs.AppendCertsFromPEM(cp.caCert)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse client CA certificate")
+	}
+	tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	tlsConfig.ClientCAs = clientCAs
+	return tlsConfig, nil
 }
