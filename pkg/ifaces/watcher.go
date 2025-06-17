@@ -27,7 +27,7 @@ var log = logrus.WithField("component", "ifaces.Watcher")
 // addition or removal.
 type Watcher struct {
 	bufLen     int
-	current    map[InterfaceKey]Interface
+	current    map[InterfaceKey]*Interface
 	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
@@ -40,7 +40,7 @@ type Watcher struct {
 func NewWatcher(bufLen int) *Watcher {
 	return &Watcher{
 		bufLen:           bufLen,
-		current:          map[InterfaceKey]Interface{},
+		current:          map[InterfaceKey]*Interface{},
 		interfaces:       netInterfaces,
 		linkSubscriberAt: netlink.LinkSubscribeAt,
 		mutex:            &sync.Mutex{},
@@ -121,7 +121,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			for _, name := range names {
 				iface := NewInterface(name.Index, name.Name, name.MAC, netnsHandle, ns)
 				w.mutex.Lock()
-				w.current[iface.InterfaceKey] = iface
+				w.current[iface.InterfaceKey] = &iface
 				w.mutex.Unlock()
 				out <- Event{Type: EventAdded, Interface: &iface}
 			}
@@ -149,7 +149,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"netns":     netnsHandle.String(),
 			}).Debug("Interface up and running")
 			if _, ok := w.current[iface.InterfaceKey]; !ok {
-				w.current[iface.InterfaceKey] = iface
+				w.current[iface.InterfaceKey] = &iface
 				out <- Event{Type: EventAdded, Interface: &iface}
 			}
 		} else {
@@ -161,7 +161,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			}).Debug("Interface down or not running")
 			if storedIface, ok := w.current[iface.InterfaceKey]; ok {
 				delete(w.current, iface.InterfaceKey)
-				out <- Event{Type: EventDeleted, Interface: &storedIface}
+				out <- Event{Type: EventDeleted, Interface: storedIface}
 			}
 		}
 		w.mutex.Unlock()

@@ -12,7 +12,7 @@ import (
 // notifications when interfaces are added or deleted.
 type Poller struct {
 	period     time.Duration
-	current    map[InterfaceKey]Interface
+	current    map[InterfaceKey]*Interface
 	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	bufLen     int
 }
@@ -22,7 +22,7 @@ func NewPoller(period time.Duration, bufLen int) *Poller {
 		period:     period,
 		bufLen:     bufLen,
 		interfaces: netInterfaces,
-		current:    map[InterfaceKey]Interface{},
+		current:    map[InterfaceKey]*Interface{},
 	}
 }
 
@@ -84,7 +84,7 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 		acquired[iface.InterfaceKey] = struct{}{}
 		if _, ok := np.current[iface.InterfaceKey]; !ok {
 			ilog.WithField("interface", iface).Debug("added network interface")
-			np.current[iface.InterfaceKey] = iface
+			np.current[iface.InterfaceKey] = &iface
 			events <- Event{
 				Type:      EventAdded,
 				Interface: &iface,
@@ -98,7 +98,7 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 			ilog.WithField("interface", iface).Debug("deleted network interface")
 			events <- Event{
 				Type:      EventDeleted,
-				Interface: &iface,
+				Interface: iface,
 			}
 		}
 	}
