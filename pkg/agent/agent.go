@@ -529,8 +529,11 @@ func (f *Flows) onInterfaceEvent(iface *ifaces.Interface, add bool) {
 		return
 	}
 	if !allowed {
-		alog.WithField("interface", iface).
-			Debug("interface does not match the allow/exclusion filters. Ignoring")
+		alog.WithField("interface", iface).Debug("interface does not match the allow/exclusion filters. Ignoring")
+		return
+	}
+	if iface.Index == 0 && model.AllZerosMac(iface.MAC) && iface.Name == "" {
+		alog.WithField("interface", iface).Debug("ignoring invalid interface event")
 		return
 	}
 	if add {
