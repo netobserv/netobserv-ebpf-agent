@@ -21,7 +21,11 @@ func TestWatcher(t *testing.T) {
 	watcher := NewWatcher(10)
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
-		return []Interface{{"foo", 1, macFoo, netns.None(), "", TCHook}, {"bar", 2, macBar, netns.None(), "", TCHook}, {"baz", 3, macBaz, netns.None(), "", TCHook}}, nil
+		return []Interface{
+			simpleInterface(1, "foo", macFoo),
+			simpleInterface(2, "bar", macBar),
+			simpleInterface(3, "baz", macBaz),
+		}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -38,23 +42,23 @@ func TestWatcher(t *testing.T) {
 
 	// initial set of fetched elements
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: &Interface{"foo", 1, macFoo, netns.None(), "", TCHook}},
+		Event{Type: EventAdded, Interface: simpleInterfacePtr(1, "foo", macFoo)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: &Interface{"bar", 2, macBar, netns.None(), "", TCHook}},
+		Event{Type: EventAdded, Interface: simpleInterfacePtr(2, "bar", macBar)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: &Interface{"baz", 3, macBaz, netns.None(), "", TCHook}},
+		Event{Type: EventAdded, Interface: simpleInterfacePtr(3, "baz", macBaz)},
 		getEvent(t, outputEvents, timeout))
 
 	// updates
 	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
 	inputLinks <- down("bar", 2, macBar[:], netns.None())
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: &Interface{"bae", 4, macBae, netns.None(), "", TCHook}},
+		Event{Type: EventAdded, Interface: simpleInterfacePtr(4, "bae", macBae)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: &Interface{"bar", 2, macBar, netns.None(), "", TCHook}},
+		Event{Type: EventDeleted, Interface: simpleInterfacePtr(2, "bar", macBar)},
 		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces

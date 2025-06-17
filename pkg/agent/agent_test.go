@@ -14,6 +14,7 @@ import (
 	test2 "github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
@@ -118,9 +119,9 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 		},
 		metrics.NewMetrics(&metrics.Settings{}),
 		test.SliceInformerFake{
-			{Name: "eth0", Index: 1},
-			{Name: "foo", Index: 3},
-			{Name: "bar", Index: 4},
+			ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
+			ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
+			ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
 		}, ebpfTracer, export.Export,
 		net.ParseIP(agentIP), nil)
 	require.NoError(t, err)

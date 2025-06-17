@@ -75,9 +75,9 @@ var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 // in the map
 type FlowFetcher struct {
 	objects                     *ebpf.BpfObjects
-	qdiscs                      map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters               map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters              map[ifaces.Interface]*netlink.BpfFilter
+	qdiscs                      map[ifaces.InterfaceKey]*netlink.GenericQdisc
+	egressFilters               map[ifaces.InterfaceKey]*netlink.BpfFilter
+	ingressFilters              map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ringbufReader               *ringbuf.Reader
 	cacheMaxSize                int
 	enableIngress               bool
@@ -85,8 +85,8 @@ type FlowFetcher struct {
 	pktDropsTracePoint          link.Link
 	rttFentryLink               link.Link
 	rttKprobeLink               link.Link
-	egressTCXLink               map[ifaces.Interface]link.Link
-	ingressTCXLink              map[ifaces.Interface]link.Link
+	egressTCXLink               map[ifaces.InterfaceKey]link.Link
+	ingressTCXLink              map[ifaces.InterfaceKey]link.Link
 	networkEventsMonitoringLink link.Link
 	nfNatManIPLink              link.Link
 	xfrmInputKretProbeLink      link.Link
@@ -348,9 +348,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	return &FlowFetcher{
 		objects:                     &objects,
 		ringbufReader:               flows,
-		egressFilters:               map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:              map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                      map[ifaces.Interface]*netlink.GenericQdisc{},
+		egressFilters:               map[ifaces.InterfaceKey]*netlink.BpfFilter{},
+		ingressFilters:              map[ifaces.InterfaceKey]*netlink.BpfFilter{},
+		qdiscs:                      map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
 		cacheMaxSize:                cfg.CacheMaxSize,
 		enableIngress:               cfg.EnableIngress,
 		enableEgress:                cfg.EnableEgress,
@@ -362,8 +362,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
-		egressTCXLink:               map[ifaces.Interface]link.Link{},
-		ingressTCXLink:              map[ifaces.Interface]link.Link{},
+		egressTCXLink:               map[ifaces.InterfaceKey]link.Link{},
+		ingressTCXLink:              map[ifaces.InterfaceKey]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		useEbpfManager:              cfg.UseEbpfManager,
@@ -420,7 +420,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 				return fmt.Errorf("failed to attach TCX egress: %w", err)
 			}
 		}
-		m.egressTCXLink[*iface] = egrLink
+		m.egressTCXLink[iface.InterfaceKey] = egrLink
 		ilog.WithField("interface", iface.Name).Debugf("successfully attach egressTCX hook link: %v", egrLink)
 	}
 
@@ -455,7 +455,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 				return fmt.Errorf("failed to attach TCX ingress: %w", err)
 			}
 		}
-		m.ingressTCXLink[*iface] = ingLink
+		m.ingressTCXLink[iface.InterfaceKey] = ingLink
 		ilog.WithField("interface", iface.Name).Debugf("successfully attach ingressTCX hook link: %v", ingLink)
 	}
 
@@ -480,24 +480,24 @@ func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 		}
 	}
 	if m.enableEgress {
-		if l := m.egressTCXLink[*iface]; l != nil {
+		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				return fmt.Errorf("TCX: failed to close egress link: %w", err)
 			}
 			ilog.WithField("interface", iface.Name).Debugf("successfully detach egressTCX hook link: %v",
-				m.egressTCXLink[*iface])
+				m.egressTCXLink[iface.InterfaceKey])
 		} else {
 			return fmt.Errorf("egress link does not have a TCX egress hook")
 		}
 	}
 
 	if m.enableIngress {
-		if l := m.ingressTCXLink[*iface]; l != nil {
+		if l := m.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				return fmt.Errorf("TCX: failed to close ingress link: %w", err)
 			}
 			ilog.WithField("interface", iface.Name).Debugf("successfully detach ingressTCX hook link: %v",
-				m.ingressTCXLink[*iface])
+				m.ingressTCXLink[iface.InterfaceKey])
 		} else {
 			return fmt.Errorf("ingress link does not have a TCX ingress hook")
 		}
@@ -624,7 +624,7 @@ func (m *FlowFetcher) Register(iface *ifaces.Interface) error {
 			return fmt.Errorf("failed to create clsact qdisc on %d (%s): %w", iface.Index, iface.Name, err)
 		}
 	}
-	m.qdiscs[*iface] = qdisc
+	m.qdiscs[iface.InterfaceKey] = qdisc
 
 	// Remove previously installed filters
 	if err := unregister(iface); err != nil {
@@ -668,7 +668,7 @@ func (m *FlowFetcher) registerEgress(iface *ifaces.Interface, ipvlan netlink.Lin
 			return fmt.Errorf("failed to create egress filter: %w", err)
 		}
 	}
-	m.egressFilters[*iface] = egressFilter
+	m.egressFilters[iface.InterfaceKey] = egressFilter
 	return nil
 }
 
@@ -702,7 +702,7 @@ func (m *FlowFetcher) registerIngress(iface *ifaces.Interface, ipvlan netlink.Li
 			return fmt.Errorf("failed to create ingress filter: %w", err)
 		}
 	}
-	m.ingressFilters[*iface] = ingressFilter
+	m.ingressFilters[iface.InterfaceKey] = ingressFilter
 	return nil
 }
 
@@ -852,7 +852,7 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
-	m.egressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	m.egressFilters = map[ifaces.InterfaceKey]*netlink.BpfFilter{}
 	for iface, igf := range m.ingressFilters {
 		log := log.WithField("interface", iface)
 		log.Debug("deleting ingress filter")
@@ -860,7 +860,7 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
 		}
 	}
-	m.ingressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	m.ingressFilters = map[ifaces.InterfaceKey]*netlink.BpfFilter{}
 	for iface, qd := range m.qdiscs {
 		log := log.WithField("interface", iface)
 		log.Debug("deleting Qdisc")
@@ -868,20 +868,20 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
 	}
-	m.qdiscs = map[ifaces.Interface]*netlink.GenericQdisc{}
+	m.qdiscs = map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
 
 	for iface, l := range m.egressTCXLink {
 		log := log.WithField("interface", iface)
 		log.Debug("detach egress TCX hook")
 		l.Close()
 	}
-	m.egressTCXLink = map[ifaces.Interface]link.Link{}
+	m.egressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 	for iface, l := range m.ingressTCXLink {
 		log := log.WithField("interface", iface)
 		log.Debug("detach ingress TCX hook")
 		l.Close()
 	}
-	m.ingressTCXLink = map[ifaces.Interface]link.Link{}
+	m.ingressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 
 	if err := m.removeAllPins(); err != nil {
 		errs = append(errs, err)
@@ -1390,15 +1390,15 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 // It provides access to packets from  the kernel space (via PerfCPU hashmap)
 type PacketFetcher struct {
 	objects                  *ebpf.BpfObjects
-	qdiscs                   map[ifaces.Interface]*netlink.GenericQdisc
-	egressFilters            map[ifaces.Interface]*netlink.BpfFilter
-	ingressFilters           map[ifaces.Interface]*netlink.BpfFilter
+	qdiscs                   map[ifaces.InterfaceKey]*netlink.GenericQdisc
+	egressFilters            map[ifaces.InterfaceKey]*netlink.BpfFilter
+	ingressFilters           map[ifaces.InterfaceKey]*netlink.BpfFilter
 	perfReader               *perf.Reader
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
-	egressTCXLink            map[ifaces.Interface]link.Link
-	ingressTCXLink           map[ifaces.Interface]link.Link
+	egressTCXLink            map[ifaces.InterfaceKey]link.Link
+	ingressTCXLink           map[ifaces.InterfaceKey]link.Link
 	lookupAndDeleteSupported bool
 }
 
@@ -1525,14 +1525,14 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	return &PacketFetcher{
 		objects:                  &objects,
 		perfReader:               packets,
-		egressFilters:            map[ifaces.Interface]*netlink.BpfFilter{},
-		ingressFilters:           map[ifaces.Interface]*netlink.BpfFilter{},
-		qdiscs:                   map[ifaces.Interface]*netlink.GenericQdisc{},
+		egressFilters:            map[ifaces.InterfaceKey]*netlink.BpfFilter{},
+		ingressFilters:           map[ifaces.InterfaceKey]*netlink.BpfFilter{},
+		qdiscs:                   map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
 		cacheMaxSize:             cfg.CacheMaxSize,
 		enableIngress:            cfg.EnableIngress,
 		enableEgress:             cfg.EnableEgress,
-		egressTCXLink:            map[ifaces.Interface]link.Link{},
-		ingressTCXLink:           map[ifaces.Interface]link.Link{},
+		egressTCXLink:            map[ifaces.InterfaceKey]link.Link{},
+		ingressTCXLink:           map[ifaces.InterfaceKey]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
 	}, nil
 }
@@ -1583,7 +1583,7 @@ func (p *PacketFetcher) Register(iface *ifaces.Interface) error {
 	if err != nil {
 		return err
 	}
-	p.qdiscs[*iface] = qdisc
+	p.qdiscs[iface.InterfaceKey] = qdisc
 
 	if err := p.registerEgress(iface, ipvlan); err != nil {
 		return err
@@ -1609,7 +1609,7 @@ func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 		}
 	}
 	if p.enableEgress {
-		if l := p.egressTCXLink[*iface]; l != nil {
+		if l := p.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				return fmt.Errorf("TCX: failed to close egress link: %w", err)
 			}
@@ -1620,7 +1620,7 @@ func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 	}
 
 	if p.enableIngress {
-		if l := p.ingressTCXLink[*iface]; l != nil {
+		if l := p.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				return fmt.Errorf("TCX: failed to close ingress link: %w", err)
 			}
@@ -1681,7 +1681,7 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 				return fmt.Errorf("failed to attach PCA TCX egress: %w", err)
 			}
 		}
-		p.egressTCXLink[*iface] = egrLink
+		p.egressTCXLink[iface.InterfaceKey] = egrLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA egressTCX hook")
 	}
 
@@ -1716,7 +1716,7 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 				return fmt.Errorf("failed to attach PCA TCX ingress: %w", err)
 			}
 		}
-		p.ingressTCXLink[*iface] = ingLink
+		p.ingressTCXLink[iface.InterfaceKey] = ingLink
 		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA ingressTCX hook")
 	}
 
@@ -1758,7 +1758,7 @@ func (p *PacketFetcher) registerEgress(iface *ifaces.Interface, ipvlan netlink.L
 		return err
 	}
 
-	p.egressFilters[*iface] = egressFilter
+	p.egressFilters[iface.InterfaceKey] = egressFilter
 	return nil
 }
 
@@ -1797,7 +1797,7 @@ func (p *PacketFetcher) registerIngress(iface *ifaces.Interface, ipvlan netlink.
 		return err
 	}
 
-	p.ingressFilters[*iface] = ingressFilter
+	p.ingressFilters[iface.InterfaceKey] = ingressFilter
 	return nil
 }
 
@@ -1837,21 +1837,21 @@ func (p *PacketFetcher) Close() error {
 			errs = append(errs, fmt.Errorf("deleting egress filter: %w", err))
 		}
 	}
-	p.egressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	p.egressFilters = map[ifaces.InterfaceKey]*netlink.BpfFilter{}
 	for iface, igf := range p.ingressFilters {
 		log.WithField("interface", iface).Debug("deleting ingress filter")
 		if err := netlink.FilterDel(igf); err != nil {
 			errs = append(errs, fmt.Errorf("deleting ingress filter: %w", err))
 		}
 	}
-	p.ingressFilters = map[ifaces.Interface]*netlink.BpfFilter{}
+	p.ingressFilters = map[ifaces.InterfaceKey]*netlink.BpfFilter{}
 	for iface, qd := range p.qdiscs {
 		log.WithField("interface", iface).Debug("deleting Qdisc")
 		if err := netlink.QdiscDel(qd); err != nil {
 			errs = append(errs, fmt.Errorf("deleting qdisc: %w", err))
 		}
 	}
-	p.qdiscs = map[ifaces.Interface]*netlink.GenericQdisc{}
+	p.qdiscs = map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
 	if len(errs) == 0 {
 		return nil
 	}
@@ -1862,13 +1862,13 @@ func (p *PacketFetcher) Close() error {
 		l.Close()
 
 	}
-	p.egressTCXLink = map[ifaces.Interface]link.Link{}
+	p.egressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 	for iface, l := range p.ingressTCXLink {
 		log := log.WithField("interface", iface)
 		log.Debug("detach ingress TCX hook")
 		l.Close()
 	}
-	p.ingressTCXLink = map[ifaces.Interface]link.Link{}
+	p.ingressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 
 	var errStrings []string
 	for _, err := range errs {

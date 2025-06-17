@@ -23,7 +23,11 @@ func TestRegisterer(t *testing.T) {
 
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
-		return []Interface{{"foo", 1, macFoo, netns.None(), "", TCHook}, {"bar", 2, macBar, netns.None(), "", TCHook}, {"baz", 3, macBaz, netns.None(), "", TCHook}}, nil
+		return []Interface{
+			simpleInterface(1, "foo", macFoo),
+			simpleInterface(2, "bar", macBar),
+			simpleInterface(3, "baz", macBaz),
+		}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -93,9 +97,9 @@ func TestRegisterer_Lookup(t *testing.T) {
 	// Set conflicting interfaces on ifindex 2 (they would have different netns, but that's not important for this test)
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{
-			{"ens5", 2, macEns5, netns.None(), "", TCHook},
-			{"eth0", 2, macEth0, netns.None(), "", TCHook},
-			{"a_pod_interface@if2", 10, macOVN, netns.None(), "", TCHook},
+			simpleInterface(2, "ens5", macEns5),
+			simpleInterface(2, "eth0", macEth0),
+			simpleInterface(10, "a_pod_interface@if2", macOVN),
 		}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)

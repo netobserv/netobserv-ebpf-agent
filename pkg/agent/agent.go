@@ -534,33 +534,54 @@ func (f *Flows) onInterfaceEvent(iface *ifaces.Interface, add bool) {
 		return
 	}
 	if add {
-		// TODO: use iface.HookType instead
 		if err1 := f.ebpf.AttachTCX(iface); err1 != nil {
 			if err2 := f.ebpf.Register(iface); err2 != nil {
 				alog.WithField("interface", iface).WithError(err2).Warn("interface detected, could not attach any hook")
 				f.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
 				return
 			}
+			iface.HookType = ifaces.TCHook
 			alog.WithField("interface", iface).WithError(err1).Debug("interface detected, could not attach TCX hook, falling back to legacy TC")
 			f.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
 			return
 		}
+		iface.HookType = ifaces.TCXHook
 		alog.WithField("interface", iface).Debug("interface detected, TCX hook attached")
 		f.metrics.InterfaceEventsCounter.Increase("attach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
 	} else {
-		alog.WithField("interface", iface).Debug("interface deleted, trying to detach TCX hook")
-		if err1 := f.ebpf.DetachTCX(iface); err1 != nil {
-			alog.WithField("interface", iface).WithError(err).Info("can't detach from TCX hook flow ebpfFetcher, fall back to use legacy TC hook")
-			if err2 := f.ebpf.UnRegister(iface); err2 != nil {
-				alog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
-				f.metrics.InterfaceEventsCounter.Increase("detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
+		switch iface.HookType {
+		case ifaces.TCHook:
+			if err := f.ebpf.UnRegister(iface); err != nil {
+				alog.WithField("interface", iface).WithError(err).Warn("interface deleted, could not detach TC hook")
+				f.metrics.InterfaceEventsCounter.Increase("detach_tc_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
+				f.metrics.Errors.WithErrorName("InterfaceEvents", "CantDetachTC", metrics.HighSeverity).Inc()
 				return
 			}
-			alog.WithField("interface", iface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
-			f.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
-			return
+			alog.WithField("interface", iface).Debug("interface deleted, TC hook detached")
+			f.metrics.InterfaceEventsCounter.Increase("detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
+		case ifaces.TCXHook:
+			if err := f.ebpf.DetachTCX(iface); err != nil {
+				alog.WithField("interface", iface).WithError(err).Warn("interface deleted, could not detach TCX hook")
+				f.metrics.InterfaceEventsCounter.Increase("detach_tcx_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
+				f.metrics.Errors.WithErrorName("InterfaceEvents", "CantDetachTCX", metrics.HighSeverity).Inc()
+				return
+			}
+			alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
+			f.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
+		case ifaces.Unset:
+			alog.WithField("interface", iface).Warn("interface deleted and no known hook attached, trying to detach anyway...")
+			if err1 := f.ebpf.DetachTCX(iface); err1 != nil {
+				if err2 := f.ebpf.UnRegister(iface); err2 != nil {
+					alog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
+					f.metrics.InterfaceEventsCounter.Increase("unset_detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
+					return
+				}
+				alog.WithField("interface", iface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
+				f.metrics.InterfaceEventsCounter.Increase("unset_detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
+				return
+			}
+			alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
+			f.metrics.InterfaceEventsCounter.Increase("unset_detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
 		}
-		alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
-		f.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
 	}
 }

@@ -21,7 +21,8 @@ const (
 type HookType int
 
 const (
-	TCHook HookType = iota
+	Unset HookType = iota
+	TCHook
 	TCXHook
 )
 
@@ -45,12 +46,28 @@ type Event struct {
 }
 
 type Interface struct {
-	Name     string
-	Index    int
+	InterfaceKey
 	MAC      [6]uint8
-	NetNS    netns.NsHandle
 	NSName   string
-	HookType HookType // warning: this might break using this struct in maps, to be verified
+	HookType HookType
+}
+
+type InterfaceKey struct {
+	Index int
+	NetNS netns.NsHandle
+	Name  string
+}
+
+func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
+	return Interface{
+		InterfaceKey: InterfaceKey{
+			Index: index,
+			NetNS: netNS,
+			Name:  name,
+		},
+		MAC:    mac,
+		NSName: nsname,
+	}
 }
 
 // Informer provides notifications about each network interface that is added or removed
@@ -73,14 +90,14 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 		return nil, fmt.Errorf("failed to list interfaces in netns (%s): %w", nsh.String(), err)
 	}
 
-	names := make([]Interface, len(links))
+	intfs := make([]Interface, len(links))
 	for i, link := range links {
 		mac, err := macToFixed6(link.Attrs().HardwareAddr)
 		if err != nil {
 			log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
 			continue
 		}
-		names[i] = Interface{Name: link.Attrs().Name, Index: link.Attrs().Index, MAC: mac, NetNS: nsh, NSName: ns}
+		intfs[i] = NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns)
 	}
-	return names, nil
+	return intfs, nil
 }
