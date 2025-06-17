@@ -32,9 +32,9 @@ func TestPoller(t *testing.T) {
 	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
-			return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"bae", 4, macBae, netns.None(), ""}}, nil
+			return []Interface{{"foo", 1, macFoo, netns.None(), "", TCHook}, {"bar", 2, macBar, netns.None(), "", TCHook}, {"bae", 4, macBae, netns.None(), "", TCHook}}, nil
 		}
-		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}, {"ovlp", 4, macOverlapped, netns.None(), ""}}, nil
+		return []Interface{{"foo", 1, macFoo, netns.None(), "", TCHook}, {"baz", 3, macBaz, netns.None(), "", TCHook}, {"ovlp", 4, macOverlapped, netns.None(), "", TCHook}}, nil
 	}
 	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
@@ -43,20 +43,20 @@ func TestPoller(t *testing.T) {
 	require.NoError(t, err)
 	// first poll: two interfaces are added
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"foo", 1, macFoo, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: &Interface{"foo", 1, macFoo, netns.None(), "", TCHook}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: &Interface{"bar", 2, macBar, netns.None(), "", TCHook}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: &Interface{"bae", 4, macBae, netns.None(), "", TCHook}},
 		getEvent(t, updates, timeout))
 	// second poll: one interface is added and another is removed
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"baz", 3, macBaz, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: &Interface{"baz", 3, macBaz, netns.None(), "", TCHook}},
 		getEvent(t, updates, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: Interface{"ovlp", 4, macOverlapped, netns.None(), ""}},
+		Event{Type: EventAdded, Interface: &Interface{"ovlp", 4, macOverlapped, netns.None(), "", TCHook}},
 		getEvent(t, updates, timeout))
 	// Order isn't guaranteed for next events, so use assert.ElementsMatch
 	next1 := getEvent(t, updates, timeout)
@@ -64,8 +64,8 @@ func TestPoller(t *testing.T) {
 	assert.ElementsMatch(t,
 		[]Event{next1, next2},
 		[]Event{
-			{Type: EventDeleted, Interface: Interface{"bar", 2, macBar, netns.None(), ""}},
-			{Type: EventDeleted, Interface: Interface{"bae", 4, macBae, netns.None(), ""}},
+			{Type: EventDeleted, Interface: &Interface{"bar", 2, macBar, netns.None(), "", TCHook}},
+			{Type: EventDeleted, Interface: &Interface{"bae", 4, macBae, netns.None(), "", TCHook}},
 		},
 	)
 

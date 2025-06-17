@@ -210,6 +210,8 @@ type Agent struct {
 	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
+	// Metrics verbosity level. From more to less verbose: debug, info (default).
+	MetricsLevel string `env:"METRICS_LEVEL" envDefault:"info"`
 	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.
 	MetricsServerAddress string `env:"METRICS_SERVER_ADDRESS"`
 	// MetricsPort is the port of the server that collects ebpf agent metrics.

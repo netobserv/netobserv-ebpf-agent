@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
@@ -26,9 +27,17 @@ type PromConnectionInfo struct {
 	TLS     *PromTLS
 }
 
+type Level string
+
+const (
+	LevelDebug Level = "debug"
+	LevelInfo  Level = "info"
+)
+
 type Settings struct {
 	PromConnectionInfo
 	Prefix string
+	Level  Level
 }
 
 type metricType string
@@ -125,7 +134,7 @@ var (
 		"error",
 		"severity",
 	)
-	flowEnrichmentCounterCounter = defineMetric(
+	flowEnrichmentCounter = defineMetric(
 		"flows_enrichment_total",
 		"Statistics on flows enrichment",
 		TypeCounter,
@@ -135,6 +144,16 @@ var (
 		"hasNetEvents",
 		"hasXlat",
 		"hasIPSec",
+	)
+	interfaceEventsCounter = defineMetric(
+		"interface_events_total",
+		"Interface watching events",
+		TypeCounter,
+		"type",
+		"ifname",
+		"ifindex",
+		"netns",
+		"mac",
 	)
 )
 
@@ -159,15 +178,16 @@ type Metrics struct {
 	Settings *Settings
 
 	// Shared metrics:
-	EvictionCounter       *EvictionCounter
-	EvictedFlowsCounter   *EvictionCounter
-	EvictedPacketsCounter *EvictionCounter
-	DroppedFlowsCounter   *EvictionCounter
-	FilteredFlowsCounter  *EvictionCounter
-	NetworkEventsCounter  *EvictionCounter
-	BufferSizeGauge       *BufferSizeGauge
-	Errors                *ErrorCounter
-	FlowEnrichmentCounter *FlowEnrichmentCounter
+	EvictionCounter        *EvictionCounter
+	EvictedFlowsCounter    *EvictionCounter
+	EvictedPacketsCounter  *EvictionCounter
+	DroppedFlowsCounter    *EvictionCounter
+	FilteredFlowsCounter   *EvictionCounter
+	NetworkEventsCounter   *EvictionCounter
+	BufferSizeGauge        *BufferSizeGauge
+	Errors                 *ErrorCounter
+	FlowEnrichmentCounter  *FlowEnrichmentCounter
+	InterfaceEventsCounter *InterfaceEventsCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
@@ -182,8 +202,13 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.BufferSizeGauge = &BufferSizeGauge{vec: m.NewGaugeVec(&bufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
-	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounterCounter)}
+	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounter)}
+	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
 	return m
+}
+
+func NoOp() *Metrics {
+	return NewMetrics(&Settings{})
 }
 
 // register will register against the default registry. May panic or not depending on settings
@@ -283,6 +308,26 @@ func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents,
 		strconv.FormatBool(hasXlat),
 		strconv.FormatBool(hasIPSec),
 	).Inc()
+}
+
+type InterfaceEventsCounter struct {
+	Increase func(typez, ifname string, ifindex int, netns string, mac [6]uint8)
+}
+
+func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {
+	if lvl == LevelDebug {
+		return &InterfaceEventsCounter{
+			Increase: func(typez, ifname string, ifindex int, netns string, mac [6]uint8) {
+				mMac := model.MacAddr(mac)
+				vec.WithLabelValues(typez, ifname, strconv.Itoa(ifindex), netns, mMac.String()).Inc()
+			},
+		}
+	}
+	return &InterfaceEventsCounter{
+		Increase: func(typez, _ string, _ int, _ string, _ [6]uint8) {
+			vec.WithLabelValues(typez, "", "", "", "").Inc()
+		},
+	}
 }
 
 func (m *Metrics) CreateTimeSpendInLookupAndDelete() prometheus.Histogram {

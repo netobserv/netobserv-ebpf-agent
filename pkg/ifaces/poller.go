@@ -87,7 +87,7 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 			np.current[iface] = struct{}{}
 			events <- Event{
 				Type:      EventAdded,
-				Interface: iface,
+				Interface: &iface,
 			}
 		}
 	}
@@ -98,7 +98,7 @@ func (np *Poller) diffNames(events chan Event, ifaces []Interface) {
 			ilog.WithField("interface", iface).Debug("deleted network interface")
 			events <- Event{
 				Type:      EventDeleted,
-				Interface: iface,
+				Interface: &iface,
 			}
 		}
 	}

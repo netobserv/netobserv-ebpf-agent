@@ -86,7 +86,7 @@ func configureInformer(cfg *config.Agent, log *logrus.Entry) ifaces.Informer {
 
 }
 
-func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, processEvent func(iface ifaces.Interface, add bool)) {
+func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, processEvent func(iface *ifaces.Interface, add bool)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -125,15 +125,17 @@ type Flows struct {
 	status        Status
 	promoServer   *http.Server
 	sampleDecoder *ovnobserv.SampleDecoder
+
+	metrics *metrics.Metrics
 }
 
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
 type ebpfFlowFetcher interface {
 	io.Closer
-	Register(iface ifaces.Interface) error
-	UnRegister(iface ifaces.Interface) error
-	AttachTCX(iface ifaces.Interface) error
-	DetachTCX(iface ifaces.Interface) error
+	Register(iface *ifaces.Interface) error
+	UnRegister(iface *ifaces.Interface) error
+	AttachTCX(iface *ifaces.Interface) error
+	DetachTCX(iface *ifaces.Interface) error
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
@@ -164,6 +166,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 			Port:    cfg.MetricsPort,
 		},
 		Prefix: cfg.MetricsPrefix,
+		Level:  metrics.Level(cfg.MetricsLevel),
 	}
 	if cfg.MetricsTLSCertPath != "" && cfg.MetricsTLSKeyPath != "" {
 		metricsSettings.PromConnectionInfo.TLS = &metrics.PromTLS{
@@ -265,7 +268,7 @@ func flowsAgent(
 	if err != nil {
 		return nil, err
 	}
-	registerer, err := ifaces.NewRegisterer(informer, cfg)
+	registerer, err := ifaces.NewRegisterer(informer, cfg, m)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +306,7 @@ func flowsAgent(
 		accounter:   accounter,
 		limiter:     limiter,
 		promoServer: promoServer,
+		metrics:     m,
 	}, nil
 }
 
@@ -517,7 +521,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 	return export, nil
 }
 
-func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
+func (f *Flows) onInterfaceEvent(iface *ifaces.Interface, add bool) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	allowed, err := f.filter.Allowed(iface.Name)
 	if err != nil {
@@ -530,27 +534,33 @@ func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
 		return
 	}
 	if add {
-		alog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
-		if err := f.ebpf.AttachTCX(iface); err != nil {
-			alog.WithField("interface", iface).WithError(err).
-				Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.Register(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't register flow ebpfFetcher. Ignoring")
+		// TODO: use iface.HookType instead
+		if err1 := f.ebpf.AttachTCX(iface); err1 != nil {
+			if err2 := f.ebpf.Register(iface); err2 != nil {
+				alog.WithField("interface", iface).WithError(err2).Warn("interface detected, could not attach any hook")
+				f.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
 				return
 			}
+			alog.WithField("interface", iface).WithError(err1).Debug("interface detected, could not attach TCX hook, falling back to legacy TC")
+			f.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
+			return
 		}
+		alog.WithField("interface", iface).Debug("interface detected, TCX hook attached")
+		f.metrics.InterfaceEventsCounter.Increase("attach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
 	} else {
-		alog.WithField("interface", iface).Info("interface deleted. trying to detach TCX hook")
-		if err := f.ebpf.DetachTCX(iface); err != nil {
-			alog.WithField("interface", iface).WithError(err).
-				Info("can't detach from TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.UnRegister(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't unregister flow ebpfFetcher. Ignoring")
+		alog.WithField("interface", iface).Debug("interface deleted, trying to detach TCX hook")
+		if err1 := f.ebpf.DetachTCX(iface); err1 != nil {
+			alog.WithField("interface", iface).WithError(err).Info("can't detach from TCX hook flow ebpfFetcher, fall back to use legacy TC hook")
+			if err2 := f.ebpf.UnRegister(iface); err2 != nil {
+				alog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
+				f.metrics.InterfaceEventsCounter.Increase("detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
 				return
 			}
+			alog.WithField("interface", iface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
+			f.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
+			return
 		}
-
+		alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
+		f.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
 	}
 }

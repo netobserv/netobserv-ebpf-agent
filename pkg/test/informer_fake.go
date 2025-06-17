@@ -13,7 +13,7 @@ type SliceInformerFake []ifaces.Interface
 func (sif SliceInformerFake) Subscribe(_ context.Context) (<-chan ifaces.Event, error) {
 	ifs := make(chan ifaces.Event, len(sif))
 	for _, i := range sif {
-		ifs <- ifaces.Event{Type: ifaces.EventAdded, Interface: i}
+		ifs <- ifaces.Event{Type: ifaces.EventAdded, Interface: &i}
 	}
 	return ifs, nil
 }

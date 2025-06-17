@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -17,12 +18,12 @@ func TestRegisterer(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10)
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10})
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
-		return []Interface{{"foo", 1, macFoo, netns.None(), ""}, {"bar", 2, macBar, netns.None(), ""}, {"baz", 3, macBaz, netns.None(), ""}}, nil
+		return []Interface{{"foo", 1, macFoo, netns.None(), "", TCHook}, {"bar", 2, macBar, netns.None(), "", TCHook}, {"baz", 3, macBaz, netns.None(), "", TCHook}}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
 	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
@@ -86,15 +87,15 @@ func TestRegisterer_Lookup(t *testing.T) {
 	)
 
 	watcher := NewWatcher(10)
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"})
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Set conflicting interfaces on ifindex 2 (they would have different netns, but that's not important for this test)
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{
-			{"ens5", 2, macEns5, netns.None(), ""},
-			{"eth0", 2, macEth0, netns.None(), ""},
-			{"a_pod_interface@if2", 10, macOVN, netns.None(), ""},
+			{"ens5", 2, macEns5, netns.None(), "", TCHook},
+			{"eth0", 2, macEth0, netns.None(), "", TCHook},
+			{"a_pod_interface@if2", 10, macOVN, netns.None(), "", TCHook},
 		}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
@@ -149,7 +150,7 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10)
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10})
+	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Start with empty interfaces

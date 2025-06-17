@@ -17,6 +17,14 @@ const (
 	EventDeleted
 )
 
+// HookType used for attachment: TC, TCX
+type HookType int
+
+const (
+	TCHook HookType = iota
+	TCXHook
+)
+
 func (e EventType) String() string {
 	switch e {
 	case EventAdded:
@@ -33,15 +41,16 @@ var ilog = logrus.WithField("component", "ifaces.Informer")
 // Event of a network interface, given the type (added, removed) and the interface name
 type Event struct {
 	Type      EventType
-	Interface Interface
+	Interface *Interface
 }
 
 type Interface struct {
-	Name   string
-	Index  int
-	MAC    [6]uint8
-	NetNS  netns.NsHandle
-	NSName string
+	Name     string
+	Index    int
+	MAC      [6]uint8
+	NetNS    netns.NsHandle
+	NSName   string
+	HookType HookType // warning: this might break using this struct in maps, to be verified
 }
 
 // Informer provides notifications about each network interface that is added or removed

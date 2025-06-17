@@ -123,7 +123,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				w.mutex.Lock()
 				w.current[iface] = struct{}{}
 				w.mutex.Unlock()
-				out <- Event{Type: EventAdded, Interface: iface}
+				out <- Event{Type: EventAdded, Interface: &iface}
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			}).Debug("Interface up and running")
 			if _, ok := w.current[iface]; !ok {
 				w.current[iface] = struct{}{}
-				out <- Event{Type: EventAdded, Interface: iface}
+				out <- Event{Type: EventAdded, Interface: &iface}
 			}
 		} else {
 			log.WithFields(logrus.Fields{
@@ -161,7 +161,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			}).Debug("Interface down or not running")
 			if _, ok := w.current[iface]; ok {
 				delete(w.current, iface)
-				out <- Event{Type: EventDeleted, Interface: iface}
+				out <- Event{Type: EventDeleted, Interface: &iface}
 			}
 		}
 		w.mutex.Unlock()

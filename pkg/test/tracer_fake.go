@@ -31,21 +31,21 @@ func NewTracerFake() *TracerFake {
 func (m *TracerFake) Close() error {
 	return nil
 }
-func (m *TracerFake) Register(iface ifaces.Interface) error {
-	m.interfaces[iface] = struct{}{}
+func (m *TracerFake) Register(iface *ifaces.Interface) error {
+	m.interfaces[*iface] = struct{}{}
 	return nil
 }
 
-func (m *TracerFake) UnRegister(iface ifaces.Interface) error {
-	m.interfaces[iface] = struct{}{}
+func (m *TracerFake) UnRegister(iface *ifaces.Interface) error {
+	m.interfaces[*iface] = struct{}{}
 	return nil
 }
 
-func (m *TracerFake) AttachTCX(_ ifaces.Interface) error {
+func (m *TracerFake) AttachTCX(_ *ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) DetachTCX(_ ifaces.Interface) error {
+func (m *TracerFake) DetachTCX(_ *ifaces.Interface) error {
 	return nil
 }
 

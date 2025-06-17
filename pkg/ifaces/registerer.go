@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,9 +23,10 @@ type Registerer struct {
 	ifaces              map[int]map[[6]uint8]string
 	bufLen              int
 	preferredInterfaces []preferredInterface
+	metrics             *metrics.Metrics
 }
 
-func NewRegisterer(inner Informer, cfg *config.Agent) (*Registerer, error) {
+func NewRegisterer(inner Informer, cfg *config.Agent, m *metrics.Metrics) (*Registerer, error) {
 	pref, err := newPreferredInterfaces(cfg.PreferredInterfaceForMACPrefix)
 	if err != nil {
 		return nil, err
@@ -34,6 +36,7 @@ func NewRegisterer(inner Informer, cfg *config.Agent) (*Registerer, error) {
 		bufLen:              cfg.BuffersLength,
 		ifaces:              map[int]map[[6]uint8]string{},
 		preferredInterfaces: pref,
+		metrics:             m,
 	}, nil
 }
 
@@ -48,6 +51,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 			switch ev.Type {
 			case EventAdded:
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
+				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC)
 				r.m.Lock()
 				if current, ok := r.ifaces[ev.Interface.Index]; ok {
 					if _, alreadySet := current[ev.Interface.MAC]; !alreadySet {
@@ -58,6 +62,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				}
 				r.m.Unlock()
 			case EventDeleted:
+				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC)
 				r.m.Lock()
 				if macs, ok := r.ifaces[ev.Interface.Index]; ok {
 					name, ok := macs[ev.Interface.MAC]

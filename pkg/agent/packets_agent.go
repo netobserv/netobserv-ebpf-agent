@@ -43,10 +43,10 @@ type Packets struct {
 
 type ebpfPacketFetcher interface {
 	io.Closer
-	Register(iface ifaces.Interface) error
-	UnRegister(iface ifaces.Interface) error
-	AttachTCX(iface ifaces.Interface) error
-	DetachTCX(iface ifaces.Interface) error
+	Register(iface *ifaces.Interface) error
+	UnRegister(iface *ifaces.Interface) error
+	AttachTCX(iface *ifaces.Interface) error
+	DetachTCX(iface *ifaces.Interface) error
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }
@@ -132,7 +132,7 @@ func packetsAgent(
 	if err != nil {
 		return nil, err
 	}
-	registerer, err := ifaces.NewRegisterer(informer, cfg)
+	registerer, err := ifaces.NewRegisterer(informer, cfg, metrics.NoOp())
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 	return export, nil
 }
 
-func (p *Packets) onInterfaceAdded(iface ifaces.Interface, add bool) {
+func (p *Packets) onInterfaceAdded(iface *ifaces.Interface, add bool) {
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	allowed, err := p.filter.Allowed(iface.Name)
 	if err != nil {
