@@ -90,14 +90,16 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 		return nil, fmt.Errorf("failed to list interfaces in netns (%s): %w", nsh.String(), err)
 	}
 
-	intfs := make([]Interface, len(links))
-	for i, link := range links {
-		mac, err := macToFixed6(link.Attrs().HardwareAddr)
-		if err != nil {
-			log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
-			continue
+	intfs := make([]Interface, 0, len(links))
+	for _, link := range links {
+		if link.Attrs().HardwareAddr != nil {
+			mac, err := macToFixed6(link.Attrs().HardwareAddr)
+			if err != nil {
+				log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
+				continue
+			}
+			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns))
 		}
-		intfs[i] = NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns)
 	}
 	return intfs, nil
 }
