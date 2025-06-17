@@ -244,6 +244,9 @@ type Agent struct {
 	// E.g. "0a:58=eth0" (used for ovn-kubernetes)
 	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
 
+	// EnableTCXFallBackToTC enables TCX fallback to TC when errors are encountered, default is false.
+	EnableTCXFallBackToTC bool `env:"ENABLE_TCX_FALLBACK_TO_TC" envDefault:"false"`
+
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

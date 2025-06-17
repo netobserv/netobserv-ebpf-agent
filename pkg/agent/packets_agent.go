@@ -101,14 +101,15 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		})
 	}
 	ebpfConfig := &tracer.FlowFetcherConfig{
-		EnableIngress:  ingress,
-		EnableEgress:   egress,
-		Debug:          debug,
-		Sampling:       cfg.Sampling,
-		CacheMaxSize:   cfg.CacheMaxFlows,
-		EnablePCA:      cfg.EnablePCA,
-		UseEbpfManager: cfg.EbpfProgramManagerMode,
-		FilterConfig:   filterRules,
+		EnableIngress:         ingress,
+		EnableEgress:          egress,
+		Debug:                 debug,
+		Sampling:              cfg.Sampling,
+		CacheMaxSize:          cfg.CacheMaxFlows,
+		EnablePCA:             cfg.EnablePCA,
+		UseEbpfManager:        cfg.EbpfProgramManagerMode,
+		FilterConfig:          filterRules,
+		EnableTCXFallBackToTC: cfg.EnableTCXFallBackToTC,
 	}
 
 	fetcher, err := tracer.NewPacketFetcher(ebpfConfig)
@@ -290,10 +291,12 @@ func (p *Packets) onInterfaceAdded(iface ifaces.Interface, add bool) {
 		if err := p.ebpf.AttachTCX(iface); err != nil {
 			plog.WithField("[PCA]interface", iface).WithError(err).
 				Info("can't attach to TCx hook packet ebpfFetcher. fall back to use legacy TC hook")
-			if err := p.ebpf.Register(iface); err != nil {
-				plog.WithField("[PCA]interface", iface).WithError(err).
-					Warn("can't register packet ebpfFetcher. Ignoring")
-				return
+			if p.cfg.EnableTCXFallBackToTC {
+				if err := p.ebpf.Register(iface); err != nil {
+					plog.WithField("[PCA]interface", iface).WithError(err).
+						Warn("can't register packet ebpfFetcher. Ignoring")
+					return
+				}
 			}
 		}
 	} else {
@@ -301,12 +304,13 @@ func (p *Packets) onInterfaceAdded(iface ifaces.Interface, add bool) {
 		if err := p.ebpf.DetachTCX(iface); err != nil {
 			plog.WithField("[PCA]interface", iface).WithError(err).
 				Info("can't detach from TCx hook packet ebpfFetcher. check if there is any legacy TC hook")
-			if err := p.ebpf.UnRegister(iface); err != nil {
-				plog.WithField("[PCA]interface", iface).WithError(err).
-					Warn("can't unregister packet ebpfFetcher. Ignoring")
-				return
+			if p.cfg.EnableTCXFallBackToTC {
+				if err := p.ebpf.UnRegister(iface); err != nil {
+					plog.WithField("[PCA]interface", iface).WithError(err).
+						Warn("can't unregister packet ebpfFetcher. Ignoring")
+					return
+				}
 			}
 		}
-
 	}
 }

@@ -240,6 +240,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
 		EnableIPsecTracker:             cfg.EnableIPsecTracking,
 		FilterConfig:                   filterRules,
+		EnableTCXFallBackToTC:          cfg.EnableTCXFallBackToTC,
 	}
 
 	fetcher, err := tracer.NewFlowFetcher(ebpfConfig)
@@ -534,10 +535,12 @@ func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
 		if err := f.ebpf.AttachTCX(iface); err != nil {
 			alog.WithField("interface", iface).WithError(err).
 				Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.Register(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't register flow ebpfFetcher. Ignoring")
-				return
+			if f.cfg.EnableTCXFallBackToTC {
+				if err := f.ebpf.Register(iface); err != nil {
+					alog.WithField("interface", iface).WithError(err).
+						Warn("can't register flow ebpfFetcher. Ignoring")
+					return
+				}
 			}
 		}
 	} else {
@@ -545,12 +548,13 @@ func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
 		if err := f.ebpf.DetachTCX(iface); err != nil {
 			alog.WithField("interface", iface).WithError(err).
 				Info("can't detach from TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.UnRegister(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't unregister flow ebpfFetcher. Ignoring")
-				return
+			if f.cfg.EnableTCXFallBackToTC {
+				if err := f.ebpf.UnRegister(iface); err != nil {
+					alog.WithField("interface", iface).WithError(err).
+						Warn("can't unregister flow ebpfFetcher. Ignoring")
+					return
+				}
 			}
 		}
-
 	}
 }

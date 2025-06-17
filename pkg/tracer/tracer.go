@@ -117,6 +117,7 @@ type FlowFetcherConfig struct {
 	BpfManBpfFSPath                string
 	EnableIPsecTracker             bool
 	FilterConfig                   []*FilterConfig
+	EnableTCXFallBackToTC          bool
 }
 
 type variablesMapping struct {
