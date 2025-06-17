@@ -9,6 +9,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 
 	"github.com/cilium/ebpf/ringbuf"
 )
@@ -41,11 +42,11 @@ func (m *TracerFake) UnRegister(iface *ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) AttachTCX(_ *ifaces.Interface) error {
+func (m *TracerFake) AttachTCX(_ *ifaces.Interface) *tracer.TracerError {
 	return nil
 }
 
-func (m *TracerFake) DetachTCX(_ *ifaces.Interface) error {
+func (m *TracerFake) DetachTCX(_ *ifaces.Interface) *tracer.TracerError {
 	return nil
 }
 

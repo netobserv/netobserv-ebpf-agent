@@ -371,12 +371,12 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}, nil
 }
 
-func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
+func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) *TracerError {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
 		originalNs, err := netns.Get()
 		if err != nil {
-			return fmt.Errorf("failed to get current netns: %w", err)
+			return NewTracerError("Attach:CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
 		}
 		defer func() {
 			if err := netns.Set(originalNs); err != nil {
@@ -385,7 +385,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 			originalNs.Close()
 		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err)
+			return NewTracerError("Attach:CantSetNetNS", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
 		}
 	}
 
@@ -406,18 +406,18 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 					for _, id := range q.Programs {
 						linkID, ok := id.LinkID()
 						if !ok {
-							return fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
 						}
 						if egrLink, err = link.NewFromID(linkID); err != nil {
-							return fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantCreateEgressLinkID", fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err))
 						}
 						ilog.WithField("link", linkID).Debug("attaching egress flow to link")
 					}
 				} else {
-					return fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err)
+					return NewTracerError("Attach:CantQueryTCXEgress", fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err))
 				}
 			} else {
-				return fmt.Errorf("failed to attach TCX egress: %w", err)
+				return NewTracerError("Attach:CantAttachTCXEgress", fmt.Errorf("failed to attach TCX egress: %w", err))
 			}
 		}
 		m.egressTCXLink[iface.InterfaceKey] = egrLink
@@ -441,18 +441,18 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 					for _, id := range q.Programs {
 						linkID, ok := id.LinkID()
 						if !ok {
-							return fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
 						}
 						if ingLink, err = link.NewFromID(linkID); err != nil {
-							return fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantCreateIngressLinkID", fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err))
 						}
 						ilog.WithField("link", linkID).Debug("attaching ingress flow to link")
 					}
 				} else {
-					return fmt.Errorf("failed to query existing TCX ingress flow to %s: %w", iface.Name, err)
+					return NewTracerError("Attach:CantQueryTCXIngress", fmt.Errorf("failed to query existing TCX ingress flow to %s: %w", iface.Name, err))
 				}
 			} else {
-				return fmt.Errorf("failed to attach TCX ingress: %w", err)
+				return NewTracerError("Attach:CantAttachTCXIngress", fmt.Errorf("failed to attach TCX ingress: %w", err))
 			}
 		}
 		m.ingressTCXLink[iface.InterfaceKey] = ingLink
@@ -462,12 +462,12 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	return nil
 }
 
-func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
+func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) *TracerError {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
 		originalNs, err := netns.Get()
 		if err != nil {
-			return fmt.Errorf("failed to get current netns: %w", err)
+			return NewTracerError("Detach:CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
 		}
 		defer func() {
 			if err := netns.Set(originalNs); err != nil {
@@ -476,30 +476,30 @@ func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 			originalNs.Close()
 		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err)
+			return NewTracerError("Detach:CantSetNetNS", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
 		}
 	}
 	if m.enableEgress {
 		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return fmt.Errorf("TCX: failed to close egress link: %w", err)
+				return NewTracerError("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
 			}
 			ilog.WithField("interface", iface.Name).Debugf("successfully detach egressTCX hook link: %v",
 				m.egressTCXLink[iface.InterfaceKey])
 		} else {
-			return fmt.Errorf("egress link does not have a TCX egress hook")
+			return NewTracerError("Detach:EgressNoTCX", fmt.Errorf("egress link does not have a TCX egress hook"))
 		}
 	}
 
 	if m.enableIngress {
 		if l := m.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return fmt.Errorf("TCX: failed to close ingress link: %w", err)
+				return NewTracerError("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
 			}
 			ilog.WithField("interface", iface.Name).Debugf("successfully detach ingressTCX hook link: %v",
 				m.ingressTCXLink[iface.InterfaceKey])
 		} else {
-			return fmt.Errorf("ingress link does not have a TCX ingress hook")
+			return NewTracerError("Detach:IngressNoTCX", fmt.Errorf("ingress link does not have a TCX ingress hook"))
 		}
 	}
 
@@ -1591,12 +1591,12 @@ func (p *PacketFetcher) Register(iface *ifaces.Interface) error {
 	return p.registerIngress(iface, ipvlan)
 }
 
-func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
+func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) *TracerError {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
 		originalNs, err := netns.Get()
 		if err != nil {
-			return fmt.Errorf("PCA failed to get current netns: %w", err)
+			return NewTracerError("Detach:CantGetNetNS", fmt.Errorf("PCA failed to get current netns: %w", err))
 		}
 		defer func() {
 			if err := netns.Set(originalNs); err != nil {
@@ -1605,39 +1605,39 @@ func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 			originalNs.Close()
 		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err)
+			return NewTracerError("Detach:CantSetNetNS", fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err))
 		}
 	}
 	if p.enableEgress {
 		if l := p.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return fmt.Errorf("TCX: failed to close egress link: %w", err)
+				return NewTracerError("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
 			}
 			ilog.WithField("interface", iface.Name).Debug("successfully detach egressTCX hook")
 		} else {
-			return fmt.Errorf("egress link does not support TCX hook")
+			return NewTracerError("Detach:EgressNoTCX", fmt.Errorf("egress link does not support TCX hook"))
 		}
 	}
 
 	if p.enableIngress {
 		if l := p.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return fmt.Errorf("TCX: failed to close ingress link: %w", err)
+				return NewTracerError("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
 			}
 			ilog.WithField("interface", iface.Name).Debug("successfully detach ingressTCX hook")
 		} else {
-			return fmt.Errorf("ingress link does not support TCX hook")
+			return NewTracerError("Detach:IngressNoTCX", fmt.Errorf("ingress link does not support TCX hook"))
 		}
 	}
 	return nil
 }
 
-func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
+func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) *TracerError {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
 		originalNs, err := netns.Get()
 		if err != nil {
-			return fmt.Errorf("PCA failed to get current netns: %w", err)
+			return NewTracerError("Attach:CantGetNetNS", fmt.Errorf("PCA failed to get current netns: %w", err))
 		}
 		defer func() {
 			if err := netns.Set(originalNs); err != nil {
@@ -1646,7 +1646,7 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 			originalNs.Close()
 		}()
 		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err)
+			return NewTracerError("Attach:CantSetNetNS", fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err))
 		}
 	}
 
@@ -1667,18 +1667,18 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 					for _, id := range q.Programs {
 						linkID, ok := id.LinkID()
 						if !ok {
-							return fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
 						}
 						if egrLink, err = link.NewFromID(linkID); err != nil {
-							return fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantCreateEgressLinkID", fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err))
 						}
 						ilog.WithField("link", linkID).Debug("attaching egress flow to link")
 					}
 				} else {
-					return fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err)
+					return NewTracerError("Attach:CantQueryTCXEgress", fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err))
 				}
 			} else {
-				return fmt.Errorf("failed to attach PCA TCX egress: %w", err)
+				return NewTracerError("Attach:CantAttachTCXEgress", fmt.Errorf("failed to attach PCA TCX egress: %w", err))
 			}
 		}
 		p.egressTCXLink[iface.InterfaceKey] = egrLink
@@ -1702,18 +1702,18 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 					for _, id := range q.Programs {
 						linkID, ok := id.LinkID()
 						if !ok {
-							return fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
 						}
 						if ingLink, err = link.NewFromID(linkID); err != nil {
-							return fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err)
+							return NewTracerError("Attach:CantCreateIngressLinkID", fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err))
 						}
 						ilog.WithField("link", linkID).Debug("attaching ingress flow to link")
 					}
 				} else {
-					return fmt.Errorf("failed to query TCX ingress flow to %s: %w", iface.Name, err)
+					return NewTracerError("Attach:CantQueryTCXIngress", fmt.Errorf("failed to query TCX ingress flow to %s: %w", iface.Name, err))
 				}
 			} else {
-				return fmt.Errorf("failed to attach PCA TCX ingress: %w", err)
+				return NewTracerError("Attach:CantAttachTCXIngress", fmt.Errorf("failed to attach PCA TCX ingress: %w", err))
 			}
 		}
 		p.ingressTCXLink[iface.InterfaceKey] = ingLink

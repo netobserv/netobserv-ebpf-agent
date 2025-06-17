@@ -45,8 +45,8 @@ type ebpfPacketFetcher interface {
 	io.Closer
 	Register(iface *ifaces.Interface) error
 	UnRegister(iface *ifaces.Interface) error
-	AttachTCX(iface *ifaces.Interface) error
-	DetachTCX(iface *ifaces.Interface) error
+	AttachTCX(iface *ifaces.Interface) *tracer.TracerError
+	DetachTCX(iface *ifaces.Interface) *tracer.TracerError
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }

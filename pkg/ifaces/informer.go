@@ -48,25 +48,25 @@ type Event struct {
 type Interface struct {
 	InterfaceKey
 	MAC      [6]uint8
-	NSName   string
+	NetNS    netns.NsHandle
 	HookType HookType
 }
 
 type InterfaceKey struct {
-	Index int
-	NetNS netns.NsHandle
-	Name  string
+	Index  int
+	Name   string
+	NSName string
 }
 
 func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
 	return Interface{
 		InterfaceKey: InterfaceKey{
-			Index: index,
-			NetNS: netNS,
-			Name:  name,
+			Index:  index,
+			Name:   name,
+			NSName: nsname,
 		},
-		MAC:    mac,
-		NSName: nsname,
+		MAC:   mac,
+		NetNS: netNS,
 	}
 }
 
