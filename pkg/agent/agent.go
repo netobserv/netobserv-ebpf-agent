@@ -15,6 +15,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -71,7 +72,8 @@ type Flows struct {
 	cfg *config.Agent
 
 	// input data providers
-	ebpf ebpfFlowFetcher
+	informer ifaces.Informer
+	ebpf     ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
@@ -229,6 +231,8 @@ func flowsAgent(
 	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.EnableUDNMapping)
 	limiter := flow.NewCapacityLimiter(m)
 
+	informer := createInformer(cfg)
+
 	return &Flows{
 		ebpf:        fetcher,
 		exporter:    exporter,
@@ -237,6 +241,7 @@ func flowsAgent(
 		rbTracer:    rbTracer,
 		accounter:   accounter,
 		limiter:     limiter,
+		informer:    informer,
 		promoServer: promoServer,
 		metrics:     m,
 	}, nil
@@ -401,7 +406,7 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 
 	if !f.cfg.EbpfProgramManagerMode {
 		alog.Debug("registering interfaces listener in background")
-		err := startInterfaceListener(ctx, f.ebpf, f.cfg, f.metrics)
+		err := startInterfaceListener(ctx, f.ebpf, f.cfg, f.metrics, f.informer)
 		if err != nil {
 			return nil, err
 		}

@@ -144,6 +144,9 @@ type Agent struct {
 	// 'tcx' is recommended but may not be available on older linux kernels.
 	// 'any' will try 'tcx' and fall back on 'tc' without retries.
 	TCAttachMode string `env:"TC_ATTACH_MODE" envDefault:"tcx"`
+	// TCAttachRetries defines the number of retries in case of attach/detach failures.
+	// Valid only for 'tc' and 'tcx' attach modes.
+	TCAttachRetries int `env:"TC_ATTACH_RETRIES" envDefault:"4"`
 	// ListenInterfaces specifies the mechanism used by the agent to listen for added or removed
 	// network interfaces. Accepted values are "watch" (default) or "poll".
 	// If the value is "watch", interfaces are traced immediately after they are created. This is

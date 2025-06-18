@@ -11,6 +11,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
@@ -24,7 +25,8 @@ type Packets struct {
 	cfg *config.Agent
 
 	// input data providers
-	ebpf ebpfPacketFetcher
+	informer ifaces.Informer
+	ebpf     ebpfPacketFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	perfTracer   *flow.PerfTracer
@@ -117,14 +119,15 @@ func packetsAgent(
 	agentIP net.IP,
 ) (*Packets, error) {
 	perfTracer := flow.NewPerfTracer(fetcher, cfg.CacheActiveTimeout)
-
 	packetbuffer := flow.NewPerfBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
+	informer := createInformer(cfg)
 
 	return &Packets{
 		ebpf:         fetcher,
 		cfg:          cfg,
 		packetbuffer: packetbuffer,
 		perfTracer:   perfTracer,
+		informer:     informer,
 		agentIP:      agentIP,
 		exporter:     packetexporter,
 	}, nil
@@ -196,10 +199,9 @@ func (p *Packets) Status() Status {
 }
 
 func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
-
 	if !p.cfg.EbpfProgramManagerMode {
 		plog.Debug("registering interfaces' listener in background")
-		err := startInterfaceListener(ctx, p.ebpf, p.cfg, metrics.NoOp())
+		err := startInterfaceListener(ctx, p.ebpf, p.cfg, metrics.NoOp(), p.informer)
 		if err != nil {
 			return nil, err
 		}

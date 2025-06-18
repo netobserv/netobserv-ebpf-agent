@@ -183,9 +183,7 @@ func getNetNS() ([]string, error) {
 	for _, f := range files {
 		ns := f.Name()
 		netns = append(netns, ns)
-		log.WithFields(logrus.Fields{
-			"netns": ns,
-		}).Debug("Detected network-namespace")
+		log.WithFields(logrus.Fields{"netns": ns}).Debug("Detected network-namespace")
 	}
 
 	return netns, nil

@@ -122,13 +122,11 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 		net.ParseIP(agentIP), nil)
 	require.NoError(t, err)
 
-	informer := test.SliceInformerFake{
+	agent.informer = test.SliceInformerFake{
 		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
 		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
 		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
 	}
-	err = startWithInformer(context.TODO(), agent.ebpf, agent.cfg, agent.metrics, informer)
-	require.NoError(t, err)
 
 	go func() {
 		require.NoError(t, agent.Run(context.Background()))

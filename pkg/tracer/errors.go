@@ -1,17 +1,17 @@
 package tracer
 
-type TracerError struct {
+type Error struct {
 	inner error
 	Name  string
 }
 
-func NewTracerError(name string, err error) *TracerError {
-	return &TracerError{
+func NewError(name string, err error) *Error {
+	return &Error{
 		inner: err,
 		Name:  name,
 	}
 }
 
-func (e *TracerError) Error() string {
+func (e *Error) Error() string {
 	return e.inner.Error()
 }

@@ -154,6 +154,7 @@ var (
 		"ifindex",
 		"netns",
 		"mac",
+		"retries",
 	)
 )
 
@@ -311,21 +312,21 @@ func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents,
 }
 
 type InterfaceEventsCounter struct {
-	Increase func(typez, ifname string, ifindex int, netns string, mac [6]uint8)
+	Increase func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int)
 }
 
 func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {
 	if lvl == LevelDebug {
 		return &InterfaceEventsCounter{
-			Increase: func(typez, ifname string, ifindex int, netns string, mac [6]uint8) {
+			Increase: func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int) {
 				mMac := model.MacAddr(mac)
-				vec.WithLabelValues(typez, ifname, strconv.Itoa(ifindex), netns, mMac.String()).Inc()
+				vec.WithLabelValues(typez, ifname, strconv.Itoa(ifindex), netns, mMac.String(), strconv.Itoa(retries)).Inc()
 			},
 		}
 	}
 	return &InterfaceEventsCounter{
-		Increase: func(typez, _ string, _ int, _ string, _ [6]uint8) {
-			vec.WithLabelValues(typez, "", "", "", "").Inc()
+		Increase: func(typez, _ string, _ int, _ string, _ [6]uint8, _ int) {
+			vec.WithLabelValues(typez, "", "", "", "", "").Inc()
 		},
 	}
 }

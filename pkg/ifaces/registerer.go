@@ -48,14 +48,10 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 	out := make(chan Event, r.bufLen)
 	go func() {
 		for ev := range innerCh {
-			// if ev.Interface.Index == 0 && model.AllZerosMac(ev.Interface.MAC) && ev.Interface.Name == "" {
-			// 	rlog.WithField("interface", ev.Interface).Debug("ignoring invalid interface event")
-			// 	continue
-			// }
 			switch ev.Type {
 			case EventAdded:
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
-				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC)
+				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				r.m.Lock()
 				if current, ok := r.ifaces[ev.Interface.Index]; ok {
 					if _, alreadySet := current[ev.Interface.MAC]; !alreadySet {
@@ -66,7 +62,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				}
 				r.m.Unlock()
 			case EventDeleted:
-				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC)
+				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				r.m.Lock()
 				if macs, ok := r.ifaces[ev.Interface.Index]; ok {
 					name, ok := macs[ev.Interface.MAC]

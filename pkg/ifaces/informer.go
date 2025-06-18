@@ -17,15 +17,6 @@ const (
 	EventDeleted
 )
 
-// // HookType used for attachment: TC, TCX
-// type HookType int
-
-// const (
-// 	Unset HookType = iota
-// 	TCHook
-// 	TCXHook
-// )
-
 func (e EventType) String() string {
 	switch e {
 	case EventAdded:
@@ -49,7 +40,6 @@ type Interface struct {
 	InterfaceKey
 	MAC   [6]uint8
 	NetNS netns.NsHandle
-	// HookType HookType
 }
 
 type InterfaceKey struct {
