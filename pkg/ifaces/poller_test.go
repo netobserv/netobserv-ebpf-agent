@@ -26,10 +26,12 @@ func simpleInterface(index int, name string, mac [6]uint8) Interface {
 	return NewInterface(index, name, mac, netns.None(), "")
 }
 
-func simpleInterfacePtr(index int, name string, mac [6]uint8) *Interface {
-	i := simpleInterface(index, name, mac)
-	return &i
-}
+var simpleInterfacePtr = simpleInterface
+
+// func simpleInterfacePtr(index int, name string, mac [6]uint8) *Interface {
+// 	i := simpleInterface(index, name, mac)
+// 	return &i
+// }
 
 func TestPoller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

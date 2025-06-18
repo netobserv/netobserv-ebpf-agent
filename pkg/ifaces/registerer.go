@@ -10,7 +10,6 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 
@@ -49,10 +48,10 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 	out := make(chan Event, r.bufLen)
 	go func() {
 		for ev := range innerCh {
-			if ev.Interface.Index == 0 && model.AllZerosMac(ev.Interface.MAC) && ev.Interface.Name == "" {
-				rlog.WithField("interface", ev.Interface).Debug("ignoring invalid interface event")
-				continue
-			}
+			// if ev.Interface.Index == 0 && model.AllZerosMac(ev.Interface.MAC) && ev.Interface.Name == "" {
+			// 	rlog.WithField("interface", ev.Interface).Debug("ignoring invalid interface event")
+			// 	continue
+			// }
 			switch ev.Type {
 			case EventAdded:
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)

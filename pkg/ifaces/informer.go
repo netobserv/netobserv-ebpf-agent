@@ -17,14 +17,14 @@ const (
 	EventDeleted
 )
 
-// HookType used for attachment: TC, TCX
-type HookType int
+// // HookType used for attachment: TC, TCX
+// type HookType int
 
-const (
-	Unset HookType = iota
-	TCHook
-	TCXHook
-)
+// const (
+// 	Unset HookType = iota
+// 	TCHook
+// 	TCXHook
+// )
 
 func (e EventType) String() string {
 	switch e {
@@ -42,14 +42,14 @@ var ilog = logrus.WithField("component", "ifaces.Informer")
 // Event of a network interface, given the type (added, removed) and the interface name
 type Event struct {
 	Type      EventType
-	Interface *Interface
+	Interface Interface
 }
 
 type Interface struct {
 	InterfaceKey
-	MAC      [6]uint8
-	NetNS    netns.NsHandle
-	HookType HookType
+	MAC   [6]uint8
+	NetNS netns.NsHandle
+	// HookType HookType
 }
 
 type InterfaceKey struct {
