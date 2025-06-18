@@ -371,6 +371,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}, nil
 }
 
+// WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
@@ -462,6 +463,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	return nil
 }
 
+// WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
 func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	if iface.NetNS != netns.None() {
