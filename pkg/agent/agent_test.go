@@ -118,12 +118,16 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 			CacheMaxFlows:      100,
 		},
 		metrics.NewMetrics(&metrics.Settings{}),
-		test.SliceInformerFake{
-			ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
-			ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
-			ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
-		}, ebpfTracer, export.Export,
+		ebpfTracer, export.Export,
 		net.ParseIP(agentIP), nil)
+	require.NoError(t, err)
+
+	informer := test.SliceInformerFake{
+		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
+		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
+		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
+	}
+	err = startWithInformer(context.TODO(), agent.ebpf, agent.cfg, agent.metrics, informer)
 	require.NoError(t, err)
 
 	go func() {

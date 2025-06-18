@@ -140,6 +140,10 @@ type Agent struct {
 	// Sampling holds the rate at which packets should be sampled and sent to the target collector.
 	// E.g. if set to 100, one out of 100 packets, on average, will be sent to the target collector.
 	Sampling int `env:"SAMPLING" envDefault:"0"`
+	// TCAttachMode defines the eBPF attach mode on traffic controller: tcx (default), tc or any.
+	// 'tcx' is recommended but may not be available on older linux kernels.
+	// 'any' will try 'tcx' and fall back on 'tc' without retries.
+	TCAttachMode string `env:"TC_ATTACH_MODE" envDefault:"tcx"`
 	// ListenInterfaces specifies the mechanism used by the agent to listen for added or removed
 	// network interfaces. Accepted values are "watch" (default) or "poll".
 	// If the value is "watch", interfaces are traced immediately after they are created. This is

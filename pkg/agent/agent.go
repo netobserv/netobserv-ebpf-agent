@@ -15,7 +15,6 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/exporter"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -67,53 +66,12 @@ func (s Status) String() string {
 	}
 }
 
-func configureInformer(cfg *config.Agent, log *logrus.Entry) ifaces.Informer {
-	var informer ifaces.Informer
-	switch cfg.ListenInterfaces {
-	case config.ListenPoll:
-		log.WithField("period", cfg.ListenPollPeriod).
-			Debug("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
-	case config.ListenWatch:
-		log.Debug("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	default:
-		log.WithField("providedValue", cfg.ListenInterfaces).
-			Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	}
-	return informer
-
-}
-
-func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, processEvent func(iface *ifaces.Interface, add bool)) {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Debug("stopping interfaces' listener")
-			return
-		case event := <-ifaceEvents:
-			slog.WithField("event", event).Debug("received event")
-			switch event.Type {
-			case ifaces.EventAdded:
-				processEvent(&event.Interface, true)
-			case ifaces.EventDeleted:
-				processEvent(&event.Interface, false)
-			default:
-				slog.WithField("event", event).Warn("unknown event type")
-			}
-		}
-	}
-}
-
 // Flows reporting agent
 type Flows struct {
 	cfg *config.Agent
 
 	// input data providers
-	interfaces ifaces.Informer
-	filter     ifaces.Filter
-	ebpf       ebpfFlowFetcher
+	ebpf ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
@@ -132,10 +90,7 @@ type Flows struct {
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
 type ebpfFlowFetcher interface {
 	io.Closer
-	Register(iface *ifaces.Interface) error
-	UnRegister(iface *ifaces.Interface) error
-	AttachTCX(iface *ifaces.Interface) *tracer.TracerError
-	DetachTCX(iface *ifaces.Interface) *tracer.TracerError
+	tcAttacher
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
@@ -148,9 +103,6 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 
 	// manage deprecated configs
 	config.ManageDeprecatedConfigs(cfg)
-
-	// configure informer for new interfaces
-	informer := configureInformer(cfg, alog)
 
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
@@ -250,37 +202,19 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP, s)
+	return flowsAgent(cfg, m, fetcher, exportFunc, agentIP, s)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
 func flowsAgent(
 	cfg *config.Agent,
 	m *metrics.Metrics,
-	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
 	agentIP net.IP,
 	s *ovnobserv.SampleDecoder,
 ) (*Flows, error) {
-
-	filter, err := ifaces.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	registerer, err := ifaces.NewRegisterer(informer, cfg, m)
-	if err != nil {
-		return nil, err
-	}
-
-	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
-		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
-		if !ok {
-			return "unknown"
-		}
-		return iface
-	}
-	model.SetGlobals(agentIP, interfaceNamer)
+	model.SetGlobalIP(agentIP)
 
 	var promoServer *http.Server
 	if cfg.MetricsEnable {
@@ -298,8 +232,6 @@ func flowsAgent(
 	return &Flows{
 		ebpf:        fetcher,
 		exporter:    exporter,
-		interfaces:  registerer,
-		filter:      filter,
 		cfg:         cfg,
 		mapTracer:   mapTracer,
 		rbTracer:    rbTracer,
@@ -463,35 +395,18 @@ func (f *Flows) Status() Status {
 	return f.status
 }
 
-// interfacesManager uses an informer to check new/deleted network interfaces. For each running
-// interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
-// TODO: consider move this method and "onInterfaceEvent" to another type
-func (f *Flows) interfacesManager(ctx context.Context) error {
-	slog := alog.WithField("function", "interfacesManager")
-
-	slog.Debug("subscribing for network interface events")
-	ifaceEvents, err := f.interfaces.Subscribe(ctx)
-	if err != nil {
-		return fmt.Errorf("instantiating interfaces' informer: %w", err)
-	}
-
-	go interfaceListener(ctx, ifaceEvents, slog, f.onInterfaceEvent)
-
-	return nil
-}
-
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
 func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.Record], error) {
 
 	if !f.cfg.EbpfProgramManagerMode {
-		alog.Debug("registering interfaces' listener in background")
-		err := f.interfacesManager(ctx)
+		alog.Debug("registering interfaces listener in background")
+		err := startInterfaceListener(ctx, f.ebpf, f.cfg, f.metrics)
 		if err != nil {
 			return nil, err
 		}
 	}
-	alog.Debug("connecting flows' processing graph")
+	alog.Debug("connecting flows processing graph")
 	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.ForceGC))
 	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
 
@@ -519,74 +434,4 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 	mapTracer.Start()
 	rbTracer.Start()
 	return export, nil
-}
-
-func (f *Flows) onInterfaceEvent(iface *ifaces.Interface, add bool) {
-	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	allowed, err := f.filter.Allowed(iface.Name)
-	if err != nil {
-		alog.WithField("interface", iface).Errorf("encountered error determining if interface is allowed: %v", err)
-		return
-	}
-	if !allowed {
-		alog.WithField("interface", iface).Debug("interface does not match the allow/exclusion filters. Ignoring")
-		return
-	}
-	// if iface.Index == 0 && model.AllZerosMac(iface.MAC) && iface.Name == "" {
-	// 	alog.WithField("interface", iface).Debug("ignoring invalid interface event")
-	// 	return
-	// }
-	if add {
-		if err1 := f.ebpf.AttachTCX(iface); err1 != nil {
-			f.metrics.Errors.WithErrorName("InterfaceEvents", err1.Name, metrics.LowSeverity).Inc()
-			if err2 := f.ebpf.Register(iface); err2 != nil {
-				alog.WithField("interface", iface).WithError(err2).Warn("interface detected, could not attach any hook")
-				f.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
-				return
-			}
-			// iface.HookType = ifaces.TCHook
-			alog.WithField("interface", iface).WithError(err1).Debug("interface detected, could not attach TCX hook, falling back to legacy TC")
-			f.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
-			return
-		}
-		// iface.HookType = ifaces.TCXHook
-		alog.WithField("interface", iface).Debug("interface detected, TCX hook attached")
-		f.metrics.InterfaceEventsCounter.Increase("attach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
-	} else {
-		// switch iface.HookType {
-		// case ifaces.TCHook:
-		// 	if err := f.ebpf.UnRegister(iface); err != nil {
-		// 		alog.WithField("interface", iface).WithError(err).Warn("interface deleted, could not detach TC hook")
-		// 		f.metrics.InterfaceEventsCounter.Increase("detach_tc_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
-		// 		f.metrics.Errors.WithErrorName("InterfaceEvents", "CantDetachTC", metrics.MediumSeverity).Inc()
-		// 		return
-		// 	}
-		// 	alog.WithField("interface", iface).Debug("interface deleted, TC hook detached")
-		// 	f.metrics.InterfaceEventsCounter.Increase("detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
-		// case ifaces.TCXHook:
-		// 	if err := f.ebpf.DetachTCX(iface); err != nil {
-		// 		f.metrics.Errors.WithErrorName("InterfaceEvents", err.Name, metrics.MediumSeverity).Inc()
-		// 		alog.WithField("interface", iface).WithError(err).Warn("interface deleted, could not detach TCX hook")
-		// 		f.metrics.InterfaceEventsCounter.Increase("detach_tcx_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
-		// 		return
-		// 	}
-		// 	alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
-		// 	f.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
-		// case ifaces.Unset:
-		alog.WithField("interface", iface).Warn("interface deleted and no known hook attached, trying to detach anyway...")
-		if err1 := f.ebpf.DetachTCX(iface); err1 != nil {
-			f.metrics.Errors.WithErrorName("InterfaceEvents", err1.Name+" (unset)", metrics.MediumSeverity).Inc()
-			if err2 := f.ebpf.UnRegister(iface); err2 != nil {
-				alog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
-				f.metrics.InterfaceEventsCounter.Increase("unset_detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC)
-				return
-			}
-			alog.WithField("interface", iface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
-			f.metrics.InterfaceEventsCounter.Increase("unset_detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC)
-			return
-		}
-		alog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
-		f.metrics.InterfaceEventsCounter.Increase("unset_detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC)
-		// }
-	}
 }
