@@ -3,6 +3,7 @@ package metrics
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
@@ -321,6 +322,12 @@ func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *Interface
 			Increase: func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int) {
 				mMac := model.MacAddr(mac)
 				vec.WithLabelValues(typez, ifname, strconv.Itoa(ifindex), netns, mMac.String(), strconv.Itoa(retries)).Inc()
+				// since it has unbounded cardinality, set up an expiration timeout in case of delete event
+				// expire after 5 minutes
+				go func() {
+					time.Sleep(5 * time.Minute)
+					vec.DeleteLabelValues(typez, ifname, strconv.Itoa(ifindex), netns, mMac.String(), strconv.Itoa(retries))
+				}()
 			},
 		}
 	}

@@ -218,6 +218,7 @@ type Agent struct {
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// Metrics verbosity level. From more to less verbose: debug, info (default).
+	// Warning: 'debug' level generates unbounded metrics cardinality, which increases memory and CPU usage.
 	MetricsLevel string `env:"METRICS_LEVEL" envDefault:"info"`
 	// MetricsServerAddress is the address of the server that collects ebpf agent metrics.
 	MetricsServerAddress string `env:"METRICS_SERVER_ADDRESS"`

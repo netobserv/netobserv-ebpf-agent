@@ -139,7 +139,7 @@ func runWithRetries(iface *ifaces.Interface, retries int, f func(*ifaces.Interfa
 			return count, f(iface)
 		}, backoff.WithBackOff(&backoff.ExponentialBackOff{
 			InitialInterval:     300 * time.Millisecond,
-			RandomizationFactor: backoff.DefaultRandomizationFactor,
+			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         60 * time.Second,
 		}), backoff.WithMaxTries(uint(retries)))
