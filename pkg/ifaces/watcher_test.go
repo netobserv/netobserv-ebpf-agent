@@ -42,23 +42,23 @@ func TestWatcher(t *testing.T) {
 
 	// initial set of fetched elements
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: simpleInterfacePtr(1, "foo", macFoo)},
+		Event{Type: EventAdded, Interface: simpleInterface(1, "foo", macFoo)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: simpleInterfacePtr(2, "bar", macBar)},
+		Event{Type: EventAdded, Interface: simpleInterface(2, "bar", macBar)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: simpleInterfacePtr(3, "baz", macBaz)},
+		Event{Type: EventAdded, Interface: simpleInterface(3, "baz", macBaz)},
 		getEvent(t, outputEvents, timeout))
 
 	// updates
 	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
 	inputLinks <- down("bar", 2, macBar[:], netns.None())
 	assert.Equal(t,
-		Event{Type: EventAdded, Interface: simpleInterfacePtr(4, "bae", macBae)},
+		Event{Type: EventAdded, Interface: simpleInterface(4, "bae", macBae)},
 		getEvent(t, outputEvents, timeout))
 	assert.Equal(t,
-		Event{Type: EventDeleted, Interface: simpleInterfacePtr(2, "bar", macBar)},
+		Event{Type: EventDeleted, Interface: simpleInterface(2, "bar", macBar)},
 		getEvent(t, outputEvents, timeout))
 
 	// repeated updates that do not involve a change in the current track of interfaces
