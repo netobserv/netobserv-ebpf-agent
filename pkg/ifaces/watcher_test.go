@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -18,7 +19,7 @@ func TestWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10)
+	watcher := NewWatcher(10, metrics.NoOp())
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{

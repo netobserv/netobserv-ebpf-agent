@@ -1,8 +1,9 @@
 package tracer
 
 type Error struct {
-	inner error
-	Name  string
+	inner      error
+	Name       string
+	DoNotRetry bool
 }
 
 func NewError(name string, err error) *Error {
@@ -12,6 +13,18 @@ func NewError(name string, err error) *Error {
 	}
 }
 
+func NewErrorNoRetry(name string, err error) *Error {
+	return &Error{
+		inner:      err,
+		Name:       name,
+		DoNotRetry: true,
+	}
+}
+
 func (e *Error) Error() string {
-	return e.inner.Error()
+	s := e.inner.Error()
+	if e.DoNotRetry {
+		return s + " (no retry)"
+	}
+	return s
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -28,6 +29,7 @@ var log = logrus.WithField("component", "ifaces.Watcher")
 type Watcher struct {
 	bufLen     int
 	current    map[InterfaceKey]Interface
+	mapSize    int
 	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
@@ -37,16 +39,19 @@ type Watcher struct {
 	nsDone           sync.Map
 }
 
-func NewWatcher(bufLen int) *Watcher {
-	return &Watcher{
+func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
+	current := map[InterfaceKey]Interface{}
+	w := &Watcher{
 		bufLen:           bufLen,
-		current:          map[InterfaceKey]Interface{},
+		current:          current,
 		interfaces:       netInterfaces,
 		linkSubscriberAt: netlink.LinkSubscribeAt,
 		mutex:            &sync.Mutex{},
 		netnsWatcher:     &fsnotify.Watcher{},
 		nsDone:           sync.Map{},
 	}
+	m.CreateInterfaceBufferGauge("watcher", func() float64 { return float64(w.mapSize) })
+	return w
 }
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
@@ -87,6 +92,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			netnsHandle = netns.None()
 		} else {
 			if netnsHandle, err = netns.GetFromName(ns); err != nil {
+				log.WithError(err).Warnf("can't get netns %s", ns)
 				return false, nil
 			}
 		}
@@ -122,6 +128,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				iface := NewInterface(name.Index, name.Name, name.MAC, netnsHandle, ns)
 				w.mutex.Lock()
 				w.current[iface.InterfaceKey] = iface
+				w.mapSize = len(w.current)
 				w.mutex.Unlock()
 				out <- Event{Type: EventAdded, Interface: iface}
 			}
@@ -164,6 +171,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				out <- Event{Type: EventDeleted, Interface: storedIface}
 			}
 		}
+		w.mapSize = len(w.current)
 		w.mutex.Unlock()
 	}
 }

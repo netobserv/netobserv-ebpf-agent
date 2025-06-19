@@ -125,7 +125,7 @@ type variablesMapping struct {
 }
 
 // nolint:golint,cyclop
-func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
+func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, error) {
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link
 	var xfrmInputKProbeLink, xfrmOutputKProbeLink link.Link
@@ -345,12 +345,19 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		return nil, fmt.Errorf("accessing to ringbuffer: %w", err)
 	}
 
+	qdiscs := map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
+	egressTCXLink := map[ifaces.InterfaceKey]link.Link{}
+	ingressTCXLink := map[ifaces.InterfaceKey]link.Link{}
+	m.CreateInterfaceBufferGauge("qdiscs", func() float64 { return float64(len(qdiscs)) })
+	m.CreateInterfaceBufferGauge("egress-tcx-links", func() float64 { return float64(len(egressTCXLink)) })
+	m.CreateInterfaceBufferGauge("ingress-tcx-links", func() float64 { return float64(len(ingressTCXLink)) })
+
 	return &FlowFetcher{
 		objects:                     &objects,
 		ringbufReader:               flows,
 		egressFilters:               map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		ingressFilters:              map[ifaces.InterfaceKey]*netlink.BpfFilter{},
-		qdiscs:                      map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
+		qdiscs:                      qdiscs,
 		cacheMaxSize:                cfg.CacheMaxSize,
 		enableIngress:               cfg.EnableIngress,
 		enableEgress:                cfg.EnableEgress,
@@ -362,8 +369,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
-		egressTCXLink:               map[ifaces.InterfaceKey]link.Link{},
-		ingressTCXLink:              map[ifaces.InterfaceKey]link.Link{},
+		egressTCXLink:               egressTCXLink,
+		ingressTCXLink:              ingressTCXLink,
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		useEbpfManager:              cfg.UseEbpfManager,
@@ -371,141 +378,94 @@ func NewFlowFetcher(cfg *FlowFetcherConfig) (*FlowFetcher, error) {
 	}, nil
 }
 
-// WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
-	ilog := log.WithField("iface", iface)
-	if iface.NetNS != netns.None() {
-		originalNs, err := netns.Get()
-		if err != nil {
-			return NewError("Attach:CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
-		}
-		defer func() {
-			if err := netns.Set(originalNs); err != nil {
-				ilog.WithError(err).Error("failed to set netns back")
-			}
-			originalNs.Close()
-		}()
-		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return NewError("Attach:CantSetNetNS", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
-		}
-	}
-
 	if m.enableEgress {
-		egrLink, err := link.AttachTCX(link.TCXOptions{
-			Program:   m.objects.BpfPrograms.TcxEgressFlowParse,
-			Attach:    cilium.AttachTCXEgress,
-			Interface: iface.Index,
-		})
+		egrLink, err := m.attachTCXOnDirection(iface, "Egress", m.objects.BpfPrograms.TcxEgressFlowParse, cilium.AttachTCXEgress)
 		if err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				// The interface already has a TCX egress hook
-				log.WithField("iface", iface.Name).Debug("interface already has a TCX egress hook ignore")
-				if q, err := link.QueryPrograms(link.QueryOptions{
-					Target: iface.Index,
-					Attach: cilium.AttachTCXEgress,
-				}); err == nil {
-					for _, id := range q.Programs {
-						linkID, ok := id.LinkID()
-						if !ok {
-							return NewError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
-						}
-						if egrLink, err = link.NewFromID(linkID); err != nil {
-							return NewError("Attach:CantCreateEgressLinkID", fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err))
-						}
-						ilog.WithField("link", linkID).Debug("attaching egress flow to link")
-					}
-				} else {
-					return NewError("Attach:CantQueryTCXEgress", fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err))
-				}
-			} else {
-				return NewError("Attach:CantAttachTCXEgress", fmt.Errorf("failed to attach TCX egress: %w", err))
-			}
+			return err
 		}
 		m.egressTCXLink[iface.InterfaceKey] = egrLink
-		ilog.WithField("interface", iface.Name).Debugf("successfully attach egressTCX hook link: %v", egrLink)
 	}
 
 	if m.enableIngress {
-		ingLink, err := link.AttachTCX(link.TCXOptions{
-			Program:   m.objects.BpfPrograms.TcxIngressFlowParse,
-			Attach:    cilium.AttachTCXIngress,
-			Interface: iface.Index,
-		})
+		ingLink, err := m.attachTCXOnDirection(iface, "Ingress", m.objects.BpfPrograms.TcxIngressFlowParse, cilium.AttachTCXIngress)
 		if err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				// The interface already has a TCX ingress hook
-				log.WithField("iface", iface.Name).Debug("interface already has a TCX ingress hook ignore")
-				if q, err := link.QueryPrograms(link.QueryOptions{
-					Target: iface.Index,
-					Attach: cilium.AttachTCXIngress,
-				}); err == nil {
-					for _, id := range q.Programs {
-						linkID, ok := id.LinkID()
-						if !ok {
-							return NewError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
-						}
-						if ingLink, err = link.NewFromID(linkID); err != nil {
-							return NewError("Attach:CantCreateIngressLinkID", fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err))
-						}
-						ilog.WithField("link", linkID).Debug("attaching ingress flow to link")
-					}
-				} else {
-					return NewError("Attach:CantQueryTCXIngress", fmt.Errorf("failed to query existing TCX ingress flow to %s: %w", iface.Name, err))
-				}
-			} else {
-				return NewError("Attach:CantAttachTCXIngress", fmt.Errorf("failed to attach TCX ingress: %w", err))
-			}
+			return err
 		}
 		m.ingressTCXLink[iface.InterfaceKey] = ingLink
-		ilog.WithField("interface", iface.Name).Debugf("successfully attach ingressTCX hook link: %v", ingLink)
 	}
 
 	return nil
 }
 
-// WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
-func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
+func (m *FlowFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName string, prg *cilium.Program, attach cilium.AttachType) (link.Link, error) {
 	ilog := log.WithField("iface", iface)
-	if iface.NetNS != netns.None() {
-		originalNs, err := netns.Get()
-		if err != nil {
-			return NewError("Detach:CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
-		}
-		defer func() {
-			if err := netns.Set(originalNs); err != nil {
-				ilog.WithError(err).Error("failed to set netns back")
+
+	lnk, err := link.AttachTCX(link.TCXOptions{
+		Program:   prg,
+		Attach:    attach,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		errPrefix := "Attach" + dirName
+		if errors.Is(err, fs.ErrExist) {
+			// The interface already has a TCX hook
+			log.WithField("iface", iface.Name).Debugf("interface already has a TCX %s hook ignore", dirName)
+			if q, err := link.QueryPrograms(link.QueryOptions{
+				Target: iface.Index,
+				Attach: attach,
+			}); err == nil {
+				for _, id := range q.Programs {
+					linkID, ok := id.LinkID()
+					if !ok {
+						return nil, NewError(errPrefix+":CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
+					}
+					if lnk, err = link.NewFromID(linkID); err != nil {
+						return nil, NewError(errPrefix+":CantCreateLinkID", fmt.Errorf("failed to get link for %s flow to %s: %w", dirName, iface.Name, err))
+					}
+					ilog.WithField("link", linkID).Debugf("attaching %s flow to link", dirName)
+				}
+			} else {
+				return nil, NewError(errPrefix+":CantQueryTCX", fmt.Errorf("failed to query TCX %s flow to %s: %w", dirName, iface.Name, err))
 			}
-			originalNs.Close()
-		}()
-		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return NewError("Detach:CantSetNetNS", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
+		} else {
+			return nil, NewError(errPrefix+":CantAttachTCX", fmt.Errorf("failed to attach TCX %s: %w", dirName, err))
 		}
 	}
+	ilog.WithField("interface", iface.Name).Debugf("successfully attach TCX %s hook link: %v", dirName, lnk)
+	return lnk, nil
+}
+
+func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
+	var oneErr error
 	if m.enableEgress {
 		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return NewError("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
+				oneErr = NewErrorNoRetry("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
+			} else {
+				ilog.WithField("interface", iface.Name).Debugf("successfully detach egressTCX hook link: %v", m.egressTCXLink[iface.InterfaceKey])
 			}
-			ilog.WithField("interface", iface.Name).Debugf("successfully detach egressTCX hook link: %v",
-				m.egressTCXLink[iface.InterfaceKey])
 		} else {
-			return NewError("Detach:EgressNoTCX", fmt.Errorf("egress link does not have a TCX egress hook"))
+			oneErr = NewErrorNoRetry("Detach:EgressNoTCX", fmt.Errorf("egress link does not have a TCX egress hook"))
 		}
+		delete(m.egressTCXLink, iface.InterfaceKey)
 	}
 
 	if m.enableIngress {
 		if l := m.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return NewError("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
+				oneErr = NewErrorNoRetry("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
+			} else {
+				ilog.WithField("interface", iface.Name).Debugf("successfully detach ingressTCX hook link: %v", m.ingressTCXLink[iface.InterfaceKey])
 			}
-			ilog.WithField("interface", iface.Name).Debugf("successfully detach ingressTCX hook link: %v",
-				m.ingressTCXLink[iface.InterfaceKey])
 		} else {
-			return NewError("Detach:IngressNoTCX", fmt.Errorf("ingress link does not have a TCX ingress hook"))
+			oneErr = NewErrorNoRetry("Detach:IngressNoTCX", fmt.Errorf("ingress link does not have a TCX ingress hook"))
 		}
+		delete(m.ingressTCXLink, iface.InterfaceKey)
 	}
 
-	return nil
+	return oneErr
 }
 
 func removeTCFilters(ifName string, tcDir uint32) error {
@@ -1015,9 +975,9 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		m.increaseEnrichmentStats(met, &flow)
 		flows[id] = flow
 	}
-	met.BufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
-	met.BufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
-	met.BufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
+	met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
+	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
+	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 
 	m.ReadGlobalCounter(met)
 	return flows

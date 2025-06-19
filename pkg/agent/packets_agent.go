@@ -120,7 +120,7 @@ func packetsAgent(
 ) (*Packets, error) {
 	perfTracer := flow.NewPerfTracer(fetcher, cfg.CacheActiveTimeout)
 	packetbuffer := flow.NewPerfBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
-	informer := createInformer(cfg)
+	informer := createInformer(cfg, metrics.NoOp())
 
 	return &Packets{
 		ebpf:         fetcher,

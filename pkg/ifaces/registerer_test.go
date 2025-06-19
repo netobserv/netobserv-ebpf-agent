@@ -17,7 +17,7 @@ func TestRegisterer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10)
+	watcher := NewWatcher(10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -90,7 +90,7 @@ func TestRegisterer_Lookup(t *testing.T) {
 		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
 	)
 
-	watcher := NewWatcher(10)
+	watcher := NewWatcher(10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -153,7 +153,7 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10)
+	watcher := NewWatcher(10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 

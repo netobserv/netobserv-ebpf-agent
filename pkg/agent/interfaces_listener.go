@@ -12,6 +12,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netns"
 )
 
 var ilog = logrus.WithField("component", "agent.Interfaces")
@@ -36,7 +37,7 @@ type requeuedEvent struct {
 	attempt int
 }
 
-func createInformer(cfg *config.Agent) ifaces.Informer {
+func createInformer(cfg *config.Agent, m *metrics.Metrics) ifaces.Informer {
 	// configure informer for new interfaces
 	var informer ifaces.Informer
 	switch cfg.ListenInterfaces {
@@ -45,10 +46,10 @@ func createInformer(cfg *config.Agent) ifaces.Informer {
 		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
 	case config.ListenWatch:
 		ilog.Info("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
+		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
 	default:
 		ilog.WithField("providedValue", cfg.ListenInterfaces).Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
+		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
 	}
 
 	return informer
@@ -146,7 +147,12 @@ func (i *interfaceListener) onEventReceived(event ifaces.Event, attempt int, att
 // returns true when completed, false when requeued
 func (i *interfaceListener) runWithRetries(iface *ifaces.Interface, typ ifaces.EventType, attempt int, f func(*ifaces.Interface) error) (bool, error) {
 	if err := f(iface); err != nil {
-		if attempt < i.cfg.TCAttachRetries {
+		allowRequeue := true
+		var tracerErr *tracer.Error
+		if errors.As(err, &tracerErr) && tracerErr.DoNotRetry {
+			allowRequeue = false
+		}
+		if allowRequeue && attempt < i.cfg.TCAttachRetries {
 			// Requeue
 			go func() {
 				time.Sleep(300 * time.Duration(attempt) * time.Millisecond)
@@ -171,7 +177,7 @@ func (i *interfaceListener) increaseErrors(err error, isAttach bool) {
 }
 
 func (i *interfaceListener) attachTC(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, i.cfg.TCAttachRetries, i.attacher.Register); complete {
+	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, attempt, i.attacher.Register); complete {
 		if err != nil {
 			i.increaseErrors(err, true)
 			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface detected, could not attach TC hook")
@@ -184,7 +190,7 @@ func (i *interfaceListener) attachTC(iface *ifaces.Interface, attempt int) {
 }
 
 func (i *interfaceListener) attachTCX(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, i.cfg.TCAttachRetries, i.attacher.AttachTCX); complete {
+	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, attempt, runInNamespace("Attach", i.attacher.AttachTCX)); complete {
 		if err != nil {
 			i.increaseErrors(err, true)
 			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface detected, could not attach TCX hook")
@@ -197,7 +203,7 @@ func (i *interfaceListener) attachTCX(iface *ifaces.Interface, attempt int) {
 }
 
 func (i *interfaceListener) attachAny(iface *ifaces.Interface, _ int) {
-	if err1 := i.attacher.AttachTCX(iface); err1 != nil {
+	if err1 := runInNamespace("Attach", i.attacher.AttachTCX)(iface); err1 != nil {
 		i.increaseErrors(err1, true)
 		if err2 := i.attacher.Register(iface); err2 != nil {
 			ilog.WithField("interface", iface).WithError(err2).Warn("interface detected, could not attach any hook")
@@ -213,7 +219,7 @@ func (i *interfaceListener) attachAny(iface *ifaces.Interface, _ int) {
 }
 
 func (i *interfaceListener) detachTC(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, i.cfg.TCAttachRetries, i.attacher.UnRegister); complete {
+	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, attempt, i.attacher.UnRegister); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
 			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface deleted, could not detach TC hook")
@@ -226,7 +232,7 @@ func (i *interfaceListener) detachTC(iface *ifaces.Interface, attempt int) {
 }
 
 func (i *interfaceListener) detachTCX(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, i.cfg.TCAttachRetries, i.attacher.DetachTCX); complete {
+	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, attempt, runInNamespace("Detach", i.attacher.DetachTCX)); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
 			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface deleted, could not detach TCX hook")
@@ -239,7 +245,7 @@ func (i *interfaceListener) detachTCX(iface *ifaces.Interface, attempt int) {
 }
 
 func (i *interfaceListener) detachAny(iface *ifaces.Interface, _ int) {
-	if err1 := i.attacher.DetachTCX(iface); err1 != nil {
+	if err1 := runInNamespace("Detach", i.attacher.DetachTCX)(iface); err1 != nil {
 		i.increaseErrors(err1, false)
 		if err2 := i.attacher.UnRegister(iface); err2 != nil {
 			ilog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
@@ -252,4 +258,32 @@ func (i *interfaceListener) detachAny(iface *ifaces.Interface, _ int) {
 	}
 	ilog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
 	i.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC, 1)
+}
+
+// WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
+func runInNamespace(errPrefix string, inner func(*ifaces.Interface) error) func(*ifaces.Interface) error {
+	return func(iface *ifaces.Interface) error {
+		if iface.NetNS != netns.None() {
+			originalNs, err := netns.Get()
+			if err != nil {
+				return tracer.NewError(errPrefix+":CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
+			}
+			defer func() {
+				if err := netns.Set(originalNs); err != nil {
+					ilog.WithError(err).Error("failed to set netns back")
+				}
+				originalNs.Close()
+			}()
+			if err = netns.Set(iface.NetNS); err != nil {
+				handle, err2 := netns.GetFromName(iface.NSName)
+				if err2 != nil {
+					return tracer.NewError(errPrefix+":CantSetNetNS-A", fmt.Errorf("failed to setns to %s: %w; NetNS doesn't exist? (%w)", iface.NetNS, err, err2))
+				} else if handle != iface.NetNS {
+					return tracer.NewError(errPrefix+":CantSetNetNS-B", fmt.Errorf("failed to setns to %s: %w; handle differs (%d != %d)", iface.NetNS, err, handle, iface.NetNS))
+				}
+				return tracer.NewError(errPrefix+":CantSetNetNS-C", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
+			}
+		}
+		return inner(iface)
+	}
 }

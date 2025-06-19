@@ -21,6 +21,7 @@ type Registerer struct {
 	m                   sync.RWMutex
 	inner               Informer
 	ifaces              map[int]map[[6]uint8]string
+	mapSize             int
 	bufLen              int
 	preferredInterfaces []preferredInterface
 	metrics             *metrics.Metrics
@@ -31,13 +32,15 @@ func NewRegisterer(inner Informer, cfg *config.Agent, m *metrics.Metrics) (*Regi
 	if err != nil {
 		return nil, err
 	}
-	return &Registerer{
+	r := &Registerer{
 		inner:               inner,
 		bufLen:              cfg.BuffersLength,
 		ifaces:              map[int]map[[6]uint8]string{},
 		preferredInterfaces: pref,
 		metrics:             m,
-	}, nil
+	}
+	m.CreateInterfaceBufferGauge("registerer", func() float64 { return float64(r.mapSize) })
+	return r, nil
 }
 
 func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
@@ -60,6 +63,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				} else {
 					r.ifaces[ev.Interface.Index] = map[[6]uint8]string{ev.Interface.MAC: ev.Interface.Name}
 				}
+				r.mapSize = len(r.ifaces)
 				r.m.Unlock()
 			case EventDeleted:
 				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
@@ -75,6 +79,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 						delete(r.ifaces, ev.Interface.Index)
 					}
 				}
+				r.mapSize = len(r.ifaces)
 				r.m.Unlock()
 			}
 			out <- ev
@@ -141,6 +146,7 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 		current[foundMAC] = iface.Name
 	} else {
 		r.ifaces[idx] = map[[6]uint8]string{foundMAC: iface.Name}
+		r.mapSize = len(r.ifaces)
 	}
 	return iface.Name, true
 }

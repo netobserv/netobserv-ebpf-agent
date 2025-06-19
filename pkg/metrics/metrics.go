@@ -110,9 +110,15 @@ var (
 		"source",
 		"reason",
 	)
-	bufferSize = defineMetric(
+	flowBufferSize = defineMetric(
 		"buffer_size",
-		"Buffer size",
+		"Flow buffer size",
+		TypeGauge,
+		"name",
+	)
+	ifaceBufferSize = defineMetric(
+		"iface_buffer_size",
+		"Interface buffer size",
 		TypeGauge,
 		"name",
 	)
@@ -176,6 +182,13 @@ func verifyMetricType(def *MetricDefinition, t metricType) {
 	}
 }
 
+func verifyMetricTypeAndLabels(def *MetricDefinition, t metricType, labelValues ...string) {
+	verifyMetricType(def, t)
+	if len(labelValues) != len(def.Labels) {
+		logrus.Panicf("operational metric %s has wrong labels configuration: %d labels, %d values", def.Name, len(def.Labels), len(labelValues))
+	}
+}
+
 type Metrics struct {
 	Settings *Settings
 
@@ -186,7 +199,7 @@ type Metrics struct {
 	DroppedFlowsCounter    *EvictionCounter
 	FilteredFlowsCounter   *EvictionCounter
 	NetworkEventsCounter   *EvictionCounter
-	BufferSizeGauge        *BufferSizeGauge
+	FlowBufferSizeGauge    *FlowBufferSizeGauge
 	Errors                 *ErrorCounter
 	FlowEnrichmentCounter  *FlowEnrichmentCounter
 	InterfaceEventsCounter *InterfaceEventsCounter
@@ -202,7 +215,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.DroppedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&droppedFlows)}
 	m.FilteredFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&filterFlows)}
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
-	m.BufferSizeGauge = &BufferSizeGauge{vec: m.NewGaugeVec(&bufferSize)}
+	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
@@ -269,6 +282,22 @@ func (m *Metrics) NewGaugeVec(def *MetricDefinition) *prometheus.GaugeVec {
 	}, def.Labels)
 	m.register(g, fullName)
 	return g
+}
+
+func (m *Metrics) NewGaugeFunc(def *MetricDefinition, function func() float64, labelValues ...string) {
+	verifyMetricTypeAndLabels(def, TypeGauge, labelValues...)
+	fullName := m.Settings.Prefix + def.Name
+
+	labels := prometheus.Labels{}
+	for i, key := range def.Labels {
+		labels[key] = labelValues[i]
+	}
+	g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name:        fullName,
+		Help:        def.Help,
+		ConstLabels: labels,
+	}, function)
+	m.register(g, fullName)
 }
 
 func (m *Metrics) NewHistogram(def *MetricDefinition, buckets []float64, labels ...string) prometheus.Histogram {
@@ -342,12 +371,12 @@ func (m *Metrics) CreateTimeSpendInLookupAndDelete() prometheus.Histogram {
 	return m.NewHistogram(&lookupAndDeleteMapDurationSeconds, []float64{.001, .01, .1, 1, 10, 100, 1000, 10000})
 }
 
-// BufferSizeGauge provides syntactic sugar hidding prom's gauge tailored for buffer size
-type BufferSizeGauge struct {
+// FlowBufferSizeGauge provides syntactic sugar hidding prom's gauge tailored for flows buffer size, backed by GaugeVec
+type FlowBufferSizeGauge struct {
 	vec *prometheus.GaugeVec
 }
 
-func (g *BufferSizeGauge) WithBufferName(bufferName string) prometheus.Gauge {
+func (g *FlowBufferSizeGauge) WithBufferName(bufferName string) prometheus.Gauge {
 	return g.vec.WithLabelValues(bufferName)
 }
 
@@ -357,6 +386,10 @@ func (m *Metrics) CreateBatchCounter(exporter string) prometheus.Counter {
 
 func (m *Metrics) CreateSamplingRate() prometheus.Gauge {
 	return m.NewGauge(&samplingRate)
+}
+
+func (m *Metrics) CreateInterfaceBufferGauge(name string, f func() float64) {
+	m.NewGaugeFunc(&ifaceBufferSize, f, name)
 }
 
 type ErrorCounter struct {

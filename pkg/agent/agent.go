@@ -199,7 +199,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		FilterConfig:                   filterRules,
 	}
 
-	fetcher, err := tracer.NewFlowFetcher(ebpfConfig)
+	fetcher, err := tracer.NewFlowFetcher(ebpfConfig, m)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func flowsAgent(
 	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.EnableUDNMapping)
 	limiter := flow.NewCapacityLimiter(m)
 
-	informer := createInformer(cfg)
+	informer := createInformer(cfg, m)
 
 	return &Flows{
 		ebpf:        fetcher,
