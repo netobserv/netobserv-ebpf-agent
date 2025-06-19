@@ -31,6 +31,7 @@ type PromConnectionInfo struct {
 type Level string
 
 const (
+	LevelTrace Level = "trace!" // exclamation mark mean "warning" (avoid using for too long, unbounded cardinality)
 	LevelDebug Level = "debug"
 	LevelInfo  Level = "info"
 )
@@ -346,7 +347,8 @@ type InterfaceEventsCounter struct {
 }
 
 func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {
-	if lvl == LevelDebug {
+	switch lvl {
+	case LevelTrace:
 		return &InterfaceEventsCounter{
 			Increase: func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int) {
 				mMac := model.MacAddr(mac)
@@ -359,11 +361,21 @@ func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *Interface
 				}()
 			},
 		}
-	}
-	return &InterfaceEventsCounter{
-		Increase: func(typez, _ string, _ int, _ string, _ [6]uint8, _ int) {
-			vec.WithLabelValues(typez, "", "", "", "", "").Inc()
-		},
+	case LevelDebug:
+		return &InterfaceEventsCounter{
+			Increase: func(typez, _ string, _ int, _ string, _ [6]uint8, retries int) {
+				vec.WithLabelValues(typez, "", "", "", "", strconv.Itoa(retries)).Inc()
+			},
+		}
+	case LevelInfo:
+		return &InterfaceEventsCounter{
+			Increase: func(typez, _ string, _ int, _ string, _ [6]uint8, _ int) {
+				vec.WithLabelValues(typez, "", "", "", "", "").Inc()
+			},
+		}
+	default:
+		logrus.Panicf("invalid metrics level: %s", lvl)
+		return nil
 	}
 }
 

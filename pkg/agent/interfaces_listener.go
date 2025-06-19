@@ -29,12 +29,13 @@ type interfaceListener struct {
 	cfg      *config.Agent
 	metrics  *metrics.Metrics
 	filter   ifaces.Filter
-	requeue  chan requeuedEvent
+	requeue  chan retriableEvent
 }
 
-type requeuedEvent struct {
+type retriableEvent struct {
 	ifaces.Event
-	attempt int
+	attempt   int
+	lastError error
 }
 
 func createInformer(cfg *config.Agent, m *metrics.Metrics) ifaces.Informer {
@@ -88,7 +89,7 @@ func startInterfaceListener(ctx context.Context, attacher tcAttacher, cfg *confi
 		cfg:      cfg,
 		metrics:  m,
 		filter:   filter,
-		requeue:  make(chan requeuedEvent, cfg.BuffersLength),
+		requeue:  make(chan retriableEvent, cfg.BuffersLength),
 	}
 
 	go l.start(ctx, ifaceEvents)
@@ -97,7 +98,7 @@ func startInterfaceListener(ctx context.Context, attacher tcAttacher, cfg *confi
 }
 
 func (i *interfaceListener) start(ctx context.Context, ifaceEvents <-chan ifaces.Event) {
-	var attach, detach func(*ifaces.Interface, int)
+	var attach, detach func(*retriableEvent)
 	switch i.cfg.TCAttachMode {
 	case "tcx":
 		attach = i.attachTCX
@@ -115,14 +116,14 @@ func (i *interfaceListener) start(ctx context.Context, ifaceEvents <-chan ifaces
 			ilog.Debug("stopping interfaces' listener")
 			return
 		case event := <-ifaceEvents:
-			i.onEventReceived(event, 1, attach, detach)
+			i.onEventReceived(&retriableEvent{Event: event, attempt: 1}, attach, detach)
 		case event := <-i.requeue:
-			i.onEventReceived(event.Event, event.attempt, attach, detach)
+			i.onEventReceived(&event, attach, detach)
 		}
 	}
 }
 
-func (i *interfaceListener) onEventReceived(event ifaces.Event, attempt int, attach, detach func(*ifaces.Interface, int)) {
+func (i *interfaceListener) onEventReceived(event *retriableEvent, attach, detach func(*retriableEvent)) {
 	ilog.WithField("event", event).Debug("received event")
 	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
 	allowed, err := i.filter.Allowed(event.Interface.Name)
@@ -136,31 +137,36 @@ func (i *interfaceListener) onEventReceived(event ifaces.Event, attempt int, att
 	}
 	switch event.Type {
 	case ifaces.EventAdded:
-		attach(&event.Interface, attempt)
+		attach(event)
 	case ifaces.EventDeleted:
-		detach(&event.Interface, attempt)
+		detach(event)
 	default:
 		ilog.WithField("event", event).Warn("unknown event type")
 	}
 }
 
 // returns true when completed, false when requeued
-func (i *interfaceListener) runWithRetries(iface *ifaces.Interface, typ ifaces.EventType, attempt int, f func(*ifaces.Interface) error) (bool, error) {
-	if err := f(iface); err != nil {
+func (i *interfaceListener) runWithRetries(event *retriableEvent, f func(*ifaces.Interface) error) (bool, error) {
+	if err := f(&event.Interface); err != nil {
 		allowRequeue := true
 		var tracerErr *tracer.Error
 		if errors.As(err, &tracerErr) && tracerErr.DoNotRetry {
 			allowRequeue = false
 		}
-		if allowRequeue && attempt < i.cfg.TCAttachRetries {
+		if allowRequeue && event.attempt < i.cfg.TCAttachRetries {
 			// Requeue
 			go func() {
-				time.Sleep(300 * time.Duration(attempt) * time.Millisecond)
-				i.requeue <- requeuedEvent{Event: ifaces.Event{Type: typ, Interface: *iface}, attempt: attempt + 1}
+				time.Sleep(300 * time.Duration(event.attempt) * time.Millisecond)
+				event.attempt++
+				event.lastError = err
+				i.requeue <- *event
 			}()
 			return false, nil
 		}
 		return true, err
+	}
+	if event.lastError != nil {
+		ilog.WithError(event.lastError).Debugf("error eventually resolved")
 	}
 	return true, nil
 }
@@ -176,88 +182,88 @@ func (i *interfaceListener) increaseErrors(err error, isAttach bool) {
 	i.metrics.Errors.WithErrorName("InterfaceEvents", errName, metrics.LowSeverity).Inc()
 }
 
-func (i *interfaceListener) attachTC(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, attempt, i.attacher.Register); complete {
+func (i *interfaceListener) attachTC(event *retriableEvent) {
+	if complete, err := i.runWithRetries(event, i.attacher.Register); complete {
 		if err != nil {
 			i.increaseErrors(err, true)
-			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface detected, could not attach TC hook")
-			i.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface detected, could not attach TC hook")
+			i.metrics.InterfaceEventsCounter.Increase("attach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		} else {
-			ilog.WithField("interface", iface).WithField("retries", attempt).Debug("interface detected, TC hook attached")
-			i.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).Debug("interface detected, TC hook attached")
+			i.metrics.InterfaceEventsCounter.Increase("attach_tc", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		}
 	}
 }
 
-func (i *interfaceListener) attachTCX(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventAdded, attempt, runInNamespace("Attach", i.attacher.AttachTCX)); complete {
+func (i *interfaceListener) attachTCX(event *retriableEvent) {
+	if complete, err := i.runWithRetries(event, runInNamespace("Attach", i.attacher.AttachTCX)); complete {
 		if err != nil {
 			i.increaseErrors(err, true)
-			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface detected, could not attach TCX hook")
-			i.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface detected, could not attach TCX hook")
+			i.metrics.InterfaceEventsCounter.Increase("attach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		} else {
-			ilog.WithField("interface", iface).WithField("retries", attempt).Debug("interface detected, TCX hook attached")
-			i.metrics.InterfaceEventsCounter.Increase("attach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).Debug("interface detected, TCX hook attached")
+			i.metrics.InterfaceEventsCounter.Increase("attach_tcx", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		}
 	}
 }
 
-func (i *interfaceListener) attachAny(iface *ifaces.Interface, _ int) {
-	if err1 := runInNamespace("Attach", i.attacher.AttachTCX)(iface); err1 != nil {
+func (i *interfaceListener) attachAny(event *retriableEvent) {
+	if err1 := runInNamespace("Attach", i.attacher.AttachTCX)(&event.Interface); err1 != nil {
 		i.increaseErrors(err1, true)
-		if err2 := i.attacher.Register(iface); err2 != nil {
-			ilog.WithField("interface", iface).WithError(err2).Warn("interface detected, could not attach any hook")
-			i.metrics.InterfaceEventsCounter.Increase("attach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, 2)
+		if err2 := i.attacher.Register(&event.Interface); err2 != nil {
+			ilog.WithField("interface", event.Interface).WithError(err2).Warn("interface detected, could not attach any hook")
+			i.metrics.InterfaceEventsCounter.Increase("attach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 2)
 			return
 		}
-		ilog.WithField("interface", iface).WithError(err1).Debug("interface detected, could not attach TCX hook, falling back to legacy TC")
-		i.metrics.InterfaceEventsCounter.Increase("attach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC, 2)
+		ilog.WithField("interface", event.Interface).WithError(err1).Debug("interface detected, could not attach TCX hook, falling back to legacy TC")
+		i.metrics.InterfaceEventsCounter.Increase("attach_tc", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 2)
 		return
 	}
-	ilog.WithField("interface", iface).Debug("interface detected, TCX hook attached")
-	i.metrics.InterfaceEventsCounter.Increase("attach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC, 1)
+	ilog.WithField("interface", event.Interface).Debug("interface detected, TCX hook attached")
+	i.metrics.InterfaceEventsCounter.Increase("attach_tcx", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 1)
 }
 
-func (i *interfaceListener) detachTC(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, attempt, i.attacher.UnRegister); complete {
+func (i *interfaceListener) detachTC(event *retriableEvent) {
+	if complete, err := i.runWithRetries(event, i.attacher.UnRegister); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
-			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface deleted, could not detach TC hook")
-			i.metrics.InterfaceEventsCounter.Increase("detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface deleted, could not detach TC hook")
+			i.metrics.InterfaceEventsCounter.Increase("detach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		} else {
-			ilog.WithField("interface", iface).WithField("retries", attempt).Debug("interface deleted, TC hook detached")
-			i.metrics.InterfaceEventsCounter.Increase("detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).Debug("interface deleted, TC hook detached")
+			i.metrics.InterfaceEventsCounter.Increase("detach_tc", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		}
 	}
 }
 
-func (i *interfaceListener) detachTCX(iface *ifaces.Interface, attempt int) {
-	if complete, err := i.runWithRetries(iface, ifaces.EventDeleted, attempt, runInNamespace("Detach", i.attacher.DetachTCX)); complete {
+func (i *interfaceListener) detachTCX(event *retriableEvent) {
+	if complete, err := i.runWithRetries(event, runInNamespace("Detach", i.attacher.DetachTCX)); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
-			ilog.WithField("interface", iface).WithField("retries", attempt).WithError(err).Warn("interface deleted, could not detach TCX hook")
-			i.metrics.InterfaceEventsCounter.Increase("detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface deleted, could not detach TCX hook")
+			i.metrics.InterfaceEventsCounter.Increase("detach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		} else {
-			ilog.WithField("interface", iface).WithField("retries", attempt).Debug("interface deleted, TCX hook detached")
-			i.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC, attempt)
+			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).Debug("interface deleted, TCX hook detached")
+			i.metrics.InterfaceEventsCounter.Increase("detach_tcx", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, event.attempt)
 		}
 	}
 }
 
-func (i *interfaceListener) detachAny(iface *ifaces.Interface, _ int) {
-	if err1 := runInNamespace("Detach", i.attacher.DetachTCX)(iface); err1 != nil {
+func (i *interfaceListener) detachAny(event *retriableEvent) {
+	if err1 := runInNamespace("Detach", i.attacher.DetachTCX)(&event.Interface); err1 != nil {
 		i.increaseErrors(err1, false)
-		if err2 := i.attacher.UnRegister(iface); err2 != nil {
-			ilog.WithField("interface", iface).WithError(err2).Warn("interface deleted, could not detach any hook")
-			i.metrics.InterfaceEventsCounter.Increase("detach_fail", iface.Name, iface.Index, iface.NSName, iface.MAC, 2)
+		if err2 := i.attacher.UnRegister(&event.Interface); err2 != nil {
+			ilog.WithField("interface", event.Interface).WithError(err2).Warn("interface deleted, could not detach any hook")
+			i.metrics.InterfaceEventsCounter.Increase("detach_fail", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 2)
 			return
 		}
-		ilog.WithField("interface", iface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
-		i.metrics.InterfaceEventsCounter.Increase("detach_tc", iface.Name, iface.Index, iface.NSName, iface.MAC, 2)
+		ilog.WithField("interface", event.Interface).WithError(err1).Debug("interface deleted, could not detach TCX hook, falling back to legacy TC")
+		i.metrics.InterfaceEventsCounter.Increase("detach_tc", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 2)
 		return
 	}
-	ilog.WithField("interface", iface).Debug("interface deleted, TCX hook detached")
-	i.metrics.InterfaceEventsCounter.Increase("detach_tcx", iface.Name, iface.Index, iface.NSName, iface.MAC, 1)
+	ilog.WithField("interface", event.Interface).Debug("interface deleted, TCX hook detached")
+	i.metrics.InterfaceEventsCounter.Increase("detach_tcx", event.Interface.Name, event.Interface.Index, event.Interface.NSName, event.Interface.MAC, 1)
 }
 
 // WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
