@@ -24,6 +24,8 @@ type tcAttacher interface {
 	DetachTCX(iface *ifaces.Interface) error
 }
 
+// find a way to coordinate tracer and watcher_poller. when tracer fails to attach, watcher_poller should know that, so it sends again the events next time
+
 type interfaceListener struct {
 	attacher tcAttacher
 	cfg      *config.Agent

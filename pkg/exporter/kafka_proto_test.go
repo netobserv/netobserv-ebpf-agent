@@ -25,7 +25,7 @@ func ByteArrayFromNetIP(netIP net.IP) []uint8 {
 
 func TestProtoConversion(t *testing.T) {
 	wc := writerCapturer{}
-	m := metrics.NewMetrics(&metrics.Settings{})
+	m := metrics.NoOp()
 
 	kj := KafkaProto{Writer: &wc, Metrics: m}
 	input := make(chan []*model.Record, 11)

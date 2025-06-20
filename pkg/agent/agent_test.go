@@ -117,7 +117,7 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 			CacheActiveTimeout: 10 * time.Millisecond,
 			CacheMaxFlows:      100,
 		},
-		metrics.NewMetrics(&metrics.Settings{}),
+		metrics.NoOp(),
 		ebpfTracer, export.Export,
 		net.ParseIP(agentIP), nil)
 	require.NoError(t, err)

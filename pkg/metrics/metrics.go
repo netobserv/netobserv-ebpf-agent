@@ -224,7 +224,7 @@ func NewMetrics(settings *Settings) *Metrics {
 }
 
 func NoOp() *Metrics {
-	return NewMetrics(&Settings{})
+	return NewMetrics(&Settings{Level: LevelInfo})
 }
 
 // register will register against the default registry. May panic or not depending on settings
