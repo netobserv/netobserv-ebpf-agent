@@ -15,14 +15,14 @@ import (
 
 // TracerFake fakes the kernel-side eBPF map structures for testing
 type TracerFake struct {
-	interfaces map[ifaces.Interface]struct{}
+	interfaces map[ifaces.InterfaceKey]struct{}
 	mapLookups chan map[ebpf.BpfFlowId]model.BpfFlowContent
 	ringBuf    chan ringbuf.Record
 }
 
 func NewTracerFake() *TracerFake {
 	return &TracerFake{
-		interfaces: map[ifaces.Interface]struct{}{},
+		interfaces: map[ifaces.InterfaceKey]struct{}{},
 		mapLookups: make(chan map[ebpf.BpfFlowId]model.BpfFlowContent, 100),
 		ringBuf:    make(chan ringbuf.Record, 100),
 	}
@@ -31,21 +31,21 @@ func NewTracerFake() *TracerFake {
 func (m *TracerFake) Close() error {
 	return nil
 }
-func (m *TracerFake) Register(iface ifaces.Interface) error {
-	m.interfaces[iface] = struct{}{}
+func (m *TracerFake) Register(iface *ifaces.Interface) error {
+	m.interfaces[iface.InterfaceKey] = struct{}{}
 	return nil
 }
 
-func (m *TracerFake) UnRegister(iface ifaces.Interface) error {
-	m.interfaces[iface] = struct{}{}
+func (m *TracerFake) UnRegister(iface *ifaces.Interface) error {
+	m.interfaces[iface.InterfaceKey] = struct{}{}
 	return nil
 }
 
-func (m *TracerFake) AttachTCX(_ ifaces.Interface) error {
+func (m *TracerFake) AttachTCX(_ *ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) DetachTCX(_ ifaces.Interface) error {
+func (m *TracerFake) DetachTCX(_ *ifaces.Interface) error {
 	return nil
 }
 

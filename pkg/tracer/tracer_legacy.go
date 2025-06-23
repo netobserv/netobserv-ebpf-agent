@@ -27,8 +27,8 @@ func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.Bp
 		}
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
-	met.BufferSizeGauge.WithBufferName("hashmap-legacy-total").Set(float64(count))
-	met.BufferSizeGauge.WithBufferName("hashmap-legacy-unique").Set(float64(len(flows)))
+	met.FlowBufferSizeGauge.WithBufferName("hashmap-legacy-total").Set(float64(count))
+	met.FlowBufferSizeGauge.WithBufferName("hashmap-legacy-unique").Set(float64(len(flows)))
 
 	m.ReadGlobalCounter(met)
 	return flows
