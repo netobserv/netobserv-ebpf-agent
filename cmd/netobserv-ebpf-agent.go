@@ -53,7 +53,9 @@ func main() {
 		}()
 	}
 
-	logrus.WithField("configuration", fmt.Sprintf("%#v", config)).Debugf("configuration loaded")
+	cfglog := logrus.New()
+	cfglog.Formatter = &logrus.TextFormatter{DisableQuote: true}
+	cfglog.WithField("configuration", fmt.Sprintf("%#v", config)).Infof("configuration loaded")
 
 	if config.EnablePCA {
 		packetsAgent, err := agent.PacketsAgent(&config)

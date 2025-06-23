@@ -25,9 +25,8 @@ type Packets struct {
 	cfg *config.Agent
 
 	// input data providers
-	interfaces ifaces.Informer
-	filter     ifaces.Filter
-	ebpf       ebpfPacketFetcher
+	informer ifaces.Informer
+	ebpf     ebpfPacketFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	perfTracer   *flow.PerfTracer
@@ -35,18 +34,14 @@ type Packets struct {
 	exporter     node.TerminalFunc[[]*model.PacketRecord]
 
 	// elements used to decorate flows with extra information
-	interfaceNamer model.InterfaceNamer
-	agentIP        net.IP
+	agentIP net.IP
 
 	status Status
 }
 
 type ebpfPacketFetcher interface {
 	io.Closer
-	Register(iface ifaces.Interface) error
-	UnRegister(iface ifaces.Interface) error
-	AttachTCX(iface ifaces.Interface) error
-	DetachTCX(iface ifaces.Interface) error
+	tcAttacher
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (perf.Record, error)
 }
@@ -57,9 +52,6 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 
 	// manage deprecated configs
 	config.ManageDeprecatedConfigs(cfg)
-
-	// configure informer for new interfaces
-	informer := configureInformer(cfg, plog)
 
 	plog.Info("[PCA]acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
@@ -116,49 +108,28 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		return nil, err
 	}
 
-	return packetsAgent(cfg, informer, fetcher, packetexportFunc, agentIP)
+	return packetsAgent(cfg, fetcher, packetexportFunc, agentIP)
 }
 
 // packetssAgent is a private constructor with injectable dependencies, usable for tests
 func packetsAgent(
 	cfg *config.Agent,
-	informer ifaces.Informer,
 	fetcher ebpfPacketFetcher,
 	packetexporter node.TerminalFunc[[]*model.PacketRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
-
-	filter, err := ifaces.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	registerer, err := ifaces.NewRegisterer(informer, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
-		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
-		if !ok {
-			return "unknown"
-		}
-		return iface
-	}
-
 	perfTracer := flow.NewPerfTracer(fetcher, cfg.CacheActiveTimeout)
-
 	packetbuffer := flow.NewPerfBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
+	informer := createInformer(cfg, metrics.NoOp())
 
 	return &Packets{
-		ebpf:           fetcher,
-		interfaces:     registerer,
-		filter:         filter,
-		cfg:            cfg,
-		packetbuffer:   packetbuffer,
-		perfTracer:     perfTracer,
-		agentIP:        agentIP,
-		interfaceNamer: interfaceNamer,
-		exporter:       packetexporter,
+		ebpf:         fetcher,
+		cfg:          cfg,
+		packetbuffer: packetbuffer,
+		perfTracer:   perfTracer,
+		informer:     informer,
+		agentIP:      agentIP,
+		exporter:     packetexporter,
 	}, nil
 }
 
@@ -227,25 +198,10 @@ func (p *Packets) Status() Status {
 	return p.status
 }
 
-func (p *Packets) interfacesManager(ctx context.Context) error {
-	slog := plog.WithField("function", "interfacesManager")
-
-	slog.Debug("subscribing for network interface events")
-	ifaceEvents, err := p.interfaces.Subscribe(ctx)
-	if err != nil {
-		return fmt.Errorf("instantiating interfaces' informer: %w", err)
-	}
-
-	go interfaceListener(ctx, ifaceEvents, slog, p.onInterfaceAdded)
-
-	return nil
-}
-
 func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
-
 	if !p.cfg.EbpfProgramManagerMode {
 		plog.Debug("registering interfaces' listener in background")
-		err := p.interfacesManager(ctx)
+		err := startInterfaceListener(ctx, p.ebpf, p.cfg, metrics.NoOp(), p.informer)
 		if err != nil {
 			return nil, err
 		}
@@ -259,54 +215,14 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 		ebl = p.cfg.BuffersLength
 	}
 
-	packetbuffer := node.AsMiddle(p.packetbuffer.PBuffer,
-		node.ChannelBufferLen(p.cfg.BuffersLength))
+	packetbuffer := node.AsMiddle(p.packetbuffer.PBuffer, node.ChannelBufferLen(p.cfg.BuffersLength))
 
 	perfTracer.SendsTo(packetbuffer)
 
-	export := node.AsTerminal(p.exporter,
-		node.ChannelBufferLen(ebl))
+	export := node.AsTerminal(p.exporter, node.ChannelBufferLen(ebl))
 
 	packetbuffer.SendsTo(export)
 	perfTracer.Start()
 
 	return export, nil
-}
-
-func (p *Packets) onInterfaceAdded(iface ifaces.Interface, add bool) {
-	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	allowed, err := p.filter.Allowed(iface.Name)
-	if err != nil {
-		plog.WithField("[PCA]interface", iface).WithError(err).
-			Warn("couldn't determine if interface is allowed. Ignoring")
-	}
-	if !allowed {
-		plog.WithField("interface", iface).
-			Debug("[PCA]interface does not match the allow/exclusion filters. Ignoring")
-		return
-	}
-	if add {
-		plog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
-		if err := p.ebpf.AttachTCX(iface); err != nil {
-			plog.WithField("[PCA]interface", iface).WithError(err).
-				Info("can't attach to TCx hook packet ebpfFetcher. fall back to use legacy TC hook")
-			if err := p.ebpf.Register(iface); err != nil {
-				plog.WithField("[PCA]interface", iface).WithError(err).
-					Warn("can't register packet ebpfFetcher. Ignoring")
-				return
-			}
-		}
-	} else {
-		plog.WithField("interface", iface).Info("interface deleted. trying to detach TCX hook")
-		if err := p.ebpf.DetachTCX(iface); err != nil {
-			plog.WithField("[PCA]interface", iface).WithError(err).
-				Info("can't detach from TCx hook packet ebpfFetcher. check if there is any legacy TC hook")
-			if err := p.ebpf.UnRegister(iface); err != nil {
-				plog.WithField("[PCA]interface", iface).WithError(err).
-					Warn("can't unregister packet ebpfFetcher. Ignoring")
-				return
-			}
-		}
-
-	}
 }

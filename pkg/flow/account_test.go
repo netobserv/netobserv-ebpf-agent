@@ -51,7 +51,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NewMetrics(&metrics.Settings{}), nil, false)
+	}, metrics.NoOp(), nil, false)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -134,7 +134,7 @@ func TestEvict_Period(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NewMetrics(&metrics.Settings{}), nil, false)
+	}, metrics.NoOp(), nil, false)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
