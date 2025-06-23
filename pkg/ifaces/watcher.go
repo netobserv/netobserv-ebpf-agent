@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -27,7 +28,8 @@ var log = logrus.WithField("component", "ifaces.Watcher")
 // addition or removal.
 type Watcher struct {
 	bufLen     int
-	current    map[Interface]struct{}
+	current    map[InterfaceKey]Interface
+	mapSize    int
 	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
@@ -37,16 +39,19 @@ type Watcher struct {
 	nsDone           sync.Map
 }
 
-func NewWatcher(bufLen int) *Watcher {
-	return &Watcher{
+func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
+	current := map[InterfaceKey]Interface{}
+	w := &Watcher{
 		bufLen:           bufLen,
-		current:          map[Interface]struct{}{},
+		current:          current,
 		interfaces:       netInterfaces,
 		linkSubscriberAt: netlink.LinkSubscribeAt,
 		mutex:            &sync.Mutex{},
 		netnsWatcher:     &fsnotify.Watcher{},
 		nsDone:           sync.Map{},
 	}
+	m.CreateInterfaceBufferGauge("watcher", func() float64 { return float64(w.mapSize) })
+	return w
 }
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
@@ -87,6 +92,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			netnsHandle = netns.None()
 		} else {
 			if netnsHandle, err = netns.GetFromName(ns); err != nil {
+				log.WithError(err).Warnf("can't get netns %s", ns)
 				return false, nil
 			}
 		}
@@ -119,9 +125,10 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
 			for _, name := range names {
-				iface := Interface{Name: name.Name, Index: name.Index, MAC: name.MAC, NetNS: netnsHandle, NSName: ns}
+				iface := NewInterface(name.Index, name.Name, name.MAC, netnsHandle, ns)
 				w.mutex.Lock()
-				w.current[iface] = struct{}{}
+				w.current[iface.InterfaceKey] = iface
+				w.mapSize = len(w.current)
 				w.mutex.Unlock()
 				out <- Event{Type: EventAdded, Interface: iface}
 			}
@@ -139,7 +146,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debugf("ignoring link update with invalid MAC: %s", err.Error())
 			continue
 		}
-		iface := Interface{Name: attrs.Name, Index: attrs.Index, MAC: mac, NetNS: netnsHandle, NSName: ns}
+		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns)
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{
@@ -148,8 +155,8 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"name":      attrs.Name,
 				"netns":     netnsHandle.String(),
 			}).Debug("Interface up and running")
-			if _, ok := w.current[iface]; !ok {
-				w.current[iface] = struct{}{}
+			if _, ok := w.current[iface.InterfaceKey]; !ok {
+				w.current[iface.InterfaceKey] = iface
 				out <- Event{Type: EventAdded, Interface: iface}
 			}
 		} else {
@@ -159,11 +166,12 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"name":      attrs.Name,
 				"netns":     netnsHandle.String(),
 			}).Debug("Interface down or not running")
-			if _, ok := w.current[iface]; ok {
-				delete(w.current, iface)
-				out <- Event{Type: EventDeleted, Interface: iface}
+			if storedIface, ok := w.current[iface.InterfaceKey]; ok {
+				delete(w.current, iface.InterfaceKey)
+				out <- Event{Type: EventDeleted, Interface: storedIface}
 			}
 		}
+		w.mapSize = len(w.current)
 		w.mutex.Unlock()
 	}
 }
@@ -183,9 +191,7 @@ func getNetNS() ([]string, error) {
 	for _, f := range files {
 		ns := f.Name()
 		netns = append(netns, ns)
-		log.WithFields(logrus.Fields{
-			"netns": ns,
-		}).Debug("Detected network-namespace")
+		log.WithFields(logrus.Fields{"netns": ns}).Debug("Detected network-namespace")
 	}
 
 	return netns, nil
