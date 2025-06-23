@@ -95,7 +95,7 @@ func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Reco
 				c.entries[record.Id] = &record.Metrics
 			}
 		}
-		c.metrics.BufferSizeGauge.WithBufferName("accounter-entries").Set(float64(len(c.entries)))
+		c.metrics.FlowBufferSizeGauge.WithBufferName("accounter-entries").Set(float64(len(c.entries)))
 	}
 }
 

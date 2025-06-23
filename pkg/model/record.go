@@ -46,8 +46,11 @@ var (
 	interfaceNamer InterfaceNamer = func(ifIndex int, _ MacAddr) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
 )
 
-func SetGlobals(ip net.IP, ifaceNamer InterfaceNamer) {
+func SetGlobalIP(ip net.IP) {
 	agentIP = ip
+}
+
+func SetInterfaceNamer(ifaceNamer InterfaceNamer) {
 	interfaceNamer = ifaceNamer
 }
 

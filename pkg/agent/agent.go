@@ -67,53 +67,13 @@ func (s Status) String() string {
 	}
 }
 
-func configureInformer(cfg *config.Agent, log *logrus.Entry) ifaces.Informer {
-	var informer ifaces.Informer
-	switch cfg.ListenInterfaces {
-	case config.ListenPoll:
-		log.WithField("period", cfg.ListenPollPeriod).
-			Debug("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
-	case config.ListenWatch:
-		log.Debug("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	default:
-		log.WithField("providedValue", cfg.ListenInterfaces).
-			Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength)
-	}
-	return informer
-
-}
-
-func interfaceListener(ctx context.Context, ifaceEvents <-chan ifaces.Event, slog *logrus.Entry, processEvent func(iface ifaces.Interface, add bool)) {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Debug("stopping interfaces' listener")
-			return
-		case event := <-ifaceEvents:
-			slog.WithField("event", event).Debug("received event")
-			switch event.Type {
-			case ifaces.EventAdded:
-				processEvent(event.Interface, true)
-			case ifaces.EventDeleted:
-				processEvent(event.Interface, false)
-			default:
-				slog.WithField("event", event).Warn("unknown event type")
-			}
-		}
-	}
-}
-
 // Flows reporting agent
 type Flows struct {
 	cfg *config.Agent
 
 	// input data providers
-	interfaces ifaces.Informer
-	filter     ifaces.Filter
-	ebpf       ebpfFlowFetcher
+	informer ifaces.Informer
+	ebpf     ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
@@ -125,15 +85,14 @@ type Flows struct {
 	status        Status
 	promoServer   *http.Server
 	sampleDecoder *ovnobserv.SampleDecoder
+
+	metrics *metrics.Metrics
 }
 
 // ebpfFlowFetcher abstracts the interface of ebpf.FlowFetcher to allow dependency injection in tests
 type ebpfFlowFetcher interface {
 	io.Closer
-	Register(iface ifaces.Interface) error
-	UnRegister(iface ifaces.Interface) error
-	AttachTCX(iface ifaces.Interface) error
-	DetachTCX(iface ifaces.Interface) error
+	tcAttacher
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
@@ -146,9 +105,6 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 
 	// manage deprecated configs
 	config.ManageDeprecatedConfigs(cfg)
-
-	// configure informer for new interfaces
-	informer := configureInformer(cfg, alog)
 
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := fetchAgentIP(cfg)
@@ -164,6 +120,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 			Port:    cfg.MetricsPort,
 		},
 		Prefix: cfg.MetricsPrefix,
+		Level:  metrics.Level(cfg.MetricsLevel),
 	}
 	if cfg.MetricsTLSCertPath != "" && cfg.MetricsTLSKeyPath != "" {
 		metricsSettings.PromConnectionInfo.TLS = &metrics.PromTLS{
@@ -242,42 +199,24 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		FilterConfig:                   filterRules,
 	}
 
-	fetcher, err := tracer.NewFlowFetcher(ebpfConfig)
+	fetcher, err := tracer.NewFlowFetcher(ebpfConfig, m)
 	if err != nil {
 		return nil, err
 	}
 
-	return flowsAgent(cfg, m, informer, fetcher, exportFunc, agentIP, s)
+	return flowsAgent(cfg, m, fetcher, exportFunc, agentIP, s)
 }
 
 // flowsAgent is a private constructor with injectable dependencies, usable for tests
 func flowsAgent(
 	cfg *config.Agent,
 	m *metrics.Metrics,
-	informer ifaces.Informer,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
 	agentIP net.IP,
 	s *ovnobserv.SampleDecoder,
 ) (*Flows, error) {
-
-	filter, err := ifaces.FromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	registerer, err := ifaces.NewRegisterer(informer, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
-		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
-		if !ok {
-			return "unknown"
-		}
-		return iface
-	}
-	model.SetGlobals(agentIP, interfaceNamer)
+	model.SetGlobalIP(agentIP)
 
 	var promoServer *http.Server
 	if cfg.MetricsEnable {
@@ -292,17 +231,19 @@ func flowsAgent(
 	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.EnableUDNMapping)
 	limiter := flow.NewCapacityLimiter(m)
 
+	informer := createInformer(cfg, m)
+
 	return &Flows{
 		ebpf:        fetcher,
 		exporter:    exporter,
-		interfaces:  registerer,
-		filter:      filter,
 		cfg:         cfg,
 		mapTracer:   mapTracer,
 		rbTracer:    rbTracer,
 		accounter:   accounter,
 		limiter:     limiter,
+		informer:    informer,
 		promoServer: promoServer,
+		metrics:     m,
 	}, nil
 }
 
@@ -459,35 +400,18 @@ func (f *Flows) Status() Status {
 	return f.status
 }
 
-// interfacesManager uses an informer to check new/deleted network interfaces. For each running
-// interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
-// TODO: consider move this method and "onInterfaceEvent" to another type
-func (f *Flows) interfacesManager(ctx context.Context) error {
-	slog := alog.WithField("function", "interfacesManager")
-
-	slog.Debug("subscribing for network interface events")
-	ifaceEvents, err := f.interfaces.Subscribe(ctx)
-	if err != nil {
-		return fmt.Errorf("instantiating interfaces' informer: %w", err)
-	}
-
-	go interfaceListener(ctx, ifaceEvents, slog, f.onInterfaceEvent)
-
-	return nil
-}
-
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
 func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.Record], error) {
 
 	if !f.cfg.EbpfProgramManagerMode {
-		alog.Debug("registering interfaces' listener in background")
-		err := f.interfacesManager(ctx)
+		alog.Debug("registering interfaces listener in background")
+		err := startInterfaceListener(ctx, f.ebpf, f.cfg, f.metrics, f.informer)
 		if err != nil {
 			return nil, err
 		}
 	}
-	alog.Debug("connecting flows' processing graph")
+	alog.Debug("connecting flows processing graph")
 	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.ForceGC))
 	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
 
@@ -515,42 +439,4 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 	mapTracer.Start()
 	rbTracer.Start()
 	return export, nil
-}
-
-func (f *Flows) onInterfaceEvent(iface ifaces.Interface, add bool) {
-	// ignore interfaces that do not match the user configuration acceptance/exclusion lists
-	allowed, err := f.filter.Allowed(iface.Name)
-	if err != nil {
-		alog.WithField("interface", iface).Errorf("encountered error determining if interface is allowed: %v", err)
-		return
-	}
-	if !allowed {
-		alog.WithField("interface", iface).
-			Debug("interface does not match the allow/exclusion filters. Ignoring")
-		return
-	}
-	if add {
-		alog.WithField("interface", iface).Info("interface detected. trying to attach TCX hook")
-		if err := f.ebpf.AttachTCX(iface); err != nil {
-			alog.WithField("interface", iface).WithError(err).
-				Info("can't attach to TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.Register(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't register flow ebpfFetcher. Ignoring")
-				return
-			}
-		}
-	} else {
-		alog.WithField("interface", iface).Info("interface deleted. trying to detach TCX hook")
-		if err := f.ebpf.DetachTCX(iface); err != nil {
-			alog.WithField("interface", iface).WithError(err).
-				Info("can't detach from TCx hook flow ebpfFetcher. fall back to use legacy TC hook")
-			if err := f.ebpf.UnRegister(iface); err != nil {
-				alog.WithField("interface", iface).WithError(err).
-					Warn("can't unregister flow ebpfFetcher. Ignoring")
-				return
-			}
-		}
-
-	}
 }

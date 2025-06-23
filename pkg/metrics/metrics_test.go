@@ -14,6 +14,7 @@ func TestMetricsCreation(t *testing.T) {
 			Port:    9090,
 		},
 		Prefix: "test_prefix_",
+		Level:  LevelInfo,
 	}
 
 	// Create Metrics instance

@@ -37,11 +37,27 @@ type Event struct {
 }
 
 type Interface struct {
-	Name   string
+	InterfaceKey
+	MAC   [6]uint8
+	NetNS netns.NsHandle
+}
+
+type InterfaceKey struct {
 	Index  int
-	MAC    [6]uint8
-	NetNS  netns.NsHandle
+	Name   string
 	NSName string
+}
+
+func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
+	return Interface{
+		InterfaceKey: InterfaceKey{
+			Index:  index,
+			Name:   name,
+			NSName: nsname,
+		},
+		MAC:   mac,
+		NetNS: netNS,
+	}
 }
 
 // Informer provides notifications about each network interface that is added or removed
@@ -64,14 +80,16 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 		return nil, fmt.Errorf("failed to list interfaces in netns (%s): %w", nsh.String(), err)
 	}
 
-	names := make([]Interface, len(links))
-	for i, link := range links {
-		mac, err := macToFixed6(link.Attrs().HardwareAddr)
-		if err != nil {
-			log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
-			continue
+	intfs := make([]Interface, 0, len(links))
+	for _, link := range links {
+		if link.Attrs().HardwareAddr != nil {
+			mac, err := macToFixed6(link.Attrs().HardwareAddr)
+			if err != nil {
+				log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
+				continue
+			}
+			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns))
 		}
-		names[i] = Interface{Name: link.Attrs().Name, Index: link.Attrs().Index, MAC: mac, NetNS: nsh, NSName: ns}
 	}
-	return names, nil
+	return intfs, nil
 }

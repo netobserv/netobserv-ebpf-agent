@@ -77,7 +77,7 @@ func capacityLimiterPipe() (chan<- []*model.Record, <-chan []*model.Record) {
 			initOut <- i
 		}
 	})
-	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NewMetrics(&metrics.Settings{}))).Limit)
+	limiter := node.AsMiddle((NewCapacityLimiter(metrics.NoOp())).Limit)
 	term := node.AsTerminal(func(termIn <-chan []*model.Record) {
 		// Let records accumulate in the channel, and release only when the flow stops growing
 		prev := -1
