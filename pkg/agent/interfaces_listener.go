@@ -240,7 +240,7 @@ func (i *interfaceListener) detachTC(event *retriableEvent) {
 }
 
 func (i *interfaceListener) detachTCX(event *retriableEvent) {
-	if complete, err := i.runWithRetries(event, runInNamespace("Detach", i.attacher.DetachTCX)); complete {
+	if complete, err := i.runWithRetries(event, i.attacher.DetachTCX); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
 			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface deleted, could not detach TCX hook")
@@ -253,7 +253,7 @@ func (i *interfaceListener) detachTCX(event *retriableEvent) {
 }
 
 func (i *interfaceListener) detachAny(event *retriableEvent) {
-	if err1 := runInNamespace("Detach", i.attacher.DetachTCX)(&event.Interface); err1 != nil {
+	if err1 := i.attacher.DetachTCX(&event.Interface); err1 != nil {
 		i.increaseErrors(err1, false)
 		if err2 := i.attacher.UnRegister(&event.Interface); err2 != nil {
 			ilog.WithField("interface", event.Interface).WithError(err2).Warn("interface deleted, could not detach any hook")
