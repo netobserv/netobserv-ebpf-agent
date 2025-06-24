@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"net"
 
 	"github.com/pion/dtls/v2"
@@ -34,17 +35,10 @@ func (cp *CollectingProcess) startUDPServer() {
 		return
 	}
 	if cp.isEncrypted { // use DTLS
-		cert, err := tls.X509KeyPair(cp.serverCert, cp.serverKey)
+		config, err := cp.createServerDTLSConfig()
 		if err != nil {
 			klog.Error(err)
 			return
-		}
-		certPool := x509.NewCertPool()
-		certPool.AppendCertsFromPEM(cp.serverCert)
-		config := &dtls.Config{
-			Certificates:         []tls.Certificate{cert},
-			ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
-			ClientCAs:            certPool,
 		}
 		listener, err = dtls.Listen("udp", address, config)
 		if err != nil {
@@ -177,4 +171,35 @@ func (cp *CollectingProcess) createUDPClient(addr string) *transportSession {
 		}
 	}()
 	return session
+}
+
+func (cp *CollectingProcess) createServerDTLSConfig() (*dtls.Config, error) {
+	if cp.tlsMinVersion != 0 && cp.tlsMinVersion != tls.VersionTLS12 {
+		return nil, fmt.Errorf("DTLS 1.2 is the only supported version")
+	}
+	cert, err := tls.X509KeyPair(cp.serverCert, cp.serverKey)
+	if err != nil {
+		return nil, err
+	}
+	// If tlsConfig.CipherSuites is nil, cipherSuites should also be nil!
+	var cipherSuites []dtls.CipherSuiteID
+	for _, cipherSuite := range cp.tlsCipherSuites {
+		cipherSuites = append(cipherSuites, dtls.CipherSuiteID(cipherSuite))
+	}
+	config := &dtls.Config{
+		Certificates:         []tls.Certificate{cert},
+		ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
+		CipherSuites:         cipherSuites,
+	}
+	if cp.caCert == nil {
+		return config, nil
+	}
+	clientCAs := x509.NewCertPool()
+	ok := clientCAs.AppendCertsFromPEM(cp.caCert)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse client CA certificate")
+	}
+	config.ClientAuth = dtls.RequireAndVerifyClientCert
+	config.ClientCAs = clientCAs
+	return config, nil
 }

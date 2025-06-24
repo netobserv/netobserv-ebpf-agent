@@ -75,7 +75,7 @@ var (
 
 func InitNewRegistry(customEnterpriseID uint32) error {
 	if globalRegistryByID == nil {
-		return fmt.Errorf("Please use LoadRegistry before registering custom registry")
+		return fmt.Errorf("use LoadRegistry before registering custom registry")
 	}
 	globalRegistryByID[customEnterpriseID] = make(map[uint16]*entities.InfoElement)
 	globalRegistryByName[customEnterpriseID] = make(map[string]*entities.InfoElement)
@@ -84,9 +84,9 @@ func InitNewRegistry(customEnterpriseID uint32) error {
 
 func PutInfoElement(ie entities.InfoElement, enterpriseID uint32) error {
 	if _, exist := globalRegistryByName[enterpriseID]; !exist {
-		return fmt.Errorf("Registry with EnterpriseID %d is not Initialized, Please use InitNewRegistry", ie.EnterpriseId)
+		return fmt.Errorf("registry with EnterpriseID %d is not Initialized, Please use InitNewRegistry", ie.EnterpriseId)
 	} else if _, exist = globalRegistryByName[enterpriseID][ie.Name]; exist {
-		return fmt.Errorf("Information element %s in registry with EnterpriseID %d has already been registered", ie.Name, ie.EnterpriseId)
+		return fmt.Errorf("information element %s in registry with EnterpriseID %d has already been registered", ie.Name, ie.EnterpriseId)
 	}
 	globalRegistryByID[ie.EnterpriseId][ie.ElementId] = &ie
 	globalRegistryByName[ie.EnterpriseId][ie.Name] = &ie
@@ -110,10 +110,10 @@ func LoadRegistry() {
 
 func GetInfoElementFromID(elementID uint16, enterpriseID uint32) (*entities.InfoElement, error) {
 	if _, exist := globalRegistryByID[enterpriseID]; !exist {
-		return nil, fmt.Errorf("Registry with EnterpriseID %d is not supported.", enterpriseID)
+		return nil, fmt.Errorf("registry with EnterpriseID %d is not supported", enterpriseID)
 	}
 	if element, exist := globalRegistryByID[enterpriseID][elementID]; !exist {
-		return element, fmt.Errorf("Information element with elementID %d in registry with enterpriseID %d cannot be found.", elementID, enterpriseID)
+		return element, fmt.Errorf("information element with elementID %d in registry with enterpriseID %d cannot be found", elementID, enterpriseID)
 	} else {
 		return element, nil
 	}
@@ -121,10 +121,10 @@ func GetInfoElementFromID(elementID uint16, enterpriseID uint32) (*entities.Info
 
 func GetInfoElement(name string, enterpriseID uint32) (*entities.InfoElement, error) {
 	if _, exist := globalRegistryByName[enterpriseID]; !exist {
-		return nil, fmt.Errorf("Registry with EnterpriseID %d is not supported.", enterpriseID)
+		return nil, fmt.Errorf("registry with EnterpriseID %d is not supported", enterpriseID)
 	}
 	if element, exist := globalRegistryByName[enterpriseID][name]; !exist {
-		return element, fmt.Errorf("Information element with name %s in registry with enterpriseID %d cannot be found.", name, enterpriseID)
+		return element, fmt.Errorf("information element with name %s in registry with enterpriseID %d cannot be found", name, enterpriseID)
 	} else {
 		return element, nil
 	}
@@ -132,9 +132,9 @@ func GetInfoElement(name string, enterpriseID uint32) (*entities.InfoElement, er
 
 func registerInfoElement(ie entities.InfoElement, enterpriseID uint32) error {
 	if _, exist := globalRegistryByName[enterpriseID]; !exist {
-		return fmt.Errorf("Registry with EnterpriseID %d is not supported.", ie.EnterpriseId)
+		return fmt.Errorf("registry with EnterpriseID %d is not supported", ie.EnterpriseId)
 	} else if _, exist = globalRegistryByName[enterpriseID][ie.Name]; exist {
-		return fmt.Errorf("Information element %s in registry with EnterpriseID %d has already been registered", ie.Name, ie.EnterpriseId)
+		return fmt.Errorf("information element %s in registry with EnterpriseID %d has already been registered", ie.Name, ie.EnterpriseId)
 	}
 	globalRegistryByID[ie.EnterpriseId][ie.ElementId] = &ie
 	globalRegistryByName[ie.EnterpriseId][ie.Name] = &ie

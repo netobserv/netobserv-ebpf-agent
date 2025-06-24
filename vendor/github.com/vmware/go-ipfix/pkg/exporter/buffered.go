@@ -107,13 +107,14 @@ func (e *BufferedIPFIXExporter) addDataRecord(record entities.Record) error {
 // returns.
 func (e *BufferedIPFIXExporter) AddRecord(record entities.Record) error {
 	recordType := record.GetRecordType()
-	if recordType == entities.Template {
+	switch recordType {
+	case entities.Template:
 		// We don't send templates for JSON records
 		if e.ep.sendJSONRecord {
 			return nil
 		}
 		return e.addTemplateRecord(record)
-	} else if recordType == entities.Data {
+	case entities.Data:
 		if e.ep.sendJSONRecord {
 			_, _, err := e.ep.createAndSendJSONRecords([]entities.Record{record}, &e.jsonBuffer)
 			return err
