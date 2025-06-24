@@ -271,25 +271,27 @@ func (i *interfaceListener) detachAny(event *retriableEvent) {
 // WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
 func runInNamespace(errPrefix string, f func(*ifaces.Interface) error) func(*ifaces.Interface) error {
 	return func(iface *ifaces.Interface) error {
-		if iface.NetNS != netns.None() {
-			originalNs, err := netns.Get()
-			if err != nil {
-				return tracer.NewError(errPrefix+":CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
+		if iface.NetNS == netns.None() {
+			return f(iface)
+		}
+
+		originalNs, err := netns.Get()
+		if err != nil {
+			return tracer.NewError(errPrefix+":CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
+		}
+		defer func() {
+			if err := netns.Set(originalNs); err != nil {
+				ilog.WithError(err).Error("failed to set netns back")
 			}
-			defer func() {
-				if err := netns.Set(originalNs); err != nil {
-					ilog.WithError(err).Error("failed to set netns back")
-				}
-				originalNs.Close()
-			}()
-			if err = netns.Set(iface.NetNS); err != nil {
-				handle, err2 := netns.GetFromName(iface.NSName)
-				if err2 != nil {
-					return tracer.NewError(errPrefix+":CantSetNetNS-A", fmt.Errorf("failed to setns to %s: %w; NetNS doesn't exist? (%w)", iface.NetNS, err, err2))
-				}
-				defer handle.Close()
-				return tracer.NewError(errPrefix+":CantSetNetNS-B", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
+			originalNs.Close()
+		}()
+		if err = netns.Set(iface.NetNS); err != nil {
+			handle, err2 := netns.GetFromName(iface.NSName)
+			if err2 != nil {
+				return tracer.NewError(errPrefix+":CantSetNetNS-A", fmt.Errorf("failed to setns to %s: %w; NetNS doesn't exist? (%w)", iface.NetNS, err, err2))
 			}
+			defer handle.Close()
+			return tracer.NewError(errPrefix+":CantSetNetNS-B", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
 		}
 		return f(iface)
 	}
