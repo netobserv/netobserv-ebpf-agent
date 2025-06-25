@@ -178,13 +178,13 @@ func (r *Registerer) ifaceCacheLookup(idx int, mac [6]uint8) (string, bool) {
 			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
 			if rlog.Logger.IsLevelEnabled(logrus.DebugLevel) {
 				sMac := model.MacAddr(mac)
-				rlog.Debugf("interface lookup found ifindex (%d) but not MAC (%s); using %s anyway", idx, sMac.String(), name)
+				rlog.Debugf("interface lookup found ifindex (%d) with MAC unmatched (%s)", idx, sMac.String())
 				candidates := []string{}
 				for m, name := range macsMap {
 					sMac = model.MacAddr(m)
 					candidates = append(candidates, fmt.Sprintf("%s (%s)", name, sMac.String()))
 				}
-				rlog.Debugf("candidates were: %s", strings.Join(candidates, ", "))
+				rlog.Debugf("picking first among candidates: %s", strings.Join(candidates, ", "))
 			}
 			for _, name := range macsMap {
 				return name, true
