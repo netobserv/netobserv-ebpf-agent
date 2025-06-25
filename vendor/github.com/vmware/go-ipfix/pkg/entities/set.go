@@ -147,15 +147,16 @@ func (s *set) AddRecord(elements []InfoElementWithValue, templateID uint16) erro
 
 func (s *set) AddRecordWithExtraElements(elements []InfoElementWithValue, numExtraElements int, templateID uint16) error {
 	var record Record
-	if s.setType == Data {
+	switch s.setType {
+	case Data:
 		record = NewDataRecord(templateID, len(elements), numExtraElements)
-	} else if s.setType == Template {
+	case Template:
 		record = NewTemplateRecord(templateID, len(elements))
 		err := record.PrepareRecord()
 		if err != nil {
 			return err
 		}
-	} else {
+	default:
 		return fmt.Errorf("set type is not supported")
 	}
 	for i := range elements {
@@ -171,15 +172,16 @@ func (s *set) AddRecordWithExtraElements(elements []InfoElementWithValue, numExt
 
 func (s *set) AddRecordV2(elements []InfoElementWithValue, templateID uint16) error {
 	var record Record
-	if s.setType == Data {
+	switch s.setType {
+	case Data:
 		record = NewDataRecordFromElements(templateID, elements)
-	} else if s.setType == Template {
+	case Template:
 		record = NewTemplateRecordFromElements(templateID, elements)
 		err := record.PrepareRecord()
 		if err != nil {
 			return err
 		}
-	} else {
+	default:
 		return fmt.Errorf("set type is not supported")
 	}
 	s.records = append(s.records, record)
@@ -210,9 +212,10 @@ func (s *set) GetNumberOfRecords() uint32 {
 }
 
 func (s *set) createHeader(setType ContentType, templateID uint16) {
-	if setType == Template {
+	switch setType {
+	case Template:
 		binary.BigEndian.PutUint16(s.headerBuffer[0:2], TemplateSetID)
-	} else if setType == Data {
+	case Data:
 		binary.BigEndian.PutUint16(s.headerBuffer[0:2], templateID)
 	}
 }

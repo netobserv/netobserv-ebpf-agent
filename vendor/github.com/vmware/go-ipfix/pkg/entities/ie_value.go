@@ -542,7 +542,7 @@ func (b *BooleanInfoElement) SetBooleanValue(val bool) {
 }
 
 func (b *BooleanInfoElement) IsValueEmpty() bool {
-	return b.value == false
+	return !b.value
 }
 
 func (b *BooleanInfoElement) ResetValue() {

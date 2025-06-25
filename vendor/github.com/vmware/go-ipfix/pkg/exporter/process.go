@@ -76,6 +76,15 @@ type ExporterTLSClientConfig struct {
 	CertData []byte
 	// KeyData holds PEM-encoded bytes.
 	KeyData []byte
+	// List of supported cipher suites.
+	// From https://pkg.go.dev/crypto/tls#pkg-constants
+	// The order of the list is ignored.Note that TLS 1.3 ciphersuites are not configurable.
+	// For DTLS, cipher suites are from https://pkg.go.dev/github.com/pion/dtls/v2@v2.2.12/internal/ciphersuite#ID.
+	CipherSuites []uint16
+	// Min TLS version.
+	// From https://pkg.go.dev/crypto/tls#pkg-constants
+	// Not configurable for DTLS, as only DTLS 1.2 is supported.
+	MinVersion uint16
 }
 
 type ExporterInput struct {
@@ -159,7 +168,8 @@ func InitExportingProcess(input ExporterInput) (*ExportingProcess, error) {
 	var err error
 	if input.TLSClientConfig != nil {
 		tlsConfig := input.TLSClientConfig
-		if input.CollectorProtocol == "tcp" { // use TLS
+		switch input.CollectorProtocol {
+		case "tcp": // use TLS
 			config, configErr := createClientConfig(tlsConfig)
 			if configErr != nil {
 				return nil, configErr
@@ -169,20 +179,29 @@ func InitExportingProcess(input ExporterInput) (*ExportingProcess, error) {
 				klog.Errorf("Cannot the create the tls connection to the Collector %s: %v", input.CollectorAddress, err)
 				return nil, err
 			}
-		} else if input.CollectorProtocol == "udp" { // use DTLS
+		case "udp": // use DTLS
 			// TODO: support client authentication
 			if len(tlsConfig.CertData) > 0 || len(tlsConfig.KeyData) > 0 {
-				klog.Error("Client-authentication is not supported yet for DTLS, cert and key data will be ignored")
+				return nil, fmt.Errorf("client-authentication is not supported yet for DTLS")
+			}
+			if tlsConfig.MinVersion != 0 && tlsConfig.MinVersion != tls.VersionTLS12 {
+				return nil, fmt.Errorf("DTLS 1.2 is the only supported version")
 			}
 			roots := x509.NewCertPool()
 			ok := roots.AppendCertsFromPEM(tlsConfig.CAData)
 			if !ok {
 				return nil, fmt.Errorf("failed to parse root certificate")
 			}
+			// If tlsConfig.CipherSuites is nil, cipherSuites should also be nil!
+			var cipherSuites []dtls.CipherSuiteID
+			for _, cipherSuite := range tlsConfig.CipherSuites {
+				cipherSuites = append(cipherSuites, dtls.CipherSuiteID(cipherSuite))
+			}
 			config := &dtls.Config{
 				RootCAs:              roots,
 				ExtendedMasterSecret: dtls.RequireExtendedMasterSecret,
 				ServerName:           tlsConfig.ServerName,
+				CipherSuites:         cipherSuites,
 			}
 			udpAddr, err := net.ResolveUDPAddr(input.CollectorProtocol, input.CollectorAddress)
 			if err != nil {
@@ -559,7 +578,6 @@ func (ep *ExportingProcess) updateTemplate(id uint16, elements []entities.InfoEl
 	for i, elem := range elements {
 		ep.templatesMap[id].elements[i] = elem.GetInfoElement()
 	}
-	return
 }
 
 //nolint:unused // Keeping this function for reference.
@@ -616,26 +634,35 @@ func (ep *ExportingProcess) dataRecSanityCheck(rec entities.Record) error {
 }
 
 func createClientConfig(config *ExporterTLSClientConfig) (*tls.Config, error) {
-	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM(config.CAData)
-	if !ok {
-		return nil, fmt.Errorf("failed to parse root certificate")
+	tlsMinVersion := config.MinVersion
+	// This should already be the default value for tls.Config, but we duplicate the earlier
+	// implementation, which was explicitly setting it to 1.2.
+	if tlsMinVersion == 0 {
+		tlsMinVersion = tls.VersionTLS12
 	}
-	if config.CertData == nil {
-		return &tls.Config{
-			RootCAs:    roots,
-			MinVersion: tls.VersionTLS12,
-			ServerName: config.ServerName,
-		}, nil
-	}
-	cert, err := tls.X509KeyPair(config.CertData, config.KeyData)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      roots,
-		MinVersion:   tls.VersionTLS12,
+	// #nosec G402: client is in charge of setting the min TLS version. We use 1.2 as the
+	// default, which is secure.
+	tlsConfig := &tls.Config{
 		ServerName:   config.ServerName,
-	}, nil
+		CipherSuites: config.CipherSuites,
+		MinVersion:   tlsMinVersion,
+	}
+	// Use system roots if config.CAData == nil.
+	if config.CAData != nil {
+		roots := x509.NewCertPool()
+		ok := roots.AppendCertsFromPEM(config.CAData)
+		if !ok {
+			return nil, fmt.Errorf("failed to parse root certificate")
+		}
+		tlsConfig.RootCAs = roots
+	}
+	// Don't use a client certificate if config.CertData == nil.
+	if config.CertData != nil {
+		cert, err := tls.X509KeyPair(config.CertData, config.KeyData)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	return tlsConfig, nil
 }
