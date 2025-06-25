@@ -155,6 +155,15 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"netns":     netnsHandle.String(),
 			}).Debug("Interface up and running")
 			if _, ok := w.current[iface.InterfaceKey]; !ok {
+				log.Debugf(
+					"found new link: %s=>[Index=%d, MAC=%s, MasterIdx=%d, ParentIdx=%d, Namespace=%s]",
+					attrs.Name,
+					attrs.Index,
+					attrs.HardwareAddr.String(),
+					attrs.MasterIndex,
+					attrs.ParentIndex,
+					ns,
+				)
 				w.current[iface.InterfaceKey] = iface
 				out <- Event{Type: EventAdded, Interface: iface}
 			}
