@@ -83,10 +83,12 @@ type CollectingProcess struct {
 	// decoding.
 	decodingMode DecodingMode
 	// caCert, serverCert and serverKey are for storing encryption info when using TLS/DTLS
-	caCert     []byte
-	serverCert []byte
-	serverKey  []byte
-	wg         sync.WaitGroup
+	caCert          []byte
+	serverCert      []byte
+	serverKey       []byte
+	tlsCipherSuites []uint16
+	tlsMinVersion   uint16
+	wg              sync.WaitGroup
 	// stats for IPFIX objects received
 	numOfMessagesReceived        uint64
 	numOfTemplateSetsReceived    uint64
@@ -108,9 +110,18 @@ type CollectorInput struct {
 	MaxBufferSize uint16
 	TemplateTTL   uint32
 	// TODO: group following fields into struct to be reuse in exporter
-	CACert           []byte
-	ServerCert       []byte
-	ServerKey        []byte
+	CACert     []byte
+	ServerCert []byte
+	ServerKey  []byte
+	// List of supported cipher suites.
+	// From https://pkg.go.dev/crypto/tls#pkg-constants
+	// The order of the list is ignored.Note that TLS 1.3 ciphersuites are not configurable.
+	// For DTLS, cipher suites are from https://pkg.go.dev/github.com/pion/dtls/v2@v2.2.12/internal/ciphersuite#ID.
+	TLSCipherSuites []uint16
+	// Min TLS version.
+	// From https://pkg.go.dev/crypto/tls#pkg-constants
+	// Not configurable for DTLS, as only DTLS 1.2 is supported.
+	TLSMinVersion    uint16
 	NumExtraElements int
 	// DecodingMode specifies how unknown information elements (in templates) are handled when
 	// decoding. The default value is DecodingModeStrict for historical reasons. For most uses,
@@ -146,6 +157,8 @@ func initCollectingProcess(input CollectorInput, clock clock) (*CollectingProces
 		caCert:           input.CACert,
 		serverCert:       input.ServerCert,
 		serverKey:        input.ServerKey,
+		tlsCipherSuites:  input.TLSCipherSuites,
+		tlsMinVersion:    input.TLSMinVersion,
 		numExtraElements: input.NumExtraElements,
 		decodingMode:     decodingMode,
 		clock:            clock,
@@ -159,9 +172,10 @@ func InitCollectingProcess(input CollectorInput) (*CollectingProcess, error) {
 
 func (cp *CollectingProcess) Start() {
 	klog.Info("Starting the collecting process")
-	if cp.protocol == "tcp" {
+	switch cp.protocol {
+	case "tcp":
 		cp.startTCPServer()
-	} else if cp.protocol == "udp" {
+	case "udp":
 		cp.startUDPServer()
 	}
 }
@@ -260,8 +274,8 @@ func (cp *CollectingProcess) decodePacket(session *transportSession, packetBuffe
 	// handle IPv6 address which may involve []
 	portIndex := strings.LastIndex(exportAddress, ":")
 	exportAddress = exportAddress[:portIndex]
-	exportAddress = strings.Replace(exportAddress, "[", "", -1)
-	exportAddress = strings.Replace(exportAddress, "]", "", -1)
+	exportAddress = strings.ReplaceAll(exportAddress, "[", "")
+	exportAddress = strings.ReplaceAll(exportAddress, "]", "")
 	message.SetExportAddress(exportAddress)
 
 	// At the moment we assume exactly one set per IPFIX message.

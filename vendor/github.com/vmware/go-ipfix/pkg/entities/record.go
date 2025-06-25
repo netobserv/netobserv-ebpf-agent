@@ -91,7 +91,7 @@ func NewTemplateRecord(id uint16, numElements int) *templateRecord {
 		baseRecord{
 			fieldCount:         uint16(numElements),
 			templateID:         id,
-			orderedElementList: make([]InfoElementWithValue, numElements, numElements),
+			orderedElementList: make([]InfoElementWithValue, numElements),
 		},
 		0,
 		0,
