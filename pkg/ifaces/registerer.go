@@ -10,6 +10,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 
@@ -185,8 +186,17 @@ func (r *Registerer) ifaceCacheLookup(idx int, mac [6]uint8) (string, bool) {
 				}
 			}
 			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
+			if rlog.Logger.IsLevelEnabled(logrus.DebugLevel) {
+				sMac := model.MacAddr(mac)
+				rlog.Debugf("interface lookup found ifindex (%d) but not MAC (%s); using %s anyway", idx, sMac.String(), name)
+				candidates := []string{}
+				for m, name := range macsMap {
+					sMac = model.MacAddr(m)
+					candidates = append(candidates, fmt.Sprintf("%s (%s)", name, sMac.String()))
+				}
+				rlog.Debugf("candidates were: %s", strings.Join(candidates, ", "))
+			}
 			for _, name := range macsMap {
-				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
 				return name, true
 			}
 		}
