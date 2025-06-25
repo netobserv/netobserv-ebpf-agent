@@ -442,12 +442,12 @@ func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 	if m.enableEgress {
 		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				oneErr = NewErrorNoRetry("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
+				oneErr = NewErrorNoRetry("DetachEgress:CantCloseLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
 			} else {
 				ilog.WithField("interface", iface.Name).Debugf("successfully detach egressTCX hook link: %v", m.egressTCXLink[iface.InterfaceKey])
 			}
 		} else {
-			oneErr = NewErrorNoRetry("Detach:EgressNoTCX", fmt.Errorf("egress link does not have a TCX egress hook"))
+			oneErr = NewErrorNoRetry("DetachEgress:TCXNoLink", fmt.Errorf("egress link not found for interface %v", iface.Name))
 		}
 		delete(m.egressTCXLink, iface.InterfaceKey)
 	}
@@ -455,12 +455,12 @@ func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 	if m.enableIngress {
 		if l := m.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				oneErr = NewErrorNoRetry("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
+				oneErr = NewErrorNoRetry("DetachIngress:CantCloseLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
 			} else {
 				ilog.WithField("interface", iface.Name).Debugf("successfully detach ingressTCX hook link: %v", m.ingressTCXLink[iface.InterfaceKey])
 			}
 		} else {
-			oneErr = NewErrorNoRetry("Detach:IngressNoTCX", fmt.Errorf("ingress link does not have a TCX ingress hook"))
+			oneErr = NewErrorNoRetry("DetachIngress:TCXNoLink", fmt.Errorf("ingress link not found for interface %v", iface.Name))
 		}
 		delete(m.ingressTCXLink, iface.InterfaceKey)
 	}
@@ -1555,43 +1555,33 @@ func (p *PacketFetcher) Register(iface *ifaces.Interface) error {
 
 func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
-	if iface.NetNS != netns.None() {
-		originalNs, err := netns.Get()
-		if err != nil {
-			return NewError("Detach:CantGetNetNS", fmt.Errorf("PCA failed to get current netns: %w", err))
-		}
-		defer func() {
-			if err := netns.Set(originalNs); err != nil {
-				ilog.WithError(err).Error("PCA failed to set netns back")
-			}
-			originalNs.Close()
-		}()
-		if err := unix.Setns(int(iface.NetNS), unix.CLONE_NEWNET); err != nil {
-			return NewError("Detach:CantSetNetNS", fmt.Errorf("PCA failed to setns to %s: %w", iface.NetNS, err))
-		}
-	}
+	var oneErr error
 	if p.enableEgress {
 		if l := p.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return NewError("Detach:CantCloseEgressLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
+				oneErr = NewErrorNoRetry("DetachEgress:CantCloseLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
+			} else {
+				ilog.WithField("interface", iface.Name).Debug("successfully detach egressTCX hook")
 			}
-			ilog.WithField("interface", iface.Name).Debug("successfully detach egressTCX hook")
 		} else {
-			return NewError("Detach:EgressNoTCX", fmt.Errorf("egress link does not support TCX hook"))
+			oneErr = NewErrorNoRetry("DetachEgress:TCXNoLink", fmt.Errorf("egress link not found for interface %v", iface.Name))
 		}
+		delete(p.egressTCXLink, iface.InterfaceKey)
 	}
 
 	if p.enableIngress {
 		if l := p.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
-				return NewError("Detach:CantCloseIngressLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
+				oneErr = NewErrorNoRetry("DetachIngress:CantCloseLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
+			} else {
+				ilog.WithField("interface", iface.Name).Debug("successfully detach ingressTCX hook")
 			}
-			ilog.WithField("interface", iface.Name).Debug("successfully detach ingressTCX hook")
 		} else {
-			return NewError("Detach:IngressNoTCX", fmt.Errorf("ingress link does not support TCX hook"))
+			oneErr = NewErrorNoRetry("DetachIngress:TCXNoLink", fmt.Errorf("ingress link not found for interface %v", iface.Name))
 		}
+		delete(p.ingressTCXLink, iface.InterfaceKey)
 	}
-	return nil
+	return oneErr
 }
 
 func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {

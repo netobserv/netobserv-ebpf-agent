@@ -240,7 +240,7 @@ func (i *interfaceListener) detachTC(event *retriableEvent) {
 }
 
 func (i *interfaceListener) detachTCX(event *retriableEvent) {
-	if complete, err := i.runWithRetries(event, runInNamespace("Detach", i.attacher.DetachTCX)); complete {
+	if complete, err := i.runWithRetries(event, i.attacher.DetachTCX); complete {
 		if err != nil {
 			i.increaseErrors(err, false)
 			ilog.WithField("interface", event.Interface).WithField("retries", event.attempt).WithError(err).Warn("interface deleted, could not detach TCX hook")
@@ -253,7 +253,7 @@ func (i *interfaceListener) detachTCX(event *retriableEvent) {
 }
 
 func (i *interfaceListener) detachAny(event *retriableEvent) {
-	if err1 := runInNamespace("Detach", i.attacher.DetachTCX)(&event.Interface); err1 != nil {
+	if err1 := i.attacher.DetachTCX(&event.Interface); err1 != nil {
 		i.increaseErrors(err1, false)
 		if err2 := i.attacher.UnRegister(&event.Interface); err2 != nil {
 			ilog.WithField("interface", event.Interface).WithError(err2).Warn("interface deleted, could not detach any hook")
@@ -269,29 +269,30 @@ func (i *interfaceListener) detachAny(event *retriableEvent) {
 }
 
 // WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
-func runInNamespace(errPrefix string, inner func(*ifaces.Interface) error) func(*ifaces.Interface) error {
+func runInNamespace(errPrefix string, f func(*ifaces.Interface) error) func(*ifaces.Interface) error {
 	return func(iface *ifaces.Interface) error {
-		if iface.NetNS != netns.None() {
-			originalNs, err := netns.Get()
-			if err != nil {
-				return tracer.NewError(errPrefix+":CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
-			}
-			defer func() {
-				if err := netns.Set(originalNs); err != nil {
-					ilog.WithError(err).Error("failed to set netns back")
-				}
-				originalNs.Close()
-			}()
-			if err = netns.Set(iface.NetNS); err != nil {
-				handle, err2 := netns.GetFromName(iface.NSName)
-				if err2 != nil {
-					return tracer.NewError(errPrefix+":CantSetNetNS-A", fmt.Errorf("failed to setns to %s: %w; NetNS doesn't exist? (%w)", iface.NetNS, err, err2))
-				} else if handle != iface.NetNS {
-					return tracer.NewError(errPrefix+":CantSetNetNS-B", fmt.Errorf("failed to setns to %s: %w; handle differs (%d != %d)", iface.NetNS, err, handle, iface.NetNS))
-				}
-				return tracer.NewError(errPrefix+":CantSetNetNS-C", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
-			}
+		if iface.NetNS == netns.None() {
+			return f(iface)
 		}
-		return inner(iface)
+
+		originalNs, err := netns.Get()
+		if err != nil {
+			return tracer.NewError(errPrefix+":CantGetNetNS", fmt.Errorf("failed to get current netns: %w", err))
+		}
+		defer func() {
+			if err := netns.Set(originalNs); err != nil {
+				ilog.WithError(err).Error("failed to set netns back")
+			}
+			originalNs.Close()
+		}()
+		if err = netns.Set(iface.NetNS); err != nil {
+			handle, err2 := netns.GetFromName(iface.NSName)
+			if err2 != nil {
+				return tracer.NewError(errPrefix+":CantSetNetNS-A", fmt.Errorf("failed to setns to %s: %w; NetNS doesn't exist? (%w)", iface.NetNS, err, err2))
+			}
+			defer handle.Close()
+			return tracer.NewError(errPrefix+":CantSetNetNS-B", fmt.Errorf("failed to setns to %s: %w", iface.NetNS, err))
+		}
+		return f(iface)
 	}
 }
