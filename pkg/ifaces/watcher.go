@@ -145,7 +145,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debugf("ignoring link update with invalid MAC: %s", err.Error())
 			continue
 		}
-		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns, attrs.ParentIndex)
+		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns)
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{

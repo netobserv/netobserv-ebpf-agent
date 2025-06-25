@@ -346,21 +346,17 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 	}
 
 	qdiscs := map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
-	egressTCFilters := map[ifaces.InterfaceKey]*netlink.BpfFilter{}
-	ingressTCFilters := map[ifaces.InterfaceKey]*netlink.BpfFilter{}
 	egressTCXLink := map[ifaces.InterfaceKey]link.Link{}
 	ingressTCXLink := map[ifaces.InterfaceKey]link.Link{}
 	m.CreateInterfaceBufferGauge("qdiscs", func() float64 { return float64(len(qdiscs)) })
-	m.CreateInterfaceBufferGauge("egress-tc-filters", func() float64 { return float64(len(egressTCFilters)) })
-	m.CreateInterfaceBufferGauge("ingress-tc-filters", func() float64 { return float64(len(ingressTCFilters)) })
 	m.CreateInterfaceBufferGauge("egress-tcx-links", func() float64 { return float64(len(egressTCXLink)) })
 	m.CreateInterfaceBufferGauge("ingress-tcx-links", func() float64 { return float64(len(ingressTCXLink)) })
 
 	return &FlowFetcher{
 		objects:                     &objects,
 		ringbufReader:               flows,
-		egressFilters:               egressTCFilters,
-		ingressFilters:              ingressTCFilters,
+		egressFilters:               map[ifaces.InterfaceKey]*netlink.BpfFilter{},
+		ingressFilters:              map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		qdiscs:                      qdiscs,
 		cacheMaxSize:                cfg.CacheMaxSize,
 		enableIngress:               cfg.EnableIngress,
