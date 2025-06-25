@@ -23,7 +23,7 @@ var (
 )
 
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
-	return NewInterface(index, name, mac, netns.None(), "")
+	return NewInterface(index, name, mac, netns.None(), "", 0)
 }
 
 func TestPoller(t *testing.T) {
