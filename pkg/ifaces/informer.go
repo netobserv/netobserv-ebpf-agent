@@ -38,8 +38,9 @@ type Event struct {
 
 type Interface struct {
 	InterfaceKey
-	MAC   [6]uint8
-	NetNS netns.NsHandle
+	MAC         [6]uint8
+	NetNS       netns.NsHandle
+	ParentIndex int
 }
 
 type InterfaceKey struct {
@@ -48,15 +49,16 @@ type InterfaceKey struct {
 	NSName string
 }
 
-func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
+func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string, parentIndex int) Interface {
 	return Interface{
 		InterfaceKey: InterfaceKey{
 			Index:  index,
 			Name:   name,
 			NSName: nsname,
 		},
-		MAC:   mac,
-		NetNS: netNS,
+		MAC:         mac,
+		NetNS:       netNS,
+		ParentIndex: parentIndex,
 	}
 }
 
@@ -82,13 +84,24 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 
 	intfs := make([]Interface, 0, len(links))
 	for _, link := range links {
+		log.Debugf(
+			"found link: %s=>[Index=%d, MAC=%s, MasterIdx=%d, ParentIdx=%d, Namespace=%s, Alias=%s, Type=%s]",
+			link.Attrs().Name,
+			link.Attrs().Index,
+			link.Attrs().HardwareAddr.String(),
+			link.Attrs().MasterIndex,
+			link.Attrs().ParentIndex,
+			link.Attrs().Namespace,
+			link.Type(),
+			link.Attrs().Alias,
+		)
 		if link.Attrs().HardwareAddr != nil {
 			mac, err := macToFixed6(link.Attrs().HardwareAddr)
 			if err != nil {
 				log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
 				continue
 			}
-			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns))
+			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns, link.Attrs().ParentIndex))
 		}
 	}
 	return intfs, nil

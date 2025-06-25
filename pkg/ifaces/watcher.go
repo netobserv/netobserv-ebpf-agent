@@ -121,11 +121,10 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	// before sending netlink updates, send all the existing interfaces at the moment of starting
 	// the Watcher
 	if netnsHandle.IsOpen() || netnsHandle.Equal(netns.None()) {
-		if names, err := w.interfaces(netnsHandle, ns); err != nil {
+		if ifaces, err := w.interfaces(netnsHandle, ns); err != nil {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
-			for _, name := range names {
-				iface := NewInterface(name.Index, name.Name, name.MAC, netnsHandle, ns)
+			for _, iface := range ifaces {
 				w.mutex.Lock()
 				w.current[iface.InterfaceKey] = iface
 				w.mapSize = len(w.current)
@@ -146,7 +145,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debugf("ignoring link update with invalid MAC: %s", err.Error())
 			continue
 		}
-		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns)
+		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns, attrs.ParentIndex)
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{
