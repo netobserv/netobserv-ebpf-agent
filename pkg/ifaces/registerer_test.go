@@ -84,12 +84,10 @@ func TestRegisterer_Lookup(t *testing.T) {
 	defer cancel()
 
 	var (
-		macEth0         = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
-		macEns5         = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
-		macOVN          = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
-		macMadeUpOVN    = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
-		macNetNS        = [6]uint8{0x88, 0x88, 0x88, 0x88, 0x88, 0x88}
-		macTroublemaker = [6]uint8{0x99, 0x99, 0x99, 0x99, 0x99, 0x99}
+		macEth0      = [6]uint8{0x0a, 0x58, 0x0a, 0x81, 0x02, 0x06}
+		macEns5      = [6]uint8{0x06, 0x62, 0x90, 0x15, 0xba, 0x83}
+		macOVN       = [6]uint8{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
+		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
 	)
 
 	watcher := NewWatcher(10, metrics.NoOp())
@@ -101,9 +99,7 @@ func TestRegisterer_Lookup(t *testing.T) {
 		return []Interface{
 			simpleInterface(2, "ens5", macEns5),
 			simpleInterface(2, "eth0", macEth0),
-			NewInterface(10, "troublemaker", macTroublemaker, netns.NsHandle(99), "netxx", 99),
-			simpleInterface(10, "a_pod_interface", macOVN),
-			NewInterface(3, "a_pod_interface", macNetNS, netns.NsHandle(88), "net1", 10),
+			simpleInterface(10, "a_pod_interface@if2", macOVN),
 		}, nil
 	}
 	inputLinks := make(chan netlink.LinkUpdate, 10)
@@ -120,24 +116,19 @@ func TestRegisterer_Lookup(t *testing.T) {
 	require.NoError(t, err)
 
 	// initial set of fetched elements
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		getEvent(t, outputEvents, timeout)
 	}
 
 	// test perfect match without collision
 	name, ok := registry.IfaceNameForIndexAndMAC(10, macOVN)
 	assert.True(t, ok)
-	assert.Equal(t, "a_pod_interface", name)
+	assert.Equal(t, "a_pod_interface@if2", name)
 
 	// test perfect match with collision
 	name, ok = registry.IfaceNameForIndexAndMAC(2, macEns5)
 	assert.True(t, ok)
 	assert.Equal(t, "ens5", name)
-
-	// test match on parent with collision
-	name, ok = registry.IfaceNameForIndexAndMAC(10, macNetNS)
-	assert.True(t, ok)
-	assert.Equal(t, "a_pod_interface", name)
 
 	// test ovn optimization
 	name, ok = registry.IfaceNameForIndexAndMAC(2, macMadeUpOVN)

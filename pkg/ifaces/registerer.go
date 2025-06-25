@@ -57,10 +57,10 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
 				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				r.m.Lock()
-				r.addToLockedIndex(ev.Interface.Index, ev.Interface.MAC, ev.Interface.Name)
-				if ev.Interface.ParentIndex != 0 {
-					// Also store the parent interface as the MAC received from TC might match parent's
-					r.addToLockedIndex(ev.Interface.ParentIndex, ev.Interface.MAC, ev.Interface.Name)
+				if _, ok := r.ifaces[ev.Interface.Index]; ok {
+					r.ifaces[ev.Interface.Index][ev.Interface.MAC] = ev.Interface.Name
+				} else {
+					r.ifaces[ev.Interface.Index] = map[[6]uint8]string{ev.Interface.MAC: ev.Interface.Name}
 				}
 				r.mapSize = len(r.ifaces)
 				r.m.Unlock()
@@ -85,16 +85,6 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 		}
 	}()
 	return out, nil
-}
-
-func (r *Registerer) addToLockedIndex(idx int, mac [6]uint8, name string) {
-	if current, ok := r.ifaces[idx]; ok {
-		if _, alreadySet := current[mac]; !alreadySet {
-			r.ifaces[idx][mac] = name
-		}
-	} else {
-		r.ifaces[idx] = map[[6]uint8]string{mac: name}
-	}
 }
 
 // IfaceNameForIndexAndMAC returns the interface name for a given

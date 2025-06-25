@@ -123,9 +123,9 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 	require.NoError(t, err)
 
 	agent.informer = test.SliceInformerFake{
-		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, "", 0),
-		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, "", 0),
-		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, "", 0),
+		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
+		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
+		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
 	}
 
 	go func() {

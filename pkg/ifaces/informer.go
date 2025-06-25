@@ -38,9 +38,8 @@ type Event struct {
 
 type Interface struct {
 	InterfaceKey
-	MAC         [6]uint8
-	NetNS       netns.NsHandle
-	ParentIndex int
+	MAC   [6]uint8
+	NetNS netns.NsHandle
 }
 
 type InterfaceKey struct {
@@ -49,16 +48,15 @@ type InterfaceKey struct {
 	NSName string
 }
 
-func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string, parentIndex int) Interface {
+func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
 	return Interface{
 		InterfaceKey: InterfaceKey{
 			Index:  index,
 			Name:   name,
 			NSName: nsname,
 		},
-		MAC:         mac,
-		NetNS:       netNS,
-		ParentIndex: parentIndex,
+		MAC:   mac,
+		NetNS: netNS,
 	}
 }
 
@@ -99,7 +97,7 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 				log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
 				continue
 			}
-			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns, link.Attrs().ParentIndex))
+			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns))
 		}
 	}
 	return intfs, nil
