@@ -121,11 +121,10 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	// before sending netlink updates, send all the existing interfaces at the moment of starting
 	// the Watcher
 	if netnsHandle.IsOpen() || netnsHandle.Equal(netns.None()) {
-		if names, err := w.interfaces(netnsHandle, ns); err != nil {
+		if ifaces, err := w.interfaces(netnsHandle, ns); err != nil {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
-			for _, name := range names {
-				iface := NewInterface(name.Index, name.Name, name.MAC, netnsHandle, ns)
+			for _, iface := range ifaces {
 				w.mutex.Lock()
 				w.current[iface.InterfaceKey] = iface
 				w.mapSize = len(w.current)
@@ -156,6 +155,15 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 				"netns":     netnsHandle.String(),
 			}).Debug("Interface up and running")
 			if _, ok := w.current[iface.InterfaceKey]; !ok {
+				log.Debugf(
+					"found new link: %s=>[Index=%d, MAC=%s, MasterIdx=%d, ParentIdx=%d, Namespace=%s]",
+					attrs.Name,
+					attrs.Index,
+					attrs.HardwareAddr.String(),
+					attrs.MasterIndex,
+					attrs.ParentIndex,
+					ns,
+				)
 				w.current[iface.InterfaceKey] = iface
 				out <- Event{Type: EventAdded, Interface: iface}
 			}

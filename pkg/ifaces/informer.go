@@ -82,6 +82,15 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 
 	intfs := make([]Interface, 0, len(links))
 	for _, link := range links {
+		log.Debugf(
+			"found link: %s=>[Index=%d, MAC=%s, MasterIdx=%d, ParentIdx=%d, Namespace=%s]",
+			link.Attrs().Name,
+			link.Attrs().Index,
+			link.Attrs().HardwareAddr.String(),
+			link.Attrs().MasterIndex,
+			link.Attrs().ParentIndex,
+			ns,
+		)
 		if link.Attrs().HardwareAddr != nil {
 			mac, err := macToFixed6(link.Attrs().HardwareAddr)
 			if err != nil {
