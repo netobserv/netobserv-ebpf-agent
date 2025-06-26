@@ -10,6 +10,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,10 +57,8 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
 				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				r.m.Lock()
-				if current, ok := r.ifaces[ev.Interface.Index]; ok {
-					if _, alreadySet := current[ev.Interface.MAC]; !alreadySet {
-						r.ifaces[ev.Interface.Index][ev.Interface.MAC] = ev.Interface.Name
-					}
+				if _, ok := r.ifaces[ev.Interface.Index]; ok {
+					r.ifaces[ev.Interface.Index][ev.Interface.MAC] = ev.Interface.Name
 				} else {
 					r.ifaces[ev.Interface.Index] = map[[6]uint8]string{ev.Interface.MAC: ev.Interface.Name}
 				}
@@ -177,8 +176,17 @@ func (r *Registerer) ifaceCacheLookup(idx int, mac [6]uint8) (string, bool) {
 				}
 			}
 			// ifindex was found but MAC not found. Use the ifindex anyway regardless of MAC, to avoid CPU penalty from syscall.
+			if rlog.Logger.IsLevelEnabled(logrus.DebugLevel) {
+				sMac := model.MacAddr(mac)
+				rlog.Debugf("interface lookup found ifindex (%d) with MAC unmatched (%s)", idx, sMac.String())
+				candidates := []string{}
+				for m, name := range macsMap {
+					sMac = model.MacAddr(m)
+					candidates = append(candidates, fmt.Sprintf("%s (%s)", name, sMac.String()))
+				}
+				rlog.Debugf("picking first among candidates: %s", strings.Join(candidates, ", "))
+			}
 			for _, name := range macsMap {
-				rlog.Debugf("Interface lookup found ifindex (%d) but not MAC; using %s anyway", idx, name)
 				return name, true
 			}
 		}
