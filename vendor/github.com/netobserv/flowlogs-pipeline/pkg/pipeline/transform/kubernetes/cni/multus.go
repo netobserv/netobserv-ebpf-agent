@@ -75,7 +75,7 @@ func (m *MultusHandler) buildSNKeys(flow config.GenericMap, rule *api.K8sRule, s
 		return nil
 	}
 
-	macIP := "~" + ip + "~" + mac
+	macIP := "~" + ip + "~" + strings.ToLower(mac)
 	if interfaces == nil {
 		return []SecondaryNetKey{{NetworkName: sn.Name, Key: macIP}}
 	}
@@ -137,5 +137,5 @@ func (n *NetStatItem) Keys(snConfig api.SecondaryNetwork) []string {
 }
 
 func key(intf, ip, mac string) string {
-	return intf + "~" + ip + "~" + strings.ToUpper(mac)
+	return intf + "~" + ip + "~" + strings.ToLower(mac)
 }
