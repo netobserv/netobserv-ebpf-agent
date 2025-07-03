@@ -41,36 +41,33 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 		logrus.Tracef("can't find kubernetes info for keys %v and IP %s", potentialKeys, ip)
 		return
 	}
-	if rule.Assignee != "otel" {
-		// NETOBSERV-666: avoid putting empty namespaces or Loki aggregation queries will
-		// differentiate between empty and nil namespaces.
-		if kubeInfo.Namespace != "" {
-			outputEntry[rule.Output+"_Namespace"] = kubeInfo.Namespace
+
+	// NETOBSERV-666: avoid putting empty namespaces or Loki aggregation queries will
+	// differentiate between empty and nil namespaces.
+	if kubeInfo.Namespace != "" {
+		outputEntry[rule.OutputKeys.Namespace] = kubeInfo.Namespace
+	}
+	outputEntry[rule.OutputKeys.Name] = kubeInfo.Name
+	outputEntry[rule.OutputKeys.Kind] = kubeInfo.Kind
+	outputEntry[rule.OutputKeys.OwnerName] = kubeInfo.OwnerName
+	outputEntry[rule.OutputKeys.OwnerKind] = kubeInfo.OwnerKind
+	outputEntry[rule.OutputKeys.NetworkName] = kubeInfo.NetworkName
+	if rule.LabelsPrefix != "" {
+		for labelKey, labelValue := range kubeInfo.Labels {
+			outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
 		}
-		outputEntry[rule.Output+"_Name"] = kubeInfo.Name
-		outputEntry[rule.Output+"_Type"] = kubeInfo.Kind
-		outputEntry[rule.Output+"_OwnerName"] = kubeInfo.OwnerName
-		outputEntry[rule.Output+"_OwnerType"] = kubeInfo.OwnerKind
-		outputEntry[rule.Output+"_NetworkName"] = kubeInfo.NetworkName
-		if rule.LabelsPrefix != "" {
-			for labelKey, labelValue := range kubeInfo.Labels {
-				outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
-			}
+	}
+	if kubeInfo.HostIP != "" {
+		outputEntry[rule.OutputKeys.HostIP] = kubeInfo.HostIP
+		if kubeInfo.HostName != "" {
+			outputEntry[rule.OutputKeys.HostName] = kubeInfo.HostName
 		}
-		if kubeInfo.HostIP != "" {
-			outputEntry[rule.Output+"_HostIP"] = kubeInfo.HostIP
-			if kubeInfo.HostName != "" {
-				outputEntry[rule.Output+"_HostName"] = kubeInfo.HostName
-			}
-		}
-		fillInK8sZone(outputEntry, rule, kubeInfo, "_Zone")
-	} else {
-		// NOTE: Some of these fields are taken from opentelemetry specs.
-		// See https://opentelemetry.io/docs/specs/semconv/resource/k8s/
-		// Other fields (not specified in the specs) are named similarly
-		if kubeInfo.Namespace != "" {
-			outputEntry[rule.Output+"k8s.namespace.name"] = kubeInfo.Namespace
-		}
+	}
+	fillInK8sZone(outputEntry, rule, kubeInfo)
+
+	if rule.Assignee == "otel" {
+		// A few otel-specific names
+		// TODO: remove them? This is adding quite some redundant content
 		switch kubeInfo.Kind {
 		case model.KindNode:
 			outputEntry[rule.Output+"k8s.node.name"] = kubeInfo.Name
@@ -82,28 +79,12 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 			outputEntry[rule.Output+"k8s.service.name"] = kubeInfo.Name
 			outputEntry[rule.Output+"k8s.service.uid"] = kubeInfo.UID
 		}
-		outputEntry[rule.Output+"k8s.name"] = kubeInfo.Name
-		outputEntry[rule.Output+"k8s.type"] = kubeInfo.Kind
-		outputEntry[rule.Output+"k8s.owner.name"] = kubeInfo.OwnerName
-		outputEntry[rule.Output+"k8s.owner.type"] = kubeInfo.OwnerKind
-		if rule.LabelsPrefix != "" {
-			for labelKey, labelValue := range kubeInfo.Labels {
-				outputEntry[rule.LabelsPrefix+"."+labelKey] = labelValue
-			}
-		}
-		if kubeInfo.HostIP != "" {
-			outputEntry[rule.Output+"k8s.host.ip"] = kubeInfo.HostIP
-			if kubeInfo.HostName != "" {
-				outputEntry[rule.Output+"k8s.host.name"] = kubeInfo.HostName
-			}
-		}
-		fillInK8sZone(outputEntry, rule, kubeInfo, "k8s.zone")
 	}
 }
 
 const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
-func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *model.ResourceMetaData, zonePrefix string) {
+func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *model.ResourceMetaData) {
 	if !rule.AddZone {
 		// Nothing to do
 		return
@@ -112,7 +93,7 @@ func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *m
 	case model.KindNode:
 		zone, ok := kubeInfo.Labels[nodeZoneLabelName]
 		if ok {
-			outputEntry[rule.Output+zonePrefix] = zone
+			outputEntry[rule.OutputKeys.Zone] = zone
 		}
 		return
 	case model.KindPod:
@@ -124,7 +105,7 @@ func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *m
 		if nodeInfo != nil {
 			zone, ok := nodeInfo.Labels[nodeZoneLabelName]
 			if ok {
-				outputEntry[rule.Output+zonePrefix] = zone
+				outputEntry[rule.OutputKeys.Zone] = zone
 			}
 		}
 		return

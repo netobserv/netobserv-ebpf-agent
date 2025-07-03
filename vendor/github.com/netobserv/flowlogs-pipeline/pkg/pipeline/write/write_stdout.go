@@ -18,50 +18,67 @@
 package write
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	jsonIter "github.com/json-iterator/go"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
 type writeStdout struct {
-	format string
+	formatter func(config.GenericMap) string
 }
 
 // Write writes a flow before being stored
 func (t *writeStdout) Write(v config.GenericMap) {
 	logrus.Tracef("entering writeStdout Write")
-	if t.format == "json" {
-		txt, _ := json.Marshal(v)
-		fmt.Println(string(txt))
-	} else if t.format == "fields" {
-		var order sort.StringSlice
-		for fieldName := range v {
-			order = append(order, fieldName)
+	fmt.Println(t.formatter(v))
+}
+
+func formatter(format string, reorder bool) func(config.GenericMap) string {
+	switch format {
+	case "json":
+		jconf := jsonIter.Config{
+			SortMapKeys: reorder,
+		}.Froze()
+		return func(v config.GenericMap) string {
+			b, _ := jconf.Marshal(v)
+			return string(b)
 		}
-		order.Sort()
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "\n\nFlow record at %s:\n", time.Now().Format(time.StampMilli))
-		for _, field := range order {
-			fmt.Fprintf(w, "%v\t=\t%v\n", field, v[field])
+	case "fields":
+		return func(v config.GenericMap) string {
+			var sb strings.Builder
+			var order sort.StringSlice
+			for fieldName := range v {
+				order = append(order, fieldName)
+			}
+			order.Sort()
+			w := tabwriter.NewWriter(&sb, 0, 0, 1, ' ', 0)
+			fmt.Fprintf(w, "\n\nFlow record at %s:\n", time.Now().Format(time.StampMilli))
+			for _, field := range order {
+				fmt.Fprintf(w, "%v\t=\t%v\n", field, v[field])
+			}
+			w.Flush()
+			return sb.String()
 		}
-		w.Flush()
-	} else {
-		fmt.Printf("%s: %v\n", time.Now().Format(time.StampMilli), v)
+	}
+	return func(v config.GenericMap) string {
+		return fmt.Sprintf("%v", v)
 	}
 }
 
 // NewWriteStdout create a new write
 func NewWriteStdout(params config.StageParam) (Writer, error) {
 	logrus.Debugf("entering NewWriteStdout")
-	writeStdout := &writeStdout{}
-	if params.Write != nil && params.Write.Stdout != nil {
-		writeStdout.format = params.Write.Stdout.Format
+	var format string
+	if params.Write.Stdout != nil {
+		format = params.Write.Stdout.Format
 	}
-	return writeStdout, nil
+	return &writeStdout{
+		formatter: formatter(format, false),
+	}, nil
 }
