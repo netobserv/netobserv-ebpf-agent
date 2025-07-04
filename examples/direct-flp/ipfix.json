@@ -1,0 +1,13 @@
+{
+	"pipeline":[
+		{"name": "writer","follows": "preset-ingester"}
+	],
+	"parameters":[
+		{"name": "writer","write": {"type": "ipfix", "ipfix": {
+			"targetHost": "127.0.0.1",
+			"targetPort": 2055,
+			"transport": "udp"
+		}}}
+	],
+	"metricsSettings":{"port": 9102}
+}
