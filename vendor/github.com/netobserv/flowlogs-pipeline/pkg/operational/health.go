@@ -18,7 +18,7 @@
 package operational
 
 import (
-	"net"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -30,7 +30,7 @@ import (
 
 func NewHealthServer(opts *config.Options, isAlive healthcheck.Check, isReady healthcheck.Check) *http.Server {
 	handler := healthcheck.NewHandler()
-	address := net.JoinHostPort(opts.Health.Address, opts.Health.Port)
+	address := fmt.Sprintf("%s:%d", opts.Health.Address, opts.Health.Port)
 	handler.AddLivenessCheck("PipelineCheck", isAlive)
 	handler.AddReadinessCheck("PipelineCheck", isReady)
 

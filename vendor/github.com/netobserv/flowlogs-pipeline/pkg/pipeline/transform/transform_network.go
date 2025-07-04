@@ -127,10 +127,11 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 			if anyIP, ok := outputEntry[rule.AddSubnetLabel.Input]; ok {
 				if strIP, ok := anyIP.(string); ok {
-					lbl, ok := n.ipLabelCache.GetCacheEntry(strIP)
+					keys := []string{strIP}
+					lbl, ok := n.ipLabelCache.GetCacheEntry(keys)
 					if !ok {
 						lbl = n.applySubnetLabel(strIP)
-						n.ipLabelCache.UpdateCacheEntry(strIP, lbl)
+						n.ipLabelCache.UpdateCacheEntry(keys, func() interface{} { return lbl })
 					}
 					if lbl != "" {
 						outputEntry[rule.AddSubnetLabel.Output] = lbl
@@ -139,7 +140,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 		case api.NetworkDecodeTCPFlags:
 			if anyFlags, ok := outputEntry[rule.DecodeTCPFlags.Input]; ok && anyFlags != nil {
-				if flags, ok := anyFlags.(uint16); ok {
+				if flags, err := util.ConvertToUint(anyFlags); err == nil {
 					flags := util.DecodeTCPFlags(flags)
 					outputEntry[rule.DecodeTCPFlags.Output] = flags
 				}
@@ -179,6 +180,8 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 	if params.Transform != nil && params.Transform.Network != nil {
 		jsonNetworkTransform = *params.Transform.Network
 	}
+	jsonNetworkTransform.Preprocess()
+
 	for _, rule := range jsonNetworkTransform.Rules {
 		switch rule.Type {
 		case api.NetworkAddLocation:

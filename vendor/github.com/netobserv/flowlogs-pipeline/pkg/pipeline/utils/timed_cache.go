@@ -35,13 +35,13 @@ var log = logrus.WithField("component", "utils.TimedCache")
 type CacheCallback func(entry interface{})
 
 type cacheEntry struct {
-	key             string
+	key             uint64
 	lastUpdatedTime time.Time
 	e               *list.Element
 	SourceEntry     interface{}
 }
 
-type TimedCacheMap map[string]*cacheEntry
+type TimedCacheMap map[uint64]*cacheEntry
 
 // If maxEntries is non-zero, this limits the number of entries in the cache to the number specified.
 // If maxEntries is zero, the cache has no size limit.
@@ -53,25 +53,36 @@ type TimedCache struct {
 	cacheLenMetric prometheus.Gauge
 }
 
-func (tc *TimedCache) GetCacheEntry(key string) (interface{}, bool) {
+var sep byte = '|'
+
+func computeHash(keys []string) uint64 {
+	h := hashNew()
+	for _, k := range keys {
+		h = hashAdd(h, k)
+		h = hashAddByte(h, sep)
+	}
+	return h
+}
+
+func (tc *TimedCache) GetCacheEntry(keys []string) (interface{}, bool) {
+	h := computeHash(keys)
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
-	cEntry, ok := tc.cacheMap[key]
+	cEntry, ok := tc.cacheMap[h]
 	if ok {
 		return cEntry.SourceEntry, ok
 	}
 	return nil, ok
 }
 
-var uclog = log.WithField("method", "UpdateCacheEntry")
-
-// If cache entry exists, update it and return it; if it does not exist, create it if there is room.
+// If cache entry exists, update its timestamp; if it does not exist, create it if there is room.
 // If we exceed the size of the cache, then do not allocate new entry
-func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) bool {
+func (tc *TimedCache) UpdateCacheEntry(keys []string, entryProvider func() interface{}) bool {
 	nowInSecs := time.Now()
+	h := computeHash(keys)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	cEntry, ok := tc.cacheMap[key]
+	cEntry, ok := tc.cacheMap[h]
 	if ok {
 		// item already exists in cache; update the element and move to end of list
 		cEntry.lastUpdatedTime = nowInSecs
@@ -84,13 +95,13 @@ func (tc *TimedCache) UpdateCacheEntry(key string, entry interface{}) bool {
 		}
 		cEntry = &cacheEntry{
 			lastUpdatedTime: nowInSecs,
-			key:             key,
-			SourceEntry:     entry,
+			key:             h,
+			SourceEntry:     entryProvider(),
 		}
-		uclog.Tracef("adding entry: %#v", cEntry)
+		log.Tracef("adding entry: %#v", cEntry)
 		// place at end of list
 		cEntry.e = tc.cacheList.PushBack(cEntry)
-		tc.cacheMap[key] = cEntry
+		tc.cacheMap[h] = cEntry
 		if tc.cacheLenMetric != nil {
 			tc.cacheLenMetric.Inc()
 		}
@@ -107,7 +118,7 @@ func (tc *TimedCache) GetCacheLen() int {
 // We expect that the function calling Iterate might make updates to the entries by calling UpdateCacheEntry()
 // We therefore cannot take the lock at this point since it will conflict with the call in UpdateCacheEntry()
 // TODO: If the callback needs to update the cache, then we need a method to perform it without taking the lock again.
-func (tc *TimedCache) Iterate(f func(key string, value interface{})) {
+func (tc *TimedCache) Iterate(f func(key uint64, value interface{})) {
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
 	for k, v := range tc.cacheMap {

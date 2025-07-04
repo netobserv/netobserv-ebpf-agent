@@ -20,7 +20,6 @@ package ingest
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"net"
 
 	ms "github.com/mitchellh/mapstructure"
@@ -34,8 +33,9 @@ import (
 	goflowCommonFormat "github.com/netsampler/goflow2/format/common"
 	_ "github.com/netsampler/goflow2/format/protobuf" // required for goflow protobuf
 	goflowpb "github.com/netsampler/goflow2/pb"
+	"github.com/netsampler/goflow2/producer"
 	"github.com/netsampler/goflow2/utils"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -43,13 +43,15 @@ const (
 	channelSize = 1000
 )
 
-type ingestCollector struct {
-	hostname   string
-	port       int
-	portLegacy int
-	in         chan map[string]interface{}
-	exitChan   <-chan struct{}
-	metrics    *metrics
+var (
+	ilog = logrus.WithField("component", "ingest.Ipfix")
+)
+
+type ingestIPFIX struct {
+	*api.IngestIpfix
+	in       chan map[string]interface{}
+	exitChan <-chan struct{}
+	metrics  *metrics
 }
 
 // TransportWrapper is an implementation of the goflow2 transport interface
@@ -89,7 +91,7 @@ func (w *TransportWrapper) Send(_, data []byte) error {
 		// temporary fix
 		// A PR was submitted to log this error from goflow2:
 		// https://github.com/netsampler/goflow2/pull/86
-		log.Error(err)
+		ilog.Error(err)
 		return err
 	}
 	renderedMsg, err := RenderMessage(&message)
@@ -100,7 +102,7 @@ func (w *TransportWrapper) Send(_, data []byte) error {
 }
 
 // Ingest ingests entries from a network collector using goflow2 library (https://github.com/netsampler/goflow2)
-func (c *ingestCollector) Ingest(out chan<- config.GenericMap) {
+func (c *ingestIPFIX) Ingest(out chan<- config.GenericMap) {
 	ctx := context.Background()
 	c.metrics.createOutQueueLen(out)
 
@@ -111,53 +113,67 @@ func (c *ingestCollector) Ingest(out chan<- config.GenericMap) {
 	c.processLogLines(out)
 }
 
-func (c *ingestCollector) initCollectorListener(ctx context.Context) {
+func (c *ingestIPFIX) initCollectorListener(ctx context.Context) {
 	transporter := NewWrapper(c.in)
 	formatter, err := goflowFormat.FindFormat(ctx, "pb")
 	if err != nil {
-		log.Fatal(err)
+		ilog.Fatal(err)
 	}
 
-	if c.port > 0 {
+	if c.Port > 0 {
 		// cf https://github.com/netsampler/goflow2/pull/49
 		tpl, err := templates.FindTemplateSystem(ctx, "memory")
 		if err != nil {
-			log.Fatalf("goflow2 error: could not find memory template system: %v", err)
+			ilog.Fatalf("goflow2 error: could not find memory template system: %v", err)
 		}
 		defer tpl.Close(ctx)
 
-		go func() {
-			sNF := utils.NewStateNetFlow()
-			sNF.Format = formatter
-			sNF.Transport = transporter
-			sNF.Logger = log.StandardLogger()
-			sNF.TemplateSystem = tpl
+		ilog.Infof("listening for netflow on host %s, port = %d", c.HostName, c.Port)
+		for i := uint(0); i < c.Sockets; i++ {
+			go func() {
+				sNF := utils.NewStateNetFlow()
+				sNF.Format = formatter
+				sNF.Transport = transporter
+				sNF.Logger = logrus.StandardLogger()
+				sNF.TemplateSystem = tpl
+				if len(c.Mapping) > 0 {
+					sNF.Config = &producer.ProducerConfig{
+						IPFIX: producer.IPFIXProducerConfig{
+							Mapping: c.Mapping,
+						},
+						NetFlowV9: producer.NetFlowV9ProducerConfig{
+							Mapping: c.Mapping,
+						},
+					}
+				}
 
-			log.Infof("listening for netflow on host %s, port = %d", c.hostname, c.port)
-			err = sNF.FlowRoutine(1, c.hostname, c.port, false)
-			log.Fatal(err)
-		}()
+				err = sNF.FlowRoutine(int(c.Workers), c.HostName, int(c.Port), c.Sockets > 1)
+				ilog.Fatal(err)
+			}()
+		}
 	}
 
-	if c.portLegacy > 0 {
-		go func() {
-			sLegacyNF := utils.NewStateNFLegacy()
-			sLegacyNF.Format = formatter
-			sLegacyNF.Transport = transporter
-			sLegacyNF.Logger = log.StandardLogger()
+	if c.PortLegacy > 0 {
+		ilog.Infof("listening for legacy netflow on host %s, port = %d", c.HostName, c.PortLegacy)
+		for i := uint(0); i < c.Sockets; i++ {
+			go func() {
+				sLegacyNF := utils.NewStateNFLegacy()
+				sLegacyNF.Format = formatter
+				sLegacyNF.Transport = transporter
+				sLegacyNF.Logger = logrus.StandardLogger()
 
-			log.Infof("listening for legacy netflow on host %s, port = %d", c.hostname, c.portLegacy)
-			err = sLegacyNF.FlowRoutine(1, c.hostname, c.portLegacy, false)
-			log.Fatal(err)
-		}()
+				err = sLegacyNF.FlowRoutine(int(c.Workers), c.HostName, int(c.PortLegacy), c.Sockets > 1)
+				ilog.Fatal(err)
+			}()
+		}
 	}
 }
 
-func (c *ingestCollector) processLogLines(out chan<- config.GenericMap) {
+func (c *ingestIPFIX) processLogLines(out chan<- config.GenericMap) {
 	for {
 		select {
 		case <-c.exitChan:
-			log.Debugf("exiting ingestCollector because of signal")
+			ilog.Infof("Exit signal received, stop processing input")
 			return
 		case record := <-c.in:
 			out <- record
@@ -165,32 +181,26 @@ func (c *ingestCollector) processLogLines(out chan<- config.GenericMap) {
 	}
 }
 
-// NewIngestCollector create a new ingester
-func NewIngestCollector(opMetrics *operational.Metrics, params config.StageParam) (Ingester, error) {
-	jsonIngestCollector := api.IngestCollector{}
-	if params.Ingest != nil && params.Ingest.Collector != nil {
-		jsonIngestCollector = *params.Ingest.Collector
-	}
-	if jsonIngestCollector.HostName == "" {
-		return nil, fmt.Errorf("ingest hostname not specified")
-	}
-	if jsonIngestCollector.Port == 0 && jsonIngestCollector.PortLegacy == 0 {
-		return nil, fmt.Errorf("no ingest port specified")
+// NewIngestIPFIX create a new ingester
+func NewIngestIPFIX(opMetrics *operational.Metrics, params config.StageParam) (Ingester, error) {
+	cfg := api.IngestIpfix{}
+	if params.Ingest != nil && params.Ingest.Ipfix != nil {
+		cfg = *params.Ingest.Ipfix
+	} else if params.Ingest != nil && params.Ingest.Collector != nil {
+		// For backward compatibility
+		cfg = *params.Ingest.Collector
 	}
 
-	log.Infof("hostname = %s", jsonIngestCollector.HostName)
-	log.Infof("port = %d", jsonIngestCollector.Port)
-	log.Infof("portLegacy = %d", jsonIngestCollector.PortLegacy)
+	cfg.SetDefaults()
+	ilog.Infof("Ingest IPFIX config: [%s]", cfg.String())
 
 	in := make(chan map[string]interface{}, channelSize)
 	metrics := newMetrics(opMetrics, params.Name, params.Ingest.Type, func() int { return len(in) })
 
-	return &ingestCollector{
-		hostname:   jsonIngestCollector.HostName,
-		port:       jsonIngestCollector.Port,
-		portLegacy: jsonIngestCollector.PortLegacy,
-		exitChan:   pUtils.ExitChannel(),
-		in:         in,
-		metrics:    metrics,
+	return &ingestIPFIX{
+		IngestIpfix: &cfg,
+		exitChan:    pUtils.ExitChannel(),
+		in:          in,
+		metrics:     metrics,
 	}, nil
 }

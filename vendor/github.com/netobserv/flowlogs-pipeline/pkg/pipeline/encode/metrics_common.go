@@ -18,7 +18,6 @@
 package encode
 
 import (
-	"strings"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
@@ -42,7 +41,7 @@ type MetricsCommonStruct struct {
 	histos           map[string]mInfoStruct
 	aggHistos        map[string]mInfoStruct
 	mCache           *putils.TimedCache
-	mChacheLenMetric prometheus.Gauge
+	mCacheLenMetric  prometheus.Gauge
 	metricsProcessed prometheus.Counter
 	metricsDropped   prometheus.Counter
 	errorsCounter    *prometheus.CounterVec
@@ -51,9 +50,9 @@ type MetricsCommonStruct struct {
 }
 
 type MetricsCommonInterface interface {
-	GetChacheEntry(entryLabels map[string]string, m interface{}) interface{}
+	GetCacheEntry(entryLabels map[string]string, m interface{}) interface{}
 	ProcessCounter(m interface{}, labels map[string]string, value float64) error
-	ProcessGauge(m interface{}, labels map[string]string, value float64, key string) error
+	ProcessGauge(m interface{}, name string, labels map[string]string, value float64, lvs []string) error
 	ProcessHist(m interface{}, labels map[string]string, value float64) error
 	ProcessAggHist(m interface{}, labels map[string]string, value []float64) error
 }
@@ -132,7 +131,7 @@ func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, met
 			continue
 		}
 		for _, labels := range labelSets {
-			err := mci.ProcessGauge(mInfo.genericMetric, labels.lMap, value, labels.key)
+			err := mci.ProcessGauge(mInfo.genericMetric, mInfo.info.Name, labels.lMap, value, labels.values)
 			if err != nil {
 				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
 				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
@@ -198,19 +197,17 @@ func (m *MetricsCommonStruct) prepareMetric(mci MetricsCommonInterface, flow con
 	}
 
 	labelSets := extractLabels(flow, flatParts, info)
-	var lkms []labelsKeyAndMap
 	for _, ls := range labelSets {
 		// Update entry for expiry mechanism (the entry itself is its own cleanup function)
-		lkm := ls.toKeyAndMap(info)
-		lkms = append(lkms, lkm)
-		cacheEntry := mci.GetChacheEntry(lkm.lMap, mv)
-		ok := m.mCache.UpdateCacheEntry(lkm.key, cacheEntry)
+		ok := m.mCache.UpdateCacheEntry(ls.values, func() interface{} {
+			return mci.GetCacheEntry(ls.lMap, mv)
+		})
 		if !ok {
 			m.metricsDropped.Inc()
 			return nil, 0
 		}
 	}
-	return lkms, floatVal
+	return labelSets, floatVal
 }
 
 func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow config.GenericMap, info *metrics.Preprocessed, mc interface{}) ([]labelsKeyAndMap, []float64) {
@@ -231,19 +228,17 @@ func (m *MetricsCommonStruct) prepareAggHisto(mci MetricsCommonInterface, flow c
 	}
 
 	labelSets := extractLabels(flow, flatParts, info)
-	var lkms []labelsKeyAndMap
 	for _, ls := range labelSets {
 		// Update entry for expiry mechanism (the entry itself is its own cleanup function)
-		lkm := ls.toKeyAndMap(info)
-		lkms = append(lkms, lkm)
-		cacheEntry := mci.GetChacheEntry(lkm.lMap, mc)
-		ok := m.mCache.UpdateCacheEntry(lkm.key, cacheEntry)
+		ok := m.mCache.UpdateCacheEntry(ls.values, func() interface{} {
+			return mci.GetCacheEntry(ls.lMap, mc)
+		})
 		if !ok {
 			m.metricsDropped.Inc()
 			return nil, nil
 		}
 	}
-	return lkms, values
+	return labelSets, values
 }
 
 func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *metrics.Preprocessed) interface{} {
@@ -259,58 +254,44 @@ func (m *MetricsCommonStruct) extractGenericValue(flow config.GenericMap, info *
 	return val
 }
 
-type label struct {
-	key   string
-	value string
-}
-
-type labelSet []label
-
 type labelsKeyAndMap struct {
-	key  string
-	lMap map[string]string
-}
-
-func (l labelSet) toKeyAndMap(info *metrics.Preprocessed) labelsKeyAndMap {
-	key := strings.Builder{}
-	key.WriteString(info.Name)
-	key.WriteRune('|')
-	m := map[string]string{}
-	for _, kv := range l {
-		key.WriteString(kv.value)
-		key.WriteRune('|')
-		m[kv.key] = kv.value
-	}
-	return labelsKeyAndMap{key: key.String(), lMap: m}
+	values []string
+	lMap   map[string]string
 }
 
 // extractLabels takes the flow and a single metric definition as input.
 // It returns the flat labels maps (label names and values).
 // Most of the time it will return a single map; it may return several of them when the parsed flow fields are lists (e.g. "interfaces").
-func extractLabels(flow config.GenericMap, flatParts []config.GenericMap, info *metrics.Preprocessed) []labelSet {
-	common := newLabelSet(flow, info.MappedLabels)
+func extractLabels(flow config.GenericMap, flatParts []config.GenericMap, info *metrics.Preprocessed) []labelsKeyAndMap {
+	common := newLabelKeyAndMap(info.Name, flow, info.MappedLabels)
 	if len(flatParts) == 0 {
-		return []labelSet{common}
+		return []labelsKeyAndMap{common}
 	}
-	var all []labelSet
+	all := make([]labelsKeyAndMap, 0, len(flatParts))
 	for _, fp := range flatParts {
-		ls := newLabelSet(fp, info.FlattenedLabels)
-		ls = append(ls, common...)
+		ls := newLabelKeyAndMap(info.Name, fp, info.FlattenedLabels)
+		ls.values = append(ls.values, common.values...)
+		for k, v := range common.lMap {
+			ls.lMap[k] = v
+		}
 		all = append(all, ls)
 	}
 	return all
 }
 
-func newLabelSet(part config.GenericMap, labels []metrics.MappedLabel) labelSet {
-	var ls labelSet
+func newLabelKeyAndMap(name string, part config.GenericMap, labels []metrics.MappedLabel) labelsKeyAndMap {
+	values := make([]string, 0, len(labels)+1)
+	values = append(values, name)
+	m := make(map[string]string, len(labels))
 	for _, t := range labels {
-		label := label{key: t.Target, value: ""}
+		value := ""
 		if v, ok := part[t.Source]; ok {
-			label.value = utils.ConvertToString(v)
+			value = utils.ConvertToString(v)
 		}
-		ls = append(ls, label)
+		values = append(values, value)
+		m[t.Target] = value
 	}
-	return ls
+	return labelsKeyAndMap{values: values, lMap: m}
 }
 
 func (m *MetricsCommonStruct) cleanupExpiredEntriesLoop(callback putils.CacheCallback) {
@@ -337,7 +318,7 @@ func NewMetricsCommonStruct(opMetrics *operational.Metrics, maxCacheEntries int,
 	mChacheLenMetric := opMetrics.NewGauge(&mChacheLen, name)
 	m := &MetricsCommonStruct{
 		mCache:           putils.NewTimedCache(maxCacheEntries, mChacheLenMetric),
-		mChacheLenMetric: mChacheLenMetric,
+		mCacheLenMetric:  mChacheLenMetric,
 		metricsProcessed: opMetrics.NewCounter(&metricsProcessed, name),
 		metricsDropped:   opMetrics.NewCounter(&metricsDropped, name),
 		errorsCounter:    opMetrics.NewCounterVec(&encodePromErrors),

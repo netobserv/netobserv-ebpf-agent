@@ -43,7 +43,7 @@ const (
 )
 
 type Labels map[string]string
-type NormalizedValues string
+type NormalizedValues []string
 
 type Aggregate struct {
 	definition *api.AggregateDefinition
@@ -78,7 +78,7 @@ func (aggregate *Aggregate) LabelsFromEntry(entry config.GenericMap) (Labels, bo
 }
 
 func (labels Labels) getNormalizedValues() NormalizedValues {
-	var normalizedAsString string
+	var normalized NormalizedValues
 
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
@@ -87,20 +87,16 @@ func (labels Labels) getNormalizedValues() NormalizedValues {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		normalizedAsString += labels[k] + ","
+		normalized = append(normalized, labels[k])
 	}
 
-	if len(normalizedAsString) > 0 {
-		normalizedAsString = normalizedAsString[:len(normalizedAsString)-1]
-	}
-
-	return NormalizedValues(normalizedAsString)
+	return normalized
 }
 
 func (aggregate *Aggregate) filterEntry(entry config.GenericMap) (NormalizedValues, Labels, error) {
 	labels, allLabelsFound := aggregate.LabelsFromEntry(entry)
 	if !allLabelsFound {
-		return "", nil, fmt.Errorf("missing keys in entry")
+		return nil, nil, fmt.Errorf("missing keys in entry")
 	}
 
 	normalizedValues := labels.getNormalizedValues()
@@ -128,7 +124,7 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	defer aggregate.mutex.Unlock()
 
 	var groupState *GroupState
-	oldEntry, ok := aggregate.cache.GetCacheEntry(string(normalizedValues))
+	oldEntry, ok := aggregate.cache.GetCacheEntry(normalizedValues)
 	if !ok {
 		groupState = &GroupState{normalizedValues: normalizedValues, labels: labels}
 		initVal := getInitValue(string(aggregate.definition.OperationType))
@@ -140,7 +136,9 @@ func (aggregate *Aggregate) UpdateByEntry(entry config.GenericMap, normalizedVal
 	} else {
 		groupState = oldEntry.(*GroupState)
 	}
-	aggregate.cache.UpdateCacheEntry(string(normalizedValues), groupState)
+	aggregate.cache.UpdateCacheEntry(normalizedValues, func() interface{} {
+		return groupState
+	})
 
 	// update value
 	operationKey := aggregate.definition.OperationKey
@@ -210,20 +208,21 @@ func (aggregate *Aggregate) GetMetrics() []config.GenericMap {
 	var metrics []config.GenericMap
 
 	// iterate over the items in the cache
-	aggregate.cache.Iterate(func(_ string, value interface{}) {
+	aggregate.cache.Iterate(func(_ uint64, value interface{}) {
 		group := value.(*GroupState)
+		nv := strings.Join(group.normalizedValues, ",")
 		newEntry := config.GenericMap{
 			"name":              aggregate.definition.Name,
 			"operation_type":    aggregate.definition.OperationType,
 			"operation_key":     aggregate.definition.OperationKey,
 			"by":                strings.Join(aggregate.definition.GroupByKeys, ","),
-			"aggregate":         string(group.normalizedValues),
+			"aggregate":         nv,
 			"total_value":       group.totalValue,
 			"total_count":       group.totalCount,
 			"recent_raw_values": group.recentRawValues,
 			"recent_op_value":   group.recentOpValue,
 			"recent_count":      group.recentCount,
-			strings.Join(aggregate.definition.GroupByKeys, "_"): string(group.normalizedValues),
+			strings.Join(aggregate.definition.GroupByKeys, "_"): nv,
 		}
 		// add the items in aggregate.definition.GroupByKeys individually to the entry
 		for _, key := range aggregate.definition.GroupByKeys {

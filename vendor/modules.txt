@@ -265,7 +265,7 @@ github.com/minio/crc64nvme
 # github.com/minio/md5-simd v1.1.2
 ## explicit; go 1.14
 github.com/minio/md5-simd
-# github.com/minio/minio-go/v7 v7.0.92
+# github.com/minio/minio-go/v7 v7.0.94
 ## explicit; go 1.23.0
 github.com/minio/minio-go/v7
 github.com/minio/minio-go/v7/internal/json
@@ -282,6 +282,7 @@ github.com/minio/minio-go/v7/pkg/signer
 github.com/minio/minio-go/v7/pkg/singleflight
 github.com/minio/minio-go/v7/pkg/sse
 github.com/minio/minio-go/v7/pkg/tags
+github.com/minio/minio-go/v7/pkg/utils
 # github.com/mitchellh/mapstructure v1.5.0
 ## explicit; go 1.14
 github.com/mitchellh/mapstructure
@@ -304,7 +305,7 @@ github.com/mwitkow/go-conntrack
 # github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 ## explicit
 github.com/mxk/go-flowrate/flowrate
-# github.com/netobserv/flowlogs-pipeline v1.9.0-crc0.0.20250528065622-289da648f066
+# github.com/netobserv/flowlogs-pipeline v1.9.0-crc0.0.20250528065622-289da648f066 => github.com/jotak/flowlogs-pipeline v0.0.0-20250704141301-743583a9a9c5
 ## explicit; go 1.23.0
 github.com/netobserv/flowlogs-pipeline/pkg/api
 github.com/netobserv/flowlogs-pipeline/pkg/config
@@ -450,7 +451,7 @@ github.com/prometheus/client_golang/prometheus/promhttp/internal
 # github.com/prometheus/client_model v0.6.2
 ## explicit; go 1.22.0
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.64.0
+# github.com/prometheus/common v0.65.0
 ## explicit; go 1.23.0
 github.com/prometheus/common/config
 github.com/prometheus/common/expfmt
@@ -581,7 +582,7 @@ github.com/vladimirvivien/gexe/net
 github.com/vladimirvivien/gexe/prog
 github.com/vladimirvivien/gexe/str
 github.com/vladimirvivien/gexe/vars
-# github.com/vmware/go-ipfix v0.15.0
+# github.com/vmware/go-ipfix v0.15.0 => github.com/jotak/go-ipfix v0.0.0-20250704140557-a3d746019169
 ## explicit; go 1.23.0
 github.com/vmware/go-ipfix/pkg/collector
 github.com/vmware/go-ipfix/pkg/entities
@@ -692,14 +693,14 @@ go.opentelemetry.io/proto/otlp/trace/v1
 # go.uber.org/atomic v1.11.0
 ## explicit; go 1.18
 go.uber.org/atomic
-# golang.org/x/crypto v0.38.0
+# golang.org/x/crypto v0.39.0
 ## explicit; go 1.23.0
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/cryptobyte
 golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/curve25519
-# golang.org/x/net v0.40.0
+# golang.org/x/net v0.41.0
 ## explicit; go 1.23.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -736,7 +737,7 @@ golang.org/x/sys/windows/registry
 # golang.org/x/term v0.32.0
 ## explicit; go 1.23.0
 golang.org/x/term
-# golang.org/x/text v0.25.0
+# golang.org/x/text v0.26.0
 ## explicit; go 1.23.0
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
@@ -1372,3 +1373,5 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/netobserv/flowlogs-pipeline => github.com/jotak/flowlogs-pipeline v0.0.0-20250704141301-743583a9a9c5
+# github.com/vmware/go-ipfix => github.com/jotak/go-ipfix v0.0.0-20250704140557-a3d746019169
