@@ -34,8 +34,8 @@ endif
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.18.0
-GOLANGCI_LINT_VERSION = v1.61.0
-GO_VERSION = "1.23.4"
+GOLANGCI_LINT_VERSION = v2.2.1
+GO_VERSION = "1.24.4"
 PROTOC_VERSION = "3.19.4"
 PROTOC_GEN_GO_VERSION="v1.35.1"
 PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
@@ -104,7 +104,9 @@ install-protoc: ## Install protoc
 .PHONY: prereqs
 prereqs: ## Check if prerequisites are met, and install missing dependencies
 	@echo "### Checking if prerequisites are met, and installing missing dependencies"
-	GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	test -f ./bin/golangci-lint-${GOLANGCI_LINT_VERSION} || ( \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s ${GOLANGCI_LINT_VERSION} \
+		&& mv ./bin/golangci-lint ./bin/golangci-lint-${GOLANGCI_LINT_VERSION})
 	test -f $(shell go env GOPATH)/bin/bpf2go || go install github.com/cilium/ebpf/cmd/bpf2go@${CILIUM_EBPF_VERSION}
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
@@ -122,7 +124,7 @@ fmt: ## Run go fmt against code.
 .PHONY: lint
 lint: prereqs ## Lint the code
 	@echo "### Linting golang code"
-	golangci-lint run ./... --timeout=3m
+	./bin/golangci-lint-${GOLANGCI_LINT_VERSION} run --timeout 3m ./...
 	@echo "### Linting bpf C code"
 	find ./bpf -type f -not -path "./bpf/headers/*" -name "*.[ch]" | xargs clang-format --dry-run --Werror
 
