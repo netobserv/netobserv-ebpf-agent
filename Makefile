@@ -33,7 +33,7 @@ ifneq ($(CLEAN_BUILD),)
 endif
 
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
-CILIUM_EBPF_VERSION := v0.18.0
+CILIUM_EBPF_VERSION := v0.19.0
 GOLANGCI_LINT_VERSION = v1.61.0
 GO_VERSION = "1.23.4"
 PROTOC_VERSION = "3.19.4"
@@ -149,7 +149,7 @@ generate: gen-bpf gen-protobuf
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/amd64 --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
