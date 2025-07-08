@@ -149,7 +149,7 @@ generate: gen-bpf gen-protobuf
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
+	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/amd64 --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
