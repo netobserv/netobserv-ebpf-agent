@@ -2,10 +2,14 @@ FROM fedora:42
 
 ARG GOVERSION="1.24.4"
 ARG PROTOCVERSION
-ARG TARGETARCH
+ARG TARGETARCH="amd64"
 ARG EXTENSION
 
+RUN echo "zchunk=false" >> /etc/dnf/dnf.conf
+
 RUN echo "using TARGETARCH: $TARGETARCH EXTENSION: $EXTENSION"
+RUN dnf clean all && rm -rf /var/cache/* && \
+    dnf install -y git kernel-devel make llvm clang unzip
 
 # Installs dependencies that are required to compile eBPF programs
 RUN dnf install -y git kernel-devel make llvm clang unzip
@@ -16,9 +20,8 @@ VOLUME ["/src"]
 WORKDIR /
 
 # Installs a fairly modern distribution of Go
-RUN curl -qL https://go.dev/dl/go$GOVERSION.linux-$TARGETARCH.tar.gz -o go.tar.gz
-RUN tar -xzf go.tar.gz
-RUN rm go.tar.gz
+RUN curl -fSL https://go.dev/dl/go$GOVERSION.linux-$TARGETARCH.tar.gz -o go.tar.gz && \
+    tar -xzf go.tar.gz && rm go.tar.gz
 
 ENV GOROOT /go
 RUN mkdir -p /gopath
@@ -27,9 +30,8 @@ RUN mkdir -p /protoc
 WORKDIR /protoc
 
 # Installs Protoc compiler
-RUN curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-${EXTENSION}.zip -o protoc.zip
-RUN unzip protoc.zip
-RUN rm protoc.zip
+RUN curl -fSL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-${EXTENSION}.zip -o protoc.zip && \
+    unzip protoc.zip && rm protoc.zip
 
 ENV PATH $GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
 

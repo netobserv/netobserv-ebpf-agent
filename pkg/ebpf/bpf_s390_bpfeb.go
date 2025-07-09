@@ -8,11 +8,13 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
 
 type BpfAdditionalMetrics struct {
+	_                 structs.HostLayout
 	StartMonoTimeTs   uint64
 	EndMonoTimeTs     uint64
 	DnsRecord         BpfDnsRecordT
@@ -36,6 +38,7 @@ const (
 )
 
 type BpfDnsFlowId struct {
+	_        structs.HostLayout
 	SrcPort  uint16
 	DstPort  uint16
 	SrcIp    [16]uint8
@@ -46,6 +49,7 @@ type BpfDnsFlowId struct {
 }
 
 type BpfDnsRecordT struct {
+	_       structs.HostLayout
 	Latency uint64
 	Id      uint16
 	Flags   uint16
@@ -62,11 +66,13 @@ const (
 )
 
 type BpfFilterKeyT struct {
+	_         structs.HostLayout
 	PrefixLen uint32
 	IpData    [16]uint8
 }
 
 type BpfFilterValueT struct {
+	_                 structs.HostLayout
 	Protocol          uint8
 	_                 [1]byte
 	DstPortStart      uint16
@@ -96,6 +102,7 @@ type BpfFilterValueT struct {
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
+	_                 structs.HostLayout
 	SrcIp             [16]uint8
 	DstIp             [16]uint8
 	SrcPort           uint16
@@ -109,16 +116,20 @@ type BpfFlowIdT struct {
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	StartMonoTimeTs    uint64
-	EndMonoTimeTs      uint64
-	Bytes              uint64
-	Packets            uint32
-	EthProtocol        uint16
-	Flags              uint16
-	SrcMac             [6]uint8
-	DstMac             [6]uint8
-	IfIndexFirstSeen   uint32
-	Lock               struct{ Val uint32 }
+	_                structs.HostLayout
+	StartMonoTimeTs  uint64
+	EndMonoTimeTs    uint64
+	Bytes            uint64
+	Packets          uint32
+	EthProtocol      uint16
+	Flags            uint16
+	SrcMac           [6]uint8
+	DstMac           [6]uint8
+	IfIndexFirstSeen uint32
+	Lock             struct {
+		_   structs.HostLayout
+		Val uint32
+	}
 	Sampling           uint32
 	DirectionFirstSeen uint8
 	Errno              uint8
@@ -131,6 +142,7 @@ type BpfFlowMetricsT struct {
 }
 
 type BpfFlowRecordT struct {
+	_       structs.HostLayout
 	Id      BpfFlowId
 	Metrics BpfFlowMetrics
 }
@@ -152,6 +164,7 @@ const (
 )
 
 type BpfPktDropsT struct {
+	_               structs.HostLayout
 	Bytes           uint64
 	Packets         uint32
 	LatestDropCause uint32
@@ -177,6 +190,7 @@ const (
 )
 
 type BpfTranslatedFlowT struct {
+	_      structs.HostLayout
 	Saddr  [16]uint8
 	Daddr  [16]uint8
 	Sport  uint16
