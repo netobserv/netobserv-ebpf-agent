@@ -396,7 +396,10 @@ func getIngester(opMetrics *operational.Metrics, params config.StageParam) (inge
 		ingester, err = ingest.NewIngestFile(params)
 	case api.SyntheticType:
 		ingester, err = ingest.NewIngestSynthetic(opMetrics, params)
-	case api.CollectorType, api.IpfixType:
+	case api.CollectorType:
+		log.Warnf("Stage %s uses deprecated 'collector' API. It should be renamed 'ipfix', as 'collector' will be removed in a future release.", params.Name)
+		ingester, err = ingest.NewIngestIPFIX(opMetrics, params)
+	case api.IpfixType:
 		ingester, err = ingest.NewIngestIPFIX(opMetrics, params)
 	case api.StdinType:
 		ingester, err = ingest.NewIngestStdin(opMetrics, params)
