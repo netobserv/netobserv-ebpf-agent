@@ -66,7 +66,7 @@ func (e *EncodeProm) ProcessCounter(m interface{}, labels map[string]string, val
 	return nil
 }
 
-func (e *EncodeProm) ProcessGauge(m interface{}, labels map[string]string, value float64, _ string) error {
+func (e *EncodeProm) ProcessGauge(m interface{}, _ string, labels map[string]string, value float64, _ []string) error {
 	gauge := m.(*prometheus.GaugeVec)
 	mm, err := gauge.GetMetricWith(labels)
 	if err != nil {
@@ -98,7 +98,8 @@ func (e *EncodeProm) ProcessAggHist(m interface{}, labels map[string]string, val
 	return nil
 }
 
-func (e *EncodeProm) GetChacheEntry(entryLabels map[string]string, m interface{}) interface{} {
+func (e *EncodeProm) GetCacheEntry(entryLabels map[string]string, m interface{}) interface{} {
+	// In prom_encode, the metrics cache just contains cleanup callbacks
 	switch mv := m.(type) {
 	case *prometheus.CounterVec:
 		return func() { mv.Delete(entryLabels) }
