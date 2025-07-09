@@ -19,6 +19,7 @@ package opentelemetry
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
@@ -64,10 +65,22 @@ func (e *EncodeOtlpMetrics) ProcessCounter(m interface{}, labels map[string]stri
 	return nil
 }
 
-func (e *EncodeOtlpMetrics) ProcessGauge(m interface{}, labels map[string]string, value float64, key string) error {
+func createKey(name string, keys []string) string {
+	key := strings.Builder{}
+	key.WriteString(name)
+	key.WriteRune('|')
+	for _, k := range keys {
+		key.WriteString(k)
+		key.WriteRune('|')
+	}
+	return key.String()
+}
+
+func (e *EncodeOtlpMetrics) ProcessGauge(m interface{}, name string, labels map[string]string, value float64, lvs []string) error {
 	obs := m.(Float64Gauge)
 	// set attributes using the labels
 	attributes := obtainAttributesFromLabels(labels)
+	key := createKey(name, lvs)
 	obs.Set(key, value, attributes)
 	return nil
 }
@@ -90,7 +103,7 @@ func (e *EncodeOtlpMetrics) ProcessAggHist(m interface{}, labels map[string]stri
 	return nil
 }
 
-func (e *EncodeOtlpMetrics) GetChacheEntry(entryLabels map[string]string, _ interface{}) interface{} {
+func (e *EncodeOtlpMetrics) GetCacheEntry(entryLabels map[string]string, _ interface{}) interface{} {
 	return entryLabels
 }
 

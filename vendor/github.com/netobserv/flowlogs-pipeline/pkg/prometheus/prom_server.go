@@ -73,9 +73,12 @@ func InitializePrometheus(settings *config.MetricsSettings) *PromServer {
 		return nil
 	}
 	r := prom.DefaultGatherer
-	if settings.SuppressGoMetrics {
+	if settings.SuppressDefaultMetrics {
 		// set up private prometheus registry
-		r = prom.NewRegistry()
+		nr := prom.NewRegistry()
+		prom.DefaultRegisterer = nr
+		prom.DefaultGatherer = nr
+		r = nr
 	}
 	SharedServer = StartServerAsync(&settings.PromConnectionInfo, "", r)
 	return SharedServer
