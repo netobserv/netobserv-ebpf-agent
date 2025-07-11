@@ -8,15 +8,12 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: ['1.23']
     steps:
     - uses: actions/checkout@v3
     - name: Set up Go
       uses: actions/setup-go@v3
       with:
-        go-version: ${{ matrix.go }}
+        go-version: '1.24'
     - name: Install make
       run: sudo apt -y install make
     - name: Run verification and tests
@@ -27,7 +24,6 @@ jobs:
     - name: check clean vendors
       run: go mod vendor
     - name: Report coverage
-      if: ${{ matrix.go == '1.23' }}
       uses: codecov/codecov-action@v4
       with:
         files: ./cover.out

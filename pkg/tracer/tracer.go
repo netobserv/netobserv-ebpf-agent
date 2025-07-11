@@ -124,7 +124,7 @@ type variablesMapping struct {
 	value interface{}
 }
 
-// nolint:golint,cyclop
+// nolint:cyclop
 func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, error) {
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link

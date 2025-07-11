@@ -85,6 +85,7 @@ func main() {
 		fmt.Println("printing stdout without saving in file")
 
 		for fp := range flowPackets {
+			//nolint:staticcheck
 			fmt.Println(fp.Pcap.Value)
 		}
 	}

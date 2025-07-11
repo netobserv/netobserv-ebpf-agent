@@ -66,10 +66,7 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 	}
 
 	ingress, egress := flowDirections(cfg)
-	debug := false
-	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
-		debug = true
-	}
+	debug := cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String()
 	filterRules := make([]*tracer.FilterConfig, 0)
 	var flowFilters []*config.FlowFilter
 	if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {

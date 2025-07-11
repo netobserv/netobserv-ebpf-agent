@@ -50,7 +50,7 @@ func PBFlowToMap(pb *pbflow.Record) config.GenericMap {
 }
 
 // RecordToMap converts the flow from Agent inner model into FLP GenericMap model
-// nolint:golint,cyclop
+// nolint:cyclop
 func RecordToMap(fr *model.Record) config.GenericMap {
 	if fr == nil {
 		return config.GenericMap{}
