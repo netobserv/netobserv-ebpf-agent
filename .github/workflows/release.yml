@@ -12,9 +12,6 @@ jobs:
   push-image:
     name: push image
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go: ['1.23']
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -34,7 +31,7 @@ jobs:
       - name: set up go 1.x
         uses: actions/setup-go@v3
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.24'
       - name: docker login to quay.io
         uses: docker/login-action@v2
         with:
