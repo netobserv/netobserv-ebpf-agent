@@ -151,10 +151,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	}
 
 	ingress, egress := flowDirections(cfg)
-	debug := false
-	if cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String() {
-		debug = true
-	}
+	debug := cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String()
 	filterRules := make([]*tracer.FilterConfig, 0)
 	if cfg.EnableFlowFilter {
 		var flowFilters []*config.FlowFilter
