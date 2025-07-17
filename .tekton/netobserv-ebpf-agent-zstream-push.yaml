@@ -11,10 +11,10 @@ metadata:
       == "release-1.9"
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: netobserv-ystream
-    appstudio.openshift.io/component: netobserv-ebpf-agent-ystream
+    appstudio.openshift.io/application: netobserv-zstream
+    appstudio.openshift.io/component: netobserv-ebpf-agent-zstream
     pipelines.appstudio.openshift.io/type: build
-  name: netobserv-ebpf-agent-ystream-on-push
+  name: netobserv-ebpf-agent-zstream-on-push
   namespace: ocp-network-observab-tenant
 spec:
   params:
@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/ocp-network-observab-tenant/netobserv-ebpf-agent-ystream:{{revision}}
+    value: quay.io/redhat-user-workloads/ocp-network-observab-tenant/netobserv-ebpf-agent-zstream:{{revision}}
   - name: build-args-file
     value: Dockerfile-args.downstream
   - name: dockerfile
@@ -31,5 +31,5 @@ spec:
   pipelineRef:
     name: build-pipeline
   taskRunTemplate:
-    serviceAccountName: build-pipeline-netobserv-ebpf-agent-ystream
+    serviceAccountName: build-pipeline-netobserv-ebpf-agent-zstream
 status: {}
