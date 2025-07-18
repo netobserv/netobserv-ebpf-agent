@@ -29,14 +29,16 @@ if [[ "${z}" == "0" ]]; then
   next_y="$x.$((y+1)).$z"
   next_z="$x.$y.$((z+1))"
   echo "Next versions to prepare:"
-  echo "- ${next_y} for branch 'main' (changes will be done on the local branch 'next-main', so make sure it's fine to overwrite before you continue)"
-  echo "- ${next_z} for branch '${release_branch}' (changes will be done on the local branch 'next-${release_branch}', so make sure it's fine to overwrite before you continue)"
+  echo "- ${next_y} for branch 'main'"
+  echo "- ${next_z} for branch '${release_branch}'"
+  echo "Changes will be done to the local branches 'next-main' and 'next-${release_branch}', so make sure it's fine to overwrite before you continue"
 else
   next_z="$x.$y.$((z+1))"
   echo "Next version to prepare:"
-  echo "- ${next_z} for branch '${release_branch}' (changes will be done on the local branch 'next-${release_branch}', so make sure it's fine to overwrite before you continue)"
+  echo "- ${next_z} for branch '${release_branch}'"
+  echo "Changes will be done to the local branch 'next-${release_branch}', so make sure it's fine to overwrite before you continue"
 fi
-read -p "Is it correct? [y/N] " -n 1 -r
+read -p "Are we good? [y/N] " -n 1 -r
 echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]
 then
