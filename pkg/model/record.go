@@ -200,10 +200,10 @@ func (m *MacAddr) MarshalJSON() ([]byte, error) {
 	return []byte("\"" + m.String() + "\""), nil
 }
 
-// ReadFrom reads a Record from a binary source, in LittleEndian order
+// ReadFrom reads a Record from a binary source, in NativeEndian order
 func ReadFrom(reader io.Reader) (*RawRecord, error) {
 	var fr RawRecord
-	err := binary.Read(reader, binary.LittleEndian, &fr)
+	err := binary.Read(reader, binary.NativeEndian, &fr)
 	return &fr, err
 }
 

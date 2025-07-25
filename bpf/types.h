@@ -69,6 +69,8 @@ typedef __u64 u64;
 #define MAX_OBSERVED_INTERFACES 6
 #define OBSERVED_DIRECTION_BOTH 3
 
+#define MAX_PAYLOAD_SIZE 256
+
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
     INGRESS,
@@ -149,7 +151,6 @@ const static struct additional_metrics_t *unused3 __attribute__((unused));
 const static struct dns_record_t *unused4 __attribute__((unused));
 const static struct pkt_drops_t *unused5 __attribute__((unused));
 const static struct translated_flow_t *unused6 __attribute__((unused));
-const static struct observed_intf_t *unused13 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {
@@ -198,6 +199,7 @@ typedef struct payload_meta_t {
     u32 if_index;
     u32 pkt_len;
     u64 timestamp; // timestamp when packet received by ebpf
+    u8 payload[MAX_PAYLOAD_SIZE];
 } payload_meta;
 
 // DNS Flow record used as key to correlate DNS query and response
