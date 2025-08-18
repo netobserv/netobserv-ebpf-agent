@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/netobserv/gopipes/pkg/node"
@@ -154,25 +155,27 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	debug := cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String()
 
 	filterRules := make([]*tracer.FilterConfig, 0)
-	var flowFilters []*config.FlowFilter
-	if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
-		return nil, err
-	}
-	for _, r := range flowFilters {
-		filterRules = append(filterRules, &tracer.FilterConfig{
-			Action:          r.Action,
-			Direction:       r.Direction,
-			IPCIDR:          r.IPCIDR,
-			Protocol:        r.Protocol,
-			PeerIP:          r.PeerIP,
-			PeerCIDR:        r.PeerCIDR,
-			DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
-			SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
-			Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
-			TCPFlags:        r.TCPFlags,
-			Drops:           r.Drops,
-			Sample:          r.Sample,
-		})
+	if strings.TrimSpace(cfg.FlowFilterRules) != "" {
+		var flowFilters []*config.FlowFilter
+		if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
+			return nil, err
+		}
+		for _, r := range flowFilters {
+			filterRules = append(filterRules, &tracer.FilterConfig{
+				Action:          r.Action,
+				Direction:       r.Direction,
+				IPCIDR:          r.IPCIDR,
+				Protocol:        r.Protocol,
+				PeerIP:          r.PeerIP,
+				PeerCIDR:        r.PeerCIDR,
+				DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
+				SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
+				Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
+				TCPFlags:        r.TCPFlags,
+				Drops:           r.Drops,
+				Sample:          r.Sample,
+			})
+		}
 	}
 
 	ebpfConfig := &tracer.FlowFetcherConfig{
