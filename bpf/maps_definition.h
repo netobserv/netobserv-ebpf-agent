@@ -30,12 +30,10 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } additional_flow_metrics SEC(".maps");
 
-//PerfEvent Array for Packet Payloads
+//Ringbuf for Packet Payloads
 struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __type(key, u32);
-    __type(value, u32);
-    __uint(max_entries, 256);
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 21); // 256 bytes * 1000 events/sec * 5sec "eviction time"
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } packet_record SEC(".maps");
 
