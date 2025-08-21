@@ -109,7 +109,6 @@ type FlowFetcherConfig struct {
 	EnableRTT                      bool
 	EnableNetworkEventsMonitoring  bool
 	NetworkEventsMonitoringGroupID int
-	EnableFlowFilter               bool
 	EnablePCA                      bool
 	EnablePktTranslation           bool
 	UseEbpfManager                 bool
@@ -132,7 +131,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 	objects := ebpf.BpfObjects{}
 	var pinDir string
 	var filter *Filter
-	if cfg.EnableFlowFilter {
+	if len(cfg.FilterConfig) > 0 {
 		filter = NewFilter(cfg.FilterConfig)
 	}
 

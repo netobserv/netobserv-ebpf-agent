@@ -84,8 +84,7 @@ The following environment variables are available to configure the NetObserv eBP
   * `METRICS_TLS_CERT_PATH` (default: unset). Path to the certificate file for the TLS connection.
   * `METRICS_TLS_KEY_PATH` (default: unset). Path to the private key file for the TLS connection.
   * `METRICS_PREFIX` (default: `ebpf-agent`). Prefix for the exported metrics.
-* `ENABLE_FLOW_FILTER` (default: `false`). If `true`, the agent will filter flows based on the configured `FLOW_FILTER_RULES`.
-  * `FLOW_FILTER_RULES` (default: unset). Filtering rules, in JSON format. See [docs](./flow_filtering.md) for details.
+* `FLOW_FILTER_RULES` (default: unset). Filtering rules, in JSON format. See [docs](./flow_filtering.md) for details.
 * `PREFERRED_INTERFACE_FOR_MAC_PREFIX` (default: unset). It is a comma-separated list of key=value pairs, allowing to specify a preference when retrieving interface names per flow in case of index collision, when using multiple network namespaces are used. This setting is only used when the interface name could not be found for a given index and MAC. E.g. "0a:58=eth0" (used for ovn-kubernetes).
 
 ## Development-only variables

@@ -50,6 +50,82 @@ func TestFlowsAgent_InvalidConfigs(t *testing.T) {
 	}
 }
 
+func TestFlowsAgenti_ParseFlowFilterRules(t *testing.T) {
+	tests := []struct {
+		name            string
+		flowFilterRules string
+		expectError     bool
+		errorContains   string
+		expectedCount   int
+	}{
+		{
+			name:            "valid JSON configuration",
+			flowFilterRules: `[{"action":"Accept","direction":"Ingress","protocol":"TCP","destination_port":80}]`,
+			expectError:     false,
+			expectedCount:   1,
+		},
+		{
+			name:            "valid JSON with multiple rules",
+			flowFilterRules: `[{"action":"Accept","direction":"Ingress","protocol":"TCP","destination_port":80},{"action":"Reject","direction":"Egress","protocol":"UDP","source_port":53}]`,
+			expectError:     false,
+			expectedCount:   2,
+		},
+		{
+			name:            "empty JSON array",
+			flowFilterRules: `[]`,
+			expectError:     false,
+			expectedCount:   0,
+		},
+		{
+			name:            "empty string - no rules configured",
+			flowFilterRules: "",
+			expectError:     false,
+			expectedCount:   0,
+		},
+		{
+			name:            "invalid JSON - malformed",
+			flowFilterRules: `[{"action":"Accept","direction":"Ingress"`,
+			expectError:     true,
+			errorContains:   "unexpected end of JSON input",
+		},
+		{
+			name:            "invalid JSON - not an array",
+			flowFilterRules: `{"action":"Accept","direction":"Ingress"}`,
+			expectError:     true,
+			errorContains:   "cannot unmarshal object into Go value of type",
+		},
+		{
+			name:            "invalid JSON - completely malformed",
+			flowFilterRules: `{invalid json}`,
+			expectError:     true,
+			errorContains:   "invalid character",
+		},
+		{
+			name:            "valid JSON with complex filter",
+			flowFilterRules: `[{"action":"Accept","direction":"Ingress","protocol":"TCP","destination_port":80,"peer_ip":"192.168.1.1","tcp_flags":"SYN","drops":true,"sample":100}]`,
+			expectError:     false,
+			expectedCount:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterRules, err := parseFlowFilterRules(tt.flowFilterRules)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected error for invalid JSON configuration")
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains, "Error should contain expected text")
+				}
+				assert.Nil(t, filterRules, "Expected nil filter rules on error")
+			} else {
+				assert.NoError(t, err, "Expected no error for valid JSON configuration")
+				assert.Len(t, filterRules, tt.expectedCount, "Expected correct number of filter rules")
+			}
+		})
+	}
+}
+
 var (
 	key1 = ebpf.BpfFlowId{
 		SrcPort: 123,
