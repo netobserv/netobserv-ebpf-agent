@@ -6,7 +6,8 @@ Rules-base filtering is a method to control the flow of packets cached in the eB
 
 ## Filter rule configuration
 
-Filtering must be enabled with the environment variable `ENABLE_FLOW_FILTER` set to `true`, and `FLOW_FILTER_RULES` containing a list of rules in JSON format. For instance, you can create a `filters.json` file such as:
+Filtering is enabled when `FLOW_FILTER_RULES` environment variable contains a valid JSON array of rule objects.
+For instance, you can create a `filters.json` file such as:
 
 ```json
 [
@@ -20,7 +21,6 @@ Filtering must be enabled with the environment variable `ENABLE_FLOW_FILTER` set
 And set environment variables:
 
 ```bash
-export ENABLE_FLOW_FILTER="true"
 export FLOW_FILTER_RULES=$(cat filters.json)
 ```
  

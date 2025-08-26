@@ -152,30 +152,12 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 
 	ingress, egress := flowDirections(cfg)
 	debug := cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String()
-	filterRules := make([]*tracer.FilterConfig, 0)
-	if cfg.EnableFlowFilter {
-		var flowFilters []*config.FlowFilter
-		if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
-			return nil, err
-		}
 
-		for _, r := range flowFilters {
-			filterRules = append(filterRules, &tracer.FilterConfig{
-				Action:          r.Action,
-				Direction:       r.Direction,
-				IPCIDR:          r.IPCIDR,
-				Protocol:        r.Protocol,
-				PeerIP:          r.PeerIP,
-				PeerCIDR:        r.PeerCIDR,
-				DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
-				SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
-				Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
-				TCPFlags:        r.TCPFlags,
-				Drops:           r.Drops,
-				Sample:          r.Sample,
-			})
-		}
+	filterRules, err := parseFlowFilterRules(cfg.FlowFilterRules)
+	if err != nil {
+		return nil, err
 	}
+
 	ebpfConfig := &tracer.FlowFetcherConfig{
 		EnableIngress:                  ingress,
 		EnableEgress:                   egress,
@@ -188,7 +170,6 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		EnableRTT:                      cfg.EnableRTT,
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
 		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
-		EnableFlowFilter:               cfg.EnableFlowFilter,
 		EnablePktTranslation:           cfg.EnablePktTranslationTracking,
 		UseEbpfManager:                 cfg.EbpfProgramManagerMode,
 		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
@@ -436,4 +417,36 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 	mapTracer.Start()
 	rbTracer.Start()
 	return export, nil
+}
+
+// parseFlowFilterRules parses the JSON flow filter rules configuration and converts them to tracer filter configs
+func parseFlowFilterRules(flowFilterRules string) ([]*tracer.FilterConfig, error) {
+	filterRules := make([]*tracer.FilterConfig, 0)
+	if len(flowFilterRules) == 0 {
+		return filterRules, nil
+	}
+
+	var flowFilters []*config.FlowFilter
+	if err := json.Unmarshal([]byte(flowFilterRules), &flowFilters); err != nil {
+		return nil, err
+	}
+
+	for _, r := range flowFilters {
+		filterRules = append(filterRules, &tracer.FilterConfig{
+			Action:          r.Action,
+			Direction:       r.Direction,
+			IPCIDR:          r.IPCIDR,
+			Protocol:        r.Protocol,
+			PeerIP:          r.PeerIP,
+			PeerCIDR:        r.PeerCIDR,
+			DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
+			SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
+			Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
+			TCPFlags:        r.TCPFlags,
+			Drops:           r.Drops,
+			Sample:          r.Sample,
+		})
+	}
+
+	return filterRules, nil
 }
