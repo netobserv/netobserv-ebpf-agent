@@ -1,7 +1,7 @@
 // This ip2location package provides a fast lookup of country, region, city, latitude, longitude, ZIP code, time zone,
 // ISP, domain name, connection type, IDD code, area code, weather station code, station name, MCC, MNC,
-// mobile brand, elevation, usage type, address type, IAB category, district, autonomous system number (ASN) and
-// autonomous system (AS) from IP address by using IP2Location database.
+// mobile brand, elevation, usage type, address type, IAB category, district, autonomous system number (ASN),
+// autonomous system (AS), AS domain, AS usage type and AS CIDR from IP address by using IP2Location database.
 package ip2location
 
 import (
@@ -73,6 +73,9 @@ type IP2Locationrecord struct {
 	District           string
 	Asn                string
 	As                 string
+	Asdomain           string
+	Asusagetype        string
+	Ascidr             string
 }
 
 type DB struct {
@@ -103,6 +106,9 @@ type DB struct {
 	district_position_offset           uint32
 	asn_position_offset                uint32
 	as_position_offset                 uint32
+	asdomain_position_offset           uint32
+	asusagetype_position_offset        uint32
+	ascidr_position_offset             uint32
 
 	country_enabled            bool
 	region_enabled             bool
@@ -128,6 +134,9 @@ type DB struct {
 	district_enabled           bool
 	asn_enabled                bool
 	as_enabled                 bool
+	asdomain_enabled           bool
+	asusagetype_enabled        bool
+	ascidr_enabled             bool
 
 	metaok bool
 }
@@ -158,8 +167,11 @@ var category_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 var district_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 23}
 var asn_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24}
 var as_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25}
+var asdomain_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26}
+var asusagetype_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27}
+var ascidr_position = [27]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28}
 
-const api_version string = "9.7.1"
+const api_version string = "9.8.0"
 
 var max_ipv4_range = uint128.From64(4294967295)
 var max_ipv6_range = uint128.From64(0)
@@ -196,8 +208,11 @@ const category uint32 = 0x0200000
 const district uint32 = 0x0400000
 const asn uint32 = 0x0800000
 const as uint32 = 0x1000000
+const asdomain uint32 = 0x2000000
+const asusagetype uint32 = 0x4000000
+const ascidr uint32 = 0x8000000
 
-const all uint32 = countryshort | countrylong | region | city | isp | latitude | longitude | domain | zipcode | timezone | netspeed | iddcode | areacode | weatherstationcode | weatherstationname | mcc | mnc | mobilebrand | elevation | usagetype | addresstype | category | district | asn | as
+const all uint32 = countryshort | countrylong | region | city | isp | latitude | longitude | domain | zipcode | timezone | netspeed | iddcode | areacode | weatherstationcode | weatherstationname | mcc | mnc | mobilebrand | elevation | usagetype | addresstype | category | district | asn | as | asdomain | asusagetype | ascidr
 
 const invalid_address string = "Invalid IP address."
 const missing_file string = "Invalid database file."
@@ -550,6 +565,18 @@ func OpenDBWithReader(reader DBReader) (*DB, error) {
 		db.as_position_offset = uint32(as_position[dbt]-2) << 2
 		db.as_enabled = true
 	}
+	if asdomain_position[dbt] != 0 {
+		db.asdomain_position_offset = uint32(asdomain_position[dbt]-2) << 2
+		db.asdomain_enabled = true
+	}
+	if asusagetype_position[dbt] != 0 {
+		db.asusagetype_position_offset = uint32(asusagetype_position[dbt]-2) << 2
+		db.asusagetype_enabled = true
+	}
+	if ascidr_position[dbt] != 0 {
+		db.ascidr_position_offset = uint32(ascidr_position[dbt]-2) << 2
+		db.ascidr_enabled = true
+	}
 
 	db.metaok = true
 
@@ -617,6 +644,9 @@ func loadmessage(mesg string) IP2Locationrecord {
 	x.District = mesg
 	x.Asn = mesg
 	x.As = mesg
+	x.Asdomain = mesg
+	x.Asusagetype = mesg
+	x.Ascidr = mesg
 
 	return x
 }
@@ -912,6 +942,21 @@ func (d *DB) Get_as(ipaddress string) (IP2Locationrecord, error) {
 	return d.query(ipaddress, as)
 }
 
+// Get_as will return the AS domain based on the queried IP address.
+func (d *DB) Get_asdomain(ipaddress string) (IP2Locationrecord, error) {
+	return d.query(ipaddress, asdomain)
+}
+
+// Get_as will return the AS usage type based on the queried IP address.
+func (d *DB) Get_asusagetype(ipaddress string) (IP2Locationrecord, error) {
+	return d.query(ipaddress, asusagetype)
+}
+
+// Get_as will return the AS CIDR based on the queried IP address.
+func (d *DB) Get_ascidr(ipaddress string) (IP2Locationrecord, error) {
+	return d.query(ipaddress, ascidr)
+}
+
 // main query
 func (d *DB) query(ipaddress string, mode uint32) (IP2Locationrecord, error) {
 	x := loadmessage(not_supported) // default message
@@ -1153,6 +1198,24 @@ func (d *DB) query(ipaddress string, mode uint32) (IP2Locationrecord, error) {
 				}
 			}
 
+			if mode&asdomain != 0 && d.asdomain_enabled {
+				if x.Asdomain, err = d.readstr(d.readuint32_row(row, d.asdomain_position_offset)); err != nil {
+					return x, err
+				}
+			}
+
+			if mode&asusagetype != 0 && d.asusagetype_enabled {
+				if x.Asusagetype, err = d.readstr(d.readuint32_row(row, d.asusagetype_position_offset)); err != nil {
+					return x, err
+				}
+			}
+
+			if mode&ascidr != 0 && d.ascidr_enabled {
+				if x.Ascidr, err = d.readstr(d.readuint32_row(row, d.ascidr_position_offset)); err != nil {
+					return x, err
+				}
+			}
+
 			return x, nil
 		} else {
 			if ipno.Cmp(ipfrom) < 0 {
@@ -1196,4 +1259,7 @@ func Printrecord(x IP2Locationrecord) {
 	fmt.Printf("district: %s\n", x.District)
 	fmt.Printf("asn: %s\n", x.Asn)
 	fmt.Printf("as: %s\n", x.As)
+	fmt.Printf("asdomain: %s\n", x.Asdomain)
+	fmt.Printf("asusagetype: %s\n", x.Asusagetype)
+	fmt.Printf("ascidr: %s\n", x.Ascidr)
 }
