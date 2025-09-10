@@ -176,6 +176,8 @@ func (c *ingestIPFIX) processLogLines(out chan<- config.GenericMap) {
 			ilog.Infof("Exit signal received, stop processing input")
 			return
 		case record := <-c.in:
+			c.metrics.flowsProcessed.Inc()
+			c.metrics.observeLatency(record)
 			out <- record
 		}
 	}
@@ -195,7 +197,7 @@ func NewIngestIPFIX(opMetrics *operational.Metrics, params config.StageParam) (I
 	ilog.Infof("Ingest IPFIX config: [%s]", cfg.String())
 
 	in := make(chan map[string]interface{}, channelSize)
-	metrics := newMetrics(opMetrics, params.Name, params.Ingest.Type, func() int { return len(in) })
+	metrics := newMetrics(opMetrics, params.Name, params.Ingest.Type, func() int { return len(in) }, withLatency())
 
 	return &ingestIPFIX{
 		IngestIpfix: &cfg,

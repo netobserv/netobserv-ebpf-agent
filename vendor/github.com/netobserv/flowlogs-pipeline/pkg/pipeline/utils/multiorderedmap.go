@@ -31,7 +31,7 @@ import (
 type Key uint64
 type Record interface{}
 type OrderID string
-type processRecordFunc func(Record) (delete, stop bool)
+type processRecordFunc func(Record) (bool, bool)
 
 type recordWrapper struct {
 	record          Record

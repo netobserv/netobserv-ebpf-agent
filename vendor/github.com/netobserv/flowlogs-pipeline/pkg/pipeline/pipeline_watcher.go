@@ -22,7 +22,7 @@ type pipelineConfigWatcher struct {
 	pipelineEntryMap map[string]*pipelineEntry
 }
 
-func newPipelineConfigWatcher(cfg *config.ConfigFileStruct, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
+func newPipelineConfigWatcher(cfg *config.Root, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
 	if cfg.DynamicParameters.Name == "" ||
 		cfg.DynamicParameters.Namespace == "" ||
 		cfg.DynamicParameters.FileName == "" {

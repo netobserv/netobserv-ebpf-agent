@@ -107,25 +107,6 @@ func (k *ingestKafka) isStopped() bool {
 	}
 }
 
-func (k *ingestKafka) processRecordDelay(record config.GenericMap) {
-	timeFlowEndInterface, ok := record["TimeFlowEndMs"]
-	if !ok {
-		// "trace" level used to minimize performance impact
-		klog.Tracef("TimeFlowEndMs missing in record %v", record)
-		k.metrics.error("TimeFlowEndMs missing")
-		return
-	}
-	timeFlowEnd, ok := timeFlowEndInterface.(int64)
-	if !ok {
-		// "trace" level used to minimize performance impact
-		klog.Tracef("Cannot parse TimeFlowEndMs of record %v", record)
-		k.metrics.error("Cannot parse TimeFlowEndMs")
-		return
-	}
-	delay := time.Since(time.UnixMilli(timeFlowEnd)).Seconds()
-	k.metrics.latency.Observe(delay)
-}
-
 func (k *ingestKafka) processRecord(record []byte, out chan<- config.GenericMap) {
 	// Decode batch
 	decoded, err := k.decoder.Decode(record)
@@ -133,7 +114,7 @@ func (k *ingestKafka) processRecord(record []byte, out chan<- config.GenericMap)
 		klog.WithError(err).Warnf("ignoring flow")
 		return
 	}
-	k.processRecordDelay(decoded)
+	k.metrics.observeLatency(decoded)
 
 	// Send batch
 	out <- decoded
@@ -167,7 +148,6 @@ func (k *ingestKafka) reportStats() {
 }
 
 // NewIngestKafka create a new ingester
-// nolint:cyclop
 func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (Ingester, error) {
 	config := &api.IngestKafka{}
 	var ingestType string
@@ -189,7 +169,14 @@ func NewIngestKafka(opMetrics *operational.Metrics, params config.StageParam) (I
 	}
 
 	in := make(chan []byte, 2*bml)
-	metrics := newMetrics(opMetrics, params.Name, ingestType, func() int { return len(in) })
+	metrics := newMetrics(
+		opMetrics,
+		params.Name,
+		ingestType,
+		func() int { return len(in) },
+		withLatency(),
+		withBatchSizeBytes(),
+	)
 
 	return &ingestKafka{
 		kafkaReader:    kafkaReader,

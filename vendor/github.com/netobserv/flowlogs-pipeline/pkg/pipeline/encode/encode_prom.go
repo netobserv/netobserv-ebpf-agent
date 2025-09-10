@@ -35,8 +35,7 @@ var plog = logrus.WithField("component", "encode.Prometheus")
 
 const defaultExpiryTime = time.Duration(2 * time.Minute)
 
-// nolint:revive
-type EncodeProm struct {
+type Prometheus struct {
 	cfg          *api.PromEncode
 	registerer   prometheus.Registerer
 	metricCommon *MetricsCommonStruct
@@ -45,18 +44,18 @@ type EncodeProm struct {
 	regName      string
 }
 
-func (e *EncodeProm) Gatherer() prometheus.Gatherer {
+func (e *Prometheus) Gatherer() prometheus.Gatherer {
 	return e.server
 }
 
 // Encode encodes a metric before being stored; the heavy work is done by the MetricCommonEncode
-func (e *EncodeProm) Encode(metricRecord config.GenericMap) {
-	plog.Tracef("entering EncodeMetric. metricRecord = %v", metricRecord)
+func (e *Prometheus) Encode(metricRecord config.GenericMap) {
+	plog.Tracef("entering encode.Prometheus; metricRecord = %v", metricRecord)
 	e.metricCommon.MetricCommonEncode(e, metricRecord)
 	e.checkConfUpdate()
 }
 
-func (e *EncodeProm) ProcessCounter(m interface{}, labels map[string]string, value float64) error {
+func (e *Prometheus) ProcessCounter(m interface{}, labels map[string]string, value float64) error {
 	counter := m.(*prometheus.CounterVec)
 	mm, err := counter.GetMetricWith(labels)
 	if err != nil {
@@ -66,7 +65,7 @@ func (e *EncodeProm) ProcessCounter(m interface{}, labels map[string]string, val
 	return nil
 }
 
-func (e *EncodeProm) ProcessGauge(m interface{}, _ string, labels map[string]string, value float64, _ []string) error {
+func (e *Prometheus) ProcessGauge(m interface{}, _ string, labels map[string]string, value float64, _ []string) error {
 	gauge := m.(*prometheus.GaugeVec)
 	mm, err := gauge.GetMetricWith(labels)
 	if err != nil {
@@ -76,7 +75,7 @@ func (e *EncodeProm) ProcessGauge(m interface{}, _ string, labels map[string]str
 	return nil
 }
 
-func (e *EncodeProm) ProcessHist(m interface{}, labels map[string]string, value float64) error {
+func (e *Prometheus) ProcessHist(m interface{}, labels map[string]string, value float64) error {
 	hist := m.(*prometheus.HistogramVec)
 	mm, err := hist.GetMetricWith(labels)
 	if err != nil {
@@ -86,7 +85,7 @@ func (e *EncodeProm) ProcessHist(m interface{}, labels map[string]string, value 
 	return nil
 }
 
-func (e *EncodeProm) ProcessAggHist(m interface{}, labels map[string]string, values []float64) error {
+func (e *Prometheus) ProcessAggHist(m interface{}, labels map[string]string, values []float64) error {
 	hist := m.(*prometheus.HistogramVec)
 	mm, err := hist.GetMetricWith(labels)
 	if err != nil {
@@ -98,7 +97,7 @@ func (e *EncodeProm) ProcessAggHist(m interface{}, labels map[string]string, val
 	return nil
 }
 
-func (e *EncodeProm) GetCacheEntry(entryLabels map[string]string, m interface{}) interface{} {
+func (e *Prometheus) GetCacheEntry(entryLabels map[string]string, m interface{}) interface{} {
 	// In prom_encode, the metrics cache just contains cleanup callbacks
 	switch mv := m.(type) {
 	case *prometheus.CounterVec:
@@ -112,41 +111,41 @@ func (e *EncodeProm) GetCacheEntry(entryLabels map[string]string, m interface{})
 }
 
 // callback function from lru cleanup
-func (e *EncodeProm) Cleanup(cleanupFunc interface{}) {
+func (e *Prometheus) Cleanup(cleanupFunc interface{}) {
 	cleanupFunc.(func())()
 }
 
-func (e *EncodeProm) addCounter(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
+func (e *Prometheus) addCounter(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddCounter(fullMetricName, counter, mInfo)
 	return counter
 }
 
-func (e *EncodeProm) addGauge(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
+func (e *Prometheus) addGauge(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	gauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddGauge(fullMetricName, gauge, mInfo)
 	return gauge
 }
 
-func (e *EncodeProm) addHistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
+func (e *Prometheus) addHistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddHist(fullMetricName, histogram, mInfo)
 	return histogram
 }
 
-func (e *EncodeProm) addAgghistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
+func (e *Prometheus) addAgghistogram(fullMetricName string, mInfo *metrics.Preprocessed) prometheus.Collector {
 	agghistogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: fullMetricName, Help: ""}, mInfo.TargetLabels())
 	e.metricCommon.AddAggHist(fullMetricName, agghistogram, mInfo)
 	return agghistogram
 }
 
-func (e *EncodeProm) unregisterMetric(c interface{}) {
+func (e *Prometheus) unregisterMetric(c interface{}) {
 	if c, ok := c.(prometheus.Collector); ok {
 		e.registerer.Unregister(c)
 	}
 }
 
-func (e *EncodeProm) cleanDeletedGeneric(newCfg api.PromEncode, metrics map[string]mInfoStruct) {
+func (e *Prometheus) cleanDeletedGeneric(newCfg api.PromEncode, metrics map[string]mInfoStruct) {
 	for fullName, m := range metrics {
 		if !strings.HasPrefix(fullName, newCfg.Prefix) {
 			if c, ok := m.genericMetric.(prometheus.Collector); ok {
@@ -170,7 +169,7 @@ func (e *EncodeProm) cleanDeletedGeneric(newCfg api.PromEncode, metrics map[stri
 	}
 }
 
-func (e *EncodeProm) cleanDeletedMetrics(newCfg api.PromEncode) {
+func (e *Prometheus) cleanDeletedMetrics(newCfg api.PromEncode) {
 	e.cleanDeletedGeneric(newCfg, e.metricCommon.counters)
 	e.cleanDeletedGeneric(newCfg, e.metricCommon.gauges)
 	e.cleanDeletedGeneric(newCfg, e.metricCommon.histos)
@@ -178,7 +177,7 @@ func (e *EncodeProm) cleanDeletedMetrics(newCfg api.PromEncode) {
 }
 
 // returns true if a registry restart is needed
-func (e *EncodeProm) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, store map[string]mInfoStruct, createMetric func(string, *metrics.Preprocessed) prometheus.Collector) bool {
+func (e *Prometheus) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, store map[string]mInfoStruct, createMetric func(string, *metrics.Preprocessed) prometheus.Collector) bool {
 	fullMetricName := prefix + apiItem.Name
 	plog.Debugf("Checking metric: %s", fullMetricName)
 	mInfo := metrics.Preprocess(apiItem)
@@ -209,7 +208,7 @@ func (e *EncodeProm) checkMetricUpdate(prefix string, apiItem *api.MetricsItem, 
 	return false
 }
 
-func (e *EncodeProm) checkConfUpdate() {
+func (e *Prometheus) checkConfUpdate() {
 	select {
 	case stage := <-e.updateChan:
 		cfg := api.PromEncode{}
@@ -252,7 +251,7 @@ func (e *EncodeProm) checkConfUpdate() {
 	}
 }
 
-func (e *EncodeProm) resetRegistry() {
+func (e *Prometheus) resetRegistry() {
 	e.metricCommon.cleanupInfoStructs()
 	reg := prometheus.NewRegistry()
 	e.registerer = reg
@@ -299,7 +298,7 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 
 	registry := prometheus.NewRegistry()
 
-	w := &EncodeProm{
+	w := &Prometheus{
 		cfg:        &cfg,
 		registerer: registry,
 		updateChan: make(chan config.StageParam),
@@ -321,6 +320,6 @@ func NewEncodeProm(opMetrics *operational.Metrics, params config.StageParam) (En
 	return w, nil
 }
 
-func (e *EncodeProm) Update(config config.StageParam) {
+func (e *Prometheus) Update(config config.StageParam) {
 	e.updateChan <- config
 }

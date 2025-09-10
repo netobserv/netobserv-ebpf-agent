@@ -32,7 +32,7 @@ type Decoder interface {
 func GetDecoder(params api.Decoder) (Decoder, error) {
 	switch params.Type {
 	case api.DecoderJSON:
-		return NewDecodeJSON()
+		return NewJSON()
 	case api.DecoderProtobuf:
 		return decode.NewProtobuf()
 	}

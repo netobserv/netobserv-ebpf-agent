@@ -27,7 +27,7 @@ var (
 
 type Mock struct {
 	mock.Mock
-	InformersInterface
+	Interface
 }
 
 func NewInformersMock() *Mock {
@@ -164,7 +164,7 @@ func SetupIndexerMocks(kd *Informers) (pods, nodes, svc, rs *IndexerMock) {
 }
 
 type FakeInformers struct {
-	InformersInterface
+	Interface
 	ipInfo         map[string]*model.ResourceMetaData
 	customKeysInfo map[string]*model.ResourceMetaData
 	nodes          map[string]*model.ResourceMetaData

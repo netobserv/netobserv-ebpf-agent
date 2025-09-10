@@ -8,7 +8,7 @@ import (
 )
 
 type Datasource struct {
-	Informers informers.InformersInterface
+	Informers informers.Interface
 }
 
 func NewInformerDatasource(kubeconfig string, infConfig informers.Config, opMetrics *operational.Metrics) (*Datasource, error) {

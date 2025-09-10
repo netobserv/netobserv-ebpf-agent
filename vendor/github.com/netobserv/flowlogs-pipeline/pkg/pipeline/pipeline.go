@@ -50,12 +50,12 @@ type Pipeline struct {
 }
 
 // NewPipeline defines the pipeline elements
-func NewPipeline(cfg *config.ConfigFileStruct) (*Pipeline, error) {
+func NewPipeline(cfg *config.Root) (*Pipeline, error) {
 	return newPipelineFromIngester(cfg, nil)
 }
 
 // newPipelineFromIngester defines the pipeline elements from a preset ingester (e.g. for in-process receiver)
-func newPipelineFromIngester(cfg *config.ConfigFileStruct, ing ingest.Ingester) (*Pipeline, error) {
+func newPipelineFromIngester(cfg *config.Root, ing ingest.Ingester) (*Pipeline, error) {
 	log.Debugf("entering newPipelineFromIngester")
 
 	log.Debugf("stages = %v ", cfg.Pipeline)
