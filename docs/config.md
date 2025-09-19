@@ -30,7 +30,7 @@ The following environment variables are available to configure the NetObserv eBP
   Any interface with an associated IP address within the given ranges will be listened on. This is an
   alternative to specifying `INTERFACES`, useful when you know ahead of time what IP or IP range an
   interface will have but not the OS-assigned interface name itself. Exclusive with INTERFACES/EXCLUDE_INTERFACES.
-* `SAMPLING` (default: disabled). Rate at which packets should be sampled and sent to the target
+* `SAMPLING` (default: disabled). Interval at which packets should be sampled and sent to the target
   collector. E.g. if set to 10, one out of 10 packets, on average, will be sent to the target
   collector.
 * `CACHE_MAX_FLOWS` (default: `5000`). Number of flows that can be accumulated in the accounting
