@@ -52,15 +52,14 @@ var (
 	log = logrus.WithField("component", "transform.Network.Kubernetes")
 )
 
-//nolint:revive
-type InformersInterface interface {
+type Interface interface {
 	IndexLookup([]cni.SecondaryNetKey, string) *model.ResourceMetaData
 	GetNodeByName(string) (*model.ResourceMetaData, error)
 	InitFromConfig(string, Config, *operational.Metrics) error
 }
 
 type Informers struct {
-	InformersInterface
+	Interface
 	// pods, nodes and services cache the different object types as *Info pointers
 	pods     cache.SharedIndexInformer
 	nodes    cache.SharedIndexInformer

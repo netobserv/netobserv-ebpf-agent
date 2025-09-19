@@ -17,7 +17,7 @@ type DirectFLP struct {
 }
 
 func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
-	var cfg flpconfig.ConfigFileStruct
+	var cfg flpconfig.Root
 	// Note that, despite jsonConfig being json, we use yaml unmarshaler because the json one
 	// is screwed up for HTTPClientConfig in github.com/prometheus/common/config (used for Loki)
 	// This is ok as YAML is a superset of JSON.
