@@ -74,7 +74,7 @@ type pipelineEntry struct {
 	Writer      write.Writer
 }
 
-func getDynConfig(cfg *config.ConfigFileStruct) ([]config.StageParam, error) {
+func getDynConfig(cfg *config.Root) ([]config.StageParam, error) {
 	k8sconfig, err := k8sutils.LoadK8sConfig(cfg.DynamicParameters.KubeConfigPath)
 	if err != nil {
 		log.Errorf("Cannot get k8s config: %v", err)
@@ -105,7 +105,7 @@ func getDynConfig(cfg *config.ConfigFileStruct) ([]config.StageParam, error) {
 	return dynConfig.Parameters, nil
 }
 
-func newBuilder(cfg *config.ConfigFileStruct) *builder {
+func newBuilder(cfg *config.Root) *builder {
 	// Get global metrics settings
 	opMetrics := operational.NewMetrics(&cfg.MetricsSettings)
 	stageDuration := opMetrics.GetOrCreateStageDurationHisto()

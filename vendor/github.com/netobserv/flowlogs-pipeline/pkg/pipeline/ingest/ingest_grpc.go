@@ -45,7 +45,15 @@ func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (
 		bufLen = defaultBufferLen
 	}
 	flowPackets := make(chan *pbflow.Records, bufLen)
-	metrics := newMetrics(opMetrics, params.Name, params.Ingest.Type, func() int { return len(flowPackets) })
+	metrics := newMetrics(
+		opMetrics,
+		params.Name,
+		params.Ingest.Type,
+		func() int { return len(flowPackets) },
+		withLatency(),
+		withBatchSizeBytes(),
+		withStageDuration(),
+	)
 	collector, err := grpc.StartCollector(netObserv.Port, flowPackets,
 		grpc.WithGRPCServerOptions(grpc2.UnaryInterceptor(instrumentGRPC(metrics))))
 	if err != nil {

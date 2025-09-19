@@ -10,7 +10,7 @@ import (
 )
 
 // StartFLPInProcess is an entry point to start the whole FLP / pipeline processing from imported code
-func StartFLPInProcess(cfg *config.ConfigFileStruct, in chan config.GenericMap) error {
+func StartFLPInProcess(cfg *config.Root, in chan config.GenericMap) error {
 	promServer := prometheus.InitializePrometheus(&cfg.MetricsSettings)
 
 	// Create new flows pipeline
