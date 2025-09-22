@@ -131,7 +131,7 @@ var (
 	)
 	samplingRate = defineMetric(
 		"sampling_rate",
-		"Sampling rate",
+		"Sampling interval",
 		TypeGauge,
 	)
 	errorsCounter = defineMetric(
