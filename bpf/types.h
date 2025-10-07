@@ -72,6 +72,8 @@ typedef __u64 u64;
 #define MAX_PAYLOAD_SIZE 256
 #define DNS_NAME_MAX_LEN 32
 
+#define MISC_FLAGS_SSL_MISMATCH 0x01
+
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
     INGRESS,
@@ -111,6 +113,8 @@ typedef struct flow_metrics_t {
     u8 nb_observed_intf;
     u8 observed_direction[MAX_OBSERVED_INTERFACES];
     u32 observed_intf[MAX_OBSERVED_INTERFACES];
+    u16 ssl_version;
+    u8 misc_flags;
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF
@@ -214,6 +218,7 @@ typedef struct pkt_info_t {
     u16 dns_flags;
     u64 dns_latency;
     char dns_name[DNS_NAME_MAX_LEN];
+    u16 ssl_version;
 } pkt_info;
 
 // Structure for payload metadata

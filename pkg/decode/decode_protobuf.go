@@ -160,6 +160,12 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 			out["IPSecRetCode"] = int32(0)
 			out["IPSecStatus"] = "success"
 		}
+		if tlsVersion := fr.Metrics.SSLVersionToString(); tlsVersion != "" {
+			out["TLSVersion"] = tlsVersion
+		}
+		if fr.Metrics.HasSSLMismatch() {
+			out["TLSMismatch"] = true
+		}
 	}
 
 	if fr.TimeFlowRtt != 0 {

@@ -50,6 +50,22 @@ static inline void set_flags(struct tcphdr *th, u16 *flags) {
     }
 }
 
+// Extract TLS info
+static inline void fill_tls_info(struct tcphdr *tcp, void *data_end, pkt_info *pkt) {
+    void *start_payload = ((void *)tcp) + (tcp->doff * 4);
+    if (start_payload + 5 <= data_end) {
+        if (((u8 *)start_payload)[0] == 0x16) {
+            // TODO handshake special case, see https://www.netmeister.org/blog/tcpdump-ssl-and-tls.html
+            pkt->ssl_version =
+                ((u16)(((u8 *)start_payload)[1])) << 8 | (u16)(((u8 *)start_payload)[2]);
+        } else if (((u8 *)start_payload)[0] == 0x14 || ((u8 *)start_payload)[0] == 0x15 ||
+                   ((u8 *)start_payload)[0] == 0x17) {
+            pkt->ssl_version =
+                ((u16)(((u8 *)start_payload)[1])) << 8 | (u16)(((u8 *)start_payload)[2]);
+        }
+    }
+}
+
 // Extract L4 info for the supported protocols
 static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol, pkt_info *pkt) {
     flow_id *id = pkt->id;
@@ -62,6 +78,7 @@ static inline void fill_l4info(void *l4_hdr_start, void *data_end, u8 protocol, 
             id->dst_port = bpf_ntohs(tcp->dest);
             set_flags(tcp, &pkt->flags);
             pkt->l4_hdr = (void *)tcp;
+            fill_tls_info(tcp, data_end, pkt);
         }
     } break;
     case IPPROTO_UDP: {

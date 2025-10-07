@@ -68,6 +68,8 @@ func FlowToPB(fr *model.Record) *Record {
 		Flags:       uint32(fr.Metrics.Flags),
 		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 		Sampling:    fr.Metrics.Sampling,
+		SslVersion:  uint32(fr.Metrics.SslVersion),
+		SslMismatch: fr.Metrics.HasSSLMismatch(),
 	}
 	if fr.Metrics.DNSMetrics != nil {
 		pbflowRecord.DnsId = uint32(fr.Metrics.DNSMetrics.Id)
@@ -160,6 +162,7 @@ func PBToFlow(pb *Record) *model.Record {
 				Flags:       uint16(pb.Flags),
 				Dscp:        uint8(pb.Network.Dscp),
 				Sampling:    pb.Sampling,
+				SslVersion:  uint16(pb.SslVersion),
 			},
 			DNSMetrics: &ebpf.BpfDnsMetrics{
 				Id:      uint16(pb.DnsId),
@@ -191,6 +194,9 @@ func PBToFlow(pb *Record) *model.Record {
 		AgentIP:       pbIPToNetIP(pb.AgentIp),
 		TimeFlowRtt:   pb.TimeFlowRtt.AsDuration(),
 		DNSLatency:    pb.DnsLatency.AsDuration(),
+	}
+	if pb.SslMismatch {
+		out.Metrics.MiscFlags |= model.MiscFlagsSSLMismatch
 	}
 	if pb.IpsecEncrypted != 0 {
 		out.Metrics.AdditionalMetrics.IpsecEncrypted = true

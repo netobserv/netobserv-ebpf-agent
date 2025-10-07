@@ -139,7 +139,9 @@ type BpfFlowMetricsT struct {
 	ObservedDirection  [6]uint8
 	_                  [2]byte
 	ObservedIntf       [6]uint32
-	_                  [4]byte
+	SslVersion         uint16
+	MiscFlags          uint8
+	_                  [1]byte
 }
 
 type BpfFlowRecordT struct {

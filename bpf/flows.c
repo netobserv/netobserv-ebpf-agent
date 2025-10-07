@@ -93,6 +93,17 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         aggregate_flow->flags |= pkt->flags;
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
+        if (pkt->ssl_version != 0 && aggregate_flow->ssl_version != pkt->ssl_version) {
+            if (aggregate_flow->ssl_version == 0) {
+                aggregate_flow->ssl_version = pkt->ssl_version;
+            } else {
+                // If several SSL versions are found, keep just the smallest and set the "mismatch" flag
+                if (pkt->ssl_version < aggregate_flow->ssl_version) {
+                    aggregate_flow->ssl_version = pkt->ssl_version;
+                }
+                aggregate_flow->misc_flags |= MISC_FLAGS_SSL_MISMATCH;
+            }
+        }
     } else if (if_index != 0) {
         // Only add info that we've seen this interface (we can also update end time & flags)
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
@@ -198,6 +209,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         new_flow.sampling = flow_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
+        new_flow.ssl_version = pkt.ssl_version;
 
         long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {

@@ -70,6 +70,8 @@ message Record {
   uint32 ipsec_encrypted = 30;
   int32 ipsec_encrypted_ret = 31;
   string dns_name = 32;
+  uint32 ssl_version = 33;
+  bool ssl_mismatch = 34;
 }
 
 message DataLink {
