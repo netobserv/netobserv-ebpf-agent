@@ -69,6 +69,8 @@ message Record {
   uint32 sampling = 29;
   uint32 ipsec_encrypted = 30;
   int32 ipsec_encrypted_ret = 31;
+  uint32 ssl_version = 32;
+  bool ssl_mismatch = 33;
 }
 
 message DataLink {

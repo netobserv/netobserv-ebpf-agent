@@ -48,6 +48,7 @@ func TestConversions(t *testing.T) {
 						Flags:       0x100,
 						Dscp:        64,
 						Sampling:    1,
+						SslVersion:  0x0303,
 					},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 						DnsRecord: ebpf.BpfDnsRecordT{
@@ -83,6 +84,7 @@ func TestConversions(t *testing.T) {
 				"AgentIP":         "10.11.12.13",
 				"IPSecRetCode":    0,
 				"IPSecStatus":     "success",
+				"TLSVersion":      "TLS 1.2",
 			},
 		},
 		{
@@ -333,6 +335,7 @@ func TestConversions(t *testing.T) {
 						Packets:     123,
 						Flags:       0x100,
 						Dscp:        64,
+						SslVersion:  0x0200,
 					},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 						DnsRecord: ebpf.BpfDnsRecordT{
@@ -389,6 +392,7 @@ func TestConversions(t *testing.T) {
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
 				"IPSecRetCode":           0,
 				"IPSecStatus":            "success",
+				"TLSVersion":             "SSL 2.0",
 			},
 		},
 		{
@@ -410,6 +414,7 @@ func TestConversions(t *testing.T) {
 						Packets:     1,
 						Flags:       0x100,
 						Dscp:        64,
+						SslVersion:  0x0303,
 					},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
 						DnsRecord: ebpf.BpfDnsRecordT{
@@ -447,6 +452,7 @@ func TestConversions(t *testing.T) {
 				"AgentIP":         "10.11.12.13",
 				"IPSecRetCode":    0,
 				"IPSecStatus":     "success",
+				"TLSVersion":      "TLS 1.2",
 			},
 		},
 	}
