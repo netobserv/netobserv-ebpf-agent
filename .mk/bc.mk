@@ -32,7 +32,7 @@ define MAPS
 	"direct_flows":"ringbuf",
 	"aggregated_flows":"hash",
 	"additional_flow_metrics":"per_cpu_hash",
-	"packets_record":"ringbuf",
+	"packet_record":"ringbuf",
 	"dns_flows":"hash",
 	"global_counters":"per_cpu_array",
 	"filter_map":"lpm_trie",
