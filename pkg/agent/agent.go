@@ -168,6 +168,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		EnableDNSTracker:               cfg.EnableDNSTracking,
 		DNSTrackerPort:                 cfg.DNSTrackingPort,
 		EnableRTT:                      cfg.EnableRTT,
+		EnableKTLS:                     cfg.EnableKTLSTracking,
 		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
 		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
 		EnablePktTranslation:           cfg.EnablePktTranslationTracking,

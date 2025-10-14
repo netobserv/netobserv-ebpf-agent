@@ -132,6 +132,7 @@ typedef struct additional_metrics_t {
         u8 latest_state;
     } pkt_drops;
     u64 flow_rtt;
+    u8 verdict;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
     struct translated_flow_t {
         u8 saddr[IP_MAX_LEN];

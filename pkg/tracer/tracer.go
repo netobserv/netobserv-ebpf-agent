@@ -6,7 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -40,6 +42,7 @@ const (
 	peerFilterMap         = "peer_filter_map"
 	globalCountersMap     = "global_counters"
 	pcaRecordsMap         = "packet_record"
+	cgroupPath            = "/sys/fs/cgroup"
 	ipsecInputMap         = "ipsec_ingress_map"
 	ipsecOutputMap        = "ipsec_egress_map"
 	// constants defined in flows.c as "volatile const"
@@ -82,6 +85,7 @@ type FlowFetcher struct {
 	enableIngress               bool
 	enableEgress                bool
 	pktDropsTracePoint          link.Link
+	tlsLink                     link.Link
 	rttFentryLink               link.Link
 	rttKprobeLink               link.Link
 	egressTCXLink               map[ifaces.InterfaceKey]link.Link
@@ -107,6 +111,7 @@ type FlowFetcherConfig struct {
 	EnableDNSTracker               bool
 	DNSTrackerPort                 uint16
 	EnableRTT                      bool
+	EnableKTLS                     bool
 	EnableNetworkEventsMonitoring  bool
 	NetworkEventsMonitoringGroupID int
 	EnablePCA                      bool
@@ -131,6 +136,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 	objects := ebpf.BpfObjects{}
 	var pinDir string
 	var filter *Filter
+	var tlsLink link.Link
 	if len(cfg.FilterConfig) > 0 {
 		filter = NewFilter(cfg.FilterConfig)
 	}
@@ -181,6 +187,30 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		objects, err = kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, spec, pinDir)
 		if err != nil {
 			return nil, err
+		}
+
+		var cgPath string
+		if cfg.EnableKTLS {
+			cgPath, err = findCgroupPath()
+			if err != nil {
+				return nil, fmt.Errorf("failed to find cgroup path: %w", err)
+			}
+			tlsLink, err = link.AttachCgroup(link.CgroupOptions{
+				Path:    cgPath,
+				Program: objects.BpfSockops,
+				Attach:  cilium.AttachCGroupSockOps,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to attach cgroup: %w", err)
+			}
+
+			if err := link.RawAttachProgram(link.RawAttachProgramOptions{
+				Target:  objects.SockHash.FD(),
+				Program: objects.BpfKtlsRedir,
+				Attach:  cilium.AttachSkMsgVerdict,
+			}); err != nil {
+				return nil, fmt.Errorf("failed to attach sk_msg: %w", err)
+			}
 		}
 
 		log.Debugf("Deleting specs for PCA")
@@ -360,6 +390,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		enableIngress:               cfg.EnableIngress,
 		enableEgress:                cfg.EnableEgress,
 		pktDropsTracePoint:          pktDropsLink,
+		tlsLink:                     tlsLink,
 		rttFentryLink:               rttFentryLink,
 		rttKprobeLink:               rttKprobeLink,
 		nfNatManIPLink:              nfNatManIPLink,
@@ -725,6 +756,12 @@ func (m *FlowFetcher) Close() error {
 		}
 	}
 
+	if m.tlsLink != nil {
+		if err := m.tlsLink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -798,6 +835,15 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.IpsecEgressMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.BpfKtlsRedir.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.SockHash.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.BpfSockops.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if len(errs) == 0 {
@@ -1863,6 +1909,20 @@ func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte
 	}
 
 	return packets
+}
+
+func findCgroupPath() (string, error) {
+	var st syscall.Statfs_t
+	var path string
+	err := syscall.Statfs(cgroupPath, &st)
+	if err != nil {
+		return "", fmt.Errorf("failed to find cgroup fs: %w", err)
+	}
+	isCgroupV2Enabled := st.Type == unix.CGROUP2_SUPER_MAGIC
+	if !isCgroupV2Enabled {
+		path = filepath.Join(cgroupPath, "unified")
+	}
+	return path, nil
 }
 
 func setVariable(spec *cilium.CollectionSpec, key string, value interface{}) error {
