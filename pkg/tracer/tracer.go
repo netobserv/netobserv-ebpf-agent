@@ -1913,15 +1913,16 @@ func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte
 
 func findCgroupPath() (string, error) {
 	var st syscall.Statfs_t
-	var path string
-	err := syscall.Statfs(cgroupPath, &st)
+	path := cgroupPath
+	err := syscall.Statfs(path, &st)
 	if err != nil {
 		return "", fmt.Errorf("failed to find cgroup fs: %w", err)
 	}
 	isCgroupV2Enabled := st.Type == unix.CGROUP2_SUPER_MAGIC
 	if !isCgroupV2Enabled {
-		path = filepath.Join(cgroupPath, "unified")
+		path = filepath.Join(path, "unified")
 	}
+	log.Debug("cgroup path: ", path)
 	return path, nil
 }
 
