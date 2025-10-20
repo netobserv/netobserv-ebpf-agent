@@ -22,7 +22,9 @@ define PROGRAMS
 	"xfrm_input_kprobe": "kprobe",
 	"xfrm_input_kretprobe": "kretprobe",
 	"xfrm_output_kprobe": "kprobe",
-	"xfrm_output_kretprobe": "kretprobe"
+	"xfrm_output_kretprobe": "kretprobe",
+	"probe_entry_SSL_write":"uprobe",
+	"probe_exit_SSL_write":"uretprobe"
 }
 endef
 
@@ -38,7 +40,9 @@ define MAPS
 	"filter_map":"lpm_trie",
 	"peer_filter_map":"lpm_trie",
 	"ipsec_ingress_map":"hash",
-	"ipsec_egress_map":"hash"
+	"ipsec_egress_map":"hash",
+	"active_ssl_write_map":"hash",
+	"ssl_data_event_map":"ringbuf"
 }
 endef
 

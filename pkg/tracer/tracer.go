@@ -63,6 +63,9 @@ const (
 	networkEventsMonitoringHook         = "psample_sample_packet"
 	defaultNetworkEventsGroupID         = 10
 	constEnableIPsec                    = "enable_ipsec"
+	constEnableSSL                      = "enable_ssl"
+	activeSSLWriteMap                   = "active_ssl_write_map"
+	sslDataEventMap                     = "ssl_data_event_map"
 )
 
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
@@ -115,6 +118,7 @@ type FlowFetcherConfig struct {
 	BpfManBpfFSPath                string
 	EnableIPsecTracker             bool
 	FilterConfig                   []*FilterConfig
+	EnableSSL                      bool
 }
 
 type variablesMapping struct {
@@ -187,10 +191,18 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		// Deleting specs for PCA
 		// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
 		spec.Maps[pcaRecordsMap].MaxEntries = 1
+		// Always set activeSSLWriteMap to the minimum in FlowFetcher - SSL and Flow Fetcher are mutually exclusive.
+		spec.Maps[activeSSLWriteMap].MaxEntries = 1
+		// Always set sslDataEventMap to the minimum in FlowFetcher - SSL and Flow Fetcher are mutually exclusive.
+		spec.Maps[sslDataEventMap] = 1
 
 		objects.TcxEgressPcaParse = nil
 		objects.TcIngressPcaParse = nil
 		delete(spec.Programs, constPcaEnable)
+		objects.ProbeEntrySSL_write = nil
+		objects.ProbeExitSSL_write = nil
+		objects.SslDataEventMap = nil
+		delete(spec.Programs, constEnableSSL)
 
 		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
 			pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
@@ -1354,12 +1366,15 @@ type PacketFetcher struct {
 	egressFilters            map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ingressFilters           map[ifaces.InterfaceKey]*netlink.BpfFilter
 	perfReader               *ringbuf.Reader
+	sslDataEventsReader      *ringbuf.Reader
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
 	egressTCXLink            map[ifaces.InterfaceKey]link.Link
 	ingressTCXLink           map[ifaces.InterfaceKey]link.Link
 	lookupAndDeleteSupported bool
+	sslUprobe                link.Link
+	sslUretprobe             link.Link
 }
 
 func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
@@ -1377,9 +1392,14 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	if cfg.EnablePCA {
 		pcaEnable = 1
 	}
+	enableSSL := 0
+	if cfg.EnableSSL {
+		enableSSL = 1
+	}
 	variables := []variablesMapping{
 		{constSampling, uint32(cfg.Sampling)},
 		{constPcaEnable, uint8(pcaEnable)},
+		{constEnableSSL, uint8(enableSSL)},
 	}
 
 	for _, mapping := range variables {
@@ -1400,18 +1420,21 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		pcaRecordsMap,
 		ipsecInputMap,
 		ipsecOutputMap,
+		activeSSLWriteMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
 
-	type pcaBpfPrograms struct {
-		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
-		TcIngressPcaParse  *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-		TcxEgressPcaParse  *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-		TcxIngressPcaParse *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+	type eventsBpfPrograms struct {
+		TcEgressPcaParse    *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		ProbeEntrySSL_write *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		ProbeExitSSL_write  *cilium.Program `ebpf:"probe_exit_SSL_write"`
 	}
 	type newBpfObjects struct {
-		pcaBpfPrograms
+		eventsBpfPrograms
 		ebpf.BpfMaps
 	}
 	var newObjects newBpfObjects
@@ -1435,6 +1458,25 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constEnablePktTranslation)
 	delete(spec.Programs, constEnableIPsec)
 
+	var sslUprobe link.Link
+	var sslUretprobe link.Link
+
+	if cfg.EnableSSL {
+		openSSLPath := "/usr/bin/openssl"
+
+		sslWriteLink, err := link.OpenExecutable(openSSLPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach SSL_write: %w", err)
+		}
+		sslUprobe, err = sslWriteLink.Uprobe("SSL_write", newObjects.ProbeEntrySSL_write, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach SSL_write: %w", err)
+		}
+		sslUretprobe, err = sslWriteLink.Uretprobe("SSL_write", newObjects.ProbeExitSSL_write, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach SSL_write: %w", err)
+		}
+	}
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
 		if errors.As(err, &ve) {
@@ -1465,9 +1507,10 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			XfrmOutputKprobe:        nil,
 		},
 		BpfMaps: ebpf.BpfMaps{
-			PacketRecord:  newObjects.PacketRecord,
-			FilterMap:     newObjects.FilterMap,
-			PeerFilterMap: newObjects.PeerFilterMap,
+			PacketRecord:    newObjects.PacketRecord,
+			SslDataEventMap: newObjects.SslDataEventMap,
+			FilterMap:       newObjects.FilterMap,
+			PeerFilterMap:   newObjects.PeerFilterMap,
 		},
 	}
 
@@ -1482,9 +1525,16 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		return nil, fmt.Errorf("accessing to perf: %w", err)
 	}
 
+	// read SSL data events from perf array
+	sslDataEvents, err := ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
+	if err != nil {
+		return nil, fmt.Errorf("accessing to perf: %w", err)
+	}
+
 	return &PacketFetcher{
 		objects:                  &objects,
 		perfReader:               packets,
+		sslDataEventsReader:      sslDataEvents,
 		egressFilters:            map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		ingressFilters:           map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		qdiscs:                   map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
@@ -1494,6 +1544,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		egressTCXLink:            map[ifaces.InterfaceKey]link.Link{},
 		ingressTCXLink:           map[ifaces.InterfaceKey]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
+		sslUprobe:                sslUprobe,
+		sslUretprobe:             sslUretprobe,
 	}, nil
 }
 
@@ -1779,6 +1831,15 @@ func (p *PacketFetcher) Close() error {
 		if err := p.objects.PacketRecord.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := p.objects.ProbeEntrySSL_write.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.ProbeExitSSL_write.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.objects.SslDataEventMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		p.objects = nil
 	}
 	for iface, ef := range p.egressFilters {
@@ -1921,6 +1982,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		spec.Maps[ipsecInputMap].MaxEntries = 1
 		spec.Maps[ipsecOutputMap].MaxEntries = 1
 	}
+
+	enableSSL := 0
+	if cfg.EnableSSL {
+		enableSSL = 1
+	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
 		{constSampling, uint32(cfg.Sampling)},
@@ -1934,6 +2000,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
 		{constEnablePktTranslation, uint8(enablePktTranslation)},
 		{constEnableIPsec, uint8(enableIPsec)},
+		{constEnableSSL, uint8(enableSSL)},
 	}
 
 	for _, mapping := range variables {

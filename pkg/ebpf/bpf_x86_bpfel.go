@@ -13,6 +13,12 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type BpfActiveSslBufT struct {
+	_       structs.HostLayout
+	SslType uint8
+	Buf     [256]uint8
+}
+
 type BpfAdditionalMetrics struct {
 	_                 structs.HostLayout
 	StartMonoTimeTs   uint64
@@ -173,6 +179,16 @@ type BpfPktDropsT struct {
 	_               [5]byte
 }
 
+type BpfSslDataEventT struct {
+	_           structs.HostLayout
+	TimestampNs uint64
+	PidTgid     uint64
+	Data        [16384]int8
+	DataLen     int32
+	SslType     uint8
+	_           [3]byte
+}
+
 type BpfTcpFlagsT uint32
 
 const (
@@ -242,6 +258,8 @@ type BpfSpecs struct {
 type BpfProgramSpecs struct {
 	KfreeSkb                *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_write     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
+	ProbeExitSSL_write      *ebpf.ProgramSpec `ebpf:"probe_exit_SSL_write"`
 	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
@@ -263,6 +281,7 @@ type BpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfMapSpecs struct {
+	ActiveSslWriteMap     *ebpf.MapSpec `ebpf:"active_ssl_write_map"`
 	AdditionalFlowMetrics *ebpf.MapSpec `ebpf:"additional_flow_metrics"`
 	AggregatedFlows       *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows           *ebpf.MapSpec `ebpf:"direct_flows"`
@@ -273,12 +292,14 @@ type BpfMapSpecs struct {
 	IpsecIngressMap       *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	SslDataEventMap       *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfVariableSpecs struct {
+	ActiveSslBuf                   *ebpf.VariableSpec `ebpf:"active_ssl_buf"`
 	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
@@ -287,11 +308,13 @@ type BpfVariableSpecs struct {
 	EnablePca                      *ebpf.VariableSpec `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
 	EnableRtt                      *ebpf.VariableSpec `ebpf:"enable_rtt"`
+	EnableSsl                      *ebpf.VariableSpec `ebpf:"enable_ssl"`
 	FilterKey                      *ebpf.VariableSpec `ebpf:"filter_key"`
 	FilterValue                    *ebpf.VariableSpec `ebpf:"filter_value"`
 	HasFilterSampling              *ebpf.VariableSpec `ebpf:"has_filter_sampling"`
 	NetworkEventsMonitoringGroupid *ebpf.VariableSpec `ebpf:"network_events_monitoring_groupid"`
 	Sampling                       *ebpf.VariableSpec `ebpf:"sampling"`
+	SslDataEvent                   *ebpf.VariableSpec `ebpf:"ssl_data_event"`
 	TraceMessages                  *ebpf.VariableSpec `ebpf:"trace_messages"`
 	Unused8                        *ebpf.VariableSpec `ebpf:"unused8"`
 	Unused9                        *ebpf.VariableSpec `ebpf:"unused9"`
@@ -317,6 +340,7 @@ func (o *BpfObjects) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfMaps struct {
+	ActiveSslWriteMap     *ebpf.Map `ebpf:"active_ssl_write_map"`
 	AdditionalFlowMetrics *ebpf.Map `ebpf:"additional_flow_metrics"`
 	AggregatedFlows       *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows           *ebpf.Map `ebpf:"direct_flows"`
@@ -327,10 +351,12 @@ type BpfMaps struct {
 	IpsecIngressMap       *ebpf.Map `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.Map `ebpf:"peer_filter_map"`
+	SslDataEventMap       *ebpf.Map `ebpf:"ssl_data_event_map"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
+		m.ActiveSslWriteMap,
 		m.AdditionalFlowMetrics,
 		m.AggregatedFlows,
 		m.DirectFlows,
@@ -341,6 +367,7 @@ func (m *BpfMaps) Close() error {
 		m.IpsecIngressMap,
 		m.PacketRecord,
 		m.PeerFilterMap,
+		m.SslDataEventMap,
 	)
 }
 
@@ -348,6 +375,7 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfVariables struct {
+	ActiveSslBuf                   *ebpf.Variable `ebpf:"active_ssl_buf"`
 	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
@@ -356,11 +384,13 @@ type BpfVariables struct {
 	EnablePca                      *ebpf.Variable `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`
 	EnableRtt                      *ebpf.Variable `ebpf:"enable_rtt"`
+	EnableSsl                      *ebpf.Variable `ebpf:"enable_ssl"`
 	FilterKey                      *ebpf.Variable `ebpf:"filter_key"`
 	FilterValue                    *ebpf.Variable `ebpf:"filter_value"`
 	HasFilterSampling              *ebpf.Variable `ebpf:"has_filter_sampling"`
 	NetworkEventsMonitoringGroupid *ebpf.Variable `ebpf:"network_events_monitoring_groupid"`
 	Sampling                       *ebpf.Variable `ebpf:"sampling"`
+	SslDataEvent                   *ebpf.Variable `ebpf:"ssl_data_event"`
 	TraceMessages                  *ebpf.Variable `ebpf:"trace_messages"`
 	Unused8                        *ebpf.Variable `ebpf:"unused8"`
 	Unused9                        *ebpf.Variable `ebpf:"unused9"`
@@ -372,6 +402,8 @@ type BpfVariables struct {
 type BpfPrograms struct {
 	KfreeSkb                *ebpf.Program `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_write     *ebpf.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeExitSSL_write      *ebpf.Program `ebpf:"probe_exit_SSL_write"`
 	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.Program `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
@@ -393,6 +425,8 @@ func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.KfreeSkb,
 		p.NetworkEventsMonitoring,
+		p.ProbeEntrySSL_write,
+		p.ProbeExitSSL_write,
 		p.TcEgressFlowParse,
 		p.TcEgressPcaParse,
 		p.TcIngressFlowParse,

@@ -277,4 +277,26 @@ struct filter_value_t {
 // Force emitting enums/structs into the ELF
 const static struct filter_value_t *unused12 __attribute__((unused));
 
+// Active SSL write args
+struct active_ssl_buf_t {
+    u8 ssl_type;
+    u8 buf[MAX_PAYLOAD_SIZE];
+} active_ssl_buf;
+
+// Force emitting enums/structs into the ELF
+const static struct active_ssl_buf_t *unused13 __attribute__((unused));
+
+#define MAX_DATA_SIZE_OPENSSL 1024 * 16
+// SSL data event
+struct ssl_data_event_t {
+    u64 timestamp_ns;
+    u64 pid_tgid;
+    char data[MAX_DATA_SIZE_OPENSSL];
+    s32 data_len;
+    u8 ssl_type;
+} ssl_data_event;
+
+// Force emitting enums/structs into the ELF
+const static struct ssl_data_event_t *unused14 __attribute__((unused));
+
 #endif /* __TYPES_H__ */

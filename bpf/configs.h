@@ -15,4 +15,5 @@ volatile const u8 enable_network_events_monitoring = 0;
 volatile const u8 network_events_monitoring_groupid = 0;
 volatile const u8 enable_pkt_translation_tracking = 0;
 volatile const u8 enable_ipsec = 0;
+volatile const u8 enable_ssl = 0;
 #endif //__CONFIGS_H__

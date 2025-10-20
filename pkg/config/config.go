@@ -252,6 +252,8 @@ type Agent struct {
 	// This setting is only used when the interface name could not be found for a given index and MAC.
 	// E.g. "0a:58=eth0" (used for ovn-kubernetes)
 	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
+	// EnableSSL enable tracking SSL flows encryption
+	EnableSSL bool `env:"ENABLE_SSL" envDefault:"false"`
 
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details

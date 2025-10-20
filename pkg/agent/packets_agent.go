@@ -98,6 +98,7 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		EnablePCA:      cfg.EnablePCA,
 		UseEbpfManager: cfg.EbpfProgramManagerMode,
 		FilterConfig:   filterRules,
+		EnableSSL:      cfg.EnableSSL,
 	}
 
 	fetcher, err := tracer.NewPacketFetcher(ebpfConfig)
