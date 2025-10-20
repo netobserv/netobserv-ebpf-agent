@@ -137,4 +137,11 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ipsec_egress_map SEC(".maps");
 
+// Ringbuf for SSL data events
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 27); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ssl_data_event_map SEC(".maps");
+
 #endif //__MAPS_DEFINITION_H__

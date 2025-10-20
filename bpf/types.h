@@ -299,4 +299,17 @@ struct filter_value_t {
 // Force emitting enums/structs into the ELF
 const static struct filter_value_t *unused12 __attribute__((unused));
 
+#define MAX_DATA_SIZE_OPENSSL 1024 * 16
+// SSL data event
+struct ssl_data_event_t {
+    u64 timestamp_ns;
+    u64 pid_tgid;
+    s32 data_len;
+    u8 ssl_type;
+    char data[MAX_DATA_SIZE_OPENSSL];
+} ssl_data_event;
+
+// Force emitting enums/structs into the ELF
+const static struct ssl_data_event_t *unused14 __attribute__((unused));
+
 #endif /* __TYPES_H__ */

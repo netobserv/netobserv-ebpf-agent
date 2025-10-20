@@ -35,8 +35,8 @@ endif
 LOCAL_GENERATOR_IMAGE ?= ebpf-generator:latest
 CILIUM_EBPF_VERSION := v0.19.0
 GOLANGCI_LINT_VERSION = v2.2.1
-GO_VERSION = "1.24.4"
-PROTOC_VERSION = "3.19.4"
+GO_VERSION = 1.24.4
+PROTOC_VERSION = 3.19.4
 PROTOC_GEN_GO_VERSION="v1.35.1"
 PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
 CLANG ?= clang
@@ -151,7 +151,7 @@ generate: gen-bpf gen-protobuf
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/amd64 --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)"
+	$(OCI_BIN) buildx build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/amd64 --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)" --load
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile
@@ -205,7 +205,7 @@ create-and-deploy-kind-cluster: prereqs ## Create a kind cluster and deploy the 
 
 .PHONY: destroy-kind-cluster
 destroy-kind-cluster: ## Destroy the kind cluster.
-	oc delete -f scripts/agent.yml
+	kubectl delete -f scripts/agent.yml
 	kind delete cluster
 
 ##@ Images
