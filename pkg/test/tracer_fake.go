@@ -65,6 +65,10 @@ func (m *TracerFake) ReadRingBuf() (ringbuf.Record, error) {
 	return <-m.ringBuf, nil
 }
 
+func (m *TracerFake) ReadSSLRingBuf() (ringbuf.Record, error) {
+	return <-m.ringBuf, nil
+}
+
 func (m *TracerFake) AppendLookupResults(results map[ebpf.BpfFlowId]model.BpfFlowContent) {
 	m.mapLookups <- results
 }
