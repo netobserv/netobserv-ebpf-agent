@@ -164,6 +164,11 @@ test: ## Test code using go test
 	@echo "### Testing code"
 	GOOS=$(GOOS) go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out
 
+.PHONY: verify-maps
+verify-maps: ## Verify map names consistency across all sources
+	@echo "### Verifying map names consistency"
+	go test -v ./pkg/maps
+
 .PHONY: test-race
 test-race: ## Test code using go test -race
 	@echo "### Testing code for race conditions"
