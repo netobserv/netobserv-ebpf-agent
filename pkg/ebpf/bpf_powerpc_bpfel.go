@@ -28,6 +28,19 @@ type BpfAdditionalMetrics struct {
 	NetworkEventsIdx  uint8
 	IpsecEncrypted    bool
 	IpsecEncryptedRet int32
+	TlsMsg            struct {
+		_                structs.HostLayout
+		Family           uint8
+		TlsContentType   uint8
+		TlsHandshakeType uint8
+		TlsAlertLevel    uint8
+		TlsAlertDesc     uint8
+		_                [1]byte
+		LocalPort        uint16
+		RemotePort       uint16
+		_                [2]byte
+		Size             uint32
+	}
 }
 
 type BpfDirectionT uint32

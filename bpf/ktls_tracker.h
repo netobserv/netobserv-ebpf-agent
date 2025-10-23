@@ -91,13 +91,48 @@ static __always_inline int find_update_flow(struct sk_msg_md *msg, int verdict) 
             aggregate_flow->start_mono_time_ts = current_ts;
         }
         aggregate_flow->verdict = verdict;
+        aggregate_flow->tls_msg.family = (u8)msg->family;
+        aggregate_flow->tls_msg.size = msg->size;
+        aggregate_flow->tls_msg.local_port = (u16)msg->local_port;
+        aggregate_flow->tls_msg.remote_port = (u16)bpf_ntohl(msg->remote_port);
+
+        unsigned char *p = (unsigned char *)(long)msg->data;
+        unsigned char *end = (unsigned char *)(long)msg->data_end;
+        if (p + 5 <= end) {
+            aggregate_flow->tls_msg.tls_content_type = p[0];
+            unsigned char *q = p + 5;
+            if (aggregate_flow->tls_msg.tls_content_type == 22 && q + 1 <= end) {
+                aggregate_flow->tls_msg.tls_handshake_type = q[0];
+            } else if (aggregate_flow->tls_msg.tls_content_type == 21 && q + 2 <= end) {
+                aggregate_flow->tls_msg.tls_alert_level = q[0];
+                aggregate_flow->tls_msg.tls_alert_desc = q[1];
+            }
+        }
         ret = bpf_map_update_elem(&additional_flow_metrics, &id, aggregate_flow, BPF_ANY);
     } else {
         additional_metrics new_flow = {
             .start_mono_time_ts = current_ts,
             .end_mono_time_ts = current_ts,
             .verdict = verdict,
+            .tls_msg = {
+                .family = (u8)msg->family,
+                .size = msg->size,
+                .local_port = (u16)msg->local_port,
+                .remote_port = (u16)bpf_ntohl(msg->remote_port),
+            },
         };
+        unsigned char *p2 = (unsigned char *)(long)msg->data;
+        unsigned char *end2 = (unsigned char *)(long)msg->data_end;
+        if (p2 + 5 <= end2) {
+            new_flow.tls_msg.tls_content_type = p2[0];
+            unsigned char *q2 = p2 + 5;
+            if (new_flow.tls_msg.tls_content_type == 22 && q2 + 1 <= end2) {
+                new_flow.tls_msg.tls_handshake_type = q2[0];
+            } else if (new_flow.tls_msg.tls_content_type == 21 && q2 + 2 <= end2) {
+                new_flow.tls_msg.tls_alert_level = q2[0];
+                new_flow.tls_msg.tls_alert_desc = q2[1];
+            }
+        }
         ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_ANY);
     }
     return ret;
