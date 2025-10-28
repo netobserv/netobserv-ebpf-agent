@@ -6,6 +6,7 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -62,6 +63,7 @@ func TestPBFlowToMap(t *testing.T) {
 		PktDropLatestDropCause: 4,
 		DnsLatency:             durationpb.New(someDuration),
 		DnsId:                  1,
+		DnsName:                "www.example.com",
 		DnsFlags:               0x80,
 		DnsErrno:               0,
 		TimeFlowRtt:            durationpb.New(someDuration),
@@ -129,6 +131,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"PktDropLatestDropCause": "SKB_DROP_REASON_PKT_TOO_SMALL",
 		"DnsLatencyMs":           someDuration.Milliseconds(),
 		"DnsId":                  uint16(1),
+		"DnsName":                "www.example.com",
 		"DnsFlags":               uint16(0x80),
 		"DnsFlagsResponseCode":   "NoError",
 		"TimeFlowRttNs":          someDuration.Nanoseconds(),
@@ -156,4 +159,118 @@ func TestPBFlowToMap(t *testing.T) {
 		"IPSecRetCode": int32(0),
 		"IPSecStatus":  "success",
 	}, out)
+}
+
+func TestDnsRawNameToDotted(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []int8
+		expected string
+	}{
+		{
+			name:     "empty input",
+			input:    []int8{},
+			expected: "",
+		},
+		{
+			name:     "null terminated empty",
+			input:    []int8{0},
+			expected: "",
+		},
+		{
+			name:     "simple single label",
+			input:    []int8{3, 'a', 'b', 'c', 0},
+			expected: "abc",
+		},
+		{
+			name:     "multiple labels",
+			input:    []int8{3, 'a', 'b', 'c', 3, 'd', 'e', 'f', 0},
+			expected: "abc.def",
+		},
+		{
+			name:     "root domain",
+			input:    []int8{0},
+			expected: "",
+		},
+		{
+			name:     "realistic domain name",
+			input:    []int8{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
+			expected: "www.example.com",
+		},
+		{
+			name:     "compression pointer stops parsing",
+			input:    []int8{3, 'a', 'b', 'c', -64, 0x12, 0}, // 0xC0 = -64 in int8
+			expected: "abc",
+		},
+		{
+			name:     "compression pointer at start",
+			input:    []int8{-64, 0x12}, // 0xC0 = -64 in int8
+			expected: "",
+		},
+		{
+			name:     "length exceeds buffer",
+			input:    []int8{10, 'a', 'b', 'c'},
+			expected: "",
+		},
+		{
+			name:     "zero length label",
+			input:    []int8{0, 3, 'a', 'b', 'c', 0},
+			expected: "",
+		},
+		{
+			name:     "null terminator in middle",
+			input:    []int8{3, 'a', 'b', 0, 3, 'd', 'e', 'f', 0},
+			expected: "",
+		},
+		{
+			name:     "single character labels",
+			input:    []int8{1, 'a', 1, 'b', 1, 'c', 0},
+			expected: "a.b.c",
+		},
+		{
+			name:     "long label",
+			input:    []int8{10, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 0},
+			expected: "abcdefghij",
+		},
+		{
+			name:     "mixed case",
+			input:    []int8{3, 'A', 'b', 'C', 3, 'D', 'e', 'F', 0},
+			expected: "AbC.DeF",
+		},
+		{
+			name:     "numbers and special chars",
+			input:    []int8{5, 't', 'e', 's', 't', '1', 3, 'a', 'b', 'c', 0},
+			expected: "test1.abc",
+		},
+		{
+			name:     "incomplete label at end",
+			input:    []int8{3, 'a', 'b', 'c', 5, 'd', 'e'},
+			expected: "abc",
+		},
+		{
+			name:     "multiple compression pointers",
+			input:    []int8{3, 'a', 'b', 'c', -64, 0x12, -64, 0x34, 0}, // 0xC0 = -64 in int8
+			expected: "abc",
+		},
+		{
+			name: "very long input with early null",
+			input: func() []int8 {
+				result := make([]int8, 1000)
+				result[0] = 3
+				result[1] = 'a'
+				result[2] = 'b'
+				result[3] = 'c'
+				result[4] = 0
+				return result
+			}(),
+			expected: "abc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := utils.DNSRawNameToDotted(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

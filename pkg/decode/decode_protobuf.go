@@ -8,6 +8,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/mdlayher/ethernet"
 	log "github.com/sirupsen/logrus"
@@ -120,6 +121,9 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 			out["DnsFlags"] = fr.Metrics.AdditionalMetrics.DnsRecord.Flags
 			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags) & 0xF)
 			out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
+			if name := utils.DNSRawNameToDotted(fr.Metrics.AdditionalMetrics.DnsRecord.Name[:]); name != "" {
+				out["DnsName"] = name
+			}
 		}
 
 		if fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause != 0 {

@@ -3,9 +3,11 @@ package pbflow
 import (
 	"encoding/binary"
 	"net"
+	"strings"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,6 +78,10 @@ func FlowToPB(fr *model.Record) *Record {
 		pbflowRecord.DnsId = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Id)
 		pbflowRecord.DnsFlags = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags)
 		pbflowRecord.DnsErrno = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Errno)
+		// Export DNS name if present (parse DNS label format)
+		if name := utils.DNSRawNameToDotted(fr.Metrics.AdditionalMetrics.DnsRecord.Name[:]); name != "" {
+			pbflowRecord.DnsName = name
+		}
 		if fr.Metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
 			pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 		}
@@ -159,6 +165,7 @@ func PBToFlow(pb *Record) *model.Record {
 				},
 				DnsRecord: ebpf.BpfDnsRecordT{
 					Id:      uint16(pb.DnsId),
+					Name:    stringToInt8Array(pb.DnsName),
 					Flags:   uint16(pb.DnsFlags),
 					Errno:   uint8(pb.DnsErrno),
 					Latency: uint64(pb.DnsLatency.AsDuration()),
@@ -246,4 +253,47 @@ func macToUint8(mac uint64) [6]uint8 {
 		uint8(mac >> 8),
 		uint8(mac),
 	}
+}
+
+// stringToInt8Array converts a Go string to DNS label format in a fixed-size int8 array
+func stringToInt8Array(s string) [32]int8 {
+	var result [32]int8
+	pos := 0
+
+	// Handle empty string
+	if s == "" {
+		return result
+	}
+
+	// Split string by dots and encode each label with length prefix
+	labels := strings.Split(s, ".")
+	for _, label := range labels {
+		if pos >= 31 { // Leave space for null terminator
+			break
+		}
+		labelLen := len(label)
+		if labelLen == 0 { // Skip empty labels
+			continue
+		}
+		if labelLen > 63 { // DNS label max length
+			labelLen = 63
+		}
+		if pos+labelLen+1 > 31 { // Check if we have space for length + label
+			break
+		}
+
+		result[pos] = int8(labelLen)
+		pos++
+		for i := 0; i < labelLen; i++ {
+			result[pos] = int8(label[i])
+			pos++
+		}
+	}
+
+	// Null terminate
+	if pos < 32 {
+		result[pos] = 0
+	}
+
+	return result
 }
