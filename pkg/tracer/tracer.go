@@ -65,6 +65,12 @@ const (
 	constEnableIPsec                    = "enable_ipsec"
 )
 
+const (
+	tcxAnchorNone = "none"
+	tcxAnchorHead = "head"
+	tcxAnchorTail = "tail"
+)
+
 var log = logrus.WithField("component", "ebpf.FlowFetcher")
 var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 
@@ -86,6 +92,8 @@ type FlowFetcher struct {
 	rttKprobeLink               link.Link
 	egressTCXLink               map[ifaces.InterfaceKey]link.Link
 	ingressTCXLink              map[ifaces.InterfaceKey]link.Link
+	egressTCXAnchor             link.Anchor
+	ingressTCXAnchor            link.Anchor
 	networkEventsMonitoringLink link.Link
 	nfNatManIPLink              link.Link
 	xfrmInputKretProbeLink      link.Link
@@ -100,6 +108,8 @@ type FlowFetcher struct {
 type FlowFetcherConfig struct {
 	EnableIngress                  bool
 	EnableEgress                   bool
+	IngressTCXAnchor               string
+	EgressTCXAnchor                string
 	Debug                          bool
 	Sampling                       int
 	CacheMaxSize                   int
@@ -369,6 +379,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
+		egressTCXAnchor:             tcxAnchor(cfg.EgressTCXAnchor),
+		ingressTCXAnchor:            tcxAnchor(cfg.IngressTCXAnchor),
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		useEbpfManager:              cfg.UseEbpfManager,
@@ -378,7 +390,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	if m.enableEgress {
-		egrLink, err := m.attachTCXOnDirection(iface, "Egress", m.objects.BpfPrograms.TcxEgressFlowParse, cilium.AttachTCXEgress)
+		egrLink, err := m.attachTCXOnDirection(iface, "Egress", m.objects.BpfPrograms.TcxEgressFlowParse, cilium.AttachTCXEgress, m.egressTCXAnchor)
 		if err != nil {
 			return err
 		}
@@ -386,7 +398,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	}
 
 	if m.enableIngress {
-		ingLink, err := m.attachTCXOnDirection(iface, "Ingress", m.objects.BpfPrograms.TcxIngressFlowParse, cilium.AttachTCXIngress)
+		ingLink, err := m.attachTCXOnDirection(iface, "Ingress", m.objects.BpfPrograms.TcxIngressFlowParse, cilium.AttachTCXIngress, m.ingressTCXAnchor)
 		if err != nil {
 			return err
 		}
@@ -396,13 +408,14 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 	return nil
 }
 
-func (m *FlowFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName string, prg *cilium.Program, attach cilium.AttachType) (link.Link, error) {
+func (m *FlowFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName string, prg *cilium.Program, attach cilium.AttachType, anchor link.Anchor) (link.Link, error) {
 	ilog := log.WithField("iface", iface)
 
 	lnk, err := link.AttachTCX(link.TCXOptions{
 		Program:   prg,
 		Attach:    attach,
 		Interface: iface.Index,
+		Anchor:    anchor,
 	})
 	if err != nil {
 		errPrefix := "Attach" + dirName
@@ -1357,6 +1370,8 @@ type PacketFetcher struct {
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
+	ingressAnchor            link.Anchor
+	egressAnchor             link.Anchor
 	egressTCXLink            map[ifaces.InterfaceKey]link.Link
 	ingressTCXLink           map[ifaces.InterfaceKey]link.Link
 	lookupAndDeleteSupported bool
@@ -1605,6 +1620,7 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 			Program:   p.objects.BpfPrograms.TcxEgressPcaParse,
 			Attach:    cilium.AttachTCXEgress,
 			Interface: iface.Index,
+			Anchor:    p.egressAnchor,
 		})
 		if err != nil {
 			if errors.Is(err, fs.ErrExist) {
@@ -1640,6 +1656,7 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 			Program:   p.objects.BpfPrograms.TcxIngressPcaParse,
 			Attach:    cilium.AttachTCXIngress,
 			Interface: iface.Index,
+			Anchor:    p.ingressAnchor,
 		})
 		if err != nil {
 			if errors.Is(err, fs.ErrExist) {
@@ -1943,4 +1960,17 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	}
 
 	return nil
+}
+
+func tcxAnchor(anchor string) link.Anchor {
+	switch anchor {
+	case tcxAnchorHead:
+		return link.Head()
+	case tcxAnchorTail:
+		return link.Tail()
+	case tcxAnchorNone:
+		return nil
+	default:
+		return nil
+	}
 }

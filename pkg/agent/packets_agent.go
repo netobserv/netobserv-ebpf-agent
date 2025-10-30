@@ -90,14 +90,16 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		})
 	}
 	ebpfConfig := &tracer.FlowFetcherConfig{
-		EnableIngress:  ingress,
-		EnableEgress:   egress,
-		Debug:          debug,
-		Sampling:       cfg.Sampling,
-		CacheMaxSize:   cfg.CacheMaxFlows,
-		EnablePCA:      cfg.EnablePCA,
-		UseEbpfManager: cfg.EbpfProgramManagerMode,
-		FilterConfig:   filterRules,
+		EnableIngress:    ingress,
+		EnableEgress:     egress,
+		IngressTCXAnchor: cfg.TCXAttachAnchorIngress,
+		EgressTCXAnchor:  cfg.TCXAttachAnchorEgress,
+		Debug:            debug,
+		Sampling:         cfg.Sampling,
+		CacheMaxSize:     cfg.CacheMaxFlows,
+		EnablePCA:        cfg.EnablePCA,
+		UseEbpfManager:   cfg.EbpfProgramManagerMode,
+		FilterConfig:     filterRules,
 	}
 
 	fetcher, err := tracer.NewPacketFetcher(ebpfConfig)
