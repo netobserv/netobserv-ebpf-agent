@@ -94,6 +94,10 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		out["Sampling"] = fr.Metrics.Sampling
 	}
 
+	if tlsVersion := fr.Metrics.SSLVersionToString(); tlsVersion != "" {
+		out["TLSVersion"] = tlsVersion
+	}
+
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
 		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
 		out["DstAddr"] = model.IP(fr.ID.DstIp).String()
@@ -159,12 +163,6 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		} else if fr.Metrics.AdditionalMetrics.IpsecEncrypted {
 			out["IPSecRetCode"] = int32(0)
 			out["IPSecStatus"] = "success"
-		}
-		if tlsVersion := fr.Metrics.SSLVersionToString(); tlsVersion != "" {
-			out["TLSVersion"] = tlsVersion
-		}
-		if fr.Metrics.HasSSLMismatch() {
-			out["TLSMismatch"] = true
 		}
 	}
 
