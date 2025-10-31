@@ -232,7 +232,11 @@ func (r *BpfFlowContent) SSLVersionToString() string {
 	if r.SslVersion == 0 {
 		return ""
 	}
-	return tls.VersionName(r.SslVersion)
+	v := tls.VersionName(r.SslVersion)
+	if r.HasSSLMismatch() {
+		return "~ " + v
+	}
+	return v
 }
 
 func (r *BpfFlowContent) HasSSLMismatch() bool {
