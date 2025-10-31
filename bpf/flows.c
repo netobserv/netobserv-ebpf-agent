@@ -29,6 +29,11 @@
 #include "dns_tracker.h"
 
 /*
+ * Defines the TLS tracker,
+ */
+#include "tls_tracker.h"
+
+/*
  * Defines an rtt tracker,
  * which runs inside flow_monitor. Is optional.
  */
@@ -190,6 +195,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     if (enable_dns_tracking) {
         dns_errno = track_dns_packet(skb, &pkt);
     }
+    track_tls_version(skb, &pkt);
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction);
