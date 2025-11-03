@@ -161,6 +161,8 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	ebpfConfig := &tracer.FlowFetcherConfig{
 		EnableIngress:                  ingress,
 		EnableEgress:                   egress,
+		IngressTCXAnchor:               cfg.TCXAttachAnchorIngress,
+		EgressTCXAnchor:                cfg.TCXAttachAnchorEgress,
 		Debug:                          debug,
 		Sampling:                       cfg.Sampling,
 		CacheMaxSize:                   cfg.CacheMaxFlows,

@@ -147,6 +147,18 @@ type Agent struct {
 	// TCAttachRetries defines the number of retries in case of attach/detach failures.
 	// Valid only for 'tc' and 'tcx' attach modes.
 	TCAttachRetries int `env:"TC_ATTACH_RETRIES" envDefault:"4"`
+	// TCXAttachAnchorIngress defines the anchor to use when attaching eBPF programs to interfaces using tcx mode for
+	// ingress.
+	// none (default): no specific anchor is used and the eBPF program is generally inserted at the end.
+	// head: eBPF program is inserted at the head.
+	// tail: eBPF program is inserted at the tail.
+	TCXAttachAnchorIngress string `env:"TCX_ATTACH_ANCHOR_INGRESS" envDefault:"none"`
+	// TCXAttachAnchorEgress defines the anchor to use when attaching eBPF programs to interfaces using tcx mode for
+	// egress.
+	// none (default): no specific anchor is used and the eBPF program is generally inserted at the end.
+	// head: eBPF program is inserted at the head.
+	// tail: eBPF program is inserted at the tail.
+	TCXAttachAnchorEgress string `env:"TCX_ATTACH_ANCHOR_EGRESS" envDefault:"none"`
 	// ListenInterfaces specifies the mechanism used by the agent to listen for added or removed
 	// network interfaces. Accepted values are "watch" (default) or "poll".
 	// If the value is "watch", interfaces are traced immediately after they are created. This is
