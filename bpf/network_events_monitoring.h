@@ -7,11 +7,20 @@
 
 #include "utils.h"
 
+// Optimized: unroll loop for small array (MAX_NETWORK_EVENTS=4)
 static inline bool md_already_exists(u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD], u8 *md) {
-    for (u8 i = 0; i < MAX_NETWORK_EVENTS; i++) {
-        if (__builtin_memcmp(network_events[i], md, MAX_EVENT_MD) == 0) {
-            return true;
-        }
+    // Unroll comparisons for common case - most flows have 1-2 events
+    if (__builtin_memcmp(network_events[0], md, MAX_EVENT_MD) == 0) {
+        return true;
+    }
+    if (__builtin_memcmp(network_events[1], md, MAX_EVENT_MD) == 0) {
+        return true;
+    }
+    if (__builtin_memcmp(network_events[2], md, MAX_EVENT_MD) == 0) {
+        return true;
+    }
+    if (__builtin_memcmp(network_events[3], md, MAX_EVENT_MD) == 0) {
+        return true;
     }
     return false;
 }

@@ -109,6 +109,24 @@ static inline u8 ipv6_get_dscp(const struct ipv6hdr *ipv6h) {
     return ((bpf_ntohs(*(const __be16 *)ipv6h) >> 4) >> DSCP_SHIFT) & DSCP_MASK;
 }
 
+// sets flow fields from IPv4 header information (L3 only, no L4)
+// Returns protocol in *protocol for later L4 parsing
+static inline int fill_iphdr_l3only(struct iphdr *ip, void *data_end, pkt_info *pkt, u8 *protocol) {
+    if ((void *)ip + sizeof(*ip) > data_end) {
+        return DISCARD;
+    }
+    flow_id *id = pkt->id;
+    /* Save the IP Address to id directly. copy once. */
+    __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    pkt->dscp = ipv4_get_dscp(ip);
+    *protocol = ip->protocol; // Store for later L4 parsing
+    // Note: L4 not parsed yet - will be parsed later if needed
+    return SUBMIT;
+}
+
 // sets flow fields from IPv4 header information
 static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     void *l4_hdr_start;
@@ -129,6 +147,23 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     return SUBMIT;
 }
 
+// sets flow fields from IPv6 header information (L3 only, no L4)
+// Returns protocol in *protocol for later L4 parsing
+static inline int fill_ip6hdr_l3only(struct ipv6hdr *ip, void *data_end, pkt_info *pkt,
+                                     u8 *protocol) {
+    if ((void *)ip + sizeof(*ip) > data_end) {
+        return DISCARD;
+    }
+    flow_id *id = pkt->id;
+    /* Save the IP Address to id directly. copy once. */
+    __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, IP_MAX_LEN);
+    __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, IP_MAX_LEN);
+    pkt->dscp = ipv6_get_dscp(ip);
+    *protocol = ip->nexthdr; // Store for later L4 parsing
+    // Note: L4 not parsed yet - will be parsed later if needed
+    return SUBMIT;
+}
+
 // sets flow fields from IPv6 header information
 static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt) {
     void *l4_hdr_start;
@@ -145,6 +180,48 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt)
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->nexthdr, pkt);
     return SUBMIT;
+}
+
+// Parse L4 header separately (after L3 has been parsed)
+// Optimized for early IP filtering flow
+static inline void parse_l4_after_l3(struct ethhdr *eth, void *data_end, pkt_info *pkt,
+                                     u16 eth_protocol, u8 protocol) {
+    void *l4_hdr_start;
+
+    if (eth_protocol == ETH_P_IP) {
+        struct iphdr *ip = (void *)eth + sizeof(*eth);
+        l4_hdr_start = (void *)ip + sizeof(*ip);
+    } else if (eth_protocol == ETH_P_IPV6) {
+        struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+        l4_hdr_start = (void *)ip6 + sizeof(*ip6);
+    } else {
+        return; // Not IP, shouldn't happen
+    }
+
+    if (l4_hdr_start <= data_end) {
+        fill_l4info(l4_hdr_start, data_end, protocol, pkt);
+    }
+}
+
+// sets flow fields from Ethernet header information (L2+L3 only, no L4)
+// Optimized for early IP filtering - skips L4 parsing
+// Returns protocol in *protocol for later L4 parsing
+static inline int fill_ethhdr_l3only(struct ethhdr *eth, void *data_end, pkt_info *pkt,
+                                     u16 *eth_protocol, u8 *protocol) {
+    if ((void *)eth + sizeof(*eth) > data_end) {
+        return DISCARD;
+    }
+    *eth_protocol = bpf_ntohs(eth->h_proto);
+
+    if (*eth_protocol == ETH_P_IP) {
+        struct iphdr *ip = (void *)eth + sizeof(*eth);
+        return fill_iphdr_l3only(ip, data_end, pkt, protocol);
+    } else if (*eth_protocol == ETH_P_IPV6) {
+        struct ipv6hdr *ip6 = (void *)eth + sizeof(*eth);
+        return fill_ip6hdr_l3only(ip6, data_end, pkt, protocol);
+    }
+    // Only IP-based flows are managed
+    return DISCARD;
 }
 
 // sets flow fields from Ethernet header information

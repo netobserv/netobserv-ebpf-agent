@@ -59,7 +59,7 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
 
         if (rule->do_peerCIDR_lookup) {
             struct filter_key_t peerKey;
-            __builtin_memset(&peerKey, 0, sizeof(peerKey));
+            // No need to memset - flow_filter_setup_lookup_key will initialize all fields we use
             // PeerCIDR lookup will will target the opposite IP compared to original CIDR lookup
             // In other words if cidr is using srcIP then peerCIDR will be the dstIP
             if (flow_filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip,
@@ -219,6 +219,62 @@ end:
 }
 
 /*
+ * Early IP-only filter check - optimized to skip L4 parsing if IP-based rejection is possible.
+ * Returns: 1 if packet can be rejected early (IP-only reject rule), 0 if needs full check
+ * This is a fast path that only checks CIDR matching, not ports/protocols.
+ */
+static __always_inline int early_ip_filter_check(flow_id *id, filter_action *action,
+                                                 u16 eth_protocol, u8 direction) {
+    struct filter_key_t key;
+    u8 len, offset;
+    struct filter_value_t *rule;
+
+    // Check srcIP CIDR match first
+    if (flow_filter_setup_lookup_key(id, &key, &len, &offset, true, eth_protocol) < 0) {
+        return 0; // Need full check
+    }
+
+    rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, &key);
+    if (rule && rule->action == REJECT) {
+        // IP matches and action is REJECT - can reject early without checking ports/protocols
+        // Note: We check direction if rule specifies it
+        if (rule->direction == MAX_DIRECTION || rule->direction == direction) {
+            // If rule has port/protocol checks, we can't reject early (would need L4)
+            // But if it's IP-only (protocol==0, no ports), we can reject now
+            if (rule->protocol == 0 && rule->dstPortStart == 0 && rule->srcPortStart == 0 &&
+                rule->portStart == 0 && rule->dstPort1 == 0 && rule->srcPort1 == 0 &&
+                rule->port1 == 0 && rule->dstPort2 == 0 && rule->srcPort2 == 0 &&
+                rule->port2 == 0 && !rule->do_peerCIDR_lookup && rule->tcpFlags == 0 &&
+                rule->icmpType == 0 && rule->filter_drops == 0) {
+                *action = REJECT;
+                return 1; // Can reject early
+            }
+        }
+    }
+
+    // Check dstIP CIDR match
+    if (flow_filter_setup_lookup_key(id, &key, &len, &offset, false, eth_protocol) < 0) {
+        return 0; // Need full check
+    }
+
+    rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, &key);
+    if (rule && rule->action == REJECT) {
+        if (rule->direction == MAX_DIRECTION || rule->direction == direction) {
+            if (rule->protocol == 0 && rule->dstPortStart == 0 && rule->srcPortStart == 0 &&
+                rule->portStart == 0 && rule->dstPort1 == 0 && rule->srcPort1 == 0 &&
+                rule->port1 == 0 && rule->dstPort2 == 0 && rule->srcPort2 == 0 &&
+                rule->port2 == 0 && !rule->do_peerCIDR_lookup && rule->tcpFlags == 0 &&
+                rule->icmpType == 0 && rule->filter_drops == 0) {
+                *action = REJECT;
+                return 1; // Can reject early
+            }
+        }
+    }
+
+    return 0; // Need full check with L4
+}
+
+/*
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
 static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, u16 flags,
@@ -228,7 +284,7 @@ static __always_inline int is_flow_filtered(flow_id *id, filter_action *action, 
     u8 len, offset;
     int result = 0;
 
-    __builtin_memset(&key, 0, sizeof(key));
+    // No need to memset - flow_filter_setup_lookup_key will initialize all fields we use
     *action = MAX_FILTER_ACTIONS;
 
     // Lets do first CIDR match using srcIP.
