@@ -7,4 +7,5 @@ ebpf-agent.tar
 *.pcap
 protoc/
 release-assets/
+perf/
 
