@@ -3,11 +3,12 @@
 Visualization script for eBPF agent performance data from CSV files.
 
 Usage:
-    python3 visualize_ebpf_performance.py <csv_file> <prow_id> [--output <output_file>]
+    python3 visualize_ebpf_performance.py <csv_file> <prow_id> [--output <output_file>] [--num-runs <N>]
 
 Example:
     python3 visualize_ebpf_performance.py data.csv 1985348508604960768
     python3 visualize_ebpf_performance.py data.csv 1985348508604960768 --output perf.png
+    python3 visualize_ebpf_performance.py data.csv 1985348508604960768 --num-runs 5
 """
 import csv
 import argparse
@@ -39,8 +40,15 @@ def parse_csv_row(row):
         'buildUrl': row[36]
     }
 
-def visualize_csv_data(csv_file, target_prow_id, output_file=None):
-    """Create visualizations from CSV data."""
+def visualize_csv_data(csv_file, target_prow_id, output_file=None, num_runs=3):
+    """Create visualizations from CSV data.
+    
+    Args:
+        csv_file: Path to CSV file with performance data
+        target_prow_id: Prow ID of the target run to compare
+        output_file: Optional output PNG file path
+        num_runs: Number of previous runs to compare against (default: 3)
+    """
     
     # Read CSV data
     with open(csv_file, 'r') as f:
@@ -70,8 +78,14 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
         print(f"Error: Prow ID {target_prow_id} not found in CSV file")
         sys.exit(1)
     
-    # Get previous runs
-    previous_runs = rows[:target_index]
+    # Get all previous runs
+    all_previous_runs = rows[:target_index]
+    
+    # Use last N runs for comparison (or all if less than N available)
+    previous_runs = all_previous_runs[-num_runs:] if len(all_previous_runs) >= num_runs else all_previous_runs
+    
+    print(f"Comparing target run to last {len(previous_runs)} previous runs (out of {len(all_previous_runs)} total)")
+    
     all_runs = rows[:target_index + 1]  # Include target
     
     # Create figure with subplots
@@ -92,7 +106,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
     ax1.scatter(indices, flows, c=colors, alpha=0.6, s=50)
     if previous_runs:
         avg_flows = sum(r['nFlowsProcessedTotals_max'] for r in previous_runs) / len(previous_runs) / 1e6
-        ax1.axhline(y=avg_flows, color=color_avg, linestyle='--', linewidth=2, label=f'Previous Avg: {avg_flows:.2f}M')
+        ax1.axhline(y=avg_flows, color=color_avg, linestyle='--', linewidth=2, label=f'Last {len(previous_runs)} Avg: {avg_flows:.2f}M')
     ax1.axhline(y=target_row['nFlowsProcessedTotals_max'] / 1e6, color=color_current, linestyle='--', linewidth=2, alpha=0.5, label=f'Current: {target_row["nFlowsProcessedTotals_max"]/1e6:.2f}M')
     ax1.set_xlabel('Run Index', fontsize=11, fontweight='bold')
     ax1.set_ylabel('Flows Processed (Millions)', fontsize=11, fontweight='bold')
@@ -108,7 +122,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
         prev_max_flows = max(r['nFlowsProcessedTotals_max'] for r in previous_runs) / 1e6
         curr_flows = target_row['nFlowsProcessedTotals_max'] / 1e6
         
-        categories = ['Previous\nMin', 'Previous\nAvg', 'Previous\nMax', 'Current\n(Updated)']
+        categories = [f'Last {len(previous_runs)}\nMin', f'Last {len(previous_runs)}\nAvg', f'Last {len(previous_runs)}\nMax', 'Current\n(Updated)']
         values = [prev_min_flows, prev_avg_flows, prev_max_flows, curr_flows]
         colors_bar = [color_prev, color_prev, color_prev, color_current]
         bars = ax2.bar(categories, values, color=colors_bar, alpha=0.7, edgecolor='black', linewidth=1.5)
@@ -132,7 +146,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
     ax3.scatter(indices, cpu_values, c=colors_cpu, alpha=0.6, s=50)
     if previous_runs:
         avg_cpu = sum(r['cpuEBPFTotals_avg'] for r in previous_runs) / len(previous_runs)
-        ax3.axhline(y=avg_cpu, color=color_avg, linestyle='--', linewidth=2, label=f'Previous Avg: {avg_cpu:.3f}')
+        ax3.axhline(y=avg_cpu, color=color_avg, linestyle='--', linewidth=2, label=f'Last {len(previous_runs)} Avg: {avg_cpu:.3f}')
     ax3.axhline(y=target_row['cpuEBPFTotals_avg'], color=color_current, linestyle='--', linewidth=2, alpha=0.5, label=f'Current: {target_row["cpuEBPFTotals_avg"]:.3f}')
     ax3.set_xlabel('Run Index', fontsize=11, fontweight='bold')
     ax3.set_ylabel('CPU Usage (cores)', fontsize=11, fontweight='bold')
@@ -148,7 +162,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
     ax4.scatter(indices, mem_values, c=colors_mem, alpha=0.6, s=50)
     if previous_runs:
         avg_mem = sum(r['rssEBPFTotals_avg'] for r in previous_runs) / len(previous_runs) / 1e9
-        ax4.axhline(y=avg_mem, color=color_avg, linestyle='--', linewidth=2, label=f'Previous Avg: {avg_mem:.2f} GB')
+        ax4.axhline(y=avg_mem, color=color_avg, linestyle='--', linewidth=2, label=f'Last {len(previous_runs)} Avg: {avg_mem:.2f} GB')
     ax4.axhline(y=target_row['rssEBPFTotals_avg'] / 1e9, color=color_current, linestyle='--', linewidth=2, alpha=0.5, label=f'Current: {target_row["rssEBPFTotals_avg"]/1e9:.2f} GB')
     ax4.set_xlabel('Run Index', fontsize=11, fontweight='bold')
     ax4.set_ylabel('Memory Usage RSS (GB)', fontsize=11, fontweight='bold')
@@ -176,7 +190,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
             avg_efficiency = sum(efficiencies) / len(efficiencies)
             y_line = x_range / avg_efficiency
             ax5.plot(x_range, y_line, '--', color='gray', alpha=0.5, linewidth=1, 
-                    label=f'Avg Efficiency: {avg_efficiency:.1f}M flows/min/core')
+                    label=f'Last {len(previous_runs)} Avg Efficiency: {avg_efficiency:.1f}M flows/min/core')
         
         ax5.set_xlabel('Flows Per Minute (Millions)', fontsize=11, fontweight='bold')
         ax5.set_ylabel('CPU Usage (cores)', fontsize=11, fontweight='bold')
@@ -204,7 +218,7 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
             avg_efficiency = sum(efficiencies) / len(efficiencies)
             y_line = x_range / avg_efficiency
             ax6.plot(x_range, y_line, '--', color='gray', alpha=0.5, linewidth=1, 
-                    label=f'Avg Efficiency: {avg_efficiency:.2f}M flows/min/MB')
+                    label=f'Last {len(previous_runs)} Avg Efficiency: {avg_efficiency:.2f}M flows/min/MB')
         
         ax6.set_xlabel('Flows Per Minute (Millions)', fontsize=11, fontweight='bold')
         ax6.set_ylabel('Memory Usage RSS (MB)', fontsize=11, fontweight='bold')
@@ -215,61 +229,69 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
     # 7. Efficiency Comparison (Percentage) - Full width
     ax7 = fig.add_subplot(gs[3, :])
     if previous_runs:
-        prev_avg_flows_per_min = sum(r['nFlowsProcessedPerMinuteTotals_max'] for r in previous_runs) / len(previous_runs)
-        prev_avg_cpu = sum(r['cpuEBPFTotals_avg'] for r in previous_runs) / len(previous_runs)
-        prev_avg_mem = sum(r['rssEBPFTotals_avg'] for r in previous_runs if r['rssEBPFTotals_avg'] > 0) / max(1, len([r for r in previous_runs if r['rssEBPFTotals_avg'] > 0]))
-        
         curr_flows_per_min = target_row['nFlowsProcessedPerMinuteTotals_max']
         curr_cpu = target_row['cpuEBPFTotals_avg']
         curr_mem = target_row['rssEBPFTotals_avg']
         
-        # Calculate efficiencies using flows per minute (rate-based)
-        prev_cpu_eff = prev_avg_flows_per_min / prev_avg_cpu / 1e6 if prev_avg_cpu > 0 else 0  # M flows/min per core
-        curr_cpu_eff = curr_flows_per_min / curr_cpu / 1e6 if curr_cpu > 0 else 0
-        prev_mem_eff = prev_avg_flows_per_min / (prev_avg_mem / 1e6) / 1e6 if prev_avg_mem > 0 else 0  # M flows/min per MB
-        curr_mem_eff = curr_flows_per_min / (curr_mem / 1e6) / 1e6 if curr_mem > 0 else 0
+        # Calculate current efficiencies
+        curr_cpu_eff = curr_flows_per_min / curr_cpu / 1e6 if curr_cpu > 0 else 0  # M flows/min per core
+        curr_mem_eff = curr_flows_per_min / (curr_mem / 1e6) / 1e6 if curr_mem > 0 else 0  # M flows/min per MB
         
-        # Calculate percentage changes
-        cpu_eff_change = ((curr_cpu_eff - prev_cpu_eff) / prev_cpu_eff * 100) if prev_cpu_eff > 0 else 0
-        mem_eff_change = ((curr_mem_eff - prev_mem_eff) / prev_mem_eff * 100) if prev_mem_eff > 0 else 0
+        # Calculate efficiency changes for each individual run
+        cpu_eff_changes = []
+        mem_eff_changes = []
+        run_labels = []
         
-        # Create efficiency percentage change bar chart
-        categories = ['CPU Efficiency\n(flows/min/core)', 'Memory Efficiency\n(flows/min/MB)']
-        changes = [cpu_eff_change, mem_eff_change]
-        colors_change = [color_avg if c >= 0 else '#e67e22' for c in changes]  # Green for improvement, orange for regression
+        for prev_run in previous_runs:
+            prev_flows_per_min = prev_run['nFlowsProcessedPerMinuteTotals_max']
+            prev_cpu = prev_run['cpuEBPFTotals_avg']
+            prev_mem = prev_run['rssEBPFTotals_avg'] if prev_run['rssEBPFTotals_avg'] > 0 else 0
+            
+            # Calculate previous run efficiencies
+            prev_cpu_eff = prev_flows_per_min / prev_cpu / 1e6 if prev_cpu > 0 else 0
+            prev_mem_eff = prev_flows_per_min / (prev_mem / 1e6) / 1e6 if prev_mem > 0 else 0
+            
+            # Calculate percentage changes
+            cpu_eff_change = ((curr_cpu_eff - prev_cpu_eff) / prev_cpu_eff * 100) if prev_cpu_eff > 0 else 0
+            mem_eff_change = ((curr_mem_eff - prev_mem_eff) / prev_mem_eff * 100) if prev_mem_eff > 0 else 0
+            
+            cpu_eff_changes.append(cpu_eff_change)
+            mem_eff_changes.append(mem_eff_change)
+            # Use prow ID as label (full ID, no truncation)
+            prow_id = prev_run.get('prow_id', 'N/A')
+            run_labels.append(str(prow_id) if prow_id else 'N/A')
         
-        x = np.arange(len(categories))
-        width = 0.6  # Wider bars for better visibility in full-width plot
-        bars = ax7.bar(x, changes, width, color=colors_change, alpha=0.7, edgecolor='black', linewidth=1.5)
+        # Create grouped bar chart
+        x = np.arange(len(run_labels))  # One group per run
+        width = 0.35  # Width of bars
+        
+        # Create bars for CPU and Memory efficiency
+        bars_cpu = ax7.bar(x - width/2, cpu_eff_changes, width, 
+                          label='CPU Efficiency (flows/min/core)', 
+                          color=color_prev, alpha=0.7, edgecolor='black', linewidth=1.5)
+        bars_mem = ax7.bar(x + width/2, mem_eff_changes, width,
+                          label='Memory Efficiency (flows/min/MB)',
+                          color=color_avg, alpha=0.7, edgecolor='black', linewidth=1.5)
         
         # Add value labels on bars
-        for bar, change in zip(bars, changes):
-            height = bar.get_height()
-            # Center text within the bar (middle of the bar height)
-            # For negative bars, height is negative, so text_y will be negative too (which is correct)
-            text_y = height / 2
-            # Use white text for better contrast on colored bars
-            text_color = 'white' if abs(height) > 1 else 'black'
-            # Show percentage change prominently
-            ax7.text(bar.get_x() + bar.get_width()/2., text_y,
-                    f'{change:+.2f}%',
-                    ha='center', va='center',
-                    fontweight='bold', fontsize=12, color=text_color)
+        for bars in [bars_cpu, bars_mem]:
+            for bar in bars:
+                height = bar.get_height()
+                text_y = height / 2
+                text_color = 'white' if abs(height) > 1 else 'black'
+                ax7.text(bar.get_x() + bar.get_width()/2., text_y,
+                        f'{height:+.2f}%',
+                        ha='center', va='center',
+                        fontweight='bold', fontsize=10, color=text_color)
         
         # Add zero line
         ax7.axhline(y=0, color='black', linestyle='-', linewidth=1)
         ax7.set_ylabel('Efficiency Change (%)', fontsize=11, fontweight='bold')
-        ax7.set_title('Efficiency Change vs Previous Average', fontsize=13, fontweight='bold')
+        ax7.set_title(f'Efficiency Change vs Each of Last {len(previous_runs)} Runs', fontsize=13, fontweight='bold')
         ax7.set_xticks(x)
-        ax7.set_xticklabels(categories, fontsize=10)
+        ax7.set_xticklabels(run_labels, fontsize=8, rotation=0)
         ax7.grid(True, alpha=0.3, axis='y')
-        
-        # Add legend for colors
-        legend_elements = [
-            mpatches.Patch(facecolor=color_avg, alpha=0.7, label='Improvement'),
-            mpatches.Patch(facecolor='#e67e22', alpha=0.7, label='Regression')
-        ]
-        ax7.legend(handles=legend_elements, fontsize=9, loc='upper right')
+        ax7.legend(fontsize=9, loc='upper right')
     
     # 8. Summary Statistics - 3 columns
     # Create a sub-gridspec for row 4 to split into 3 columns
@@ -332,15 +354,15 @@ def visualize_csv_data(csv_file, target_prow_id, output_file=None):
 PERFORMANCE SUMMARY
 
 Target Prow ID: {target_prow_id}
-Previous Runs: {len(previous_runs)}
+Comparing to: Last {len(previous_runs)} runs
 
 FLOWS PROCESSED
-  Previous Avg: {prev_avg_flows/1e6:.2f}M flows
+  Last {len(previous_runs)} Avg: {prev_avg_flows/1e6:.2f}M flows
   Current:      {curr_flows/1e6:.2f}M flows
   Change:       {flows_change:+.2f}%
 
 FLOWS PER MINUTE
-  Previous Avg: {prev_avg_flows_per_min/1e6:.2f}M flows/min
+  Last {len(previous_runs)} Avg: {prev_avg_flows_per_min/1e6:.2f}M flows/min
   Current:      {curr_flows_per_min/1e6:.2f}M flows/min
   Change:       {flows_per_min_change:+.2f}%
         """
@@ -349,12 +371,12 @@ FLOWS PER MINUTE
 RESOURCE USAGE
 
 CPU USAGE
-  Previous Avg: {prev_avg_cpu:.3f} cores
+  Last {len(previous_runs)} Avg: {prev_avg_cpu:.3f} cores
   Current:      {curr_cpu:.3f} cores
   Change:       {cpu_change:+.2f}%
 
 MEMORY (RSS)
-  Previous Avg: {prev_avg_mem/1e9:.2f} GB
+  Last {len(previous_runs)} Avg: {prev_avg_mem/1e9:.2f} GB
   Current:      {curr_mem/1e9:.2f} GB
   Change:       {mem_change:+.2f}%
         """
@@ -363,12 +385,12 @@ MEMORY (RSS)
 EFFICIENCY (Rate-Based)
 
 CPU Efficiency:
-  Previous:   {prev_cpu_eff:.2f}M flows/min/core
+  Last {len(previous_runs)} Avg: {prev_cpu_eff:.2f}M flows/min/core
   Current:    {curr_cpu_eff:.2f}M flows/min/core
   Change:     {cpu_eff_change:+.2f}%
 
 Memory Efficiency:
-  Previous:   {prev_mem_eff:.2f}M flows/min/MB
+  Last {len(previous_runs)} Avg: {prev_mem_eff:.2f}M flows/min/MB
   Current:    {curr_mem_eff:.2f}M flows/min/MB
   Change:     {mem_eff_change:+.2f}%
         """
@@ -392,7 +414,7 @@ Memory Efficiency:
     if previous_runs:
         dropped_flows_text = f"""
 DROPPED FLOWS (Ratio)
-  Previous Avg: {prev_avg_dropped:.6f}
+  Last {len(previous_runs)} Avg: {prev_avg_dropped:.6f}
   Current:      {curr_dropped:.6f}
   Change:       {dropped_change_str}
   Status:       {dropped_status}
@@ -431,11 +453,14 @@ def main():
 Examples:
   %(prog)s data.csv 1985348508604960768
   %(prog)s data.csv 1985348508604960768 --output perf.png
+  %(prog)s data.csv 1985348508604960768 --num-runs 5
         """
     )
     parser.add_argument('csv_file', help='Path to CSV file with performance data')
     parser.add_argument('prow_id', help='Prow ID of the target run to compare')
     parser.add_argument('--output', '-o', help='Output PNG file path (default: perf/ebpf_performance_visualization.png)')
+    parser.add_argument('--num-runs', '-n', type=int, default=3, 
+                       help='Number of previous runs to compare against (default: 3)')
     
     args = parser.parse_args()
     
@@ -444,10 +469,16 @@ Examples:
         print(f"Error: CSV file not found: {args.csv_file}")
         sys.exit(1)
     
+    # Validate num_runs
+    if args.num_runs < 1:
+        print(f"Error: --num-runs must be at least 1")
+        sys.exit(1)
+    
     print(f"Creating visualization from {args.csv_file}")
     print(f"Target Prow ID: {args.prow_id}")
+    print(f"Comparing against last {args.num_runs} previous runs")
     
-    visualize_csv_data(args.csv_file, args.prow_id, args.output)
+    visualize_csv_data(args.csv_file, args.prow_id, args.output, args.num_runs)
     print("\n[OK] Visualization completed successfully!")
 
 if __name__ == '__main__':

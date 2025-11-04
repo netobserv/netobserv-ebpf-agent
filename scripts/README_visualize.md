@@ -7,7 +7,7 @@
 ## Usage
 
 ```bash
-python3 scripts/visualize_ebpf_performance.py <csv_file> <prow_id> [--output <output_file>]
+python3 scripts/visualize_ebpf_performance.py <csv_file> <prow_id> [--output <output_file>] [--num-runs <N>]
 ```
 
 ### Arguments
@@ -15,18 +15,22 @@ python3 scripts/visualize_ebpf_performance.py <csv_file> <prow_id> [--output <ou
 - `csv_file`: Path to CSV file containing performance data such as `https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/pr-logs/pull/netobserv_netobserv-ebpf-agent/824/pull-ci-netobserv-netobserv-ebpf-agent-main-ebpf-node-density-heavy-25nodes/1985348508604960768/artifacts/ebpf-node-density-heavy-25nodes/openshift-qe-orion/artifacts/data-netobserv-perf-node-density-heavy-AWS-25w.csv`
 - `prow_id`: Prow ID of the target run to compare against previous runs such as `1985348508604960768`
 - `--output`, `-o`: (Optional) Output PNG file path (default: `perf/ebpf_performance_visualization.png`)
+- `--num-runs`, `-n`: (Optional) Number of previous runs to compare against (default: `3`)
 
 ### Examples
 
 ```bash
-# Basic usage
+# Basic usage (compares against last 3 previous runs by default)
 python3 scripts/visualize_ebpf_performance.py data.csv 1985348508604960768
 
 # Specify custom output file
 python3 scripts/visualize_ebpf_performance.py data.csv 1985348508604960768 --output custom_output.png
 
-# With full paths
-python3 scripts/visualize_ebpf_performance.py /path/to/data.csv 1985348508604960768 -o /path/to/output.png
+# Compare against last 5 previous runs
+python3 scripts/visualize_ebpf_performance.py data.csv 1985348508604960768 --num-runs 5
+
+# With full paths and custom number of runs
+python3 scripts/visualize_ebpf_performance.py /path/to/data.csv 1985348508604960768 -o /path/to/output.png -n 10
 ```
 
 ## Requirements
@@ -57,7 +61,7 @@ The script generates an 8-panel visualization (5 rows × 2 columns) showing:
 6. **Memory Efficiency** - Flows per minute per MB scatter plot with efficiency trend line
 
 **Row 4:**
-7. **Efficiency Comparison** - Percentage change bar chart (CPU and Memory efficiency vs previous average), full width spanning both columns
+7. **Efficiency Comparison** - Percentage change grouped bar chart comparing CPU and Memory efficiency against each of the last N previous runs individually (labeled by prow ID), full width spanning both columns
 
 **Row 5:**
 8. **Summary Statistics** - Comprehensive text panel split into 3 columns:
@@ -77,10 +81,10 @@ The script generates an 8-panel visualization (5 rows × 2 columns) showing:
 
 ## Notes
 
-- The script compares the target prow ID against all previous runs in the CSV
+- The script compares the target prow ID against the last N previous runs in the CSV (default: 3, configurable with `--num-runs`)
 - Efficiency calculations use rate-based metrics (flows per minute) for accurate comparison
 - Memory efficiency is calculated per MB (not GB) for more granular analysis
-- Efficiency comparison shows percentage change from previous average (green = improvement, orange = regression)
+- Efficiency comparison shows percentage change for each individual previous run (labeled by prow ID), allowing you to see variations between runs
 - All plots include trend lines and reference averages for easy comparison
 - Dropped flows information is displayed in the summary panel (not as a separate plot)
 - Summary statistics are organized into 3 columns for better readability
