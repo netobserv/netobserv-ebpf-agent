@@ -19,10 +19,15 @@ COPY go.sum go.sum
 # Build
 RUN CGO_ENABLED=0 GOARCH=$TARGETARCH go build -ldflags "$LDFLAGS" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
+# Build collect-kernel-stats utility
+# Note: CGO may be required for cilium/ebpf library interactions with kernel
+RUN GOARCH=$TARGETARCH go build -mod vendor -a -o bin/collect-kernel-stats ./cmd/collect-kernel-stats
+
 # Create final image from minimal + built binary
 FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:9.6-1758184547
 WORKDIR /
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
+COPY --from=builder /opt/app-root/bin/collect-kernel-stats /collect-kernel-stats
 USER 65532:65532
 
 ENTRYPOINT ["/netobserv-ebpf-agent"]
