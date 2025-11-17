@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -132,7 +133,7 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	return nil
 }
 
-func (m *RingBufTracer) listenAndForwardRingBufferSSL(forwardCh chan<- *model.RawRecord) error {
+func (m *RingBufTracer) listenAndForwardRingBufferSSL(_ chan<- *model.RawRecord) error {
 	rtlog.Debug("listenAndForwardRingBufferSSL: waiting for SSL event...")
 	event, err := m.ringBufferSSL.ReadSSLRingBuf()
 	if err != nil {
@@ -175,12 +176,13 @@ func (m *RingBufTracer) listenAndForwardRingBufferSSL(forwardCh chan<- *model.Ra
 			rtlog.Warnf("Failed to read SSL data: read %d/%d bytes, err=%v", n, dataLen, err)
 		}
 
-		rtlog.Infof("SSL EVENT: pid=%d, timestamp=%d, data_len=%d, ssl_type=%d",
+		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d, ssl_type=%d",
 			pidTgid, timestamp, dataLen, sslType)
 		printLen := min(256, len(data))
-		rtlog.Infof("SSL data as string: %s", string(data[:printLen]))
+		rtlog.Debugf("SSL data as string: %s", string(data[:printLen]))
+		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(sslType)), int(dataLen))
 	} else {
-		rtlog.Infof("SSL EVENT: pid=%d, timestamp=%d, data_len=%d (invalid), ssl_type=%d",
+		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d (invalid), ssl_type=%d",
 			pidTgid, timestamp, dataLen, sslType)
 	}
 

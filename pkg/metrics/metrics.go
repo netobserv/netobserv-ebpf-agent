@@ -164,6 +164,13 @@ var (
 		"mac",
 		"retries",
 	)
+	opensslDataEventsCounter = defineMetric(
+		"openssl_data_events_total",
+		"Number of OpenSSL data events",
+		TypeCounter,
+		"openssl_type",
+		"data_len",
+	)
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -194,16 +201,17 @@ type Metrics struct {
 	Settings *Settings
 
 	// Shared metrics:
-	EvictionCounter        *EvictionCounter
-	EvictedFlowsCounter    *EvictionCounter
-	EvictedPacketsCounter  *EvictionCounter
-	DroppedFlowsCounter    *EvictionCounter
-	FilteredFlowsCounter   *EvictionCounter
-	NetworkEventsCounter   *EvictionCounter
-	FlowBufferSizeGauge    *FlowBufferSizeGauge
-	Errors                 *ErrorCounter
-	FlowEnrichmentCounter  *FlowEnrichmentCounter
-	InterfaceEventsCounter *InterfaceEventsCounter
+	EvictionCounter          *EvictionCounter
+	EvictedFlowsCounter      *EvictionCounter
+	EvictedPacketsCounter    *EvictionCounter
+	DroppedFlowsCounter      *EvictionCounter
+	FilteredFlowsCounter     *EvictionCounter
+	NetworkEventsCounter     *EvictionCounter
+	FlowBufferSizeGauge      *FlowBufferSizeGauge
+	Errors                   *ErrorCounter
+	FlowEnrichmentCounter    *FlowEnrichmentCounter
+	InterfaceEventsCounter   *InterfaceEventsCounter
+	OpenSSLDataEventsCounter *OpenSSLDataEventsCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
@@ -220,6 +228,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
+	m.OpenSSLDataEventsCounter = &OpenSSLDataEventsCounter{vec: m.NewCounterVec(&opensslDataEventsCounter)}
 	return m
 }
 
@@ -344,6 +353,14 @@ func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents,
 
 type InterfaceEventsCounter struct {
 	Increase func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int)
+}
+
+type OpenSSLDataEventsCounter struct {
+	vec *prometheus.CounterVec
+}
+
+func (c *OpenSSLDataEventsCounter) Increase(sslType string, dataLen int) {
+	c.vec.WithLabelValues(sslType, strconv.Itoa(dataLen)).Inc()
 }
 
 func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {
