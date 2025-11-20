@@ -122,11 +122,7 @@ func NewOtlpTracerProvider(ctx context.Context, params config.StageParam, res *r
 	return traceProvider, nil
 }
 
-func NewOtlpMetricsProvider(ctx context.Context, params config.StageParam, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
-	cfg := api.EncodeOtlpMetrics{}
-	if params.Encode != nil && params.Encode.OtlpMetrics != nil {
-		cfg = *params.Encode.OtlpMetrics
-	}
+func NewOtlpMetricsProvider(ctx context.Context, cfg *api.EncodeOtlpMetrics, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
 	timeInterval := cfg.PushTimeInterval
 	if timeInterval.Duration == 0 {
 		timeInterval.Duration = defaultTimeInterval

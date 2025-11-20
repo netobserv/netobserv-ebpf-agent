@@ -51,10 +51,10 @@ type MetricsCommonStruct struct {
 
 type MetricsCommonInterface interface {
 	GetCacheEntry(entryLabels map[string]string, m interface{}) interface{}
-	ProcessCounter(m interface{}, labels map[string]string, value float64) error
+	ProcessCounter(m interface{}, name string, labels map[string]string, value float64) error
 	ProcessGauge(m interface{}, name string, labels map[string]string, value float64, lvs []string) error
-	ProcessHist(m interface{}, labels map[string]string, value float64) error
-	ProcessAggHist(m interface{}, labels map[string]string, value []float64) error
+	ProcessHist(m interface{}, name string, labels map[string]string, value float64) error
+	ProcessAggHist(m interface{}, name string, labels map[string]string, value []float64) error
 }
 
 var (
@@ -114,7 +114,7 @@ func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, met
 			continue
 		}
 		for _, labels := range labelSets {
-			err := mci.ProcessCounter(mInfo.genericMetric, labels.lMap, value)
+			err := mci.ProcessCounter(mInfo.genericMetric, mInfo.info.Name, labels.lMap, value)
 			if err != nil {
 				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
 				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
@@ -148,7 +148,7 @@ func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, met
 			continue
 		}
 		for _, labels := range labelSets {
-			err := mci.ProcessHist(mInfo.genericMetric, labels.lMap, value)
+			err := mci.ProcessHist(mInfo.genericMetric, mInfo.info.Name, labels.lMap, value)
 			if err != nil {
 				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
 				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
@@ -165,7 +165,7 @@ func (m *MetricsCommonStruct) MetricCommonEncode(mci MetricsCommonInterface, met
 			continue
 		}
 		for _, labels := range labelSets {
-			err := mci.ProcessAggHist(mInfo.genericMetric, labels.lMap, values)
+			err := mci.ProcessAggHist(mInfo.genericMetric, mInfo.info.Name, labels.lMap, values)
 			if err != nil {
 				log.Errorf("labels registering error on %s: %v", mInfo.info.Name, err)
 				m.errorsCounter.WithLabelValues("LabelsRegisteringError", mInfo.info.Name, "").Inc()
