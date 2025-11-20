@@ -69,6 +69,7 @@ message Record {
   uint32 sampling = 29;
   uint32 ipsec_encrypted = 30;
   int32 ipsec_encrypted_ret = 31;
+  string dns_name = 32;
 }
 
 message DataLink {

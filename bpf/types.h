@@ -70,6 +70,7 @@ typedef __u64 u64;
 #define OBSERVED_DIRECTION_BOTH 3
 
 #define MAX_PAYLOAD_SIZE 256
+#define DNS_NAME_MAX_LEN 32
 
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
@@ -123,6 +124,7 @@ typedef struct additional_metrics_t {
         u16 id;
         u16 flags;
         u8 errno;
+        char name[DNS_NAME_MAX_LEN];
     } dns_record;
     struct pkt_drops_t {
         u64 bytes;
@@ -192,6 +194,7 @@ typedef struct pkt_info_t {
     u16 dns_id;
     u16 dns_flags;
     u64 dns_latency;
+    char dns_name[DNS_NAME_MAX_LEN];
 } pkt_info;
 
 // Structure for payload metadata

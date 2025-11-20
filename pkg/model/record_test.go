@@ -115,7 +115,10 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, // latency
 		01, 00, // id
 		0x80, 00, // flags
-		0x00,             // errno
+		0x00, // errno
+		// name (32 bytes)
+		't', 'e', 's', 't', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm',
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, // 3 bytes padding
 		// pkt_drops structure
 		0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, // u64 bytes
@@ -160,6 +163,7 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 			Flags:   0x0080,
 			Latency: 0x1817161514131211,
 			Errno:   0,
+			Name:    [32]int8{'t', 'e', 's', 't', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm'},
 		},
 		FlowRtt:          0xdeadbeefbeefdead,
 		NetworkEventsIdx: 1,

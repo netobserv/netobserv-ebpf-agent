@@ -338,6 +338,7 @@ func TestConversions(t *testing.T) {
 						DnsRecord: ebpf.BpfDnsRecordT{
 							Latency: uint64(someDuration),
 							Id:      1,
+							Name:    [32]int8{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
 							Flags:   0x8001,
 							Errno:   0,
 						},
@@ -384,6 +385,7 @@ func TestConversions(t *testing.T) {
 				"PktDropLatestDropCause": "SKB_DROP_REASON_TCP_CSUM",
 				"DnsLatencyMs":           someDuration.Milliseconds(),
 				"DnsId":                  1,
+				"DnsName":                "www.example.com",
 				"DnsFlags":               0x8001,
 				"DnsFlagsResponseCode":   "FormErr",
 				"TimeFlowRttNs":          someDuration.Nanoseconds(),
