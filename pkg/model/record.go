@@ -231,6 +231,8 @@ func AllZeroIP(ip net.IP) bool {
 func (r *BpfFlowContent) SSLVersionToString() string {
 	if r.SslVersion == 0 {
 		return ""
+	} else if r.SslVersion == 0xffff {
+		return "unknown"
 	}
 	v := tls.VersionName(r.SslVersion)
 	if r.HasSSLMismatch() {
