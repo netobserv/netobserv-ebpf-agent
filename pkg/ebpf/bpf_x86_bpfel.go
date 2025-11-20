@@ -140,8 +140,10 @@ type BpfFlowMetricsT struct {
 	_                  [2]byte
 	ObservedIntf       [6]uint32
 	SslVersion         uint16
+	TlsCipherSuite     uint16
+	TlsTypes           uint8
 	MiscFlags          uint8
-	_                  [1]byte
+	_                  [6]byte
 }
 
 type BpfFlowRecordT struct {

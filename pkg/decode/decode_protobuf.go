@@ -96,6 +96,8 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 
 	if tlsVersion := fr.Metrics.SSLVersionToString(); tlsVersion != "" {
 		out["TLSVersion"] = tlsVersion
+		out["TLSTypes"] = fr.Metrics.TlsTypes
+		out["TLSCipherSuite"] = fr.Metrics.TlsCipherSuite
 	}
 
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
