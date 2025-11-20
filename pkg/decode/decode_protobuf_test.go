@@ -98,6 +98,7 @@ func TestPBFlowToMap(t *testing.T) {
 		},
 		IpsecEncrypted:    1,
 		IpsecEncryptedRet: 0,
+		SslVersion:        0x0303,
 	}
 
 	out := PBFlowToMap(flow)
@@ -155,5 +156,6 @@ func TestPBFlowToMap(t *testing.T) {
 		"ZoneId":       uint16(100),
 		"IPSecRetCode": int32(0),
 		"IPSecStatus":  "success",
+		"TLSVersion":   "TLS 1.2",
 	}, out)
 }
