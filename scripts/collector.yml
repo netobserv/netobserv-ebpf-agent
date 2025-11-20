@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netobserv-collector
+  namespace: netobserv-privileged
+  labels:
+    k8s-app: netobserv-collector
+spec:
+  selector:
+    matchLabels:
+      k8s-app: netobserv-collector
+  template:
+    metadata:
+      labels:
+        k8s-app: netobserv-collector
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: collector
+          image: quay.io/netobserv/flowlogs-pipeline:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9999
+              hostPort: 9999
+              protocol: TCP
+          args:
+            - --config=/etc/flp/config.yaml
+          volumeMounts:
+            - mountPath: /etc/flp
+              name: config-volume
+      volumes:
+        - name: config-volume
+          configMap:
+            name: flp-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flp-config
+  namespace: netobserv-privileged
+data:
+  config.yaml: |
+    log-level: info
+    pipeline:
+      - name: ingest
+      - name: stdout
+        follows: ingest
+    parameters:
+      - name: ingest
+        ingest:
+          type: grpc
+          grpc:
+            port: 9999
+      - name: stdout
+        write:
+          type: stdout
+          stdout:
+            format: json
+
