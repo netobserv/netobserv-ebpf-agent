@@ -20,13 +20,27 @@ type BpfAdditionalMetrics struct {
 	DnsRecord         BpfDnsRecordT
 	PktDrops          BpfPktDropsT
 	FlowRtt           uint64
+	Verdict           uint8
 	NetworkEvents     [4][8]uint8
+	_                 [1]byte
 	TranslatedFlow    BpfTranslatedFlowT
 	EthProtocol       uint16
 	NetworkEventsIdx  uint8
 	IpsecEncrypted    bool
-	_                 [2]byte
 	IpsecEncryptedRet int32
+	TlsMsg            struct {
+		_                structs.HostLayout
+		Family           uint8
+		TlsContentType   uint8
+		TlsHandshakeType uint8
+		TlsAlertLevel    uint8
+		TlsAlertDesc     uint8
+		_                [1]byte
+		LocalPort        uint16
+		RemotePort       uint16
+		_                [2]byte
+		Size             uint32
+	}
 }
 
 type BpfDirectionT uint32
@@ -173,6 +187,15 @@ type BpfPktDropsT struct {
 	_               [5]byte
 }
 
+type BpfSockKey struct {
+	_          structs.HostLayout
+	RemoteIp   [16]uint8
+	LocalIp    [16]uint8
+	RemotePort uint32
+	LocalPort  uint32
+	Family     uint32
+}
+
 type BpfTcpFlagsT uint32
 
 const (
@@ -240,6 +263,8 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
+	BpfKtlsRedir            *ebpf.ProgramSpec `ebpf:"bpf_ktls_redir"`
+	BpfSockops              *ebpf.ProgramSpec `ebpf:"bpf_sockops"`
 	KfreeSkb                *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
 	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
@@ -273,6 +298,7 @@ type BpfMapSpecs struct {
 	IpsecIngressMap       *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	SockHash              *ebpf.MapSpec `ebpf:"sock_hash"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -327,6 +353,7 @@ type BpfMaps struct {
 	IpsecIngressMap       *ebpf.Map `ebpf:"ipsec_ingress_map"`
 	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
 	PeerFilterMap         *ebpf.Map `ebpf:"peer_filter_map"`
+	SockHash              *ebpf.Map `ebpf:"sock_hash"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -341,6 +368,7 @@ func (m *BpfMaps) Close() error {
 		m.IpsecIngressMap,
 		m.PacketRecord,
 		m.PeerFilterMap,
+		m.SockHash,
 	)
 }
 
@@ -370,6 +398,8 @@ type BpfVariables struct {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
+	BpfKtlsRedir            *ebpf.Program `ebpf:"bpf_ktls_redir"`
+	BpfSockops              *ebpf.Program `ebpf:"bpf_sockops"`
 	KfreeSkb                *ebpf.Program `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
 	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
@@ -391,6 +421,8 @@ type BpfPrograms struct {
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
+		p.BpfKtlsRedir,
+		p.BpfSockops,
 		p.KfreeSkb,
 		p.NetworkEventsMonitoring,
 		p.TcEgressFlowParse,

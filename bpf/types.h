@@ -132,6 +132,7 @@ typedef struct additional_metrics_t {
         u8 latest_state;
     } pkt_drops;
     u64 flow_rtt;
+    u8 verdict;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
     struct translated_flow_t {
         u8 saddr[IP_MAX_LEN];
@@ -144,6 +145,17 @@ typedef struct additional_metrics_t {
     u8 network_events_idx;
     bool ipsec_encrypted;
     int ipsec_encrypted_ret;
+    struct tls_msg_t {
+        // Minimal TLS/kTLS debugging fields
+        u8 family;              // AF_INET/AF_INET6
+        u8 tls_content_type;    // 20=CCS,21=Alert,22=Handshake,23=AppData
+        u8 tls_handshake_type;  // if content_type==22
+        u8 tls_alert_level;     // if content_type==21
+        u8 tls_alert_desc;      // if content_type==21
+        u16 local_port;         // host order
+        u16 remote_port;        // host order
+        u32 size;               // message size
+    } tls_msg;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF

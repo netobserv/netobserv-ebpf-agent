@@ -227,6 +227,8 @@ type Agent struct {
 	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
 	// EnablePCA enables Packet Capture Agent (PCA). By default, PCA is off.
 	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
+	// EnableKTLSTracking enable tracking kernel encrypted packets
+	EnableKTLSTracking bool `env:"ENABLE_KTLS_TRACKING" envDefault:"false"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// Metrics verbosity level. From more to less verbose: trace!, debug, info (default).

@@ -42,11 +42,13 @@
 
 /* Do flow filtering. Is optional. */
 #include "flows_filter.h"
+
 /*
  * Defines an Network events monitoring tracker,
  * which runs inside flow_monitor. Is optional.
  */
 #include "network_events_monitoring.h"
+
 /*
  * Defines packets translation tracker
  */
@@ -56,6 +58,11 @@
  * Defines ipsec tracker
  */
 #include "ipsec.h"
+
+/*
+ * Defines ktls tracker
+ */
+#include "ktls_tracker.h"
 
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
