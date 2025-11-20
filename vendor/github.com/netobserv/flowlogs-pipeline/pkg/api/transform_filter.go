@@ -32,13 +32,13 @@ type TransformFilterEnum string
 
 const (
 	// For doc generation, enum definitions must match format `Constant Type = "value" // doc`
-	RemoveField              TransformFilterEnum = "remove_field"                 // removes the field from the entry
-	RemoveEntryIfExists      TransformFilterEnum = "remove_entry_if_exists"       // removes the entry if the field exists
-	RemoveEntryIfDoesntExist TransformFilterEnum = "remove_entry_if_doesnt_exist" // removes the entry if the field does not exist
-	RemoveEntryIfEqual       TransformFilterEnum = "remove_entry_if_equal"        // removes the entry if the field value equals specified value
-	RemoveEntryIfNotEqual    TransformFilterEnum = "remove_entry_if_not_equal"    // removes the entry if the field value does not equal specified value
-	RemoveEntryAllSatisfied  TransformFilterEnum = "remove_entry_all_satisfied"   // removes the entry if all of the defined rules are satisfied
-	KeepEntryQuery           TransformFilterEnum = "keep_entry_query"             // keeps the entry if it matches the query
+	RemoveField              TransformFilterEnum = "remove_field"                 // removes the field from the flow log
+	RemoveEntryIfExists      TransformFilterEnum = "remove_entry_if_exists"       // removes the entry (ie. the flow log) if the field exists
+	RemoveEntryIfDoesntExist TransformFilterEnum = "remove_entry_if_doesnt_exist" // removes the entry (ie. the flow log) if the field does not exist
+	RemoveEntryIfEqual       TransformFilterEnum = "remove_entry_if_equal"        // removes the entry (ie. the flow log) if the field value equals the specified value
+	RemoveEntryIfNotEqual    TransformFilterEnum = "remove_entry_if_not_equal"    // removes the entry (ie. the flow log) if the field value does not equal the specified value
+	RemoveEntryAllSatisfied  TransformFilterEnum = "remove_entry_all_satisfied"   // removes the entry (ie. the flow log) if all of the defined rules are satisfied
+	KeepEntryQuery           TransformFilterEnum = "keep_entry_query"             // keeps the entry (ie. the flow log) if it matches the query
 	AddField                 TransformFilterEnum = "add_field"                    // adds (input) field to the entry; overrides previous value if present (key=input, value=value)
 	AddFieldIfDoesntExist    TransformFilterEnum = "add_field_if_doesnt_exist"    // adds a field to the entry if the field does not exist
 	AddFieldIf               TransformFilterEnum = "add_field_if"                 // add output field set to assignee if input field satisfies criteria from parameters field
@@ -51,10 +51,10 @@ const (
 type TransformFilterRemoveEntryEnum string
 
 const (
-	RemoveEntryIfExistsD      TransformFilterRemoveEntryEnum = "remove_entry_if_exists"       // removes the entry if the field exists
-	RemoveEntryIfDoesntExistD TransformFilterRemoveEntryEnum = "remove_entry_if_doesnt_exist" // removes the entry if the field does not exist
-	RemoveEntryIfEqualD       TransformFilterRemoveEntryEnum = "remove_entry_if_equal"        // removes the entry if the field value equals specified value
-	RemoveEntryIfNotEqualD    TransformFilterRemoveEntryEnum = "remove_entry_if_not_equal"    // removes the entry if the field value does not equal specified value
+	RemoveEntryIfExistsD      TransformFilterRemoveEntryEnum = "remove_entry_if_exists"       // removes the entry (ie. the flow log) if the field exists
+	RemoveEntryIfDoesntExistD TransformFilterRemoveEntryEnum = "remove_entry_if_doesnt_exist" // removes the entry (ie. the flow log) if the field does not exist
+	RemoveEntryIfEqualD       TransformFilterRemoveEntryEnum = "remove_entry_if_equal"        // removes the entry (ie. the flow log) if the field value equals the specified value
+	RemoveEntryIfNotEqualD    TransformFilterRemoveEntryEnum = "remove_entry_if_not_equal"    // removes the entry (ie. the flow log) if the field value does not equal the specified value
 )
 
 type TransformFilterRule struct {
@@ -63,7 +63,7 @@ type TransformFilterRule struct {
 	RemoveEntry             *TransformFilterGenericRule      `yaml:"removeEntry,omitempty" json:"removeEntry,omitempty" doc:"configuration for remove_entry_* rules"`
 	RemoveEntryAllSatisfied []*RemoveEntryRule               `yaml:"removeEntryAllSatisfied,omitempty" json:"removeEntryAllSatisfied,omitempty" doc:"configuration for remove_entry_all_satisfied rule"`
 	KeepEntryQuery          string                           `yaml:"keepEntryQuery,omitempty" json:"keepEntryQuery,omitempty" doc:"configuration for keep_entry rule"`
-	KeepEntrySampling       uint16                           `yaml:"keepEntrySampling,omitempty" json:"keepEntrySampling,omitempty" doc:"sampling value for keep_entry type: 1 flow on <sampling> is kept"`
+	KeepEntrySampling       uint16                           `yaml:"keepEntrySampling,omitempty" json:"keepEntrySampling,omitempty" doc:"sampling interval for keep_entry type: 1 flow on <sampling> is kept"`
 	AddField                *TransformFilterGenericRule      `yaml:"addField,omitempty" json:"addField,omitempty" doc:"configuration for add_field rule"`
 	AddFieldIfDoesntExist   *TransformFilterGenericRule      `yaml:"addFieldIfDoesntExist,omitempty" json:"addFieldIfDoesntExist,omitempty" doc:"configuration for add_field_if_doesnt_exist rule"`
 	AddFieldIf              *TransformFilterRuleWithAssignee `yaml:"addFieldIf,omitempty" json:"addFieldIf,omitempty" doc:"configuration for add_field_if rule"`
@@ -115,7 +115,7 @@ type RemoveEntryRule struct {
 }
 
 type SamplingCondition struct {
-	Value uint16             `yaml:"value,omitempty" json:"value,omitempty" doc:"sampling value: 1 flow on <sampling> is kept"`
+	Value uint16             `yaml:"value,omitempty" json:"value,omitempty" doc:"sampling interval: 1 flow on <sampling> is kept"`
 	Rules []*RemoveEntryRule `yaml:"rules,omitempty" json:"rules,omitempty" doc:"rules to be satisfied for this sampling configuration"`
 }
 

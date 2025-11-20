@@ -30,6 +30,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 
 	logAdapter "github.com/go-kit/kit/log/logrus"
+	"github.com/netobserv/loki-client-go/grpc"
 	"github.com/netobserv/loki-client-go/loki"
 	"github.com/netobserv/loki-client-go/pkg/backoff"
 	"github.com/netobserv/loki-client-go/pkg/urlutil"
@@ -49,7 +50,6 @@ type emitter interface {
 
 // Loki record writer
 type Loki struct {
-	lokiConfig     loki.Config
 	apiConfig      api.WriteLoki
 	timestampScale float64
 	saneLabels     map[string]model.LabelName
@@ -61,7 +61,46 @@ type Loki struct {
 	formatter      func(config.GenericMap) string
 }
 
-func buildLokiConfig(c *api.WriteLoki) (loki.Config, error) {
+func createLokiClient(c *api.WriteLoki) (emitter, error) {
+	switch c.ClientProtocol {
+	case "grpc":
+		return createGRPCClient(c)
+	case "http", "":
+		return createHTTPClient(c)
+	default:
+		return nil, fmt.Errorf("unsupported client protocol: %s", c.ClientProtocol)
+	}
+}
+
+func createHTTPClient(c *api.WriteLoki) (emitter, error) {
+	cfg, err := buildHTTPLokiConfig(c)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := loki.NewWithLogger(cfg, logAdapter.NewLogger(log.WithField("module", "export/loki")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP Loki client: %w", err)
+	}
+
+	return client, nil
+}
+
+func createGRPCClient(c *api.WriteLoki) (emitter, error) {
+	cfg, err := buildGRPCLokiConfig(c)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := grpc.NewWithLogger(cfg, logAdapter.NewLogger(log.WithField("module", "export/loki-grpc")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC Loki client: %w", err)
+	}
+
+	return client, nil
+}
+
+func buildHTTPLokiConfig(c *api.WriteLoki) (loki.Config, error) {
 	batchWait, err := time.ParseDuration(c.BatchWait)
 	if err != nil {
 		return loki.Config{}, fmt.Errorf("failed in parsing BatchWait : %w", err)
@@ -102,6 +141,69 @@ func buildLokiConfig(c *api.WriteLoki) (loki.Config, error) {
 		return cfg, fmt.Errorf("failed to parse client URL: %w", err)
 	}
 	cfg.URL = clientURL
+	return cfg, nil
+}
+
+func buildGRPCLokiConfig(c *api.WriteLoki) (grpc.Config, error) {
+	if c.GRPCConfig == nil {
+		return grpc.Config{}, fmt.Errorf("gRPC config is required for gRPC client protocol")
+	}
+
+	batchWait, err := time.ParseDuration(c.BatchWait)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing BatchWait: %w", err)
+	}
+
+	timeout, err := time.ParseDuration(c.Timeout)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing Timeout: %w", err)
+	}
+
+	minBackoff, err := time.ParseDuration(c.MinBackoff)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing MinBackoff: %w", err)
+	}
+
+	maxBackoff, err := time.ParseDuration(c.MaxBackoff)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing MaxBackoff: %w", err)
+	}
+
+	keepAlive, err := time.ParseDuration(c.GRPCConfig.KeepAlive)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing KeepAlive: %w", err)
+	}
+
+	keepAliveTimeout, err := time.ParseDuration(c.GRPCConfig.KeepAliveTimeout)
+	if err != nil {
+		return grpc.Config{}, fmt.Errorf("failed in parsing KeepAliveTimeout: %w", err)
+	}
+
+	cfg := grpc.Config{
+		ServerAddress:    c.URL,
+		TenantID:         c.TenantID,
+		BatchWait:        batchWait,
+		BatchSize:        c.BatchSize,
+		Timeout:          timeout,
+		KeepAlive:        keepAlive,
+		KeepAliveTimeout: keepAliveTimeout,
+		BackoffConfig: backoff.BackoffConfig{
+			MinBackoff: minBackoff,
+			MaxBackoff: maxBackoff,
+			MaxRetries: c.MaxRetries,
+		},
+	}
+
+	// Set external labels from static labels
+	if len(c.StaticLabels) > 0 {
+		cfg.ExternalLabels.LabelSet = c.StaticLabels
+	}
+
+	// Configure TLS from shared ClientConfig (same as HTTP client)
+	if c.ClientConfig != nil {
+		cfg.TLS = c.ClientConfig.TLSConfig
+	}
+
 	return cfg, nil
 }
 
@@ -219,13 +321,10 @@ func NewWriteLoki(opMetrics *operational.Metrics, params config.StageParam) (*Lo
 		return nil, fmt.Errorf("the provided config is not valid: %w", err)
 	}
 
-	lokiConfig, buildconfigErr := buildLokiConfig(&lokiConfigIn)
-	if buildconfigErr != nil {
-		return nil, buildconfigErr
-	}
-	client, newWithLoggerErr := loki.NewWithLogger(lokiConfig, logAdapter.NewLogger(log.WithField("module", "export/loki")))
-	if newWithLoggerErr != nil {
-		return nil, newWithLoggerErr
+	// Create the appropriate client based on clientProtocol
+	client, err := createLokiClient(&lokiConfigIn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Loki client: %w", err)
 	}
 
 	timestampScale, err := time.ParseDuration(lokiConfigIn.TimestampScale)
@@ -237,7 +336,7 @@ func NewWriteLoki(opMetrics *operational.Metrics, params config.StageParam) (*Lo
 	saneLabels := make(map[string]model.LabelName, len(lokiConfigIn.Labels))
 	for _, label := range lokiConfigIn.Labels {
 		sanitized := model.LabelName(keyReplacer.Replace(label))
-		if sanitized.IsValidLegacy() {
+		if model.LegacyValidation.IsValidLabelName(string(sanitized)) {
 			saneLabels[label] = sanitized
 		} else {
 			log.WithFields(logrus.Fields{"key": label, "sanitized": sanitized}).
@@ -253,7 +352,6 @@ func NewWriteLoki(opMetrics *operational.Metrics, params config.StageParam) (*Lo
 
 	f := formatter(lokiConfigIn.Format, lokiConfigIn.Reorder)
 	l := &Loki{
-		lokiConfig:     lokiConfig,
 		apiConfig:      lokiConfigIn,
 		timestampScale: float64(timestampScale),
 		saneLabels:     saneLabels,

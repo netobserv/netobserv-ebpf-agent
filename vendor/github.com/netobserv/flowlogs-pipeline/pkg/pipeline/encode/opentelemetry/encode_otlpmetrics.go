@@ -19,6 +19,7 @@ package opentelemetry
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,8 +32,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 const defaultExpiryTime = time.Duration(2 * time.Minute)
@@ -41,9 +40,6 @@ const flpMeterName = "flp_meter"
 type EncodeOtlpMetrics struct {
 	cfg          api.EncodeOtlpMetrics
 	ctx          context.Context
-	res          *resource.Resource
-	mp           *sdkmetric.MeterProvider
-	meter        metric.Meter
 	metricCommon *encode.MetricsCommonStruct
 }
 
@@ -57,12 +53,14 @@ func (e *EncodeOtlpMetrics) Encode(metricRecord config.GenericMap) {
 	e.metricCommon.MetricCommonEncode(e, metricRecord)
 }
 
-func (e *EncodeOtlpMetrics) ProcessCounter(m interface{}, labels map[string]string, value float64) error {
-	counter := m.(metric.Float64Counter)
-	// set attributes using the labels
-	attributes := obtainAttributesFromLabels(labels)
-	counter.Add(e.ctx, value, metric.WithAttributes(attributes...))
-	return nil
+func (e *EncodeOtlpMetrics) ProcessCounter(m interface{}, name string, labels map[string]string, value float64) error {
+	if counter, ok := m.(metric.Float64Counter); ok {
+		// set attributes using the labels
+		attributes := obtainAttributesFromLabels(labels)
+		counter.Add(e.ctx, value, metric.WithAttributes(attributes...))
+		return nil
+	}
+	return fmt.Errorf("wrong Otlp Counter type for %s: %T; expecting Float64Counter", name, m)
 }
 
 func createKey(name string, keys []string) string {
@@ -77,30 +75,36 @@ func createKey(name string, keys []string) string {
 }
 
 func (e *EncodeOtlpMetrics) ProcessGauge(m interface{}, name string, labels map[string]string, value float64, lvs []string) error {
-	obs := m.(Float64Gauge)
-	// set attributes using the labels
-	attributes := obtainAttributesFromLabels(labels)
-	key := createKey(name, lvs)
-	obs.Set(key, value, attributes)
-	return nil
-}
-
-func (e *EncodeOtlpMetrics) ProcessHist(m interface{}, labels map[string]string, value float64) error {
-	histo := m.(metric.Float64Histogram)
-	// set attributes using the labels
-	attributes := obtainAttributesFromLabels(labels)
-	histo.Record(e.ctx, value, metric.WithAttributes(attributes...))
-	return nil
-}
-
-func (e *EncodeOtlpMetrics) ProcessAggHist(m interface{}, labels map[string]string, values []float64) error {
-	histo := m.(metric.Float64Histogram)
-	// set attributes using the labels
-	attributes := obtainAttributesFromLabels(labels)
-	for _, v := range values {
-		histo.Record(e.ctx, v, metric.WithAttributes(attributes...))
+	if obs, ok := m.(Float64Gauge); ok {
+		// set attributes using the labels
+		attributes := obtainAttributesFromLabels(labels)
+		key := createKey(name, lvs)
+		obs.Set(key, value, attributes)
+		return nil
 	}
-	return nil
+	return fmt.Errorf("wrong Otlp Gauge type for %s: %T; expecting Float64Gauge", name, m)
+}
+
+func (e *EncodeOtlpMetrics) ProcessHist(m interface{}, name string, labels map[string]string, value float64) error {
+	if histo, ok := m.(metric.Float64Histogram); ok {
+		// set attributes using the labels
+		attributes := obtainAttributesFromLabels(labels)
+		histo.Record(e.ctx, value, metric.WithAttributes(attributes...))
+		return nil
+	}
+	return fmt.Errorf("wrong Otlp Histogram type for %s: %T; expecting Float64Histogram", name, m)
+}
+
+func (e *EncodeOtlpMetrics) ProcessAggHist(m interface{}, name string, labels map[string]string, values []float64) error {
+	if histo, ok := m.(metric.Float64Histogram); ok {
+		// set attributes using the labels
+		attributes := obtainAttributesFromLabels(labels)
+		for _, v := range values {
+			histo.Record(e.ctx, v, metric.WithAttributes(attributes...))
+		}
+		return nil
+	}
+	return fmt.Errorf("wrong Otlp Histogram type for %s: %T; expecting Float64Histogram", name, m)
 }
 
 func (e *EncodeOtlpMetrics) GetCacheEntry(entryLabels map[string]string, _ interface{}) interface{} {
@@ -118,30 +122,28 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 	ctx := context.Background()
 	res := newResource()
 
-	mp, err := NewOtlpMetricsProvider(ctx, params, res)
+	mp, err := NewOtlpMetricsProvider(ctx, &cfg, res)
 	if err != nil {
 		return nil, err
 	}
-	meter := mp.Meter(
-		flpMeterName,
-	)
+	meter := mp.Meter(flpMeterName)
+	return newEncodeOtlpMetricsWithMeter(ctx, params.Name, opMetrics, &cfg, meter)
+}
+
+func newEncodeOtlpMetricsWithMeter(ctx context.Context, stageName string, opMetrics *operational.Metrics, cfg *api.EncodeOtlpMetrics, meter metric.Meter) (encode.Encoder, error) {
+	meterFactory := otel.Meter(flpMeterName)
 
 	expiryTime := cfg.ExpiryTime
 	if expiryTime.Duration == 0 {
 		expiryTime.Duration = defaultExpiryTime
 	}
 
-	meterFactory := otel.Meter(flpMeterName)
-
 	w := &EncodeOtlpMetrics{
-		cfg:   cfg,
-		ctx:   ctx,
-		res:   res,
-		mp:    mp,
-		meter: meterFactory,
+		cfg: *cfg,
+		ctx: ctx,
 	}
 
-	metricCommon := encode.NewMetricsCommonStruct(opMetrics, 0, params.Name, expiryTime, nil)
+	metricCommon := encode.NewMetricsCommonStruct(opMetrics, 0, stageName, expiryTime, nil)
 	w.metricCommon = metricCommon
 
 	for i := range cfg.Metrics {
@@ -152,7 +154,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 		mInfo := metrics.Preprocess(mCfg)
 		switch mCfg.Type {
 		case api.MetricCounter:
-			counter, err := meter.Float64Counter(fullMetricName)
+			counter, err := meter.Float64Counter(fullMetricName, metric.WithDescription(mCfg.Help))
 			if err != nil {
 				log.Errorf("error during counter creation: %v", err)
 				return nil, err
@@ -163,6 +165,7 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 			obs := Float64Gauge{observations: make(map[string]Float64GaugeEntry)}
 			gauge, err := meterFactory.Float64ObservableGauge(
 				fullMetricName,
+				metric.WithDescription(mCfg.Help),
 				metric.WithFloat64Callback(obs.Callback),
 			)
 			if err != nil {
@@ -172,13 +175,14 @@ func NewEncodeOtlpMetrics(opMetrics *operational.Metrics, params config.StagePar
 			metricCommon.AddGauge(fullMetricName, gauge, mInfo)
 		case api.MetricHistogram:
 			var histo metric.Float64Histogram
+			var err error
 			if len(mCfg.Buckets) == 0 {
-				histo, err = meter.Float64Histogram(fullMetricName)
+				histo, err = meter.Float64Histogram(fullMetricName, metric.WithDescription(mCfg.Help))
 			} else {
 				histo, err = meter.Float64Histogram(fullMetricName,
+					metric.WithDescription(mCfg.Help),
 					metric.WithExplicitBucketBoundaries(mCfg.Buckets...),
 				)
-
 			}
 			if err != nil {
 				log.Errorf("error during histogram creation: %v", err)

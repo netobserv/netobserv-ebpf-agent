@@ -14,14 +14,11 @@ import (
 	"time"
 
 	"github.com/netobserv/loki-client-go/pkg/backoff"
+	"github.com/netobserv/loki-client-go/pkg/metrics"
 	"github.com/prometheus/prometheus/promql/parser"
-
-	"github.com/netobserv/loki-client-go/pkg/metric"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
@@ -39,74 +36,15 @@ const (
 	// pipeline stages
 	ReservedLabelTenantID = "__tenant_id__"
 
-	LatencyLabel = "filename"
-	HostLabel    = "host"
-	MetricPrefix = "netobserv"
+	transportHTTP = "http"
 )
 
 var (
-	encodedBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_encoded_bytes_total",
-		Help:      "Number of bytes encoded and ready to send.",
-	}, []string{HostLabel})
-	sentBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_sent_bytes_total",
-		Help:      "Number of bytes sent.",
-	}, []string{HostLabel})
-	droppedBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_dropped_bytes_total",
-		Help:      "Number of bytes dropped because failed to be sent to the ingester after all retries.",
-	}, []string{HostLabel})
-	sentEntries = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_sent_entries_total",
-		Help:      "Number of log entries sent to the ingester.",
-	}, []string{HostLabel})
-	droppedEntries = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_dropped_entries_total",
-		Help:      "Number of log entries dropped because failed to be sent to the ingester after all retries.",
-	}, []string{HostLabel})
-	requestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_request_duration_seconds",
-		Help:      "Duration of send requests.",
-	}, []string{"status_code", HostLabel})
-	batchRetries = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: MetricPrefix,
-		Name:      "loki_batch_retries_total",
-		Help:      "Number of times batches has had to be retried.",
-	}, []string{HostLabel})
-	streamLag *metric.Gauges
-
-	countersWithHost = []*prometheus.CounterVec{
-		encodedBytes, sentBytes, droppedBytes, sentEntries, droppedEntries,
-	}
-
 	UserAgent = fmt.Sprintf("promtail/%s", version.Version)
 )
 
 func init() {
-	prometheus.MustRegister(encodedBytes)
-	prometheus.MustRegister(sentBytes)
-	prometheus.MustRegister(droppedBytes)
-	prometheus.MustRegister(sentEntries)
-	prometheus.MustRegister(droppedEntries)
-	prometheus.MustRegister(requestDuration)
-	prometheus.MustRegister(batchRetries)
-	var err error
-	streamLag, err = metric.NewGauges(MetricPrefix+"_loki_stream_lag_seconds",
-		"Difference between current time and last batch timestamp for successful sends",
-		metric.GaugeConfig{Action: "set"},
-		int64(1*time.Minute.Seconds()), // This strips out files which update slowly and reduces noise in this metric.
-	)
-	if err != nil {
-		panic(err)
-	}
-	prometheus.MustRegister(streamLag)
+	metrics.RegisterMetrics()
 }
 
 // Client for pushing logs in snappy-compressed protos over HTTP.
@@ -172,8 +110,8 @@ func NewWithLogger(cfg Config, logger log.Logger) (*Client, error) {
 
 	// Initialize counters to 0 so the metrics are exported before the first
 	// occurrence of incrementing to avoid missing metrics.
-	for _, counter := range countersWithHost {
-		counter.WithLabelValues(c.cfg.URL.Host).Add(0)
+	for _, counter := range metrics.CountersWithHost {
+		counter.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(0)
 	}
 
 	c.wg.Add(1)
@@ -264,7 +202,7 @@ func (c *Client) sendBatch(tenantID string, batch *batch) {
 		return
 	}
 	bufBytes := float64(len(buf))
-	encodedBytes.WithLabelValues(c.cfg.URL.Host).Add(bufBytes)
+	metrics.EncodedBytes.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(bufBytes)
 
 	ctx := context.Background()
 	backoff := backoff.New(ctx, c.cfg.BackoffConfig)
@@ -272,11 +210,11 @@ func (c *Client) sendBatch(tenantID string, batch *batch) {
 	for backoff.Ongoing() {
 		start := time.Now()
 		status, err = c.send(ctx, tenantID, buf)
-		requestDuration.WithLabelValues(strconv.Itoa(status), c.cfg.URL.Host).Observe(time.Since(start).Seconds())
+		metrics.RequestDuration.WithLabelValues(strconv.Itoa(status), c.cfg.URL.Host, transportHTTP).Observe(time.Since(start).Seconds())
 
 		if err == nil {
-			sentBytes.WithLabelValues(c.cfg.URL.Host).Add(bufBytes)
-			sentEntries.WithLabelValues(c.cfg.URL.Host).Add(float64(entriesCount))
+			metrics.SentBytes.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(bufBytes)
+			metrics.SentEntries.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(float64(entriesCount))
 			for _, s := range batch.streams {
 				lbls, err := parser.ParseMetric(s.Labels)
 				if err != nil {
@@ -286,15 +224,15 @@ func (c *Client) sendBatch(tenantID string, batch *batch) {
 				}
 				var lblSet model.LabelSet
 				for i := range lbls {
-					if lbls[i].Name == LatencyLabel {
+					if lbls[i].Name == metrics.LatencyLabel {
 						lblSet = model.LabelSet{
-							model.LabelName(HostLabel):    model.LabelValue(c.cfg.URL.Host),
-							model.LabelName(LatencyLabel): model.LabelValue(lbls[i].Value),
+							model.LabelName(metrics.HostLabel):    model.LabelValue(c.cfg.URL.Host),
+							model.LabelName(metrics.LatencyLabel): model.LabelValue(lbls[i].Value),
 						}
 					}
 				}
 				if lblSet != nil {
-					streamLag.With(lblSet).Set(time.Since(s.Entries[len(s.Entries)-1].Timestamp).Seconds())
+					metrics.StreamLag.With(lblSet).Set(time.Since(s.Entries[len(s.Entries)-1].Timestamp).Seconds())
 				}
 			}
 			return
@@ -306,14 +244,14 @@ func (c *Client) sendBatch(tenantID string, batch *batch) {
 		}
 
 		level.Warn(c.logger).Log("msg", "error sending batch, will retry", "status", status, "error", err)
-		batchRetries.WithLabelValues(c.cfg.URL.Host).Inc()
+		metrics.BatchRetries.WithLabelValues(c.cfg.URL.Host, transportHTTP).Inc()
 		backoff.Wait()
 	}
 
 	if err != nil {
 		level.Error(c.logger).Log("msg", "final error sending batch", "status", status, "error", err)
-		droppedBytes.WithLabelValues(c.cfg.URL.Host).Add(bufBytes)
-		droppedEntries.WithLabelValues(c.cfg.URL.Host).Add(float64(entriesCount))
+		metrics.DroppedBytes.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(bufBytes)
+		metrics.DroppedEntries.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(float64(entriesCount))
 	}
 }
 
@@ -399,6 +337,6 @@ func (c *Client) Handle(ls model.LabelSet, t time.Time, s string) error {
 }
 
 func (c *Client) UnregisterLatencyMetric(labels model.LabelSet) {
-	labels[HostLabel] = model.LabelValue(c.cfg.URL.Host)
-	streamLag.Delete(labels)
+	labels[metrics.HostLabel] = model.LabelValue(c.cfg.URL.Host)
+	metrics.StreamLag.Delete(labels)
 }
