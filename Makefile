@@ -159,6 +159,11 @@ compile: ## Compile ebpf agent project
 	@echo "### Compiling project"
 	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
+.PHONY: collect-kernel-stats
+collect-kernel-stats: ## Build kernel-space eBPF statistics collector
+	@echo "### Building kernel stats collector"
+	GOARCH=${GOARCH} GOOS=$(GOOS) go build -mod vendor -o bin/collect-kernel-stats ./cmd/collect-kernel-stats
+
 .PHONY: test
 test: ## Test code using go test
 	@echo "### Testing code"

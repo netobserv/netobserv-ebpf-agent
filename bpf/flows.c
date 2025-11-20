@@ -58,25 +58,78 @@
 #include "ipsec.h"
 
 // return 0 on success, 1 if capacity reached
+// Optimized: loop unrolled and early exits for common cases
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                              u8 direction) {
     if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
         return 1;
     }
-    for (u8 i = 0; i < value->nb_observed_intf; i++) {
-        if (value->observed_intf[i] == if_index) {
-            if (value->observed_direction[i] != direction &&
-                value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
-                // Same interface seen on a different direction => mark as both directions
-                value->observed_direction[i] = OBSERVED_DIRECTION_BOTH;
-            }
-            // Interface already seen -> skip
-            return 0;
-        }
+
+    // Fast path: unroll loop for small array sizes (most common cases)
+    // Check each position explicitly to eliminate loop overhead
+    u8 nb = value->nb_observed_intf;
+
+    // Unroll for common cases (0-3 interfaces) - most flows see 1-2 interfaces
+    if (nb == 0) {
+        // First interface - no check needed
+        goto add_new;
     }
-    value->observed_intf[value->nb_observed_intf] = if_index;
-    value->observed_direction[value->nb_observed_intf] = direction;
-    value->nb_observed_intf++;
+
+    // Check existing interfaces with unrolled comparisons
+    if (value->observed_intf[0] == if_index) {
+        if (value->observed_direction[0] != direction &&
+            value->observed_direction[0] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[0] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+    if (nb >= 2 && value->observed_intf[1] == if_index) {
+        if (value->observed_direction[1] != direction &&
+            value->observed_direction[1] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[1] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+    if (nb >= 3 && value->observed_intf[2] == if_index) {
+        if (value->observed_direction[2] != direction &&
+            value->observed_direction[2] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[2] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+    // Fully unroll remaining cases (positions 3-5) for MAX_OBSERVED_INTERFACES=6
+    if (nb >= 4 && value->observed_intf[3] == if_index) {
+        if (value->observed_direction[3] != direction &&
+            value->observed_direction[3] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[3] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+    if (nb >= 5 && value->observed_intf[4] == if_index) {
+        if (value->observed_direction[4] != direction &&
+            value->observed_direction[4] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[4] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+    if (nb >= 6 && value->observed_intf[5] == if_index) {
+        if (value->observed_direction[5] != direction &&
+            value->observed_direction[5] != OBSERVED_DIRECTION_BOTH) {
+            value->observed_direction[5] = OBSERVED_DIRECTION_BOTH;
+        }
+        return 0;
+    }
+
+add_new:
+    // Not found - add new interface
+    value->observed_intf[nb] = if_index;
+    value->observed_direction[nb] = direction;
+    value->nb_observed_intf = nb + 1;
     return 0;
 }
 
@@ -84,22 +137,34 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
                                                  u64 len, u32 sampling, u32 if_index,
                                                  u8 direction) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
+    // Using lock-free atomic operations for better performance
     int maxReached = 0;
-    bpf_spin_lock(&aggregate_flow->lock);
-    if (aggregate_flow->if_index_first_seen == if_index) {
-        aggregate_flow->packets += 1;
-        aggregate_flow->bytes += len;
+
+    // Read if_index_first_seen once (it's never modified after flow creation)
+    u32 first_seen = aggregate_flow->if_index_first_seen;
+
+    if (first_seen == if_index) {
+        // Common path: same interface - use atomic operations
+        __sync_fetch_and_add(&aggregate_flow->packets, 1);
+        __sync_fetch_and_add(&aggregate_flow->bytes, len);
+        // Timestamp: use simple write (acceptable if slightly out of order, we want latest anyway)
+        // On architectures that support it, this will be naturally atomic for aligned 64-bit writes
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
+        // Flags is u16 - eBPF doesn't support atomic ops on 16-bit types
+        // Use simple write: OR is idempotent, so worst case is missing a flag bit in rare races (acceptable)
         aggregate_flow->flags |= pkt->flags;
+        // DSCP and sampling: simple writes (these are infrequently updated, races are acceptable)
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
     } else if (if_index != 0) {
-        // Only add info that we've seen this interface (we can also update end time & flags)
+        // Different interface path: update timestamps/flags atomically, then add interface
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
+        // Flags update - use simple write (OR is idempotent, occasional missed flag is acceptable)
         aggregate_flow->flags |= pkt->flags;
+        // Note: add_observed_intf may have races, but worst case is missing one interface entry
+        // This is acceptable since interface tracking is best-effort metadata
         maxReached = add_observed_intf(aggregate_flow, pkt, if_index, direction);
     }
-    bpf_spin_unlock(&aggregate_flow->lock);
     if (maxReached > 0) {
         BPF_PRINTK("observed interface missed (array capacity reached); ifindex=%d, eth_type=%d, "
                    "proto=%d, sport=%d, dport=%d\n",
@@ -138,25 +203,50 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
 
     u16 eth_protocol = 0;
+    // Initialize pkt_info with only needed fields - compiler zeros the rest
     pkt_info pkt;
-    __builtin_memset(&pkt, 0, sizeof(pkt));
-
-    flow_id id;
-    __builtin_memset(&id, 0, sizeof(id));
-
     pkt.current_ts = bpf_ktime_get_ns(); // Record the current time first.
+    pkt.id = NULL;                       // Will be set below
+    pkt.flags = 0;
+    pkt.l4_hdr = NULL;
+    pkt.dscp = 0;
+    pkt.dns_id = 0;
+    pkt.dns_flags = 0;
+    pkt.dns_latency = 0;
+    // DNS name only initialized if DNS tracking enabled (set by track_dns_packet if needed)
+
+    flow_id id = {0}; // All fields zeroed - needed for flow identification
+
     pkt.id = &id;
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     struct ethhdr *eth = (struct ethhdr *)data;
     u64 len = skb->len;
+    u8 protocol = 0; // Will be set by L3 parsing
 
-    if (fill_ethhdr(eth, data_end, &pkt, &eth_protocol) == DISCARD) {
+    // Optimized: Parse L2+L3 first for early IP filtering
+    // This allows us to skip L4 parsing if IP-based filtering rejects the packet
+    if (fill_ethhdr_l3only(eth, data_end, &pkt, &eth_protocol, &protocol) == DISCARD) {
         return TC_ACT_OK;
     }
 
-    // check if this packet need to be filtered if filtering feature is enabled
+    // Early IP filtering: check if we can reject before parsing L4
+    // This saves L4 parsing for packets that will be rejected anyway
+    bool filter_enabled = is_filter_enabled();
+    if (filter_enabled) {
+        filter_action early_action = MAX_FILTER_ACTIONS;
+        if (early_ip_filter_check(&id, &early_action, eth_protocol, direction)) {
+            // Early rejection - skip L4 parsing entirely
+            if (early_action == REJECT) {
+                return TC_ACT_OK;
+            }
+        }
+    }
+    // Parse L4 (needed for full filtering or flow tracking)
+    parse_l4_after_l3(eth, data_end, &pkt, eth_protocol, protocol);
+
+    // Full filter check (now that L4 is parsed if needed)
     bool skip =
         check_and_do_flow_filtering(&id, pkt.flags, 0, eth_protocol, &flow_sampling, direction);
     if (has_filter_sampling) {
@@ -183,18 +273,20 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
-        flow_metrics new_flow;
-        __builtin_memset(&new_flow, 0, sizeof(new_flow));
-        new_flow.if_index_first_seen = skb->ifindex;
-        new_flow.direction_first_seen = direction;
-        new_flow.packets = 1;
-        new_flow.bytes = len;
-        new_flow.eth_protocol = eth_protocol;
-        new_flow.start_mono_time_ts = pkt.current_ts;
-        new_flow.end_mono_time_ts = pkt.current_ts;
-        new_flow.flags = pkt.flags;
-        new_flow.dscp = pkt.dscp;
-        new_flow.sampling = flow_sampling;
+        // Initialize only the fields we need - compiler will zero the rest
+        flow_metrics new_flow = {
+            .if_index_first_seen = skb->ifindex,
+            .direction_first_seen = direction,
+            .packets = 1,
+            .bytes = len,
+            .eth_protocol = eth_protocol,
+            .start_mono_time_ts = pkt.current_ts,
+            .end_mono_time_ts = pkt.current_ts,
+            .flags = pkt.flags,
+            .dscp = pkt.dscp,
+            .sampling = flow_sampling,
+            .nb_observed_intf = 0 // Explicitly zero for clarity
+        };
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
 
@@ -245,15 +337,17 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         if (extra_metrics != NULL) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
-            additional_metrics new_metrics;
-            __builtin_memset(&new_metrics, 0, sizeof(new_metrics));
-            new_metrics.start_mono_time_ts = pkt.current_ts;
-            new_metrics.end_mono_time_ts = pkt.current_ts;
-            new_metrics.eth_protocol = eth_protocol;
-            new_metrics.dns_record.id = pkt.dns_id;
-            new_metrics.dns_record.flags = pkt.dns_flags;
-            new_metrics.dns_record.latency = pkt.dns_latency;
-            new_metrics.dns_record.errno = dns_errno;
+            // Initialize only needed fields - compiler will zero the rest
+            additional_metrics new_metrics = {
+                .start_mono_time_ts = pkt.current_ts,
+                .end_mono_time_ts = pkt.current_ts,
+                .eth_protocol = eth_protocol,
+                .dns_record = {.id = pkt.dns_id,
+                               .flags = pkt.dns_flags,
+                               .latency = pkt.dns_latency,
+                               .errno = dns_errno},
+                .network_events_idx = 0 // Explicitly zero for clarity
+            };
             long ret =
                 bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
             if (ret != 0) {

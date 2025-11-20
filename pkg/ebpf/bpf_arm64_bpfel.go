@@ -116,20 +116,16 @@ type BpfFlowIdT struct {
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	_                structs.HostLayout
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	Bytes            uint64
-	Packets          uint32
-	EthProtocol      uint16
-	Flags            uint16
-	SrcMac           [6]uint8
-	DstMac           [6]uint8
-	IfIndexFirstSeen uint32
-	Lock             struct {
-		_   structs.HostLayout
-		Val uint32
-	}
+	_                  structs.HostLayout
+	StartMonoTimeTs    uint64
+	EndMonoTimeTs      uint64
+	Bytes              uint64
+	Packets            uint32
+	EthProtocol        uint16
+	Flags              uint16
+	SrcMac             [6]uint8
+	DstMac             [6]uint8
+	IfIndexFirstSeen   uint32
 	Sampling           uint32
 	DirectionFirstSeen uint8
 	Errno              uint8
@@ -138,7 +134,6 @@ type BpfFlowMetricsT struct {
 	ObservedDirection  [6]uint8
 	_                  [2]byte
 	ObservedIntf       [6]uint32
-	_                  [4]byte
 }
 
 type BpfFlowRecordT struct {

@@ -98,7 +98,7 @@ typedef struct flow_metrics_t {
     u8 dst_mac[ETH_ALEN];
     // OS interface index
     u32 if_index_first_seen;
-    struct bpf_spin_lock lock;
+    // Lock removed - using lock-free atomic operations for better performance
     u32 sampling;
     u8 direction_first_seen;
     // The positive errno of a failed map insertion that caused a flow

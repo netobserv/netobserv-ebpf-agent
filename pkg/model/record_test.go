@@ -16,7 +16,7 @@ import (
 
 func TestRecordBinaryEncoding(t *testing.T) {
 	// Makes sure that we read the C *not packed* flow structure according
-	// to the order defined in bpf/flow.h
+	// to the order defined in bpf/types.h
 	fr, err := ReadFrom(bytes.NewReader([]byte{
 		// ID
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09, // network: u8[16] src_ip
@@ -37,7 +37,6 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x04, 0x05, 0x06, 0x07, 0x08, 0x09, // data_link: u8[6] src_mac
 		0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, // data_link: u8[6] dst_mac
 		0x13, 0x14, 0x15, 0x16, // u32 if_index_first_seen
-		0x00, 0x00, 0x00, 0x00, // u32 lock
 		0x02, 0x00, 0x00, 0x00, // u32 sampling
 		0x03,                               // u8 direction_first_seen
 		0x33,                               // u8 errno
