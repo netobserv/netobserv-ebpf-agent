@@ -54,6 +54,7 @@ type BpfDnsRecordT struct {
 	Id      uint16
 	Flags   uint16
 	Errno   uint8
+	Name    [32]int8
 	_       [3]byte
 }
 
