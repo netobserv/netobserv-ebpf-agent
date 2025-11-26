@@ -42,10 +42,18 @@ type Interface struct {
 	NetNS netns.NsHandle
 }
 
+func (i Interface) String() string {
+	return fmt.Sprintf("key=[%s] mac=%v netns=%s", i.InterfaceKey, i.MAC, i.NetNS)
+}
+
 type InterfaceKey struct {
 	Index  int
 	Name   string
 	NSName string
+}
+
+func (k InterfaceKey) String() string {
+	return fmt.Sprintf("index=%d name=%s ns=%s", k.Index, k.Name, k.NSName)
 }
 
 func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
