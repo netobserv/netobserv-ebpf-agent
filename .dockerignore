@@ -1,0 +1,54 @@
+# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+
+# Build artifacts
+**/bin/
+*.o
+*.tar
+*.tgz
+
+# Test files and directories
+**/e2e/
+**/*_test.go
+cover*.out
+test.out
+
+# Documentation
+**/docs/
+CONTRIBUTING.md
+*.md
+!README.md
+
+# Examples and deployments (not needed for build)
+**/examples/
+**/deployments/
+
+# Scripts (not needed for build)
+**/scripts/
+
+# Build tools (not needed in image)
+**/protoc/
+
+# Test artifacts
+capture.pcap
+ebpf-agent.tar
+
+# CI/CD and development files
+**/.git/
+.gitignore
+.gitattributes
+OWNERS
+renovate.json
+Containerfile.*
+
+# IDE and editor files
+**/.vscode/
+**/.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+
