@@ -32,8 +32,8 @@ type GRPCProto struct {
 	batchCounter       prometheus.Counter
 }
 
-func StartGRPCProto(hostIP string, hostPort int, maxFlowsPerMessage int, m *metrics.Metrics) (*GRPCProto, error) {
-	clientConn, err := grpc.ConnectClient(hostIP, hostPort)
+func StartGRPCProto(hostIP string, hostPort int, caPath, userCertPath, userKeyPath string, maxFlowsPerMessage int, m *metrics.Metrics) (*GRPCProto, error) {
+	clientConn, err := grpc.ConnectClient(hostIP, hostPort, caPath, userCertPath, userKeyPath)
 	if err != nil {
 		return nil, err
 	}
