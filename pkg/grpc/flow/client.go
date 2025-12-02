@@ -33,7 +33,7 @@ func ConnectClient(hostIP string, hostPort int, caPath, userCertPath, userKeyPat
 		// Configure TLS (server CA)
 		caCert, err := os.ReadFile(caPath)
 		if err != nil {
-			return nil, fmt.Errorf("Cannot load CA certificate: %w", err)
+			return nil, fmt.Errorf("cannot load CA certificate: %w", err)
 		}
 		pool := x509.NewCertPool()
 		pool.AppendCertsFromPEM(caCert)
@@ -45,7 +45,7 @@ func ConnectClient(hostIP string, hostPort int, caPath, userCertPath, userKeyPat
 			// Configure mTLS (client certificates)
 			cert, err := tls.LoadX509KeyPair(userCertPath, userKeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("Cannot load client certificate: %w", err)
+				return nil, fmt.Errorf("cannot load client certificate: %w", err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		} else {
