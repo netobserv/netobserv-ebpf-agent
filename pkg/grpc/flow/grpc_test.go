@@ -2,21 +2,27 @@ package flowgrpc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/mariomac/guara/pkg/test"
+	test2 "github.com/mariomac/guara/pkg/test"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const timeout = 5 * time.Second
 
 func TestGRPCCommunication(t *testing.T) {
-	port, err := test.FreeTCPPort()
+	port, err := test2.FreeTCPPort()
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut)
@@ -93,7 +99,7 @@ func TestGRPCCommunication(t *testing.T) {
 }
 
 func TestConstructorOptions(t *testing.T) {
-	port, err := test.FreeTCPPort()
+	port, err := test2.FreeTCPPort()
 	require.NoError(t, err)
 	intercepted := make(chan struct{})
 	// Override the default GRPC collector to verify that StartCollector is applying the
@@ -127,7 +133,7 @@ func TestConstructorOptions(t *testing.T) {
 }
 
 func BenchmarkIPv4GRPCCommunication(b *testing.B) {
-	port, err := test.FreeTCPPort()
+	port, err := test2.FreeTCPPort()
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
 	collector, err := StartCollector(port, serverOut)
@@ -188,7 +194,7 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 }
 
 func BenchmarkIPv6GRPCCommunication(b *testing.B) {
-	port, err := test.FreeTCPPort()
+	port, err := test2.FreeTCPPort()
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
 	collector, err := StartCollector(port, serverOut)
@@ -248,4 +254,134 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 		}
 		<-serverOut
 	}
+}
+
+// Note: there's more tests focused on TLS in FLP, that also cover agent's functions
+func TestGRPCCommunication_TLS(t *testing.T) {
+	ca, _, _, cert, key, cleanup := test.CreateAllCerts(t)
+	defer cleanup()
+	opts, err := buildTLSServerOptions(cert, key, "")
+	require.NoError(t, err)
+
+	port, err := test2.FreeTCPPort()
+	require.NoError(t, err)
+	serverOut := make(chan *pbflow.Records)
+	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))
+	require.NoError(t, err)
+	cc, err := ConnectClient("127.0.0.1", port, ca, "", "")
+	require.NoError(t, err)
+	client := cc.Client()
+
+	go func() {
+		_, err = client.Send(context.Background(),
+			&pbflow.Records{Entries: []*pbflow.Record{{
+				EthProtocol: 123, Network: &pbflow.Network{
+					SrcAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x11223344},
+					},
+					DstAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x55667788},
+					},
+				}}},
+			})
+		require.NoError(t, err)
+	}()
+
+	var rs *pbflow.Records
+	select {
+	case rs = <-serverOut:
+	case <-time.After(timeout):
+		require.Fail(t, "timeout waiting for flows")
+	}
+	assert.Len(t, rs.Entries, 1)
+	r := rs.Entries[0]
+	assert.EqualValues(t, 123, r.EthProtocol)
+	assert.EqualValues(t, 0x11223344, r.GetNetwork().GetSrcAddr().GetIpv4())
+	assert.EqualValues(t, 0x55667788, r.GetNetwork().GetDstAddr().GetIpv4())
+
+	select {
+	case rs = <-serverOut:
+		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
+	default:
+		// ok!
+	}
+}
+
+// Note: there's more tests focused on TLS in FLP, that also cover agent's functions
+func TestGRPCCommunication_MutualTLS(t *testing.T) {
+	ca, clCert, clKey, cert, key, cleanup := test.CreateAllCerts(t)
+	defer cleanup()
+	opts, err := buildTLSServerOptions(cert, key, ca)
+	require.NoError(t, err)
+
+	port, err := test2.FreeTCPPort()
+	require.NoError(t, err)
+	serverOut := make(chan *pbflow.Records)
+	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))
+	require.NoError(t, err)
+	cc, err := ConnectClient("127.0.0.1", port, ca, clCert, clKey)
+	require.NoError(t, err)
+	client := cc.Client()
+
+	go func() {
+		_, err = client.Send(context.Background(),
+			&pbflow.Records{Entries: []*pbflow.Record{{
+				EthProtocol: 123, Network: &pbflow.Network{
+					SrcAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x11223344},
+					},
+					DstAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x55667788},
+					},
+				}}},
+			})
+		require.NoError(t, err)
+	}()
+
+	var rs *pbflow.Records
+	select {
+	case rs = <-serverOut:
+	case <-time.After(timeout):
+		require.Fail(t, "timeout waiting for flows")
+	}
+	assert.Len(t, rs.Entries, 1)
+	r := rs.Entries[0]
+	assert.EqualValues(t, 123, r.EthProtocol)
+	assert.EqualValues(t, 0x11223344, r.GetNetwork().GetSrcAddr().GetIpv4())
+	assert.EqualValues(t, 0x55667788, r.GetNetwork().GetDstAddr().GetIpv4())
+
+	select {
+	case rs = <-serverOut:
+		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
+	default:
+		// ok!
+	}
+}
+
+func buildTLSServerOptions(certPath, keyPath, clientCAPath string) ([]grpc.ServerOption, error) {
+	var opts []grpc.ServerOption
+	if certPath != "" && keyPath != "" {
+		// TLS
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load configured certificate: %w", err)
+		}
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.NoClientCert,
+		}
+		if clientCAPath != "" {
+			// mTLS
+			caCert, err := os.ReadFile(clientCAPath)
+			if err != nil {
+				return nil, fmt.Errorf("cannot load configured client CA certificate: %w", err)
+			}
+			pool := x509.NewCertPool()
+			pool.AppendCertsFromPEM(caCert)
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+			tlsCfg.ClientCAs = pool
+		}
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsCfg)))
+	}
+	return opts, nil
 }
