@@ -3,6 +3,8 @@ ARG TARGETARCH
 # Build the manager binary
 FROM docker.io/library/golang:1.24 as builder
 
+ARG TARGETARCH
+
 ARG LDFLAGS
 
 WORKDIR /opt/app-root
