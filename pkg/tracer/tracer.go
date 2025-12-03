@@ -65,6 +65,7 @@ const (
 	constEnableIPsec                    = "enable_ipsec"
 	constEnableOpenSSLTracking          = "enable_openssl_tracking"
 	sslDataEventMap                     = "ssl_data_event_map"
+	dnsNameMap                          = "dns_name_map"
 )
 
 const (
@@ -180,6 +181,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			ipsecInputMap,
 			ipsecOutputMap,
 			sslDataEventMap,
+			dnsNameMap,
 		} {
 			spec.Maps[m].Pinning = 0
 		}
@@ -378,6 +380,12 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		log.Infof("BPFManager mode: loading SSL data event pinned maps")
 		mPath = path.Join(pinDir, sslDataEventMap)
 		objects.BpfMaps.SslDataEventMap, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading DNS name pinned maps")
+		mPath = path.Join(pinDir, dnsNameMap)
+		objects.BpfMaps.DnsNameMap, err = cilium.LoadPinnedMap(mPath, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
@@ -874,6 +882,12 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.SslDataEventMap.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.DnsNameMap.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.DnsNameMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -1227,6 +1241,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
 				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1292,6 +1307,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
 				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1357,6 +1373,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
 				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1422,6 +1439,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
 				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1493,6 +1511,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ipsecInputMap,
 		ipsecOutputMap,
 		sslDataEventMap,
+		dnsNameMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
@@ -1531,6 +1550,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constEnablePktTranslation)
 	delete(spec.Programs, constEnableIPsec)
 	delete(spec.Programs, constEnableOpenSSLTracking)
+	delete(spec.Programs, dnsNameMap)
 
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError

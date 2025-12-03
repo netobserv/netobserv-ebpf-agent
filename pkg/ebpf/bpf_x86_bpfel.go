@@ -48,6 +48,11 @@ type BpfDnsFlowId struct {
 	_        [1]byte
 }
 
+type BpfDnsNameBuffer struct {
+	_    structs.HostLayout
+	Name [32]int8
+}
+
 type BpfDnsRecordT struct {
 	_       structs.HostLayout
 	Latency uint64
@@ -279,6 +284,7 @@ type BpfMapSpecs struct {
 	AggregatedFlows       *ebpf.MapSpec `ebpf:"aggregated_flows"`
 	DirectFlows           *ebpf.MapSpec `ebpf:"direct_flows"`
 	DnsFlows              *ebpf.MapSpec `ebpf:"dns_flows"`
+	DnsNameMap            *ebpf.MapSpec `ebpf:"dns_name_map"`
 	FilterMap             *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.MapSpec `ebpf:"global_counters"`
 	IpsecEgressMap        *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
@@ -336,6 +342,7 @@ type BpfMaps struct {
 	AggregatedFlows       *ebpf.Map `ebpf:"aggregated_flows"`
 	DirectFlows           *ebpf.Map `ebpf:"direct_flows"`
 	DnsFlows              *ebpf.Map `ebpf:"dns_flows"`
+	DnsNameMap            *ebpf.Map `ebpf:"dns_name_map"`
 	FilterMap             *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters        *ebpf.Map `ebpf:"global_counters"`
 	IpsecEgressMap        *ebpf.Map `ebpf:"ipsec_egress_map"`
@@ -351,6 +358,7 @@ func (m *BpfMaps) Close() error {
 		m.AggregatedFlows,
 		m.DirectFlows,
 		m.DnsFlows,
+		m.DnsNameMap,
 		m.FilterMap,
 		m.GlobalCounters,
 		m.IpsecEgressMap,
