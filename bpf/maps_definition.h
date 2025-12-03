@@ -97,6 +97,15 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } global_counters SEC(".maps");
 
+// Per-CPU temporary storage for DNS name (avoids stack limit)
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __type(key, u32);
+    __type(value, dns_name_buffer);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} dns_name_map SEC(".maps");
+
 // LPM trie map used to filter traffic by IP address CIDR
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);

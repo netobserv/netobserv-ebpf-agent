@@ -44,7 +44,8 @@ define MAPS
 	"peer_filter_map":"lpm_trie",
 	"ipsec_ingress_map":"hash",
 	"ipsec_egress_map":"hash",
-	"ssl_data_event_map":"ringbuf"
+	"ssl_data_event_map":"ringbuf",
+	"dns_name_map":"per_cpu_array"
 }
 endef
 

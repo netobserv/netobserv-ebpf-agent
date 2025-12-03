@@ -72,6 +72,11 @@ typedef __u64 u64;
 #define MAX_PAYLOAD_SIZE 256
 #define DNS_NAME_MAX_LEN 32
 
+// Per-CPU temporary storage for DNS name (avoids stack limit)
+typedef struct dns_name_buffer_t {
+    char name[DNS_NAME_MAX_LEN];
+} dns_name_buffer;
+
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
     INGRESS,
@@ -213,7 +218,7 @@ typedef struct pkt_info_t {
     u16 dns_id;
     u16 dns_flags;
     u64 dns_latency;
-    char dns_name[DNS_NAME_MAX_LEN];
+    char *dns_name;
 } pkt_info;
 
 // Structure for payload metadata

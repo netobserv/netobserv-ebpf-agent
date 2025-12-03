@@ -17,4 +17,5 @@ var Maps = []string{
 	"ipsec_ingress_map",
 	"ipsec_egress_map",
 	"ssl_data_event_map",
+	"dns_name_map",
 }
