@@ -101,6 +101,12 @@ type Agent struct {
 	TargetHost string `env:"TARGET_HOST"`
 	// Port is the port the flow or packet collector, when the EXPORT variable is set to "grpc"
 	TargetPort int `env:"TARGET_PORT"`
+	// CA certificate path of the target, when TLS is used. Empty by default (no TLS).
+	TargetTLSCACertPath string `env:"TARGET_TLS_CA_CERT_PATH"`
+	// User certificate path, when mTLS is used. Empty by default (no mTLS).
+	TargetTLSUserCertPath string `env:"TARGET_TLS_USER_CERT_PATH"`
+	// User certificate key path, when mTLS is used. Empty by default (no mTLS).
+	TargetTLSUserKeyPath string `env:"TARGET_TLS_USER_KEY_PATH"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`

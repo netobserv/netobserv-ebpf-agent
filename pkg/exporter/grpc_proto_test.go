@@ -29,7 +29,7 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, 1000, metrics.NoOp())
+	exporter, err := StartGRPCProto("127.0.0.1", port, "", "", "", 1000, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -71,7 +71,7 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	defer coll.Close()
 
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("::1", port, 1000, metrics.NoOp())
+	exporter, err := StartGRPCProto("::1", port, "", "", "", 1000, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
@@ -114,7 +114,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 
 	const msgMaxLen = 10000
 	// Start GRPCProto exporter stage
-	exporter, err := StartGRPCProto("127.0.0.1", port, msgMaxLen, metrics.NoOp())
+	exporter, err := StartGRPCProto("127.0.0.1", port, "", "", "", msgMaxLen, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Send a message much longer than the limit length
