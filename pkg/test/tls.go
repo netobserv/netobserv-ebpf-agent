@@ -30,59 +30,80 @@ GXHWiYftbJRGHDiA9BqZT2g/vMz/1e9k5wSek+fqaBQNS7nEijUz+Qk0LlmagZV3
 kom8Fkz5HTYkmZVzXPW8spFEuIibCgRK1qA1RuDsyNxMnk3c1jcR8B5AJ/VI
 -----END CERTIFICATE-----`
 
+// CA generated with:
+// openssl req -newkey rsa:2048 -nodes -days 3650 -x509 -keyout ca.key -out ca.crt -subj "/CN=*"
+const clientCA string = `-----BEGIN CERTIFICATE-----
+MIIC+TCCAeGgAwIBAgIUCStrU+idWDMcp01lWVF2cQhp0wIwDQYJKoZIhvcNAQEL
+BQAwDDEKMAgGA1UEAwwBKjAeFw0yNTEyMDUxNTM1MjlaFw0zNTEyMDMxNTM1Mjla
+MAwxCjAIBgNVBAMMASowggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0
+ldnq3a7RXZ3tyO5OmSP2Q+z1vE/IyqSPZtGopxf8vupcklClWjrJs/rojVWMjAgE
+YH4EPNOQgWhZjJQaaWaaP9HuENwkkflneQ39zSKfU6hU3jV/gYjED5QNCTsbrV1J
+m/y6FzdGumwCvoztXTcg6exRWkifrJkcO9Fg0CpQ3hFuJw81G18W9yFPvHAf1XPJ
+8Lglbg4zFcMOMBp8Ob5L8UITV7BGaKFVmBQM8/F4sIBYDx6ACktwxpk52pLIJF1z
+95dixTZjwBN9meji8hyV/IuJ5UvwwtADhRtLhB+CWcDPuu3fVPVodRoeONSg0q/1
+lfaTT4fkQCz1MaZ4kochAgMBAAGjUzBRMB0GA1UdDgQWBBSdDuiQNR5nJrRm5xNV
+QabgI9/xIzAfBgNVHSMEGDAWgBSdDuiQNR5nJrRm5xNVQabgI9/xIzAPBgNVHRMB
+Af8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAvBl5AZIpq1zZDQy9QGc6SznHT
+R6bGmFPZRFEtCK00NrQT1n5fHB3dWtkUqLuIcxy6tzRf+yn9rKeqASKcc/adxrMg
+Gnp5hIHN94P2LdTyHhwbGTPE+zDZyDSBfhuKmGBWMqXVkjWaxdU9/YwSe+tODvSQ
+BDOqYTeCOUBHbP2oESqr66dx8DYqJieaIBiH1XCaRAhk3/DcqRzgdc24Cv+zL6gn
+xhdEapxmUK2mGxiOkchn0Qy8xrT5sRZRSpXbLhia1NsK6qieC0INkkvW3lpgB30p
+WDFE2110hEj7aOzf4UajFrCJIONiXqbwrANp0ILtannrKuvF40ghH8ZV5+Q5
+-----END CERTIFICATE-----`
+
 // Client key (for mTLS) generated with:
 // openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/C=GB/ST=London/L=London/O=libvault consultants/OU=IT Department/CN=*"
 const clientKey string = `-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6MwSpGNZz7sCO
-/6Wn+iC7Am+UxQkfm+SWHDxRB9wgDQbZVesAFWiRkMXcTQjBc/71R2RhZed1FFVO
-vXZfewfgepdq9RlRCEgFSoMhF8zuwxwKfrrAML2PiRy720i0azwLLilTQB9s5MrB
-Cz0Gsq2neY6wXf3KkyMYyhzBaKocl5NqxIcHILWJ+jBnKrfvW69CP8jtIjZLo9xS
-WtCw0S2pTVRBt16smiA8VNfXnZc2p8LyWCmZ523AjqKnatviiJ6apyTlhsLMx9Lf
-RIqkirgaoTB9y6VFvyZQtqXD+PI7r9QykVgHioMnep2gsJwgxqTuj75gxTsebIJd
-PKdv4qwTAgMBAAECggEAUSsWWAR8z/L/PBcThsNR61PngknWbVIO9qT+YjBz9ADZ
-wHpkxBeRCwu6RQvLylEfjpr9ljvPB0nC2l1bMco3J9MpGLYZwCpFAxF1UkLG0jp5
-idWu4UMeD2ks/nNcIVIxzYnk9+aXDGg8PqUAiF/xtXUXD6kZjmpPvWm12VYf+fAX
-OIXrs3BDJKsJUDfOxg8ujcOuK+qyQjVOoiR8zrREZy/fCRc0TSD7tnnLLPW5MCst
-PaFhS8vb35XuTvzCW7yCdosV/xnf2I22KWVJDxV11xtfbi3AF8ggyzUZElW8fVCz
-7AJU3W95NVArNw3mvSm6vTcdbddQbuJsMnW1Hc2YCQKBgQDaBUlnliOpTUAGxCOV
-sLl7GjsMfH8TrsHa9+ca0BwcoSqDky0jGh/sm1LgyPqoHn9Vj8uK/DLebNMnRZAc
-KzGMQpzneW7K0G64SHJI6Faa29FTUfa+azeS3vIKa6WbTWzuhGQ/R7OqTy7UbJTs
-IQaA/vfPa13ZNWtHONAaMO96PQKBgQDaoqVVv9NZIVCK1PlcdHhjJ++NrWkKgBGk
-YaMvXbWRP0vF1vEgKIE8vzNufQiw6FuiZgeLQluglN6wkvV3fzhVnu7An8DqVaxD
-JQQAuwHTvn3wmiepMuYNleYU67bAeFhNZRJuOmkUtrLiPOgVliuwNUqmaaUnzouD
-RLzFs/00jwKBgQCLcqI2zUNWAIEZUs7n6bdZU7e9DsxBDKAVrEZ3UfEJJtSIf9R5
-BTayIc7q0+HvMkKDuYuZBCKNPdH45nd8bOwuKFUvgO4qbxLCcCQZGfJ67mp+/ofx
-16YeHNd3bs7n/KfWD3wHNZdnMWpkmGbQeXctfueGFchbK93IGkCQ4AfsiQKBgHEH
-bsRC9Gd6wqHTcsrqZ6aTadPr14cXKIe79loxbwGVIH46HdRLPG0ER/mR6GFU7rKp
-XrMO7kG5VNsiToalnaEeFj49GMXM3s6jn0slYs9uBrvRZjmh168kVJtyNLuSO8xf
-OUUFK3gK77XoWO94AEQLePlJWpmWvSdy7MikwX1fAoGALrRIZVmlmDoJ/jm9lNaZ
-r3PmRWYlhqLyI/oeEzczqy6WOGcTOQsXlP4Yu1EM6V9mLqQ4ATZ2lUM3mcahfi14
-RPYzuPxqdxxmRGy1iPVWwU7Jw97ke80Zx68Wm69sQHb8Gz9Y6B3c/F63WMuojyas
-APnsbr5Kx+5wC0t3xGfShK4=
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC8EZEm3cXCZZ65
+UXQC0iV4VA51hM0BcXKiCetNWMvSaeNwANtEQkAQ5SztfVaZkgPpSsZjzYVmFvKc
+CyVTxct4vZ7Fn8Vyl2QWNXzzHcssSck7edCMOVWoITgGvPJTyrj8Q0meZ7tJ5IGk
+uzdkeEPy4DD22ObGUjgScntJO65kq0xJ+Ku0Mw3s4RfHi+fsDbvRjvuQcu0y+L3t
+6sJKsM0vyuWLqQKDN8SUAG3gJFLtNVK5W4H8eG72Y68vgBRXHBCTt2hesOsCAgW3
+djZrDx6vFnj5fsHLEUA6T1iXcl8yL0+ALShtEjBgaOu9RlbFY3Pei7uV2fujjRSk
+ihKMbQsZAgMBAAECggEAAQI5HJPA7Ud9P/IzZJZ68/fDchbpwJG6syrJc8s/oJvH
+yACBLI8MZ+rKwGVVMxKo6bXodX2TMxZ5a6PVqercKgQeV2IBfZlZRJM53dXxkoW8
+yhBfsXjXQEUZV1PpGtDyCAxWVz6oLv/GQDtu0x+gAav5J0HHjxW+zj6F8cEbsNeG
+AL4QjIxO9RYXA+KLIu7Nx6XSsiZFyDJCM31xT5WtS6jzzMJ3wdbTotI4TQzim3au
+Exh03aFnksKSmvF+txQncZeHSmJw90T6nEvUjW6dLKI3XKgTVPQVfrDh1h+qLLQA
+9tuZEZgRHUCwlCtljYiS67RhBhU9cZ8IqNOpJsFQmQKBgQDj4wvVtmE/ybiDm9j5
+hrw8AR4hAA2OdCmGJgRfKhCJzgd2wg/+sIFYjNadD6ULgadjaiDoaHNKCh6frGAF
+PMkFk4U5jwK9QCtls/24xo8HzEFadfJEgv50iTJNAl57Z/chNhhAAaVAZlWqRTN+
+D/FYMozX+bs0r37MSeGiIcSgjQKBgQDTRQJ5DNqKez/Pi8rzJaKM9YJyb6UlmIsy
+IzKj7UoLyQCjzK4fo6z42QVPtQzR6J0zkdiruPeFqvrfEW+xdi+0Jy5DRGekUVrm
+dX5tbcGPPZYfsu8u96gi43TJTVatQ1pKEN0+8sq8wzsSO0cfZ8nnB+iCaJUbib08
+cEYiL1NPvQKBgQCBZsWrnxptvD/YC8ETP9zXPdM77enEwFVr5V6KIzqs5Z77Yoru
+lo98Fs0u9llDxWWlX/g7wEPnAQQOqzUDBFcpoXD/FCP8DtoVsDUcnTNOvD9H/L2L
+Bc8zoUw8ymGYNZrw8uSmQ8jwXqu6Of1ZUfg7msi7QwV4j0ay/ijvhbk/aQKBgBeA
+I6hHb7/budtiV274jr5TSPFlzd8CuukW1Tk62fO5piKSUAQg9sqviVG2d/iZgXMN
+FCb16kKqJEHP9LauyNunSBQfdc/nZM8h3rBZdyBx31MjWkvFLKTE3GbP/YZEabS3
+b4TjCP46UUXT5jNuHh1e2dQ3we5QQgaJDqQa04+ZAoGBALTIJW/uq7y+3Dxq4oLC
+mato2oHmf/8TCruwAXljdiUPgH2SCDlH/62oBes/zokS1cLk+N/5n25EiffcyviT
+heaRcSqLl5Q3opyt37Jk/nDjB3+P+sCAX4EsRJl3U4M0r4ickKan+g856Tt+AQl0
+NHdueneZkKeVhhtQrGu9WzM3
 -----END PRIVATE KEY-----`
 
 // Client cert (for mTLS) generated with:
 // openssl x509 -req -days 3650 -sha256 -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -extfile <(echo subjectAltName = IP:127.0.0.1)
 const clientCert string = `-----BEGIN CERTIFICATE-----
-MIIDXzCCAkegAwIBAgIUZP3uzJrPArjETkLd2SZticeIAeMwDQYJKoZIhvcNAQEL
-BQAwDDEKMAgGA1UEAwwBKjAeFw0yMzA4MDIwODU1NTJaFw0zMzA3MzAwODU1NTJa
+MIIDXzCCAkegAwIBAgIUcOdT2T03jT2H/W78F/usXc4zv78wDQYJKoZIhvcNAQEL
+BQAwDDEKMAgGA1UEAwwBKjAeFw0yNTEyMDUxNTM4MDhaFw0zNTEyMDMxNTM4MDha
 MHIxCzAJBgNVBAYTAkdCMQ8wDQYDVQQIDAZMb25kb24xDzANBgNVBAcMBkxvbmRv
 bjEdMBsGA1UECgwUbGlidmF1bHQgY29uc3VsdGFudHMxFjAUBgNVBAsMDUlUIERl
 cGFydG1lbnQxCjAIBgNVBAMMASowggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
-AoIBAQC6MwSpGNZz7sCO/6Wn+iC7Am+UxQkfm+SWHDxRB9wgDQbZVesAFWiRkMXc
-TQjBc/71R2RhZed1FFVOvXZfewfgepdq9RlRCEgFSoMhF8zuwxwKfrrAML2PiRy7
-20i0azwLLilTQB9s5MrBCz0Gsq2neY6wXf3KkyMYyhzBaKocl5NqxIcHILWJ+jBn
-KrfvW69CP8jtIjZLo9xSWtCw0S2pTVRBt16smiA8VNfXnZc2p8LyWCmZ523AjqKn
-atviiJ6apyTlhsLMx9LfRIqkirgaoTB9y6VFvyZQtqXD+PI7r9QykVgHioMnep2g
-sJwgxqTuj75gxTsebIJdPKdv4qwTAgMBAAGjUzBRMA8GA1UdEQQIMAaHBH8AAAEw
-HQYDVR0OBBYEFJXWoxXktt1SPSppKKxG9irVdZ6pMB8GA1UdIwQYMBaAFDfhKgNf
-8sL6LaHntwho4aYZlOAHMA0GCSqGSIb3DQEBCwUAA4IBAQAY+8cforOMMqzuyQtm
-q2fs+rd/AavSTxxOjazD+QX7vwoCjvSqBSVr53//1hFKoEE33PsQ+UpNVOkYyNo1
-QuyKfhlnqJ7wfXYFWorU07qjHHc02SlQmqHTIpu0VaUxRuEbHdMhO54oJqBnLkL5
-lSOGjsHAMVh/a7ET96OqZKwMwNpWZXLmVhkXkpqf21Ept8P1aweEmmkaW3WAMQ/Y
-L99WlvK/Zds/xUlXcpDBOrVZwXuYqhYsjxfig5J6z3bX6o/0g+baL0CRpIz+66BF
-Ks1CJYZnOX9Tb26DyBTQAUXzJMv9sJXlYF3Llhd14YfEmOeXnNkog8GflJA7GU6C
-lkAS
+AoIBAQC8EZEm3cXCZZ65UXQC0iV4VA51hM0BcXKiCetNWMvSaeNwANtEQkAQ5Szt
+fVaZkgPpSsZjzYVmFvKcCyVTxct4vZ7Fn8Vyl2QWNXzzHcssSck7edCMOVWoITgG
+vPJTyrj8Q0meZ7tJ5IGkuzdkeEPy4DD22ObGUjgScntJO65kq0xJ+Ku0Mw3s4RfH
+i+fsDbvRjvuQcu0y+L3t6sJKsM0vyuWLqQKDN8SUAG3gJFLtNVK5W4H8eG72Y68v
+gBRXHBCTt2hesOsCAgW3djZrDx6vFnj5fsHLEUA6T1iXcl8yL0+ALShtEjBgaOu9
+RlbFY3Pei7uV2fujjRSkihKMbQsZAgMBAAGjUzBRMA8GA1UdEQQIMAaHBH8AAAEw
+HQYDVR0OBBYEFKR8VXncy1LIMzMm8Js5TM75gk+lMB8GA1UdIwQYMBaAFJ0O6JA1
+HmcmtGbnE1VBpuAj3/EjMA0GCSqGSIb3DQEBCwUAA4IBAQCh7v5ZoKQCqZ+Jfo+E
+RXM8Yc0bLgwon0VuAsfVhACulRhEh+raloC4tC/+gaH2hhZo1cMsDH0sPw4/2ird
+7pblFIRa10hQ5lRuz59+bO5OZwnZpXPYYCso9KfY5I5xoNDC1UC6T22ZwxLFiCxL
+W7/IbRLN/BmMGYHwXg2H9LLeb/3n1UJDSNox9bHxM4OxjJw5mZwNg9qy5uSZYOd6
+9e/zHl7dIq6MX618Wbk+oXCpi3RVaoJFeHlBrIdJK/hgbmaDJOgJ+lMEOrHWyjPg
+LK2QDUoqRp31VeRk0UvBnwBQfgGYjvvb7qBWtPRwvGSsmhxxdaD4qUHi22athUAF
+HqR9
 -----END CERTIFICATE-----`
 
 // Server key generated with:
@@ -167,13 +188,16 @@ func CreateClientCerts(t *testing.T) (string, string, string, func()) {
 }
 
 // CreateAllCerts returns paths to:
-// - ca
+// - user ca
 // - user cert
 // - user key
+// - server ca
 // - server cert
 // - server key
 // and the cleanup function to defer
-func CreateAllCerts(t *testing.T) (string, string, string, string, string, func()) {
+func CreateAllCerts(t *testing.T) (string, string, string, string, string, string, func()) {
+	cc, cleanupCC, err := DumpToTemp(clientCA)
+	require.NoError(t, err)
 	ca, cleanupCA, err := DumpToTemp(caCert)
 	require.NoError(t, err)
 	uc, cleanupUC, err := DumpToTemp(clientCert)
@@ -184,7 +208,8 @@ func CreateAllCerts(t *testing.T) (string, string, string, string, string, func(
 	require.NoError(t, err)
 	sk, cleanupSK, err := DumpToTemp(serverKey)
 	require.NoError(t, err)
-	return ca, uc, uk, sc, sk, func() {
+	return cc, uc, uk, ca, sc, sk, func() {
+		cleanupCC()
 		cleanupCA()
 		cleanupUC()
 		cleanupUK()

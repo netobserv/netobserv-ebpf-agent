@@ -258,7 +258,7 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 
 // Note: there's more tests focused on TLS in FLP, that also cover agent's functions
 func TestGRPCCommunication_TLS(t *testing.T) {
-	ca, _, _, cert, key, cleanup := test.CreateAllCerts(t)
+	_, _, _, ca, cert, key, cleanup := test.CreateAllCerts(t)
 	defer cleanup()
 	opts, err := buildTLSServerOptions(cert, key, "")
 	require.NoError(t, err)
@@ -309,9 +309,9 @@ func TestGRPCCommunication_TLS(t *testing.T) {
 
 // Note: there's more tests focused on TLS in FLP, that also cover agent's functions
 func TestGRPCCommunication_MutualTLS(t *testing.T) {
-	ca, clCert, clKey, cert, key, cleanup := test.CreateAllCerts(t)
+	clCA, clCert, clKey, ca, cert, key, cleanup := test.CreateAllCerts(t)
 	defer cleanup()
-	opts, err := buildTLSServerOptions(cert, key, ca)
+	opts, err := buildTLSServerOptions(cert, key, clCA)
 	require.NoError(t, err)
 
 	port, err := test2.FreeTCPPort()
@@ -352,6 +352,46 @@ func TestGRPCCommunication_MutualTLS(t *testing.T) {
 
 	select {
 	case rs = <-serverOut:
+		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
+	default:
+		// ok!
+	}
+}
+
+func TestGRPCCommunication_MutualTLS_InvalidCert(t *testing.T) {
+	_, clCert, clKey, ca, cert, key, cleanup := test.CreateAllCerts(t)
+	defer cleanup()
+
+	// Here we pass the server CA, which was NOT used to generate the client cert, which means that the client cert should be rejected upon connecting
+	opts, err := buildTLSServerOptions(cert, key, ca)
+	require.NoError(t, err)
+
+	port, err := test2.FreeTCPPort()
+	require.NoError(t, err)
+	serverOut := make(chan *pbflow.Records)
+	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))
+	require.NoError(t, err)
+	cc, err := ConnectClient("127.0.0.1", port, ca, clCert, clKey)
+	require.NoError(t, err)
+	client := cc.Client()
+
+	go func() {
+		_, err = client.Send(context.Background(),
+			&pbflow.Records{Entries: []*pbflow.Record{{
+				EthProtocol: 123, Network: &pbflow.Network{
+					SrcAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x11223344},
+					},
+					DstAddr: &pbflow.IP{
+						IpFamily: &pbflow.IP_Ipv4{Ipv4: 0x55667788},
+					},
+				}}},
+			})
+		require.ErrorContains(t, err, "tls: unknown certificate authority")
+	}()
+
+	select {
+	case rs := <-serverOut:
 		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
 	default:
 		// ok!
