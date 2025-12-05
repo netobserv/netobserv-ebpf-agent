@@ -31,7 +31,9 @@ spec:
           - name: SAMPLING
             value: "1"
           - name: CACHE_ACTIVE_TIMEOUT
-            value: 200ms
+            value: "5s"
+          - name: CACHE_MAX_FLOWS
+            value: "10000"
           - name: LOG_LEVEL
             value: debug
           - name: TARGET_HOST
@@ -46,12 +48,23 @@ spec:
             value: "true"
           - name: ENABLE_DNS_TRACKING
             value: "true"
+          - name: ENABLE_OPENSSL_TRACKING
+            value: "true"
+          - name: OPENSSL_PATH
+            value: "/usr/lib/aarch64-linux-gnu/libssl.so.1.1"
         volumeMounts:
             - name: bpf-kernel-debug
               mountPath: /sys/kernel/debug
               mountPropagation: Bidirectional
+            - name: host-lib
+              mountPath: /usr/lib/aarch64-linux-gnu
+              readOnly: true
       volumes:
         - name: bpf-kernel-debug
           hostPath:
             path: /sys/kernel/debug
+            type: Directory
+        - name: host-lib
+          hostPath:
+            path: /usr/lib/aarch64-linux-gnu
             type: Directory

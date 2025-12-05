@@ -63,6 +63,9 @@ const (
 	networkEventsMonitoringHook         = "psample_sample_packet"
 	defaultNetworkEventsGroupID         = 10
 	constEnableIPsec                    = "enable_ipsec"
+	constEnableOpenSSLTracking          = "enable_openssl_tracking"
+	sslDataEventMap                     = "ssl_data_event_map"
+	dnsNameMap                          = "dns_name_map"
 )
 
 const (
@@ -100,6 +103,8 @@ type FlowFetcher struct {
 	xfrmOutputKretProbeLink     link.Link
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
+	sslUprobe                   link.Link
+	sslDataEventsReader         *ringbuf.Reader
 	lookupAndDeleteSupported    bool
 	useEbpfManager              bool
 	pinDir                      string
@@ -125,6 +130,8 @@ type FlowFetcherConfig struct {
 	BpfManBpfFSPath                string
 	EnableIPsecTracker             bool
 	FilterConfig                   []*FilterConfig
+	EnableOpenSSLTracking          bool
+	OpenSSLPath                    string
 }
 
 type variablesMapping struct {
@@ -137,6 +144,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link
 	var xfrmInputKProbeLink, xfrmOutputKProbeLink link.Link
+	var sslUprobe link.Link
+	var sslDataEvents *ringbuf.Reader
 	var err error
 	objects := ebpf.BpfObjects{}
 	var pinDir string
@@ -171,6 +180,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			pcaRecordsMap,
 			ipsecInputMap,
 			ipsecOutputMap,
+			sslDataEventMap,
+			dnsNameMap,
 		} {
 			spec.Maps[m].Pinning = 0
 		}
@@ -201,6 +212,11 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		objects.TcxEgressPcaParse = nil
 		objects.TcIngressPcaParse = nil
 		delete(spec.Programs, constPcaEnable)
+
+		// Minimize SSL maps if SSL is disabled
+		if !cfg.EnableOpenSSLTracking {
+			spec.Maps[sslDataEventMap].MaxEntries = 1
+		}
 
 		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
 			pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
@@ -272,6 +288,27 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 				return nil, fmt.Errorf("failed to attach the BPF KretProbe program to xfrm_output: %w", err)
 			}
 		}
+
+		// Setup SSL tracking if enabled
+		if cfg.EnableOpenSSLTracking {
+			// Read SSL data events from ringbuf
+			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
+			if err != nil {
+				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
+			}
+
+			// Attach SSL uprobes
+			sslWriteLink, err := link.OpenExecutable(cfg.OpenSSLPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open executable %s: %w", cfg.OpenSSLPath, err)
+			}
+			sslUprobe, err = sslWriteLink.Uprobe("SSL_write", objects.ProbeEntrySSL_write, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to attach SSL_write uprobe: %w", err)
+			}
+			log.Infof("SSL tracking enabled with library: %s", cfg.OpenSSLPath)
+		}
+
 	} else {
 		pinDir = cfg.BpfManBpfFSPath
 		opts := &cilium.LoadPinOptions{
@@ -340,6 +377,18 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
+		log.Infof("BPFManager mode: loading SSL data event pinned maps")
+		mPath = path.Join(pinDir, sslDataEventMap)
+		objects.BpfMaps.SslDataEventMap, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Infof("BPFManager mode: loading DNS name pinned maps")
+		mPath = path.Join(pinDir, dnsNameMap)
+		objects.BpfMaps.DnsNameMap, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
 	}
 
 	if filter != nil {
@@ -377,6 +426,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
+		sslUprobe:                   sslUprobe,
+		sslDataEventsReader:         sslDataEvents,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
 		egressTCXAnchor:             tcxAnchor(cfg.EgressTCXAnchor),
@@ -738,6 +789,18 @@ func (m *FlowFetcher) Close() error {
 		}
 	}
 
+	if m.sslUprobe != nil {
+		if err := m.sslUprobe.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if m.sslDataEventsReader != nil {
+		if err := m.sslDataEventsReader.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -811,6 +874,18 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.IpsecEgressMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.SslDataEventMap.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.SslDataEventMap.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.DnsNameMap.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.DnsNameMap.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if len(errs) == 0 {
@@ -916,6 +991,10 @@ func doIgnoreNoDev[T any](sysCall func(T) error, dev T, log *logrus.Entry) error
 
 func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 	return m.ringbufReader.Read()
+}
+
+func (m *FlowFetcher) ReadSSLRingBuf() (ringbuf.Record, error) {
+	return m.sslDataEventsReader.Read()
 }
 
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
@@ -1115,6 +1194,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
 			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
+			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1148,6 +1228,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcpRcvFentry:            nil,
 				KfreeSkb:                nil,
 				NetworkEventsMonitoring: nil,
+				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1159,6 +1240,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				GlobalCounters:        newObjects.GlobalCounters,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1178,6 +1261,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
 			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
+			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1210,6 +1294,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcpRcvFentry:            nil,
 				KfreeSkb:                nil,
 				NetworkEventsMonitoring: nil,
+				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1221,6 +1306,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				GlobalCounters:        newObjects.GlobalCounters,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1240,6 +1327,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
 			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
+			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1272,6 +1360,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				TcpRcvKprobe:            nil,
 				KfreeSkb:                nil,
 				NetworkEventsMonitoring: nil,
+				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1283,6 +1372,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				GlobalCounters:        newObjects.GlobalCounters,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1304,6 +1395,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
 			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
+			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
 		}
 		type newBpfObjects struct {
 			newBpfPrograms
@@ -1334,6 +1426,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				XfrmInputKprobe:         newObjects.XfrmInputKprobe,
 				XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
 				NetworkEventsMonitoring: nil,
+				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
 			},
 			BpfMaps: ebpf.BpfMaps{
 				DirectFlows:           newObjects.DirectFlows,
@@ -1345,6 +1438,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				GlobalCounters:        newObjects.GlobalCounters,
 				IpsecIngressMap:       newObjects.IpsecIngressMap,
 				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				SslDataEventMap:       newObjects.SslDataEventMap,
+				DnsNameMap:            newObjects.DnsNameMap,
 			},
 		}
 
@@ -1415,9 +1510,14 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		pcaRecordsMap,
 		ipsecInputMap,
 		ipsecOutputMap,
+		sslDataEventMap,
+		dnsNameMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
+
+	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
+	spec.Maps[sslDataEventMap].MaxEntries = 1
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
@@ -1449,6 +1549,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
 	delete(spec.Programs, constEnablePktTranslation)
 	delete(spec.Programs, constEnableIPsec)
+	delete(spec.Programs, constEnableOpenSSLTracking)
+	delete(spec.Programs, dnsNameMap)
 
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
@@ -1478,11 +1580,13 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			XfrmOutputKretprobe:     nil,
 			XfrmInputKprobe:         nil,
 			XfrmOutputKprobe:        nil,
+			ProbeEntrySSL_write:     nil,
 		},
 		BpfMaps: ebpf.BpfMaps{
-			PacketRecord:  newObjects.PacketRecord,
-			FilterMap:     newObjects.FilterMap,
-			PeerFilterMap: newObjects.PeerFilterMap,
+			PacketRecord:    newObjects.PacketRecord,
+			SslDataEventMap: newObjects.SslDataEventMap,
+			FilterMap:       newObjects.FilterMap,
+			PeerFilterMap:   newObjects.PeerFilterMap,
 		},
 	}
 
@@ -1938,6 +2042,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		spec.Maps[ipsecInputMap].MaxEntries = 1
 		spec.Maps[ipsecOutputMap].MaxEntries = 1
 	}
+
+	enableOpenSSLTracking := 0
+	if cfg.EnableOpenSSLTracking {
+		enableOpenSSLTracking = 1
+	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
 		{constSampling, uint32(cfg.Sampling)},
@@ -1951,6 +2060,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
 		{constEnablePktTranslation, uint8(enablePktTranslation)},
 		{constEnableIPsec, uint8(enableIPsec)},
+		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
 	}
 
 	for _, mapping := range variables {
