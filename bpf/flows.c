@@ -57,6 +57,11 @@
  */
 #include "ipsec.h"
 
+/*
+ * Defines ssl tracker
+ */
+#include "openssl_tracker.h"
+
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                              u8 direction) {
@@ -118,7 +123,9 @@ static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, 
         extra_metrics->dns_record.id = pkt->dns_id;
         extra_metrics->dns_record.flags = pkt->dns_flags;
         extra_metrics->dns_record.latency = pkt->dns_latency;
-        __builtin_memcpy(extra_metrics->dns_record.name, pkt->dns_name, DNS_NAME_MAX_LEN);
+        if (pkt->dns_name != NULL) {
+            __builtin_memcpy(extra_metrics->dns_record.name, pkt->dns_name, DNS_NAME_MAX_LEN);
+        }
     }
     if (dns_errno != 0) {
         extra_metrics->dns_record.errno = dns_errno;
@@ -254,7 +261,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             new_metrics.dns_record.id = pkt.dns_id;
             new_metrics.dns_record.flags = pkt.dns_flags;
             new_metrics.dns_record.latency = pkt.dns_latency;
-            __builtin_memcpy(new_metrics.dns_record.name, pkt.dns_name, DNS_NAME_MAX_LEN);
+            if (pkt.dns_name != NULL) {
+                __builtin_memcpy(new_metrics.dns_record.name, pkt.dns_name, DNS_NAME_MAX_LEN);
+            }
             new_metrics.dns_record.errno = dns_errno;
             long ret =
                 bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
