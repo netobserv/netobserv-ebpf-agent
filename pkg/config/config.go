@@ -110,6 +110,15 @@ type Agent struct {
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`
+	// GRPCReconnectTimer specifies a period after which the GRPC connection is re-established. This is
+	// useful for load rebalancing across receivers. Disabled by default, which means
+	// connections are not actively re-established.
+	GRPCReconnectTimer time.Duration `env:"GRPC_RECONNECT_TIMER"`
+	// GRPCReconnectTimerRandomization specifies how much GRPCReconnectTimer should be randomized,
+	// to avoid several agents reconnecting all at the same time. The value must be lower than GRPCReconnectTimer.
+	// For instance, if GRPCReconnectTimer is 5m and GRPCReconnectTimerRandomization is 30s,
+	// the randomization yields a value between 4m30s and 5m30s.
+	GRPCReconnectTimerRandomization time.Duration `env:"GRPC_RECONNECT_TIMER_RANDOMIZATION"`
 	// Interfaces contains the interface names from where flows will be collected. If empty, the agent
 	// will fetch all the interfaces in the system, excepting the ones listed in ExcludeInterfaces.
 	// If an entry is enclosed by slashes (e.g. `/br-/`), it will match as regular expression,

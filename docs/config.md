@@ -9,6 +9,13 @@ The following environment variables are available to configure the NetObserv eBP
 * `TARGET_PORT` (required if `EXPORT` is `grpc` or `ipfix+[tcp/udp]`). Port of the target flow or packet collector.
 * `GRPC_MESSAGE_MAX_FLOWS` (default: `10000`). Specifies the limit, in number of flows, of each GRPC
   message. Messages larger than that number will be split and submitted sequentially.
+* `GRPC_RECONNECT_TIMER` specifies a period after which the GRPC connection is re-established. This is
+	useful for load rebalancing across receivers. Disabled by default, which means
+	connections are not actively re-established.
+* `GRPC_RECONNECT_TIMER_RANDOMIZATION` specifies how much `GRPC_RECONNECT_TIMER` should be randomized,
+	to avoid several agents reconnecting all at the same time. The value must be lower than `GRPC_RECONNECT_TIMER`.
+	For instance, if `GRPC_RECONNECT_TIMER` is 5m and `GRPC_RECONNECT_TIMER_RANDOMIZATION` is 30s,
+	the randomization yields a value between 4m30s and 5m30s.
 * `AGENT_IP` (optional). Allows overriding the reported Agent IP address on each flow.
 * `AGENT_IP_IFACE` (default: `external`). Specifies which interface should the agent pick the IP
   address from in order to report it in the AgentIP field on each flow. Accepted values are:

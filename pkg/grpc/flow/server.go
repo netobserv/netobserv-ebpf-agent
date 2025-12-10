@@ -32,9 +32,12 @@ func WithGRPCServerOptions(options ...grpc.ServerOption) CollectorOption {
 
 // StartCollector listens in background for gRPC+Protobuf flows in the given port, and forwards each
 // set of *pbflow.Records by the provided channel.
-func StartCollector(
-	port int, recordForwarder chan<- *pbflow.Records, options ...CollectorOption,
-) (*CollectorServer, error) {
+func StartCollector(port int, recordForwarder chan<- *pbflow.Records, options ...CollectorOption) (*CollectorServer, error) {
+	return StartCollectorWithAPI(port, &collectorAPI{recordForwarder: recordForwarder}, options...)
+}
+
+// StartCollectorWithAPI listens in background for gRPC+Protobuf flows in the given port, connecting to the provided API
+func StartCollectorWithAPI(port int, api pbflow.CollectorServer, options ...CollectorOption) (*CollectorServer, error) {
 	copts := collectorOptions{}
 	for _, opt := range options {
 		opt(&copts)
@@ -45,18 +48,14 @@ func StartCollector(
 		return nil, err
 	}
 	grpcServer := grpc.NewServer(copts.grpcServerOptions...)
-	pbflow.RegisterCollectorServer(grpcServer, &collectorAPI{
-		recordForwarder: recordForwarder,
-	})
+	pbflow.RegisterCollectorServer(grpcServer, api)
 	reflection.Register(grpcServer)
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
 			panic("error connecting to server: " + err.Error())
 		}
 	}()
-	return &CollectorServer{
-		grpcServer: grpcServer,
-	}, nil
+	return &CollectorServer{grpcServer: grpcServer}, nil
 }
 
 func (c *CollectorServer) Close() error {
