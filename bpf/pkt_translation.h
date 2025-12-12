@@ -22,9 +22,8 @@ static inline void dump_xlated_flow(struct xlat_metrics_t *flow) {
     }
 }
 
-static void __always_inline parse_tuple(struct nf_conntrack_tuple *t,
-                                        struct xlat_metrics_t *flow, u16 zone_id, u16 family,
-                                        u8 protocol, bool invert) {
+static void __always_inline parse_tuple(struct nf_conntrack_tuple *t, struct xlat_metrics_t *flow,
+                                        u16 zone_id, u16 family, u8 protocol, bool invert) {
     __builtin_memset(flow, 0, sizeof(*flow));
     if (invert) {
         if (is_transport_protocol(protocol)) {

@@ -241,8 +241,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     // Update additional metrics (per-CPU map)
     if (pkt.dns_id != 0 || dns_errno != 0) {
-        dns_metrics *extra_metrics =
-            (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
+        dns_metrics *extra_metrics = (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
         if (extra_metrics != NULL) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
@@ -256,8 +255,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
             new_metrics.latency = pkt.dns_latency;
             __builtin_memcpy(new_metrics.name, pkt.dns_name, DNS_NAME_MAX_LEN);
             new_metrics.errno = dns_errno;
-            long ret =
-                bpf_map_update_elem(&aggregated_flows_dns, &id, &new_metrics, BPF_NOEXIST);
+            long ret = bpf_map_update_elem(&aggregated_flows_dns, &id, &new_metrics, BPF_NOEXIST);
             if (ret != 0) {
                 if (trace_messages && ret != -EEXIST) {
                     bpf_printk("error adding DNS %d\n", ret);

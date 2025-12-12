@@ -115,15 +115,15 @@ func TestDNSMetricsBinaryEncoding(t *testing.T) {
 		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, // latency
 		01, 00, // id
 		0x80, 00, // flags
+		0x03, 0x00, // u16 eth_protocol
 		0x00, // errno
 		// name (32 bytes)
 		't', 'e', 's', 't', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm',
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x03, 0x00, // u16 eth_protocol
-		0x00, 0x00, 0x00, // 3 bytes padding
+		0x00, // padding
 	}
-	var addmet ebpf.BpfDnsMetrics
-	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
+	var met ebpf.BpfDnsMetrics
+	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
 	assert.Equal(t, ebpf.BpfDnsMetrics{
@@ -135,7 +135,7 @@ func TestDNSMetricsBinaryEncoding(t *testing.T) {
 		Latency:         0x1817161514131211,
 		Errno:           0,
 		Name:            [32]int8{'t', 'e', 's', 't', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm'},
-	}, addmet)
+	}, met)
 }
 
 func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
@@ -149,12 +149,12 @@ func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
 		0x10, 0x11, 0x12, 0x13, // u32 packets
 		0x11, 0, 0, 0, // cause
 		0x1c, 0x1d, // flags
-		0x1e,       // state
 		0x03, 0x00, // u16 eth_protocol
-		0x00, 0x00, 0x00, 0x00, 0x00, // 5 bytes padding
+		0x1e,             // state
+		0x00, 0x00, 0x00, // padding
 	}
-	var addmet ebpf.BpfPktDropMetrics
-	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
+	var met ebpf.BpfPktDropMetrics
+	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
 	assert.Equal(t, ebpf.BpfPktDropMetrics{
@@ -166,7 +166,7 @@ func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
 		LatestFlags:     0x1d1c,
 		LatestState:     0x1e,
 		LatestDropCause: 0x11,
-	}, addmet)
+	}, met)
 }
 
 func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
@@ -181,10 +181,11 @@ func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x03, 0x00, // u16 eth_protocol
-		0x01, // u8 network_events_idx
+		0x01,                         // u8 network_events_idx
+		0x00, 0x00, 0x00, 0x00, 0x00, // padding
 	}
-	var addmet ebpf.BpfNetworkEventsMetrics
-	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
+	var met ebpf.BpfNetworkEventsMetrics
+	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
 	assert.Equal(t, ebpf.BpfNetworkEventsMetrics{
@@ -197,7 +198,7 @@ func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
 				0x0,
 			},
 		},
-	}, addmet)
+	}, met)
 }
 
 func TestXlatMetricsBinaryEncoding(t *testing.T) {
@@ -214,8 +215,8 @@ func TestXlatMetricsBinaryEncoding(t *testing.T) {
 		0x02, 0x00,
 		0x03, 0x00, // u16 eth_protocol
 	}
-	var addmet ebpf.BpfXlatMetrics
-	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
+	var met ebpf.BpfXlatMetrics
+	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
 	assert.Equal(t, ebpf.BpfXlatMetrics{
@@ -227,7 +228,7 @@ func TestXlatMetricsBinaryEncoding(t *testing.T) {
 		Sport:           0,
 		Dport:           0,
 		ZoneId:          2,
-	}, addmet)
+	}, met)
 }
 
 func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
@@ -237,17 +238,21 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 		0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u64 flow_start_time
 		0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u64 flow_end_time
 		0xad, 0xde, 0xef, 0xbe, 0xef, 0xbe, 0xad, 0xde, // u64 flow_rtt
+		0x01, 0x00, 0x00, 0x00, // int32 ipsec_encrypted_ret
 		0x03, 0x00, // u16 eth_protocol
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 7 bytes padding
+		0x01, // bool ipsec_encrypted
+		0x00, // padding
 	}
-	var addmet ebpf.BpfAdditionalMetrics
-	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &addmet)
+	var met ebpf.BpfAdditionalMetrics
+	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
 	assert.Equal(t, ebpf.BpfAdditionalMetrics{
-		StartMonoTimeTs: 0x10,
-		EndMonoTimeTs:   0xFF,
-		EthProtocol:     3,
-		FlowRtt:         0xdeadbeefbeefdead,
-	}, addmet)
+		StartMonoTimeTs:   0x10,
+		EndMonoTimeTs:     0xFF,
+		EthProtocol:       3,
+		FlowRtt:           0xdeadbeefbeefdead,
+		IpsecEncrypted:    true,
+		IpsecEncryptedRet: 1,
+	}, met)
 }

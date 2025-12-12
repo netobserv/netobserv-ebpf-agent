@@ -122,9 +122,9 @@ typedef struct dns_metrics_t {
     u64 latency;
     u16 id;
     u16 flags;
+    u16 eth_protocol;
     u8 errno;
     char name[DNS_NAME_MAX_LEN];
-    u16 eth_protocol;
 } dns_metrics;
 
 typedef struct pkt_drop_metrics_t {
@@ -134,8 +134,8 @@ typedef struct pkt_drop_metrics_t {
     u32 packets;
     u32 latest_drop_cause;
     u16 latest_flags;
-    u8 latest_state;
     u16 eth_protocol;
+    u8 latest_state;
 } pkt_drop_metrics;
 
 typedef struct network_events_metrics_t {
@@ -161,9 +161,9 @@ typedef struct additional_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
     u64 flow_rtt;
+    int ipsec_encrypted_ret;
     u16 eth_protocol;
     bool ipsec_encrypted;
-    int ipsec_encrypted_ret;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF

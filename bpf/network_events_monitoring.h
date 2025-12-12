@@ -22,7 +22,8 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
 
     bpf_probe_read_kernel(cookie, md_len, user_cookie);
 
-    network_events_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_network_events, id);
+    network_events_metrics *extra_metrics =
+        bpf_map_lookup_elem(&aggregated_flows_network_events, id);
     if (extra_metrics != NULL) {
         u8 idx = extra_metrics->network_events_idx;
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();

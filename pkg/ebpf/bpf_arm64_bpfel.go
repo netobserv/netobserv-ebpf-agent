@@ -18,10 +18,10 @@ type BpfAdditionalMetrics struct {
 	StartMonoTimeTs   uint64
 	EndMonoTimeTs     uint64
 	FlowRtt           uint64
+	IpsecEncryptedRet int32
 	EthProtocol       uint16
 	IpsecEncrypted    bool
 	_                 [1]byte
-	IpsecEncryptedRet int32
 }
 
 type BpfDirectionT uint32
@@ -52,10 +52,10 @@ type BpfDnsMetricsT struct {
 	Latency         uint64
 	Id              uint16
 	Flags           uint16
+	EthProtocol     uint16
 	Errno           uint8
 	Name            [32]int8
 	_               [1]byte
-	EthProtocol     uint16
 }
 
 type BpfFilterActionT uint32
@@ -186,10 +186,9 @@ type BpfPktDropMetricsT struct {
 	Packets         uint32
 	LatestDropCause uint32
 	LatestFlags     uint16
-	LatestState     uint8
-	_               [1]byte
 	EthProtocol     uint16
-	_               [2]byte
+	LatestState     uint8
+	_               [3]byte
 }
 
 type BpfTcpFlagsT uint32
