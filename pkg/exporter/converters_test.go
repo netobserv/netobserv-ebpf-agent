@@ -49,12 +49,8 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 						Sampling:    1,
 					},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-						DnsRecord: ebpf.BpfDnsRecordT{
-							Errno: 0,
-						},
-						IpsecEncrypted: true,
-					},
+					DNSMetrics:        &ebpf.BpfDnsMetrics{Errno: 0},
+					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
 				},
 				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
@@ -280,14 +276,12 @@ func TestConversions(t *testing.T) {
 						Bytes:       500,
 						Packets:     128,
 					},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-						PktDrops: ebpf.BpfPktDropsT{
-							Packets:         10,
-							Bytes:           100,
-							LatestFlags:     0x200,
-							LatestState:     0,
-							LatestDropCause: 2,
-						},
+					PktDropMetrics: &ebpf.BpfPktDropMetrics{
+						Packets:         10,
+						Bytes:           100,
+						LatestFlags:     0x200,
+						LatestState:     0,
+						LatestDropCause: 2,
 					},
 				},
 				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
@@ -334,21 +328,21 @@ func TestConversions(t *testing.T) {
 						Flags:       0x100,
 						Dscp:        64,
 					},
+					DNSMetrics: &ebpf.BpfDnsMetrics{
+						Latency: uint64(someDuration),
+						Id:      1,
+						Name:    [32]int8{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
+						Flags:   0x8001,
+						Errno:   0,
+					},
+					PktDropMetrics: &ebpf.BpfPktDropMetrics{
+						Packets:         10,
+						Bytes:           100,
+						LatestFlags:     0x200,
+						LatestState:     6,
+						LatestDropCause: 5,
+					},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-						DnsRecord: ebpf.BpfDnsRecordT{
-							Latency: uint64(someDuration),
-							Id:      1,
-							Name:    [32]int8{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
-							Flags:   0x8001,
-							Errno:   0,
-						},
-						PktDrops: ebpf.BpfPktDropsT{
-							Packets:         10,
-							Bytes:           100,
-							LatestFlags:     0x200,
-							LatestState:     6,
-							LatestDropCause: 5,
-						},
 						IpsecEncrypted: true,
 					},
 				},
@@ -413,12 +407,8 @@ func TestConversions(t *testing.T) {
 						Flags:       0x100,
 						Dscp:        64,
 					},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-						DnsRecord: ebpf.BpfDnsRecordT{
-							Errno: 0,
-						},
-						IpsecEncrypted: true,
-					},
+					DNSMetrics:        &ebpf.BpfDnsMetrics{Errno: 0},
+					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
 				},
 				Interfaces: []model.IntfDirUdn{
 					model.NewIntfDirUdn("5e6e92caa1d51cf", model.DirectionIngress, nil),

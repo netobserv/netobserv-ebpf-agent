@@ -31,6 +31,10 @@ define MAPS
 {
 	"direct_flows":"ringbuf",
 	"aggregated_flows":"hash",
+	"aggregated_flows_dns":"per_cpu_hash",
+	"aggregated_flows_pkt_drop":"per_cpu_hash",
+	"aggregated_flows_network_events":"per_cpu_hash",
+	"aggregated_flows_xlat":"per_cpu_hash",
 	"additional_flow_metrics":"per_cpu_hash",
 	"packet_record":"ringbuf",
 	"dns_flows":"hash",

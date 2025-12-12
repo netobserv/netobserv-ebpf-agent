@@ -69,27 +69,33 @@ func FlowToPB(fr *model.Record) *Record {
 		TimeFlowRtt: durationpb.New(fr.TimeFlowRtt),
 		Sampling:    fr.Metrics.Sampling,
 	}
-	if fr.Metrics.AdditionalMetrics != nil {
-		pbflowRecord.PktDropBytes = fr.Metrics.AdditionalMetrics.PktDrops.Bytes
-		pbflowRecord.PktDropPackets = uint64(fr.Metrics.AdditionalMetrics.PktDrops.Packets)
-		pbflowRecord.PktDropLatestFlags = uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestFlags)
-		pbflowRecord.PktDropLatestState = uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestState)
-		pbflowRecord.PktDropLatestDropCause = fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause
-		pbflowRecord.DnsId = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Id)
-		pbflowRecord.DnsFlags = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags)
-		pbflowRecord.DnsErrno = uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Errno)
+	if fr.Metrics.DNSMetrics != nil {
+		pbflowRecord.DnsId = uint32(fr.Metrics.DNSMetrics.Id)
+		pbflowRecord.DnsFlags = uint32(fr.Metrics.DNSMetrics.Flags)
+		pbflowRecord.DnsErrno = uint32(fr.Metrics.DNSMetrics.Errno)
 		// Export DNS name if present (parse DNS label format)
-		if name := utils.DNSRawNameToDotted(fr.Metrics.AdditionalMetrics.DnsRecord.Name[:]); name != "" {
+		if name := utils.DNSRawNameToDotted(fr.Metrics.DNSMetrics.Name[:]); name != "" {
 			pbflowRecord.DnsName = name
 		}
-		if fr.Metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
+		if fr.Metrics.DNSMetrics.Latency != 0 {
 			pbflowRecord.DnsLatency = durationpb.New(fr.DNSLatency)
 		}
+	}
+	if fr.Metrics.PktDropMetrics != nil {
+		pbflowRecord.PktDropBytes = fr.Metrics.PktDropMetrics.Bytes
+		pbflowRecord.PktDropPackets = uint64(fr.Metrics.PktDropMetrics.Packets)
+		pbflowRecord.PktDropLatestFlags = uint32(fr.Metrics.PktDropMetrics.LatestFlags)
+		pbflowRecord.PktDropLatestState = uint32(fr.Metrics.PktDropMetrics.LatestState)
+		pbflowRecord.PktDropLatestDropCause = fr.Metrics.PktDropMetrics.LatestDropCause
+	}
+	if fr.Metrics.XlatMetrics != nil {
 		pbflowRecord.Xlat = &Xlat{
-			SrcPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport),
-			DstPort: uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport),
-			ZoneId:  uint32(fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId),
+			SrcPort: uint32(fr.Metrics.XlatMetrics.Sport),
+			DstPort: uint32(fr.Metrics.XlatMetrics.Dport),
+			ZoneId:  uint32(fr.Metrics.XlatMetrics.ZoneId),
 		}
+	}
+	if fr.Metrics.AdditionalMetrics != nil {
 		pbflowRecord.IpsecEncryptedRet = fr.Metrics.AdditionalMetrics.IpsecEncryptedRet
 		if fr.Metrics.AdditionalMetrics.IpsecEncrypted {
 			pbflowRecord.IpsecEncrypted = uint32(1)
@@ -106,16 +112,16 @@ func FlowToPB(fr *model.Record) *Record {
 	if fr.Metrics.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.DstIp[:]}}
-		if fr.Metrics.AdditionalMetrics != nil {
-			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr[:]}}
-			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr[:]}}
+		if fr.Metrics.XlatMetrics != nil {
+			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.XlatMetrics.Saddr[:]}}
+			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.XlatMetrics.Daddr[:]}}
 		}
 	} else {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.SrcIp)}}
 		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.DstIp)}}
-		if fr.Metrics.AdditionalMetrics != nil {
-			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr)}}
-			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr)}}
+		if fr.Metrics.XlatMetrics != nil {
+			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.XlatMetrics.Saddr)}}
+			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.XlatMetrics.Daddr)}}
 		}
 	}
 
@@ -155,28 +161,28 @@ func PBToFlow(pb *Record) *model.Record {
 				Dscp:        uint8(pb.Network.Dscp),
 				Sampling:    pb.Sampling,
 			},
+			DNSMetrics: &ebpf.BpfDnsMetrics{
+				Id:      uint16(pb.DnsId),
+				Name:    stringToInt8Array(pb.DnsName),
+				Flags:   uint16(pb.DnsFlags),
+				Errno:   uint8(pb.DnsErrno),
+				Latency: uint64(pb.DnsLatency.AsDuration()),
+			},
+			PktDropMetrics: &ebpf.BpfPktDropMetrics{
+				Bytes:           pb.PktDropBytes,
+				Packets:         uint32(pb.PktDropPackets),
+				LatestFlags:     uint16(pb.PktDropLatestFlags),
+				LatestState:     uint8(pb.PktDropLatestState),
+				LatestDropCause: pb.PktDropLatestDropCause,
+			},
+			XlatMetrics: &ebpf.BpfXlatMetrics{
+				Saddr:  ipToIPAddr(pb.Xlat.GetSrcAddr()),
+				Daddr:  ipToIPAddr(pb.Xlat.GetDstAddr()),
+				Sport:  uint16(pb.Xlat.GetSrcPort()),
+				Dport:  uint16(pb.Xlat.GetDstPort()),
+				ZoneId: uint16(pb.Xlat.GetZoneId()),
+			},
 			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				PktDrops: ebpf.BpfPktDropsT{
-					Bytes:           pb.PktDropBytes,
-					Packets:         uint32(pb.PktDropPackets),
-					LatestFlags:     uint16(pb.PktDropLatestFlags),
-					LatestState:     uint8(pb.PktDropLatestState),
-					LatestDropCause: pb.PktDropLatestDropCause,
-				},
-				DnsRecord: ebpf.BpfDnsRecordT{
-					Id:      uint16(pb.DnsId),
-					Name:    stringToInt8Array(pb.DnsName),
-					Flags:   uint16(pb.DnsFlags),
-					Errno:   uint8(pb.DnsErrno),
-					Latency: uint64(pb.DnsLatency.AsDuration()),
-				},
-				TranslatedFlow: ebpf.BpfTranslatedFlowT{
-					Saddr:  ipToIPAddr(pb.Xlat.GetSrcAddr()),
-					Daddr:  ipToIPAddr(pb.Xlat.GetDstAddr()),
-					Sport:  uint16(pb.Xlat.GetSrcPort()),
-					Dport:  uint16(pb.Xlat.GetDstPort()),
-					ZoneId: uint16(pb.Xlat.GetZoneId()),
-				},
 				IpsecEncryptedRet: pb.IpsecEncryptedRet,
 			},
 		},

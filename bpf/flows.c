@@ -112,16 +112,16 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
     }
 }
 
-static inline void update_dns(additional_metrics *extra_metrics, pkt_info *pkt, int dns_errno) {
+static inline void update_dns(dns_metrics *dns_metrics, pkt_info *pkt, int dns_errno) {
     if (pkt->dns_id != 0) {
-        extra_metrics->end_mono_time_ts = pkt->current_ts;
-        extra_metrics->dns_record.id = pkt->dns_id;
-        extra_metrics->dns_record.flags = pkt->dns_flags;
-        extra_metrics->dns_record.latency = pkt->dns_latency;
-        __builtin_memcpy(extra_metrics->dns_record.name, pkt->dns_name, DNS_NAME_MAX_LEN);
+        dns_metrics->end_mono_time_ts = pkt->current_ts;
+        dns_metrics->id = pkt->dns_id;
+        dns_metrics->flags = pkt->dns_flags;
+        dns_metrics->latency = pkt->dns_latency;
+        __builtin_memcpy(dns_metrics->name, pkt->dns_name, DNS_NAME_MAX_LEN);
     }
     if (dns_errno != 0) {
-        extra_metrics->dns_record.errno = dns_errno;
+        dns_metrics->errno = dns_errno;
     }
 }
 
@@ -241,31 +241,29 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     // Update additional metrics (per-CPU map)
     if (pkt.dns_id != 0 || dns_errno != 0) {
-        additional_metrics *extra_metrics =
-            (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
+        dns_metrics *extra_metrics = (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
         if (extra_metrics != NULL) {
             update_dns(extra_metrics, &pkt, dns_errno);
         } else {
-            additional_metrics new_metrics;
+            dns_metrics new_metrics;
             __builtin_memset(&new_metrics, 0, sizeof(new_metrics));
             new_metrics.start_mono_time_ts = pkt.current_ts;
             new_metrics.end_mono_time_ts = pkt.current_ts;
             new_metrics.eth_protocol = eth_protocol;
-            new_metrics.dns_record.id = pkt.dns_id;
-            new_metrics.dns_record.flags = pkt.dns_flags;
-            new_metrics.dns_record.latency = pkt.dns_latency;
-            __builtin_memcpy(new_metrics.dns_record.name, pkt.dns_name, DNS_NAME_MAX_LEN);
-            new_metrics.dns_record.errno = dns_errno;
-            long ret =
-                bpf_map_update_elem(&additional_flow_metrics, &id, &new_metrics, BPF_NOEXIST);
+            new_metrics.id = pkt.dns_id;
+            new_metrics.flags = pkt.dns_flags;
+            new_metrics.latency = pkt.dns_latency;
+            __builtin_memcpy(new_metrics.name, pkt.dns_name, DNS_NAME_MAX_LEN);
+            new_metrics.errno = dns_errno;
+            long ret = bpf_map_update_elem(&aggregated_flows_dns, &id, &new_metrics, BPF_NOEXIST);
             if (ret != 0) {
                 if (trace_messages && ret != -EEXIST) {
                     bpf_printk("error adding DNS %d\n", ret);
                 }
                 if (ret == -EEXIST) {
                     // Concurrent write from another CPU; retry
-                    additional_metrics *extra_metrics =
-                        (additional_metrics *)bpf_map_lookup_elem(&additional_flow_metrics, &id);
+                    dns_metrics *extra_metrics =
+                        (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
                     if (extra_metrics != NULL) {
                         update_dns(extra_metrics, &pkt, dns_errno);
                     } else {

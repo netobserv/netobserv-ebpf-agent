@@ -22,7 +22,8 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
 
     bpf_probe_read_kernel(cookie, md_len, user_cookie);
 
-    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    network_events_metrics *extra_metrics =
+        bpf_map_lookup_elem(&aggregated_flows_network_events, id);
     if (extra_metrics != NULL) {
         u8 idx = extra_metrics->network_events_idx;
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
@@ -93,7 +94,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
 
     // there is no matching flows so lets create new one and add the network event metadata
     u64 current_time = bpf_ktime_get_ns();
-    additional_metrics new_flow;
+    network_events_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
     new_flow.start_mono_time_ts = current_time;
     new_flow.end_mono_time_ts = current_time;
@@ -101,7 +102,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     new_flow.network_events_idx = 0;
     bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);
     new_flow.network_events_idx++;
-    ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
+    ret = bpf_map_update_elem(&aggregated_flows_network_events, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
             bpf_printk("error network events creating new flow %d\n", ret);

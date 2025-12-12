@@ -116,43 +116,62 @@ typedef struct flow_metrics_t {
 // Force emitting enums/structs into the ELF
 const static struct flow_metrics_t *unused2 __attribute__((unused));
 
+typedef struct dns_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u64 latency;
+    u16 id;
+    u16 flags;
+    u16 eth_protocol;
+    u8 errno;
+    char name[DNS_NAME_MAX_LEN];
+} dns_metrics;
+
+typedef struct pkt_drop_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u64 bytes;
+    u32 packets;
+    u32 latest_drop_cause;
+    u16 latest_flags;
+    u16 eth_protocol;
+    u8 latest_state;
+} pkt_drop_metrics;
+
+typedef struct network_events_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
+    u16 eth_protocol;
+    u8 network_events_idx;
+} network_events_metrics;
+
+typedef struct xlat_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u8 saddr[IP_MAX_LEN];
+    u8 daddr[IP_MAX_LEN];
+    u16 sport;
+    u16 dport;
+    u16 zone_id;
+    u16 eth_protocol;
+} xlat_metrics;
+
 typedef struct additional_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
-    struct dns_record_t {
-        u64 latency;
-        u16 id;
-        u16 flags;
-        u8 errno;
-        char name[DNS_NAME_MAX_LEN];
-    } dns_record;
-    struct pkt_drops_t {
-        u64 bytes;
-        u32 packets;
-        u32 latest_drop_cause;
-        u16 latest_flags;
-        u8 latest_state;
-    } pkt_drops;
     u64 flow_rtt;
-    u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
-    struct translated_flow_t {
-        u8 saddr[IP_MAX_LEN];
-        u8 daddr[IP_MAX_LEN];
-        u16 sport;
-        u16 dport;
-        u16 zone_id;
-    } translated_flow;
-    u16 eth_protocol;
-    u8 network_events_idx;
-    bool ipsec_encrypted;
     int ipsec_encrypted_ret;
+    u16 eth_protocol;
+    bool ipsec_encrypted;
 } additional_metrics;
 
 // Force emitting enums/structs into the ELF
+const static struct dns_metrics_t *unused4 __attribute__((unused));
+const static struct pkt_drop_metrics_t *unused5 __attribute__((unused));
+const static struct network_events_metrics_t *unused6 __attribute__((unused));
+const static struct xlat_metrics_t *unused13 __attribute__((unused));
 const static struct additional_metrics_t *unused3 __attribute__((unused));
-const static struct dns_record_t *unused4 __attribute__((unused));
-const static struct pkt_drops_t *unused5 __attribute__((unused));
-const static struct translated_flow_t *unused6 __attribute__((unused));
 
 // Attributes that uniquely identify a flow
 typedef struct flow_id_t {

@@ -112,39 +112,47 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		}
 	}
 
-	if fr.Metrics.AdditionalMetrics != nil {
-		if fr.Metrics.AdditionalMetrics.DnsRecord.Errno != 0 {
-			out["DnsErrno"] = fr.Metrics.AdditionalMetrics.DnsRecord.Errno
+	if fr.Metrics.DNSMetrics != nil {
+		if fr.Metrics.DNSMetrics.Errno != 0 {
+			out["DnsErrno"] = fr.Metrics.DNSMetrics.Errno
 		}
-		if fr.Metrics.AdditionalMetrics.DnsRecord.Id != 0 {
-			out["DnsId"] = fr.Metrics.AdditionalMetrics.DnsRecord.Id
-			out["DnsFlags"] = fr.Metrics.AdditionalMetrics.DnsRecord.Flags
-			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.AdditionalMetrics.DnsRecord.Flags) & 0xF)
+		if fr.Metrics.DNSMetrics.Id != 0 {
+			out["DnsId"] = fr.Metrics.DNSMetrics.Id
+			out["DnsFlags"] = fr.Metrics.DNSMetrics.Flags
+			out["DnsFlagsResponseCode"] = DNSRcodeToStr(uint32(fr.Metrics.DNSMetrics.Flags) & 0xF)
 			out["DnsLatencyMs"] = fr.DNSLatency.Milliseconds()
-			if name := utils.DNSRawNameToDotted(fr.Metrics.AdditionalMetrics.DnsRecord.Name[:]); name != "" {
+			if name := utils.DNSRawNameToDotted(fr.Metrics.DNSMetrics.Name[:]); name != "" {
 				out["DnsName"] = name
 			}
 		}
+	}
 
-		if fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause != 0 {
-			out["PktDropBytes"] = fr.Metrics.AdditionalMetrics.PktDrops.Bytes
-			out["PktDropPackets"] = fr.Metrics.AdditionalMetrics.PktDrops.Packets
-			out["PktDropLatestFlags"] = fr.Metrics.AdditionalMetrics.PktDrops.LatestFlags
-			out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.AdditionalMetrics.PktDrops.LatestState))
-			out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.AdditionalMetrics.PktDrops.LatestDropCause)
+	if fr.Metrics.PktDropMetrics != nil {
+		if fr.Metrics.PktDropMetrics.LatestDropCause != 0 {
+			out["PktDropBytes"] = fr.Metrics.PktDropMetrics.Bytes
+			out["PktDropPackets"] = fr.Metrics.PktDropMetrics.Packets
+			out["PktDropLatestFlags"] = fr.Metrics.PktDropMetrics.LatestFlags
+			out["PktDropLatestState"] = TCPStateToStr(uint32(fr.Metrics.PktDropMetrics.LatestState))
+			out["PktDropLatestDropCause"] = PktDropCauseToStr(fr.Metrics.PktDropMetrics.LatestDropCause)
 		}
-		if !model.AllZeroIP(model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr)) &&
-			!model.AllZeroIP(model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr)) {
-			out["ZoneId"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.ZoneId
-			if fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport != 0 {
-				out["XlatSrcPort"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.Sport
+	}
+
+	if fr.Metrics.XlatMetrics != nil {
+		if !model.AllZeroIP(model.IP(fr.Metrics.XlatMetrics.Daddr)) &&
+			!model.AllZeroIP(model.IP(fr.Metrics.XlatMetrics.Saddr)) {
+			out["ZoneId"] = fr.Metrics.XlatMetrics.ZoneId
+			if fr.Metrics.XlatMetrics.Sport != 0 {
+				out["XlatSrcPort"] = fr.Metrics.XlatMetrics.Sport
 			}
-			if fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport != 0 {
-				out["XlatDstPort"] = fr.Metrics.AdditionalMetrics.TranslatedFlow.Dport
+			if fr.Metrics.XlatMetrics.Dport != 0 {
+				out["XlatDstPort"] = fr.Metrics.XlatMetrics.Dport
 			}
-			out["XlatSrcAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Saddr).String()
-			out["XlatDstAddr"] = model.IP(fr.Metrics.AdditionalMetrics.TranslatedFlow.Daddr).String()
+			out["XlatSrcAddr"] = model.IP(fr.Metrics.XlatMetrics.Saddr).String()
+			out["XlatDstAddr"] = model.IP(fr.Metrics.XlatMetrics.Daddr).String()
 		}
+	}
+
+	if fr.Metrics.AdditionalMetrics != nil {
 		if fr.Metrics.AdditionalMetrics.IpsecEncryptedRet != 0 {
 			out["IPSecRetCode"] = fr.Metrics.AdditionalMetrics.IpsecEncryptedRet
 			out["IPSecStatus"] = "error"

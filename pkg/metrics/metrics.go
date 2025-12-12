@@ -142,17 +142,6 @@ var (
 		"error",
 		"severity",
 	)
-	flowEnrichmentCounter = defineMetric(
-		"flows_enrichment_total",
-		"Statistics on flows enrichment",
-		TypeCounter,
-		"hasDNS",
-		"hasRTT",
-		"hasDrops",
-		"hasNetEvents",
-		"hasXlat",
-		"hasIPSec",
-	)
 	interfaceEventsCounter = defineMetric(
 		"interface_events_total",
 		"Interface watching events",
@@ -202,7 +191,6 @@ type Metrics struct {
 	NetworkEventsCounter   *EvictionCounter
 	FlowBufferSizeGauge    *FlowBufferSizeGauge
 	Errors                 *ErrorCounter
-	FlowEnrichmentCounter  *FlowEnrichmentCounter
 	InterfaceEventsCounter *InterfaceEventsCounter
 }
 
@@ -218,7 +206,6 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
-	m.FlowEnrichmentCounter = &FlowEnrichmentCounter{vec: m.NewCounterVec(&flowEnrichmentCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
 	return m
 }
@@ -325,21 +312,6 @@ func (c *EvictionCounter) WithSourceAndReason(source, reason string) prometheus.
 
 func (c *EvictionCounter) WithSource(source string) prometheus.Counter {
 	return c.vec.WithLabelValues(source, "")
-}
-
-type FlowEnrichmentCounter struct {
-	vec *prometheus.CounterVec
-}
-
-func (c *FlowEnrichmentCounter) Increase(hasDNS, hasRTT, hasDrops, hasNetEvents, hasXlat, hasIPSec bool) {
-	c.vec.WithLabelValues(
-		strconv.FormatBool(hasDNS),
-		strconv.FormatBool(hasRTT),
-		strconv.FormatBool(hasDrops),
-		strconv.FormatBool(hasNetEvents),
-		strconv.FormatBool(hasXlat),
-		strconv.FormatBool(hasIPSec),
-	).Inc()
 }
 
 type InterfaceEventsCounter struct {
