@@ -108,18 +108,20 @@ func NewRecord(
 		))
 	}
 
+	if metrics.DNSMetrics != nil {
+		if metrics.DNSMetrics.Latency != 0 {
+			record.DNSLatency = time.Duration(metrics.DNSMetrics.Latency)
+		}
+	}
 	if metrics.AdditionalMetrics != nil {
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
 			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}
-		if metrics.AdditionalMetrics.DnsRecord.Latency != 0 {
-			record.DNSLatency = time.Duration(metrics.AdditionalMetrics.DnsRecord.Latency)
-		}
 	}
-	if s != nil && metrics.AdditionalMetrics != nil {
+	if s != nil && metrics.NetworkEventsMetrics != nil {
 		seen := make(map[string]bool)
 		record.NetworkMonitorEventsMD = make([]map[string]string, 0)
-		for _, metadata := range metrics.AdditionalMetrics.NetworkEvents {
+		for _, metadata := range metrics.NetworkEventsMetrics.NetworkEvents {
 			if !AllZerosMetaData(metadata) {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
 					mdStr := md.String()

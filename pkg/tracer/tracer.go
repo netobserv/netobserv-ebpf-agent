@@ -32,16 +32,20 @@ import (
 const (
 	qdiscType = "clsact"
 	// ebpf map names as defined in bpf/maps_definition.h
-	aggregatedFlowsMap    = "aggregated_flows"
-	additionalFlowMetrics = "additional_flow_metrics"
-	directFlowsMap        = "direct_flows"
-	dnsLatencyMap         = "dns_flows"
-	filterMap             = "filter_map"
-	peerFilterMap         = "peer_filter_map"
-	globalCountersMap     = "global_counters"
-	pcaRecordsMap         = "packet_record"
-	ipsecInputMap         = "ipsec_ingress_map"
-	ipsecOutputMap        = "ipsec_egress_map"
+	aggregatedFlowsMap           = "aggregated_flows"
+	aggregatedFlowsDNS           = "aggregated_flows_dns"
+	aggregatedFlowsPktDrop       = "aggregated_flows_pkt_drop"
+	aggregatedFlowsNetworkEvents = "aggregated_flows_network_events"
+	aggregatedFlowsXLat          = "aggregated_flows_xlat"
+	additionalFlowMetrics        = "additional_flow_metrics"
+	directFlowsMap               = "direct_flows"
+	dnsLatencyMap                = "dns_flows"
+	filterMap                    = "filter_map"
+	peerFilterMap                = "peer_filter_map"
+	globalCountersMap            = "global_counters"
+	pcaRecordsMap                = "packet_record"
+	ipsecInputMap                = "ipsec_ingress_map"
+	ipsecOutputMap               = "ipsec_egress_map"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
 	constHasFilterSampling              = "has_filter_sampling"
@@ -84,9 +88,6 @@ type FlowFetcher struct {
 	egressFilters               map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ingressFilters              map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ringbufReader               *ringbuf.Reader
-	cacheMaxSize                int
-	enableIngress               bool
-	enableEgress                bool
 	pktDropsTracePoint          link.Link
 	rttFentryLink               link.Link
 	rttKprobeLink               link.Link
@@ -101,8 +102,8 @@ type FlowFetcher struct {
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
 	lookupAndDeleteSupported    bool
-	useEbpfManager              bool
 	pinDir                      string
+	config                      *FlowFetcherConfig
 }
 
 type FlowFetcherConfig struct {
@@ -157,11 +158,19 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 
 		// Resize maps according to user-provided configuration
 		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-		spec.Maps[additionalFlowMetrics].MaxEntries = uint32(cfg.CacheMaxSize)
+		sizeMapForFeature(spec, aggregatedFlowsDNS, cfg.EnableDNSTracker, cfg.CacheMaxSize)
+		sizeMapForFeature(spec, aggregatedFlowsNetworkEvents, cfg.EnableNetworkEventsMonitoring, cfg.CacheMaxSize)
+		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxSize)
+		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslation, cfg.CacheMaxSize)
+		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracker, cfg.CacheMaxSize)
 
 		// remove pinning from all maps
 		for _, m := range []string{
 			aggregatedFlowsMap,
+			aggregatedFlowsDNS,
+			aggregatedFlowsNetworkEvents,
+			aggregatedFlowsPktDrop,
+			aggregatedFlowsXLat,
 			additionalFlowMetrics,
 			directFlowsMap,
 			dnsLatencyMap,
@@ -286,6 +295,30 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
+		log.Info("BPFManager mode: loading aggregated flow DNS pinned maps")
+		mPath = path.Join(pinDir, aggregatedFlowsDNS)
+		objects.BpfMaps.AggregatedFlowsDns, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Info("BPFManager mode: loading aggregated flow pkt drops pinned maps")
+		mPath = path.Join(pinDir, aggregatedFlowsPktDrop)
+		objects.BpfMaps.AggregatedFlowsPktDrop, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Info("BPFManager mode: loading aggregated flow network events pinned maps")
+		mPath = path.Join(pinDir, aggregatedFlowsNetworkEvents)
+		objects.BpfMaps.AggregatedFlowsNetworkEvents, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
+		log.Info("BPFManager mode: loading aggregated flow translation pinned maps")
+		mPath = path.Join(pinDir, aggregatedFlowsXLat)
+		objects.BpfMaps.AggregatedFlowsXlat, err = cilium.LoadPinnedMap(mPath, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		}
 		log.Info("BPFManager mode: loading additional flow metrics pinned maps")
 		mPath = path.Join(pinDir, additionalFlowMetrics)
 		objects.BpfMaps.AdditionalFlowMetrics, err = cilium.LoadPinnedMap(mPath, opts)
@@ -366,9 +399,6 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		egressFilters:               map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		ingressFilters:              map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		qdiscs:                      qdiscs,
-		cacheMaxSize:                cfg.CacheMaxSize,
-		enableIngress:               cfg.EnableIngress,
-		enableEgress:                cfg.EnableEgress,
 		pktDropsTracePoint:          pktDropsLink,
 		rttFentryLink:               rttFentryLink,
 		rttKprobeLink:               rttKprobeLink,
@@ -383,13 +413,13 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		ingressTCXAnchor:            tcxAnchor(cfg.IngressTCXAnchor),
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
-		useEbpfManager:              cfg.UseEbpfManager,
 		pinDir:                      pinDir,
+		config:                      cfg,
 	}, nil
 }
 
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
-	if m.enableEgress {
+	if m.config.EnableEgress {
 		egrLink, err := m.attachTCXOnDirection(iface, "Egress", m.objects.BpfPrograms.TcxEgressFlowParse, cilium.AttachTCXEgress, m.egressTCXAnchor)
 		if err != nil {
 			return err
@@ -397,7 +427,7 @@ func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
 		m.egressTCXLink[iface.InterfaceKey] = egrLink
 	}
 
-	if m.enableIngress {
+	if m.config.EnableIngress {
 		ingLink, err := m.attachTCXOnDirection(iface, "Ingress", m.objects.BpfPrograms.TcxIngressFlowParse, cilium.AttachTCXIngress, m.ingressTCXAnchor)
 		if err != nil {
 			return err
@@ -450,7 +480,7 @@ func (m *FlowFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName stri
 func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	var oneErr error
-	if m.enableEgress {
+	if m.config.EnableEgress {
 		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				oneErr = NewErrorNoRetry("DetachEgress:CantCloseLink", fmt.Errorf("TCX: failed to close egress link: %w", err))
@@ -463,7 +493,7 @@ func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 		delete(m.egressTCXLink, iface.InterfaceKey)
 	}
 
-	if m.enableIngress {
+	if m.config.EnableIngress {
 		if l := m.ingressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
 				oneErr = NewErrorNoRetry("DetachIngress:CantCloseLink", fmt.Errorf("TCX: failed to close ingress link: %w", err))
@@ -613,7 +643,7 @@ func (m *FlowFetcher) Register(iface *ifaces.Interface) error {
 
 func (m *FlowFetcher) registerEgress(iface *ifaces.Interface, ipvlan netlink.Link, handle *netlink.Handle) error {
 	ilog := log.WithField("iface", iface)
-	if !m.enableEgress {
+	if !m.config.EnableEgress {
 		ilog.Debug("ignoring egress traffic, according to user configuration")
 		return nil
 	}
@@ -647,7 +677,7 @@ func (m *FlowFetcher) registerEgress(iface *ifaces.Interface, ipvlan netlink.Lin
 
 func (m *FlowFetcher) registerIngress(iface *ifaces.Interface, ipvlan netlink.Link, handle *netlink.Handle) error {
 	ilog := log.WithField("iface", iface)
-	if !m.enableIngress {
+	if !m.config.EnableIngress {
 		ilog.Debug("ignoring ingress traffic, according to user configuration")
 		return nil
 	}
@@ -763,6 +793,30 @@ func (m *FlowFetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.AggregatedFlows.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsDns.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsDns.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsPktDrop.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsPktDrop.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsNetworkEvents.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsNetworkEvents.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsXlat.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.AggregatedFlowsXlat.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if err := m.objects.AdditionalFlowMetrics.Unpin(); err != nil {
@@ -921,13 +975,14 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
+// TODO: try parallelize lookups on maps
 func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
 	if !m.lookupAndDeleteSupported {
 		return m.legacyLookupAndDeleteMap(met)
 	}
 
 	flowMap := m.objects.AggregatedFlows
-	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.cacheMaxSize)
+	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxSize)
 	var ids []ebpf.BpfFlowId
 	var id ebpf.BpfFlowId
 	var baseMetrics ebpf.BpfFlowMetrics
@@ -955,38 +1010,52 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
 
-	// Reiterate on additional metrics
-	var additionalMetrics []ebpf.BpfAdditionalMetrics
-	ids = []ebpf.BpfFlowId{}
-	addtlIterator := m.objects.AdditionalFlowMetrics.Iterate()
-	for addtlIterator.Next(&id, &additionalMetrics) {
-		ids = append(ids, id)
-	}
-
-	countAdditional := 0
-	for i, id := range ids {
-		countAdditional++
-		if err := m.objects.AdditionalFlowMetrics.LookupAndDelete(&id, &additionalMetrics); err != nil {
-			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
-				log.WithError(err).Warnf("switching to legacy mode")
-				m.lookupAndDeleteSupported = false
-				return m.legacyLookupAndDeleteMap(met)
+	// Reiterate on per-cpu maps
+	if m.config.EnableDNSTracker {
+		var dns []ebpf.BpfDnsMetrics
+		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
+			for _, entry := range dns {
+				flow.AccumulateDNS(&entry)
 			}
-			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete additional metrics entry")
-			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteAdditionalMetric", metrics.HighSeverity).Inc()
-			continue
-		}
-		flow, found := flows[id]
-		if !found {
-			flow = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-		}
-		for iMet := range additionalMetrics {
-			flow.AccumulateAdditional(&additionalMetrics[iMet])
-		}
-		m.increaseEnrichmentStats(met, &flow)
-		flows[id] = flow
+		})
+		met.FlowBufferSizeGauge.WithBufferName("dnsmap").Set(float64(countDNS))
 	}
-	met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAdditional))
+	if m.config.EnablePktDrops {
+		var pktDrops []ebpf.BpfPktDropMetrics
+		countDrops := lookupAndDeletePerCPUMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+			for _, entry := range pktDrops {
+				flow.AccumulateDrops(&entry)
+			}
+		})
+		met.FlowBufferSizeGauge.WithBufferName("pktdropsmap").Set(float64(countDrops))
+	}
+	if m.config.EnableNetworkEventsMonitoring {
+		var netev []ebpf.BpfNetworkEventsMetrics
+		countNetEv := lookupAndDeletePerCPUMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+			for _, entry := range netev {
+				flow.AccumulateNetworkEvents(&entry)
+			}
+		})
+		met.FlowBufferSizeGauge.WithBufferName("networkeventsmap").Set(float64(countNetEv))
+	}
+	if m.config.EnablePktTranslation {
+		var xlat []ebpf.BpfXlatMetrics
+		countXlat := lookupAndDeletePerCPUMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+			for _, entry := range xlat {
+				flow.AccumulateXlat(&entry)
+			}
+		})
+		met.FlowBufferSizeGauge.WithBufferName("xlatmap").Set(float64(countXlat))
+	}
+	if m.config.EnableRTT || m.config.EnableIPsecTracker {
+		var addit []ebpf.BpfAdditionalMetrics
+		countAddit := lookupAndDeletePerCPUMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+			for _, entry := range addit {
+				flow.AccumulateAdditional(&entry)
+			}
+		})
+		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+	}
 	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 
@@ -994,19 +1063,34 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	return flows
 }
 
-func (m *FlowFetcher) increaseEnrichmentStats(met *metrics.Metrics, flow *model.BpfFlowContent) {
-	if flow.AdditionalMetrics != nil {
-		met.FlowEnrichmentCounter.Increase(
-			flow.AdditionalMetrics.DnsRecord.Id != 0,
-			flow.AdditionalMetrics.FlowRtt != 0,
-			flow.AdditionalMetrics.PktDrops.Packets != 0,
-			!model.AllZerosMetaData(flow.AdditionalMetrics.NetworkEvents[0]),
-			!model.AllZeroIP(model.IP(flow.AdditionalMetrics.TranslatedFlow.Daddr)),
-			flow.AdditionalMetrics.IpsecEncryptedRet != 0 || flow.AdditionalMetrics.IpsecEncrypted,
-		)
-	} else {
-		met.FlowEnrichmentCounter.Increase(false, false, false, false, false, false)
+func lookupAndDeletePerCPUMap(
+	flows map[ebpf.BpfFlowId]model.BpfFlowContent,
+	perCPUReceiver any,
+	bpfMap *cilium.Map,
+	met *metrics.Metrics,
+	accumulator func(flow *model.BpfFlowContent),
+) int {
+	var id ebpf.BpfFlowId
+	ids := []ebpf.BpfFlowId{}
+
+	it := bpfMap.Iterate()
+	for it.Next(&id, perCPUReceiver) {
+		ids = append(ids, id)
 	}
+	for _, id := range ids {
+		if err := bpfMap.LookupAndDelete(&id, perCPUReceiver); err != nil {
+			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete secondary map entry")
+			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteSecondaryMetric", metrics.HighSeverity).Inc()
+			continue
+		}
+		flow, found := flows[id]
+		if !found {
+			flow = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+		}
+		accumulator(&flow)
+		flows[id] = flow
+	}
+	return len(ids)
 }
 
 // ReadGlobalCounter reads the global counter and updates drop flows counter metrics
@@ -1150,15 +1234,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:           newObjects.DirectFlows,
-				AggregatedFlows:       newObjects.AggregatedFlows,
-				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
-				DnsFlows:              newObjects.DnsFlows,
-				FilterMap:             newObjects.FilterMap,
-				PeerFilterMap:         newObjects.PeerFilterMap,
-				GlobalCounters:        newObjects.GlobalCounters,
-				IpsecIngressMap:       newObjects.IpsecIngressMap,
-				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				DirectFlows:                  newObjects.DirectFlows,
+				AggregatedFlows:              newObjects.AggregatedFlows,
+				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
+				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
+				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
+				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
+				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
+				DnsFlows:                     newObjects.DnsFlows,
+				FilterMap:                    newObjects.FilterMap,
+				PeerFilterMap:                newObjects.PeerFilterMap,
+				GlobalCounters:               newObjects.GlobalCounters,
+				IpsecIngressMap:              newObjects.IpsecIngressMap,
+				IpsecEgressMap:               newObjects.IpsecEgressMap,
 			},
 		}
 
@@ -1212,15 +1300,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:           newObjects.DirectFlows,
-				AggregatedFlows:       newObjects.AggregatedFlows,
-				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
-				DnsFlows:              newObjects.DnsFlows,
-				FilterMap:             newObjects.FilterMap,
-				PeerFilterMap:         newObjects.PeerFilterMap,
-				GlobalCounters:        newObjects.GlobalCounters,
-				IpsecIngressMap:       newObjects.IpsecIngressMap,
-				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				DirectFlows:                  newObjects.DirectFlows,
+				AggregatedFlows:              newObjects.AggregatedFlows,
+				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
+				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
+				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
+				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
+				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
+				DnsFlows:                     newObjects.DnsFlows,
+				FilterMap:                    newObjects.FilterMap,
+				PeerFilterMap:                newObjects.PeerFilterMap,
+				GlobalCounters:               newObjects.GlobalCounters,
+				IpsecIngressMap:              newObjects.IpsecIngressMap,
+				IpsecEgressMap:               newObjects.IpsecEgressMap,
 			},
 		}
 
@@ -1274,15 +1366,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:           newObjects.DirectFlows,
-				AggregatedFlows:       newObjects.AggregatedFlows,
-				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
-				DnsFlows:              newObjects.DnsFlows,
-				FilterMap:             newObjects.FilterMap,
-				PeerFilterMap:         newObjects.PeerFilterMap,
-				GlobalCounters:        newObjects.GlobalCounters,
-				IpsecIngressMap:       newObjects.IpsecIngressMap,
-				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				DirectFlows:                  newObjects.DirectFlows,
+				AggregatedFlows:              newObjects.AggregatedFlows,
+				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
+				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
+				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
+				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
+				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
+				DnsFlows:                     newObjects.DnsFlows,
+				FilterMap:                    newObjects.FilterMap,
+				PeerFilterMap:                newObjects.PeerFilterMap,
+				GlobalCounters:               newObjects.GlobalCounters,
+				IpsecIngressMap:              newObjects.IpsecIngressMap,
+				IpsecEgressMap:               newObjects.IpsecEgressMap,
 			},
 		}
 
@@ -1336,15 +1432,19 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				NetworkEventsMonitoring: nil,
 			},
 			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:           newObjects.DirectFlows,
-				AggregatedFlows:       newObjects.AggregatedFlows,
-				AdditionalFlowMetrics: newObjects.AdditionalFlowMetrics,
-				DnsFlows:              newObjects.DnsFlows,
-				FilterMap:             newObjects.FilterMap,
-				PeerFilterMap:         newObjects.PeerFilterMap,
-				GlobalCounters:        newObjects.GlobalCounters,
-				IpsecIngressMap:       newObjects.IpsecIngressMap,
-				IpsecEgressMap:        newObjects.IpsecEgressMap,
+				DirectFlows:                  newObjects.DirectFlows,
+				AggregatedFlows:              newObjects.AggregatedFlows,
+				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
+				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
+				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
+				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
+				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
+				DnsFlows:                     newObjects.DnsFlows,
+				FilterMap:                    newObjects.FilterMap,
+				PeerFilterMap:                newObjects.PeerFilterMap,
+				GlobalCounters:               newObjects.GlobalCounters,
+				IpsecIngressMap:              newObjects.IpsecIngressMap,
+				IpsecEgressMap:               newObjects.IpsecEgressMap,
 			},
 		}
 
@@ -1406,6 +1506,10 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	// remove pinning from all maps
 	for _, m := range []string{
 		aggregatedFlowsMap,
+		aggregatedFlowsDNS,
+		aggregatedFlowsNetworkEvents,
+		aggregatedFlowsPktDrop,
+		aggregatedFlowsXLat,
 		additionalFlowMetrics,
 		directFlowsMap,
 		dnsLatencyMap,
@@ -1435,6 +1539,10 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, tcpRcvKprobe)
 	delete(spec.Programs, tcpFentryHook)
 	delete(spec.Programs, aggregatedFlowsMap)
+	delete(spec.Programs, aggregatedFlowsDNS)
+	delete(spec.Programs, aggregatedFlowsNetworkEvents)
+	delete(spec.Programs, aggregatedFlowsPktDrop)
+	delete(spec.Programs, aggregatedFlowsXLat)
 	delete(spec.Programs, additionalFlowMetrics)
 	delete(spec.Programs, ipsecInputMap)
 	delete(spec.Programs, ipsecOutputMap)
@@ -1972,5 +2080,13 @@ func tcxAnchor(anchor string) link.Anchor {
 		return nil
 	default:
 		return nil
+	}
+}
+
+func sizeMapForFeature(spec *cilium.CollectionSpec, name string, enabled bool, size int) {
+	if enabled {
+		spec.Maps[name].MaxEntries = uint32(size)
+	} else {
+		spec.Maps[name].MaxEntries = 1
 	}
 }

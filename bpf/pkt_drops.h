@@ -9,14 +9,14 @@
 
 static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 flags,
                                                    enum skb_drop_reason reason, u64 len) {
-    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    pkt_drop_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_pkt_drop, id);
     if (extra_metrics != NULL) {
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
-        extra_metrics->pkt_drops.packets += 1;
-        extra_metrics->pkt_drops.bytes += len;
-        extra_metrics->pkt_drops.latest_state = state;
-        extra_metrics->pkt_drops.latest_flags = flags;
-        extra_metrics->pkt_drops.latest_drop_cause = reason;
+        extra_metrics->packets += 1;
+        extra_metrics->bytes += len;
+        extra_metrics->latest_state = state;
+        extra_metrics->latest_flags = flags;
+        extra_metrics->latest_drop_cause = reason;
         return 0;
     }
     return -1;
@@ -75,17 +75,17 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
     }
     // there is no matching flows so lets create new one and add the drops
     u64 current_time = bpf_ktime_get_ns();
-    additional_metrics new_flow;
+    pkt_drop_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
     new_flow.start_mono_time_ts = current_time;
     new_flow.end_mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
-    new_flow.pkt_drops.packets = 1;
-    new_flow.pkt_drops.bytes = len;
-    new_flow.pkt_drops.latest_state = state;
-    new_flow.pkt_drops.latest_flags = flags;
-    new_flow.pkt_drops.latest_drop_cause = reason;
-    ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
+    new_flow.packets = 1;
+    new_flow.bytes = len;
+    new_flow.latest_state = state;
+    new_flow.latest_flags = flags;
+    new_flow.latest_drop_cause = reason;
+    ret = bpf_map_update_elem(&aggregated_flows_pkt_drop, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
             bpf_printk("error packet drop creating new flow %d\n", ret);

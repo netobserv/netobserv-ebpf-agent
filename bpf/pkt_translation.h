@@ -9,7 +9,7 @@
 
 #define s6_addr in6_u.u6_addr8
 
-static inline void dump_xlated_flow(struct translated_flow_t *flow) {
+static inline void dump_xlated_flow(struct xlat_metrics_t *flow) {
     BPF_PRINTK("zone_id %d sport %d dport %d\n", flow->zone_id, flow->sport, flow->dport);
     int i;
     for (i = 0; i < IP_MAX_LEN; i += 4) {
@@ -23,7 +23,7 @@ static inline void dump_xlated_flow(struct translated_flow_t *flow) {
 }
 
 static void __always_inline parse_tuple(struct nf_conntrack_tuple *t,
-                                        struct translated_flow_t *flow, u16 zone_id, u16 family,
+                                        struct xlat_metrics_t *flow, u16 zone_id, u16 family,
                                         u8 protocol, bool invert) {
     __builtin_memset(flow, 0, sizeof(*flow));
     if (invert) {
@@ -74,7 +74,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
                                                     struct nf_conntrack_tuple *reply_t, u16 zone_id,
                                                     u16 family, u16 eth_protocol) {
     long ret = 0;
-    struct translated_flow_t orig;
+    struct xlat_metrics_t orig;
 
     parse_tuple(orig_t, &orig, zone_id, family, id->transport_protocol, false);
 
@@ -85,33 +85,30 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     id->dst_port = orig.dport;
     u64 current_time = bpf_ktime_get_ns();
 
-    additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+    xlat_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_xlat, id);
     if (extra_metrics != NULL) {
         extra_metrics->end_mono_time_ts = current_time;
-        parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family,
-                    id->transport_protocol, true);
+        parse_tuple(reply_t, extra_metrics, zone_id, family, id->transport_protocol, true);
         return ret;
     }
 
     // there is no matching flows so lets create new one and add the xlation
-    additional_metrics new_extra_metrics;
+    xlat_metrics new_extra_metrics;
     __builtin_memset(&new_extra_metrics, 0, sizeof(new_extra_metrics));
     new_extra_metrics.start_mono_time_ts = current_time;
     new_extra_metrics.end_mono_time_ts = current_time;
     new_extra_metrics.eth_protocol = eth_protocol;
-    parse_tuple(reply_t, &new_extra_metrics.translated_flow, zone_id, family,
-                id->transport_protocol, true);
-    ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_extra_metrics, BPF_NOEXIST);
+    parse_tuple(reply_t, &new_extra_metrics, zone_id, family, id->transport_protocol, true);
+    ret = bpf_map_update_elem(&aggregated_flows_xlat, id, &new_extra_metrics, BPF_NOEXIST);
     if (ret != 0) {
         if (trace_messages && ret != -EEXIST) {
             bpf_printk("error packet translation creating new flow %d\n", ret);
         }
         if (ret == -EEXIST) {
-            additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
+            xlat_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_xlat, id);
             if (extra_metrics != NULL) {
                 extra_metrics->end_mono_time_ts = current_time;
-                parse_tuple(reply_t, &extra_metrics->translated_flow, zone_id, family,
-                            id->transport_protocol, true);
+                parse_tuple(reply_t, extra_metrics, zone_id, family, id->transport_protocol, true);
                 return 0;
             }
         }

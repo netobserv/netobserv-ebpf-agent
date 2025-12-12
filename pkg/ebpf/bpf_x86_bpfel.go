@@ -17,15 +17,10 @@ type BpfAdditionalMetrics struct {
 	_                 structs.HostLayout
 	StartMonoTimeTs   uint64
 	EndMonoTimeTs     uint64
-	DnsRecord         BpfDnsRecordT
-	PktDrops          BpfPktDropsT
 	FlowRtt           uint64
-	NetworkEvents     [4][8]uint8
-	TranslatedFlow    BpfTranslatedFlowT
 	EthProtocol       uint16
-	NetworkEventsIdx  uint8
 	IpsecEncrypted    bool
-	_                 [2]byte
+	_                 [1]byte
 	IpsecEncryptedRet int32
 }
 
@@ -48,14 +43,19 @@ type BpfDnsFlowId struct {
 	_        [1]byte
 }
 
-type BpfDnsRecordT struct {
-	_       structs.HostLayout
-	Latency uint64
-	Id      uint16
-	Flags   uint16
-	Errno   uint8
-	Name    [32]int8
-	_       [3]byte
+type BpfDnsMetrics BpfDnsMetricsT
+
+type BpfDnsMetricsT struct {
+	_               structs.HostLayout
+	StartMonoTimeTs uint64
+	EndMonoTimeTs   uint64
+	Latency         uint64
+	Id              uint16
+	Flags           uint16
+	Errno           uint8
+	Name            [32]int8
+	_               [1]byte
+	EthProtocol     uint16
 }
 
 type BpfFilterActionT uint32
@@ -164,14 +164,32 @@ const (
 	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 10
 )
 
-type BpfPktDropsT struct {
+type BpfNetworkEventsMetrics BpfNetworkEventsMetricsT
+
+type BpfNetworkEventsMetricsT struct {
+	_                structs.HostLayout
+	StartMonoTimeTs  uint64
+	EndMonoTimeTs    uint64
+	NetworkEvents    [4][8]uint8
+	EthProtocol      uint16
+	NetworkEventsIdx uint8
+	_                [5]byte
+}
+
+type BpfPktDropMetrics BpfPktDropMetricsT
+
+type BpfPktDropMetricsT struct {
 	_               structs.HostLayout
+	StartMonoTimeTs uint64
+	EndMonoTimeTs   uint64
 	Bytes           uint64
 	Packets         uint32
 	LatestDropCause uint32
 	LatestFlags     uint16
 	LatestState     uint8
-	_               [5]byte
+	_               [1]byte
+	EthProtocol     uint16
+	_               [2]byte
 }
 
 type BpfTcpFlagsT uint32
@@ -190,13 +208,18 @@ const (
 	BpfTcpFlagsTRST_ACK_FLAG BpfTcpFlagsT = 1024
 )
 
-type BpfTranslatedFlowT struct {
-	_      structs.HostLayout
-	Saddr  [16]uint8
-	Daddr  [16]uint8
-	Sport  uint16
-	Dport  uint16
-	ZoneId uint16
+type BpfXlatMetrics BpfXlatMetricsT
+
+type BpfXlatMetricsT struct {
+	_               structs.HostLayout
+	StartMonoTimeTs uint64
+	EndMonoTimeTs   uint64
+	Saddr           [16]uint8
+	Daddr           [16]uint8
+	Sport           uint16
+	Dport           uint16
+	ZoneId          uint16
+	EthProtocol     uint16
 }
 
 // LoadBpf returns the embedded CollectionSpec for Bpf.
@@ -264,16 +287,20 @@ type BpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfMapSpecs struct {
-	AdditionalFlowMetrics *ebpf.MapSpec `ebpf:"additional_flow_metrics"`
-	AggregatedFlows       *ebpf.MapSpec `ebpf:"aggregated_flows"`
-	DirectFlows           *ebpf.MapSpec `ebpf:"direct_flows"`
-	DnsFlows              *ebpf.MapSpec `ebpf:"dns_flows"`
-	FilterMap             *ebpf.MapSpec `ebpf:"filter_map"`
-	GlobalCounters        *ebpf.MapSpec `ebpf:"global_counters"`
-	IpsecEgressMap        *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
-	IpsecIngressMap       *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
-	PacketRecord          *ebpf.MapSpec `ebpf:"packet_record"`
-	PeerFilterMap         *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	AdditionalFlowMetrics        *ebpf.MapSpec `ebpf:"additional_flow_metrics"`
+	AggregatedFlows              *ebpf.MapSpec `ebpf:"aggregated_flows"`
+	AggregatedFlowsDns           *ebpf.MapSpec `ebpf:"aggregated_flows_dns"`
+	AggregatedFlowsNetworkEvents *ebpf.MapSpec `ebpf:"aggregated_flows_network_events"`
+	AggregatedFlowsPktDrop       *ebpf.MapSpec `ebpf:"aggregated_flows_pkt_drop"`
+	AggregatedFlowsXlat          *ebpf.MapSpec `ebpf:"aggregated_flows_xlat"`
+	DirectFlows                  *ebpf.MapSpec `ebpf:"direct_flows"`
+	DnsFlows                     *ebpf.MapSpec `ebpf:"dns_flows"`
+	FilterMap                    *ebpf.MapSpec `ebpf:"filter_map"`
+	GlobalCounters               *ebpf.MapSpec `ebpf:"global_counters"`
+	IpsecEgressMap               *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
+	IpsecIngressMap              *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
+	PacketRecord                 *ebpf.MapSpec `ebpf:"packet_record"`
+	PeerFilterMap                *ebpf.MapSpec `ebpf:"peer_filter_map"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -318,22 +345,30 @@ func (o *BpfObjects) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfMaps struct {
-	AdditionalFlowMetrics *ebpf.Map `ebpf:"additional_flow_metrics"`
-	AggregatedFlows       *ebpf.Map `ebpf:"aggregated_flows"`
-	DirectFlows           *ebpf.Map `ebpf:"direct_flows"`
-	DnsFlows              *ebpf.Map `ebpf:"dns_flows"`
-	FilterMap             *ebpf.Map `ebpf:"filter_map"`
-	GlobalCounters        *ebpf.Map `ebpf:"global_counters"`
-	IpsecEgressMap        *ebpf.Map `ebpf:"ipsec_egress_map"`
-	IpsecIngressMap       *ebpf.Map `ebpf:"ipsec_ingress_map"`
-	PacketRecord          *ebpf.Map `ebpf:"packet_record"`
-	PeerFilterMap         *ebpf.Map `ebpf:"peer_filter_map"`
+	AdditionalFlowMetrics        *ebpf.Map `ebpf:"additional_flow_metrics"`
+	AggregatedFlows              *ebpf.Map `ebpf:"aggregated_flows"`
+	AggregatedFlowsDns           *ebpf.Map `ebpf:"aggregated_flows_dns"`
+	AggregatedFlowsNetworkEvents *ebpf.Map `ebpf:"aggregated_flows_network_events"`
+	AggregatedFlowsPktDrop       *ebpf.Map `ebpf:"aggregated_flows_pkt_drop"`
+	AggregatedFlowsXlat          *ebpf.Map `ebpf:"aggregated_flows_xlat"`
+	DirectFlows                  *ebpf.Map `ebpf:"direct_flows"`
+	DnsFlows                     *ebpf.Map `ebpf:"dns_flows"`
+	FilterMap                    *ebpf.Map `ebpf:"filter_map"`
+	GlobalCounters               *ebpf.Map `ebpf:"global_counters"`
+	IpsecEgressMap               *ebpf.Map `ebpf:"ipsec_egress_map"`
+	IpsecIngressMap              *ebpf.Map `ebpf:"ipsec_ingress_map"`
+	PacketRecord                 *ebpf.Map `ebpf:"packet_record"`
+	PeerFilterMap                *ebpf.Map `ebpf:"peer_filter_map"`
 }
 
 func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AdditionalFlowMetrics,
 		m.AggregatedFlows,
+		m.AggregatedFlowsDns,
+		m.AggregatedFlowsNetworkEvents,
+		m.AggregatedFlowsPktDrop,
+		m.AggregatedFlowsXlat,
 		m.DirectFlows,
 		m.DnsFlows,
 		m.FilterMap,

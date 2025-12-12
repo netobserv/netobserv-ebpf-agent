@@ -12,7 +12,7 @@ func (m *FlowFetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.Bp
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.cacheMaxSize)
+	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxSize)
 	var id ebpf.BpfFlowId
 	var baseMetrics ebpf.BpfFlowMetrics
 	count := 0

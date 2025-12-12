@@ -24,6 +24,46 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
+    __type(value, dns_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} aggregated_flows_dns SEC(".maps");
+
+// Key: the flow identifier. Value: extra metrics for that identifier.
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, pkt_drop_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} aggregated_flows_pkt_drop SEC(".maps");
+
+// Key: the flow identifier. Value: extra metrics for that identifier.
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, network_events_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} aggregated_flows_network_events SEC(".maps");
+
+// Key: the flow identifier. Value: extra metrics for that identifier.
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, xlat_metrics);
+    __uint(max_entries, 1 << 24);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} aggregated_flows_xlat SEC(".maps");
+
+// Key: the flow identifier. Value: extra metrics for that identifier.
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
     __type(value, additional_metrics);
     __uint(max_entries, 1 << 24);
     __uint(map_flags, BPF_F_NO_PREALLOC);

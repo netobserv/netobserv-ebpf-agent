@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,329 +8,268 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
-var (
-	additionalSample1 = ebpf.BpfAdditionalMetrics{
-		DnsRecord: ebpf.BpfDnsRecordT{
-			Latency: 100,
-			Id:      101,
-		},
-		FlowRtt: 200,
-		PktDrops: ebpf.BpfPktDropsT{
-			Bytes:           10,
-			Packets:         2,
-			LatestDropCause: 5,
-			LatestFlags:     6,
-			LatestState:     7,
-		},
-	}
-	additionalSample2 = ebpf.BpfAdditionalMetrics{
-		DnsRecord: ebpf.BpfDnsRecordT{
-			Latency: 1000,
-			Id:      1000,
-		},
-		FlowRtt: 1000,
-		PktDrops: ebpf.BpfPktDropsT{
-			Bytes:           1000,
-			Packets:         1000,
-			LatestDropCause: 1000,
-			LatestFlags:     1000,
-			LatestState:     10,
-		},
-	}
-)
-
-func TestAccumulate(t *testing.T) {
-	type testCase struct {
-		name            string
-		inputFlow       ebpf.BpfFlowMetrics
-		inputAdditional []ebpf.BpfAdditionalMetrics
-		expected        BpfFlowContent
-	}
-	tcs := []testCase{{
-		name:      "flow without additional",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		expected: BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
-			Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1,
-		}},
-	}, {
-		name:            "with single additional",
-		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1},
-		expected: BpfFlowContent{
-			BpfFlowMetrics:    &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &additionalSample1,
-		},
-	}, {
-		name:            "with two additional",
-		inputFlow:       ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{additionalSample1, additionalSample2},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				DnsRecord: ebpf.BpfDnsRecordT{
-					Latency: 1000, // keep highest
-					Id:      1000, // last seen
-				},
-				FlowRtt: 1000, // keep highest
-				PktDrops: ebpf.BpfPktDropsT{
-					Bytes:           1010, // sum
-					Packets:         1002, // sum
-					LatestDropCause: 1000, // last seen
-					LatestFlags:     1006, // union
-					LatestState:     10,   // last seen
-				},
-			},
-		},
-	}, {
-		name:      "duplicate net events",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			}},
-	}, {
-		name:      "net events + empty net event",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			{
-				NetworkEventsIdx: 0,
-				NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			}},
-	}, {
-		name:      "different net events",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 4, 0, 0, 0, 0, 0, 0},
-				},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NetworkEventsIdx: 2,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-					{1, 4, 0, 0, 0, 0, 0, 0},
-				},
-			},
-		},
-	}, {
-		name:      "3 different net events",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				NetworkEventsIdx: 2,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-					{1, 3, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			{
-				NetworkEventsIdx: 1,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 4, 0, 0, 0, 0, 0, 0},
-				},
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				NetworkEventsIdx: 3,
-				NetworkEvents: [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{
-					{1, 2, 0, 0, 0, 0, 0, 0},
-					{1, 3, 0, 0, 0, 0, 0, 0},
-					{1, 4, 0, 0, 0, 0, 0, 0},
-				},
-			},
-		},
-	}, {
-		name:      "accumulate no base",
-		inputFlow: ebpf.BpfFlowMetrics{},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{DnsRecord: ebpf.BpfDnsRecordT{Id: 5}, StartMonoTimeTs: 15, EndMonoTimeTs: 25},
-			{FlowRtt: 500},
-			{PktDrops: ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1}},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 15, EndMonoTimeTs: 25, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				StartMonoTimeTs: 15,
-				EndMonoTimeTs:   25,
-				DnsRecord:       ebpf.BpfDnsRecordT{Id: 5},
-				FlowRtt:         500,
-				PktDrops:        ebpf.BpfPktDropsT{Packets: 5, Bytes: 1000, LatestFlags: 1},
-			},
-		},
-	}, {
-		name:      "IPsec: missing + success",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 0,
-			},
-			{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-		},
-	}, {
-		name:      "IPsec: success + missing",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 0,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-		},
-	}, {
-		name:      "IPsec: missing + error",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 0,
-			},
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
-	}, {
-		name:      "IPsec: error + missing",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 0,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
-	}, {
-		name:      "IPsec: success + error",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
-	}, {
-		name:      "IPsec: error + success",
-		inputFlow: ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-		inputAdditional: []ebpf.BpfAdditionalMetrics{
-			{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-			{
-				IpsecEncrypted:    true,
-				IpsecEncryptedRet: 0,
-			},
-		},
-		expected: BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 0x7, Bytes: 0x22d, StartMonoTimeTs: 0x176a790b240b, EndMonoTimeTs: 0x176a792a755b, Flags: 1},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
-				IpsecEncrypted:    false,
-				IpsecEncryptedRet: 2,
-			},
-		},
+func TestAccumulateDNS(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
 	}}
-	for i, tc := range tcs {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			aggregated := BpfFlowContent{BpfFlowMetrics: &tc.inputFlow}
-			for _, add := range tc.inputAdditional {
-				aggregated.AccumulateAdditional(&add)
-			}
-			assert.Equalf(t, tc.expected, aggregated, "Test name: %s", tc.name)
-		})
-	}
+
+	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+		Latency:         1000,
+		Id:              1,
+		Flags:           0b00000011,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		DNSMetrics: &ebpf.BpfDnsMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			Latency:         1000,
+			Id:              1,
+			Flags:           0b00000011,
+		},
+	}, flow)
+
+	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{
+		StartMonoTimeTs: 30,
+		EndMonoTimeTs:   30,
+		Latency:         2000,
+		Id:              1,
+		Flags:           0b00001001,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		DNSMetrics: &ebpf.BpfDnsMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			Latency:         2000,
+			Id:              1,
+			Flags:           0b00001011,
+		},
+	}, flow)
+}
+
+func TestAccumulatePktDrops(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+	}}
+	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+		Bytes:           5,
+		Packets:         1,
+		LatestDropCause: 100,
+		LatestFlags:     0b00000011,
+		LatestState:     200,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			Bytes:           5,
+			Packets:         1,
+			LatestDropCause: 100,
+			LatestFlags:     0b00000011,
+			LatestState:     200,
+		},
+	}, flow)
+
+	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{
+		StartMonoTimeTs: 30,
+		EndMonoTimeTs:   30,
+		Bytes:           10,
+		Packets:         2,
+		LatestDropCause: 101,
+		LatestFlags:     0b00001001,
+		LatestState:     201,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			Bytes:           15,
+			Packets:         3,
+			LatestDropCause: 101,
+			LatestFlags:     0b00001011,
+			LatestState:     201,
+		},
+	}, flow)
+}
+
+func TestAccumulateNetEvents(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+	}}
+	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{
+		StartMonoTimeTs:  25,
+		EndMonoTimeTs:    25,
+		NetworkEventsIdx: 2,
+		NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}},
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+			StartMonoTimeTs:  25,
+			EndMonoTimeTs:    25,
+			NetworkEventsIdx: 2,
+			NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}},
+		},
+	}, flow)
+
+	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{
+		StartMonoTimeTs:  30,
+		EndMonoTimeTs:    30,
+		NetworkEventsIdx: 2,
+		NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 2, 0, 0, 0, 0, 0, 0}, {1, 3, 0, 0, 0, 0, 0, 0}},
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+			StartMonoTimeTs:  25,
+			EndMonoTimeTs:    25,
+			NetworkEventsIdx: 3,
+			NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}, {1, 3, 0, 0, 0, 0, 0, 0}},
+		},
+	}, flow)
+}
+
+func TestAccumulateXlat(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+	}}
+	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		XlatMetrics: &ebpf.BpfXlatMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+		},
+	}, flow)
+
+	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{
+		StartMonoTimeTs: 30,
+		EndMonoTimeTs:   30,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		XlatMetrics: &ebpf.BpfXlatMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+		},
+	}, flow)
+}
+
+func TestAccumulateAdditional(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+	}}
+	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+		FlowRtt:         200,
+		IpsecEncrypted:  true,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			FlowRtt:         200,
+			IpsecEncrypted:  true,
+		},
+	}, flow)
+
+	// Higher RTT, no ipsec info
+	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 1000})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			FlowRtt:         1000,
+			IpsecEncrypted:  true,
+		},
+	}, flow)
+
+	// Lower RTT, ipsec failure
+	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{
+		StartMonoTimeTs:   30,
+		EndMonoTimeTs:     30,
+		FlowRtt:           800,
+		IpsecEncryptedRet: 5,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+			StartMonoTimeTs:   25,
+			EndMonoTimeTs:     25,
+			FlowRtt:           1000,
+			IpsecEncryptedRet: 5,
+		},
+	}, flow)
+
+	// No change / empty ipsec
+	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 800})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+			StartMonoTimeTs:   25,
+			EndMonoTimeTs:     25,
+			FlowRtt:           1000,
+			IpsecEncryptedRet: 5,
+		},
+	}, flow)
+}
+
+func TestAccumulateNowBase(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		DNSMetrics:     &ebpf.BpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
+
+	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		PktDropMetrics: &ebpf.BpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
+
+	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics:       &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
+
+	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		XlatMetrics:    &ebpf.BpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
+
+	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics:    &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
 }
