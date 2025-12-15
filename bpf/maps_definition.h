@@ -20,7 +20,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows SEC(".maps");
 
-// Key: the flow identifier. Value: extra metrics for that identifier.
+// Key: the flow identifier. Value: dns metrics for that identifier.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
@@ -30,7 +30,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_dns SEC(".maps");
 
-// Key: the flow identifier. Value: extra metrics for that identifier.
+// Key: the flow identifier. Value: drops metrics for that identifier.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
@@ -40,7 +40,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_pkt_drop SEC(".maps");
 
-// Key: the flow identifier. Value: extra metrics for that identifier.
+// Key: the flow identifier. Value: network events metrics for that identifier.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
@@ -50,7 +50,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_network_events SEC(".maps");
 
-// Key: the flow identifier. Value: extra metrics for that identifier.
+// Key: the flow identifier. Value: xlat metrics for that identifier.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
