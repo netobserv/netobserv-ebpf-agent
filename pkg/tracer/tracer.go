@@ -975,7 +975,6 @@ func (m *FlowFetcher) ReadRingBuf() (ringbuf.Record, error) {
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
 // TODO: detect whether BatchLookupAndDelete is supported (Kernel>=5.6) and use it selectively
 // Supported Lookup/Delete operations by kernel: https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
-// TODO: try parallelize lookups on maps
 func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
 	if !m.lookupAndDeleteSupported {
 		return m.legacyLookupAndDeleteMap(met)
