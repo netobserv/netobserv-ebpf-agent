@@ -7,8 +7,19 @@ metadata:
     build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
-      == "main"
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request" && target_branch == "main" && (
+        ".tekton/***".pathChanged() ||
+        "Dockerfile.downstream".pathChanged() ||
+        "Dockerfile-args.downstream".pathChanged() ||
+        ".dockerignore".pathChanged() ||
+        "go.mod".pathChanged() ||
+        "go.sum".pathChanged() ||
+        "cmd/***".pathChanged() ||
+        "pkg/***".pathChanged() ||
+        "Makefile".pathChanged() ||
+        "LICENSE".pathChanged()
+      )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: netobserv-ystream
