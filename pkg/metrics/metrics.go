@@ -158,7 +158,6 @@ var (
 		"Number of OpenSSL data events",
 		TypeCounter,
 		"openssl_type",
-		"data_len",
 	)
 )
 
@@ -331,8 +330,8 @@ type OpenSSLDataEventsCounter struct {
 	vec *prometheus.CounterVec
 }
 
-func (c *OpenSSLDataEventsCounter) Increase(sslType string, dataLen int) {
-	c.vec.WithLabelValues(sslType, strconv.Itoa(dataLen)).Inc()
+func (c *OpenSSLDataEventsCounter) Increase(sslType string) {
+	c.vec.WithLabelValues(sslType).Inc()
 }
 
 func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {

@@ -180,7 +180,7 @@ func (m *RingBufTracer) listenAndForwardRingBufferSSL(_ chan<- *model.RawRecord)
 			pidTgid, timestamp, dataLen, sslType)
 		printLen := min(256, len(data))
 		rtlog.Debugf("SSL data as string: %s", string(data[:printLen]))
-		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(sslType)), int(dataLen))
+		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(sslType)))
 	} else {
 		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d (invalid), ssl_type=%d",
 			pidTgid, timestamp, dataLen, sslType)
