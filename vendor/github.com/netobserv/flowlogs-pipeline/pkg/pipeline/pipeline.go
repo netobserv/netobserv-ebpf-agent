@@ -72,8 +72,17 @@ func newPipelineFromIngester(cfg *config.Root, ing ingest.Ingester) (*Pipeline, 
 	if err != nil {
 		return nil, err
 	}
-	pipeline.configWatcher, err = newPipelineConfigWatcher(cfg, pipeline.pipelineEntryMap)
-	return pipeline, err
+
+	if cfg.DynamicParameters.Name != "" &&
+		cfg.DynamicParameters.Namespace != "" &&
+		cfg.DynamicParameters.FileName != "" {
+		pipeline.configWatcher, err = newPipelineConfigWatcher(cfg.DynamicParameters, pipeline.pipelineEntryMap)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return pipeline, nil
 }
 
 func (p *Pipeline) Run() {
