@@ -15,17 +15,21 @@ import (
 var ds *datasource.Datasource
 var infConfig informers.Config
 
+const (
+	truncateSuffix = "..."
+)
+
 // For testing
 func MockInformers() {
-	infConfig = informers.NewConfig(api.NetworkTransformKubeConfig{})
+	infConfig = informers.NewConfig(&api.NetworkTransformKubeConfig{})
 	ds = &datasource.Datasource{Informers: informers.NewInformersMock()}
 }
 
-func InitInformerDatasource(config api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
+func InitInformerDatasource(config *api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
 	var err error
 	infConfig = informers.NewConfig(config)
 	if ds == nil {
-		ds, err = datasource.NewInformerDatasource(config.ConfigPath, infConfig, opMetrics)
+		ds, err = datasource.NewInformerDatasource(config.ConfigPath, &infConfig, opMetrics)
 	}
 	return err
 }
@@ -54,7 +58,24 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 	outputEntry[rule.OutputKeys.NetworkName] = kubeInfo.NetworkName
 	if rule.LabelsPrefix != "" {
 		for labelKey, labelValue := range kubeInfo.Labels {
-			outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
+			if shouldInclude(labelKey, rule.LabelInclusionsMap, rule.LabelExclusionsMap) {
+				outputEntry[rule.LabelsPrefix+"_"+labelKey] = truncateWithSuffix(
+					labelValue,
+					rule.LabelValueMaxLength,
+					truncateSuffix,
+				)
+			}
+		}
+	}
+	if rule.AnnotationsPrefix != "" {
+		for annotationKey, annotationValue := range kubeInfo.Annotations {
+			if shouldInclude(annotationKey, rule.AnnotationInclusionsMap, rule.AnnotationExclusionsMap) {
+				outputEntry[rule.AnnotationsPrefix+"_"+annotationKey] = truncateWithSuffix(
+					annotationValue,
+					rule.AnnotationValueMaxLength,
+					truncateSuffix,
+				)
+			}
 		}
 	}
 	if kubeInfo.HostIP != "" {
@@ -141,4 +162,37 @@ func objectIsApp(namespace, name string, rule *api.K8sInfraRule) bool {
 		}
 	}
 	return true
+}
+
+// shouldInclude determines if an item should be included based on inclusion/exclusion maps.
+func shouldInclude(key string, inclusions, exclusions map[string]struct{}) bool {
+	if _, excluded := exclusions[key]; excluded {
+		return false
+	}
+	if len(inclusions) > 0 {
+		_, included := inclusions[key]
+		return included
+	}
+	return true
+}
+
+// truncateWithSuffix truncates s to max runes, including the suffix.
+func truncateWithSuffix(s string, maxRunes *int, suffix string) string {
+	if maxRunes == nil {
+		return s
+	}
+	m := *maxRunes
+	if m <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	sr := []rune(suffix)
+	if len(r) <= m {
+		return s
+	}
+	if m <= len(sr) {
+		return string(sr[:m])
+	}
+	keep := m - len(sr)
+	return string(r[:keep]) + suffix
 }

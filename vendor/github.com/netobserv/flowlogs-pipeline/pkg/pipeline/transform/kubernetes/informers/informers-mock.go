@@ -36,7 +36,7 @@ func NewInformersMock() *Mock {
 	return inf
 }
 
-func (o *Mock) InitFromConfig(kubeconfig string, infConfig Config, opMetrics *operational.Metrics) error {
+func (o *Mock) InitFromConfig(kubeconfig string, infConfig *Config, opMetrics *operational.Metrics) error {
 	args := o.Called(kubeconfig, infConfig, opMetrics)
 	return args.Error(0)
 }
@@ -135,6 +135,24 @@ func (m *IndexerMock) MockReplicaSet(name, namespace, ownerName, ownerKind strin
 	}, true, nil)
 }
 
+func (m *IndexerMock) MockDeployment(name, namespace, ownerName, ownerKind string) {
+	if ownerName == "" {
+		// No owner
+		m.On("GetByKey", namespace+"/"+name).Return(&metav1.ObjectMeta{
+			Name:            name,
+			OwnerReferences: []metav1.OwnerReference{},
+		}, true, nil)
+	} else {
+		m.On("GetByKey", namespace+"/"+name).Return(&metav1.ObjectMeta{
+			Name: name,
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind: ownerKind,
+				Name: ownerName,
+			}},
+		}, true, nil)
+	}
+}
+
 func (m *IndexerMock) FallbackNotFound() {
 	m.On("ByIndex", IndexIP, mock.Anything).Return([]interface{}{}, nil)
 }
@@ -163,6 +181,26 @@ func SetupIndexerMocks(kd *Informers) (pods, nodes, svc, rs *IndexerMock) {
 	return
 }
 
+func SetupIndexerMocksWithTrackedKinds(kd *Informers, trackedKinds []string) (pods, nodes, svc, rs, deploy *IndexerMock) {
+	// Setup base informers
+	pods, nodes, svc, rs = SetupIndexerMocks(kd)
+
+	// Setup additional informers based on trackedKinds
+	for _, kind := range trackedKinds {
+		switch kind {
+		case "Deployment", "Gateway":
+			// Gateway requires Deployment informer, so we initialize it for both
+			if deploy == nil {
+				deploy = &IndexerMock{}
+				dim := InformerMock{}
+				dim.On("GetIndexer").Return(deploy)
+				kd.deployments = &dim
+			}
+		}
+	}
+	return
+}
+
 type FakeInformers struct {
 	Interface
 	ipInfo         map[string]*model.ResourceMetaData
@@ -171,7 +209,7 @@ type FakeInformers struct {
 }
 
 func SetupStubs(ipInfo, customKeysInfo, nodes map[string]*model.ResourceMetaData) (Config, *FakeInformers) {
-	cfg := NewConfig(api.NetworkTransformKubeConfig{SecondaryNetworks: secondaryNetConfig})
+	cfg := NewConfig(&api.NetworkTransformKubeConfig{SecondaryNetworks: secondaryNetConfig})
 	return cfg, &FakeInformers{
 		ipInfo:         ipInfo,
 		customKeysInfo: customKeysInfo,
@@ -179,7 +217,7 @@ func SetupStubs(ipInfo, customKeysInfo, nodes map[string]*model.ResourceMetaData
 	}
 }
 
-func (f *FakeInformers) InitFromConfig(_ string, _ Config, _ *operational.Metrics) error {
+func (f *FakeInformers) InitFromConfig(_ string, _ *Config, _ *operational.Metrics) error {
 	return nil
 }
 
