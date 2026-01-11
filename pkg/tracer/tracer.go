@@ -224,7 +224,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 
 		// Minimize SSL maps if SSL is disabled
 		if !cfg.EnableOpenSSLTracking {
-			spec.Maps[sslDataEventMap].MaxEntries = 1
+			spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
 		}
 
 		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
@@ -1620,7 +1620,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 
 	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
-	spec.Maps[sslDataEventMap].MaxEntries = 1
+	spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
