@@ -72,6 +72,8 @@ typedef __u64 u64;
 #define MAX_PAYLOAD_SIZE 256
 #define DNS_NAME_MAX_LEN 32
 
+#define MISC_FLAGS_SSL_MISMATCH 0x01
+
 // according to field 61 in https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum direction_t {
     INGRESS,
@@ -111,6 +113,10 @@ typedef struct flow_metrics_t {
     u8 nb_observed_intf;
     u8 observed_direction[MAX_OBSERVED_INTERFACES];
     u32 observed_intf[MAX_OBSERVED_INTERFACES];
+    u16 ssl_version;
+    u16 tls_cipher_suite;
+    u8 tls_types;
+    u8 misc_flags;
 } flow_metrics;
 
 // Force emitting enums/structs into the ELF
@@ -203,7 +209,7 @@ typedef struct flow_record_t {
 // Force emitting enums/structs into the ELF
 const struct flow_record_t *unused8 __attribute__((unused));
 
-// Internal structure: Packet info structure parsed around functions.
+// Internal structure: Packet info structure passed around functions.
 typedef struct pkt_info_t {
     flow_id *id;
     u64 current_ts; // ts recorded when pkt came.
@@ -215,6 +221,13 @@ typedef struct pkt_info_t {
     u64 dns_latency;
     char dns_name[DNS_NAME_MAX_LEN];
 } pkt_info;
+
+// Internal structure: TLS info.
+typedef struct tls_info_t {
+    u16 version;
+    u16 cipher_suite;
+    u8 type;
+} tls_info;
 
 // Structure for payload metadata
 typedef struct payload_meta_t {

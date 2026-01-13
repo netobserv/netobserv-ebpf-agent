@@ -29,6 +29,11 @@
 #include "dns_tracker.h"
 
 /*
+ * Defines the TLS tracker,
+ */
+#include "tls_tracker.h"
+
+/*
  * Defines an rtt tracker,
  * which runs inside flow_monitor. Is optional.
  */
@@ -81,8 +86,8 @@ static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt,
 }
 
 static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt,
-                                                 u64 len, u32 sampling, u32 if_index,
-                                                 u8 direction) {
+                                                 u64 len, u32 sampling, u32 if_index, u8 direction,
+                                                 tls_info *tls) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
     int maxReached = 0;
     bpf_spin_lock(&aggregate_flow->lock);
@@ -93,6 +98,19 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         aggregate_flow->flags |= pkt->flags;
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
+        // TODO: if we got NOTLS while we previously had TLS, set mismatch flag??
+        // TODO: merge, keeping more accurate data first; e.g. in 1.3 ServerHello is correctly identified while AppData is disguised as 1.2
+        if (tls->version > 0 && aggregate_flow->ssl_version != tls->version) {
+            if (aggregate_flow->ssl_version == 0xff ||
+                tls->type == TLSTRACKER_BF_SERVER_HELLO ||
+                tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+                aggregate_flow->ssl_version = tls->version;
+            }
+        }
+        if (tls->cipher_suite > 0 && tls->type == TLSTRACKER_BF_SERVER_HELLO) {
+            aggregate_flow->tls_cipher_suite = tls->cipher_suite;
+        }
+        aggregate_flow->tls_types |= tls->type;
     } else if (if_index != 0) {
         // Only add info that we've seen this interface (we can also update end time & flags)
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
@@ -179,9 +197,17 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     if (enable_dns_tracking) {
         dns_errno = track_dns_packet(skb, &pkt);
     }
+
+    tls_info tls;
+    __builtin_memset(&tls, 0, sizeof(tls));
+    int tls_ret = track_tls(skb, pkt.id->transport_protocol, pkt.l4_hdr, pkt.flags, &tls);
+    if (tls_ret == TLSTRACKER_UNKNOWN) {
+        tls.version = 0xffff;
+    }
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction);
+        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction,
+                             &tls);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow;
@@ -198,6 +224,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         new_flow.sampling = flow_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
+        new_flow.ssl_version = tls.version;
+        new_flow.tls_cipher_suite = tls.cipher_suite;
+        new_flow.tls_types = tls.type;
 
         long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {
@@ -209,7 +238,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
                     update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex,
-                                         direction);
+                                         direction, &tls);
                 } else {
                     if (trace_messages) {
                         bpf_printk("failed to update an exising flow\n");

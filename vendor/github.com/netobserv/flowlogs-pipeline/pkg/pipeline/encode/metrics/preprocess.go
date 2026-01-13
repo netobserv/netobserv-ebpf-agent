@@ -10,7 +10,7 @@ import (
 
 type Preprocessed struct {
 	*api.MetricsItem
-	filters         []preprocessedFilter
+	filters         map[string][]preprocessedFilter
 	MappedLabels    []MappedLabel
 	FlattenedLabels []MappedLabel
 }
@@ -60,6 +60,7 @@ func filterToPredicate(filter api.MetricsFilter) filters.Predicate {
 func Preprocess(def *api.MetricsItem) *Preprocessed {
 	mi := Preprocessed{
 		MetricsItem: def,
+		filters:     make(map[string][]preprocessedFilter),
 	}
 	for _, l := range def.Labels {
 		ml := MappedLabel{Source: l, Target: l}
@@ -73,7 +74,7 @@ func Preprocess(def *api.MetricsItem) *Preprocessed {
 		}
 	}
 	for _, f := range def.Filters {
-		mi.filters = append(mi.filters, preprocessedFilter{
+		mi.filters[f.Key] = append(mi.filters[f.Key], preprocessedFilter{
 			predicate: filterToPredicate(f),
 			useFlat:   mi.isFlattened(f.Key),
 		})
