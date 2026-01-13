@@ -100,6 +100,11 @@ func TestPBFlowToMap(t *testing.T) {
 		},
 		IpsecEncrypted:    1,
 		IpsecEncryptedRet: 0,
+		Quic: &pbflow.Quic{
+			Version:      1,
+			SeenLongHdr:  1,
+			SeenShortHdr: 1,
+		},
 	}
 
 	out := PBFlowToMap(flow)
@@ -151,13 +156,16 @@ func TestPBFlowToMap(t *testing.T) {
 				"Direction": "egress",
 			},
 		},
-		"XlatSrcAddr":  "1.2.3.4",
-		"XlatDstAddr":  "5.6.7.8",
-		"XlatSrcPort":  uint16(1),
-		"XlatDstPort":  uint16(2),
-		"ZoneId":       uint16(100),
-		"IPSecRetCode": int32(0),
-		"IPSecStatus":  "success",
+		"XlatSrcAddr":      "1.2.3.4",
+		"XlatDstAddr":      "5.6.7.8",
+		"XlatSrcPort":      uint16(1),
+		"XlatDstPort":      uint16(2),
+		"ZoneId":           uint16(100),
+		"IPSecRetCode":     int32(0),
+		"IPSecStatus":      "success",
+		"QuicVersion":      uint32(1),
+		"QuicSeenLongHdr":  uint8(1),
+		"QuicSeenShortHdr": uint8(1),
 	}, out)
 }
 
