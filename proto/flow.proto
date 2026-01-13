@@ -70,6 +70,7 @@ message Record {
   uint32 ipsec_encrypted = 30;
   int32 ipsec_encrypted_ret = 31;
   string dns_name = 32;
+  Quic quic = 33;
 }
 
 message DataLink {
@@ -111,4 +112,10 @@ message Xlat {
   uint32 src_port = 3;
   uint32 dst_port = 4;
   uint32 zone_id = 5;
+}
+
+message Quic {
+  uint32 version = 1;
+  uint32 seen_long_hdr = 2;
+  uint32 seen_short_hdr = 3;
 }

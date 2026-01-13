@@ -62,6 +62,11 @@
  */
 #include "openssl_tracker.h"
 
+/*
+ * Defines quic tracker
+ */
+#include "quic_tracker.h"
+
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
                                              u8 direction) {
@@ -186,6 +191,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     if (enable_dns_tracking) {
         dns_errno = track_dns_packet(skb, &pkt);
     }
+    if (enable_quic_tracking) {
+        track_quic_packet(skb, &pkt, eth_protocol, direction, len);
+    }
+
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction);

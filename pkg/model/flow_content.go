@@ -11,6 +11,7 @@ type BpfFlowContent struct {
 	NetworkEventsMetrics *ebpf.BpfNetworkEventsMetrics
 	XlatMetrics          *ebpf.BpfXlatMetrics
 	AdditionalMetrics    *ebpf.BpfAdditionalMetrics
+	QuicMetrics          *ebpf.BpfQuicMetrics
 }
 
 // nolint:gocritic // hugeParam: metric is reported as heavy; but it needs to be copied anyway, we don't want a pointer here
@@ -168,6 +169,26 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 		if other.IpsecEncrypted {
 			p.AdditionalMetrics.IpsecEncrypted = other.IpsecEncrypted
 		}
+	}
+}
+
+func (p *BpfFlowContent) AccumulateQuic(other *ebpf.BpfQuicMetrics) {
+	if other == nil {
+		return
+	}
+	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	if p.QuicMetrics == nil {
+		p.QuicMetrics = other
+	}
+	// QUIC
+	if p.QuicMetrics.Version < other.Version {
+		p.QuicMetrics.Version = other.Version
+	}
+	if p.QuicMetrics.SeenLongHdr < other.SeenLongHdr {
+		p.QuicMetrics.SeenLongHdr = other.SeenLongHdr
+	}
+	if p.QuicMetrics.SeenShortHdr < other.SeenShortHdr {
+		p.QuicMetrics.SeenShortHdr = other.SeenShortHdr
 	}
 }
 
