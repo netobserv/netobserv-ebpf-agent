@@ -97,6 +97,15 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } global_counters SEC(".maps");
 
+// Per-CPU temporary storage for DNS name (avoids stack limit)
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __type(key, u32);
+    __type(value, dns_name_buffer);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} dns_name_map SEC(".maps");
+
 // LPM trie map used to filter traffic by IP address CIDR
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
@@ -136,5 +145,12 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ipsec_egress_map SEC(".maps");
+
+// Ringbuf for SSL data events
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 27); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ssl_data_event_map SEC(".maps");
 
 #endif //__MAPS_DEFINITION_H__

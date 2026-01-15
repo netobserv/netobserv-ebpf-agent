@@ -28,17 +28,58 @@ nodes:
     scheduler:
         extraArgs:
             v: "5"
+  extraMounts:
+  - hostPath: /sys/kernel/btf
+    containerPath: /sys/kernel/btf
+    readOnly: true
+  - hostPath: /sys/kernel/debug
+    containerPath: /sys/kernel/debug
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
 - role: worker
+  extraMounts:
+  - hostPath: /sys/kernel/btf
+    containerPath: /sys/kernel/btf
+    readOnly: true
+  - hostPath: /sys/kernel/debug
+    containerPath: /sys/kernel/debug
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
 - role: worker
+  extraMounts:
+  - hostPath: /sys/kernel/btf
+    containerPath: /sys/kernel/btf
+    readOnly: true
+  - hostPath: /sys/kernel/debug
+    containerPath: /sys/kernel/debug
+  - hostPath: /var/run/netns
+    containerPath: /var/run/netns
 EOF
 }
 
 # install_netobserv-agent will install the daemonset
 # into each kind docker container
 install_netobserv-agent() {
-docker build . -t localhost/ebpf-agent:test
-kind load docker-image localhost/ebpf-agent:test
-kubectl apply -f ${DIR}/agent.yml
+  # Get the architecture and convert to Go arch format
+  local ARCH=$(uname -m)
+  local TARGETARCH
+
+  case $ARCH in
+    x86_64)
+      TARGETARCH=amd64
+      ;;
+    aarch64|arm64)
+      TARGETARCH=arm64
+      ;;
+    *)
+      TARGETARCH=$ARCH
+      ;;
+  esac
+
+  echo "Building for architecture: $TARGETARCH (detected: $ARCH)"
+  docker build . --build-arg TARGETARCH=$TARGETARCH -t localhost/ebpf-agent:test
+  kind load docker-image localhost/ebpf-agent:test
+  kubectl apply -f ${DIR}/agent.yml
 }
 
 # print_success prints a little success message at the end of the script
@@ -60,8 +101,8 @@ SVC_CIDR_IPV6=${SVC_CIDR_IPV6:-fd00:10:96::/112}
 # At the minimum, deploy the kind cluster
 deploy_kind
 export KUBECONFIG=${DIR}/kubeconfig
-oc label node kind-worker node-role.kubernetes.io/worker=
-oc label node kind-worker2 node-role.kubernetes.io/worker=
+kubectl label node kind-worker node-role.kubernetes.io/worker=
+kubectl label node kind-worker2 node-role.kubernetes.io/worker=
 
 install_netobserv-agent
 

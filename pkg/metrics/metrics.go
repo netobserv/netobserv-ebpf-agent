@@ -153,6 +153,12 @@ var (
 		"mac",
 		"retries",
 	)
+	opensslDataEventsCounter = defineMetric(
+		"openssl_data_events_total",
+		"Number of OpenSSL data events",
+		TypeCounter,
+		"openssl_type",
+	)
 )
 
 func (def *MetricDefinition) mapLabels(labels []string) prometheus.Labels {
@@ -183,15 +189,16 @@ type Metrics struct {
 	Settings *Settings
 
 	// Shared metrics:
-	EvictionCounter        *EvictionCounter
-	EvictedFlowsCounter    *EvictionCounter
-	EvictedPacketsCounter  *EvictionCounter
-	DroppedFlowsCounter    *EvictionCounter
-	FilteredFlowsCounter   *EvictionCounter
-	NetworkEventsCounter   *EvictionCounter
-	FlowBufferSizeGauge    *FlowBufferSizeGauge
-	Errors                 *ErrorCounter
-	InterfaceEventsCounter *InterfaceEventsCounter
+	EvictionCounter          *EvictionCounter
+	EvictedFlowsCounter      *EvictionCounter
+	EvictedPacketsCounter    *EvictionCounter
+	DroppedFlowsCounter      *EvictionCounter
+	FilteredFlowsCounter     *EvictionCounter
+	NetworkEventsCounter     *EvictionCounter
+	FlowBufferSizeGauge      *FlowBufferSizeGauge
+	Errors                   *ErrorCounter
+	InterfaceEventsCounter   *InterfaceEventsCounter
+	OpenSSLDataEventsCounter *OpenSSLDataEventsCounter
 }
 
 func NewMetrics(settings *Settings) *Metrics {
@@ -207,6 +214,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
+	m.OpenSSLDataEventsCounter = &OpenSSLDataEventsCounter{vec: m.NewCounterVec(&opensslDataEventsCounter)}
 	return m
 }
 
@@ -316,6 +324,14 @@ func (c *EvictionCounter) WithSource(source string) prometheus.Counter {
 
 type InterfaceEventsCounter struct {
 	Increase func(typez, ifname string, ifindex int, netns string, mac [6]uint8, retries int)
+}
+
+type OpenSSLDataEventsCounter struct {
+	vec *prometheus.CounterVec
+}
+
+func (c *OpenSSLDataEventsCounter) Increase(sslType string) {
+	c.vec.WithLabelValues(sslType).Inc()
 }
 
 func newInterfaceEventsCounter(vec *prometheus.CounterVec, lvl Level) *InterfaceEventsCounter {

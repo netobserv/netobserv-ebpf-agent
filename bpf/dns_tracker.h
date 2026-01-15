@@ -110,12 +110,17 @@ static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt
             pkt->dns_flags = flags;
 
             // Copy raw QNAME bytes (label-encoded) and let userspace decode to dotted form
-            __builtin_memset(pkt->dns_name, 0, DNS_NAME_MAX_LEN);
-            u32 qname_off = dns_offset + sizeof(struct dns_header);
-            // Best-effort fixed-size copy; safe for verifier (constant size)
-            (void)bpf_skb_load_bytes(skb, qname_off, pkt->dns_name, DNS_NAME_MAX_LEN - 1);
-            // Ensure null-termination
-            pkt->dns_name[DNS_NAME_MAX_LEN - 1] = '\0';
+            // Use per-CPU map to avoid stack limit
+            u32 key = 0;
+            dns_name_buffer *dns_buf = bpf_map_lookup_elem(&dns_name_map, &key);
+            if (dns_buf) {
+                u32 qname_off = dns_offset + sizeof(struct dns_header);
+                // Best-effort fixed-size copy; safe for verifier (constant size)
+                (void)bpf_skb_load_bytes(skb, qname_off, dns_buf->name, DNS_NAME_MAX_LEN - 1);
+                // Ensure null-termination
+                dns_buf->name[DNS_NAME_MAX_LEN - 1] = '\0';
+                pkt->dns_name = dns_buf->name;
+            }
         } // end of dns response
     }
     return ret;
