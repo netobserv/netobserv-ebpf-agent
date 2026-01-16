@@ -46,6 +46,12 @@ PROTOC_ARTIFACTS := pkg/pbflow
 # regular expressions for excluded file patterns
 EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 
+# Container image for running linux tests from non-linux hosts (e.g. macOS).
+# Prefer matching the *host* Go toolchain version (go env GOVERSION), which tends to
+# be more reliable than GO_VERSION (used for generator tooling) and avoids "go: not found".
+HOST_GO_VERSION := $(shell go env GOVERSION 2>/dev/null | sed 's/^go//')
+TEST_CONTAINER_IMAGE ?= $(if $(HOST_GO_VERSION),golang:$(HOST_GO_VERSION),golang:$(GO_VERSION))
+
 .DEFAULT_GOAL := help
 
 # build a single arch target provided as argument
@@ -162,7 +168,29 @@ compile: ## Compile ebpf agent project
 .PHONY: test
 test: ## Test code using go test
 	@echo "### Testing code"
-	GOOS=$(GOOS) go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out
+	@if [ "$$(go env GOOS)" = "linux" ]; then \
+		go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out; \
+	else \
+		$(MAKE) test-container; \
+	fi
+
+.PHONY: test-container
+test-container: ## Run linux tests in a container (useful on macOS)
+	@echo "### Testing in linux container ($(TEST_CONTAINER_IMAGE))"
+	@if [ -z "$(OCI_BIN_PATH)" ]; then \
+		echo "ERROR: docker/podman not found in PATH. Install one, or run 'make test-unit' instead."; \
+		exit 1; \
+	fi
+	@$(OCI_BIN) run --rm \
+		-u $$(id -u):$$(id -g) \
+		-v "$$(pwd)":/src \
+		-w /src \
+		-e HOME=/tmp \
+		-e GOPATH=/tmp/go \
+		-e GOCACHE=/tmp/go-build \
+		-e CGO_ENABLED=0 \
+		$(TEST_CONTAINER_IMAGE) \
+		sh -lc 'mkdir -p "$$GOPATH" "$$GOCACHE"; export PATH="/usr/local/go/bin:/go/bin:$$PATH"; command -v go >/dev/null || (echo "ERROR: go not found; PATH=$$PATH" && exit 127); go version && go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out && go test -v ./pkg/maps'
 
 .PHONY: verify-maps
 verify-maps: ## Verify map names consistency across all sources
@@ -172,7 +200,29 @@ verify-maps: ## Verify map names consistency across all sources
 .PHONY: test-race
 test-race: ## Test code using go test -race
 	@echo "### Testing code for race conditions"
-	GOOS=$(GOOS) go test -race -mod vendor ./pkg/... ./cmd/...
+	@if [ "$$(go env GOOS)" = "linux" ]; then \
+		go test -race -mod vendor ./pkg/... ./cmd/...; \
+	else \
+		$(MAKE) test-race-container; \
+	fi
+
+.PHONY: test-race-container
+test-race-container: ## Run go test -race in a linux container (useful on macOS)
+	@echo "### Testing code for race conditions in linux container ($(TEST_CONTAINER_IMAGE))"
+	@if [ -z "$(OCI_BIN_PATH)" ]; then \
+		echo "ERROR: docker/podman not found in PATH."; \
+		exit 1; \
+	fi
+	@$(OCI_BIN) run --rm \
+		-u $$(id -u):$$(id -g) \
+		-v "$$(pwd)":/src \
+		-w /src \
+		-e HOME=/tmp \
+		-e GOPATH=/tmp/go \
+		-e GOCACHE=/tmp/go-build \
+		-e CGO_ENABLED=1 \
+		$(TEST_CONTAINER_IMAGE) \
+		sh -lc 'mkdir -p "$$GOPATH" "$$GOCACHE"; export PATH="/usr/local/go/bin:/go/bin:$$PATH"; command -v go >/dev/null || (echo "ERROR: go not found; PATH=$$PATH" && exit 127); go version && go test -race -mod vendor ./pkg/... ./cmd/...'
 
 .PHONY: cov-exclude-generated
 cov-exclude-generated:

@@ -1,10 +1,13 @@
 package decode
 
 import (
+	"net"
 	"testing"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
@@ -167,6 +170,118 @@ func TestPBFlowToMap(t *testing.T) {
 		"QuicSeenLongHdr":  uint8(1),
 		"QuicSeenShortHdr": uint8(1),
 	}, out)
+}
+
+func TestRecordToMap_OptionalMetrics(t *testing.T) {
+	someTime := time.Unix(1700000000, 0).UTC()
+	makeFlow := func(withQuic bool) *model.Record {
+		f := &model.Record{
+			ID: ebpf.BpfFlowId{
+				SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
+				DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
+				SrcPort:           23000,
+				DstPort:           443,
+				TransportProtocol: 17,
+			},
+			Metrics: model.BpfFlowContent{
+				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					EthProtocol: 2048,
+					Bytes:       456,
+					Packets:     123,
+				},
+			},
+			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
+			TimeFlowStart: someTime,
+			TimeFlowEnd:   someTime,
+			AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
+		}
+		if withQuic {
+			f.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
+		}
+		return f
+	}
+
+	tests := []struct {
+		name       string
+		withQuic   bool
+		expectKeys bool
+	}{
+		{name: "without optional metrics", withQuic: false, expectKeys: false},
+		{name: "with optional metrics", withQuic: true, expectKeys: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := RecordToMap(makeFlow(tt.withQuic))
+			_, ok := out["QuicVersion"]
+			assert.Equal(t, tt.expectKeys, ok)
+			_, ok = out["QuicSeenLongHdr"]
+			assert.Equal(t, tt.expectKeys, ok)
+			_, ok = out["QuicSeenShortHdr"]
+			assert.Equal(t, tt.expectKeys, ok)
+
+			if tt.expectKeys {
+				assert.Equal(t, uint32(1), out["QuicVersion"])
+				assert.Equal(t, uint8(1), out["QuicSeenLongHdr"])
+				assert.Equal(t, uint8(1), out["QuicSeenShortHdr"])
+			}
+		})
+	}
+}
+
+func TestPBFlowRoundTrip_OptionalFields(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+
+	tests := []struct {
+		name     string
+		withQuic bool
+	}{
+		{name: "without optional fields", withQuic: false},
+		{name: "with optional fields", withQuic: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := &model.Record{
+				ID: ebpf.BpfFlowId{
+					TransportProtocol: 17,
+					SrcIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 1, 2, 3, 4},
+					DstIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 5, 6, 7, 8},
+					SrcPort:           12345,
+					DstPort:           443,
+				},
+				Metrics: model.BpfFlowContent{
+					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+						EthProtocol:        2048,
+						DirectionFirstSeen: 1,
+						Bytes:              10,
+						Packets:            1,
+					},
+				},
+				TimeFlowStart: now,
+				TimeFlowEnd:   now,
+			}
+			if tt.withQuic {
+				in.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
+			}
+
+			pb := pbflow.FlowToPB(in)
+			if tt.withQuic {
+				if assert.NotNil(t, pb.Quic) {
+					assert.Equal(t, uint32(1), pb.Quic.Version)
+				}
+			} else {
+				assert.Nil(t, pb.Quic)
+			}
+
+			back := pbflow.PBToFlow(pb)
+			if tt.withQuic {
+				assert.NotNil(t, back.Metrics.QuicMetrics)
+			} else {
+				assert.Nil(t, back.Metrics.QuicMetrics)
+			}
+		})
+	}
 }
 
 func TestDnsRawNameToDotted(t *testing.T) {
