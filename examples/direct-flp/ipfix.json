@@ -6,7 +6,8 @@
 		{"name": "writer","write": {"type": "ipfix", "ipfix": {
 			"targetHost": "127.0.0.1",
 			"targetPort": 2055,
-			"transport": "udp"
+			"transport": "udp",
+			"enterpriseId":2
 		}}}
 	],
 	"metricsSettings":{"port": 9102}
