@@ -18,6 +18,7 @@
 package encode
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
@@ -27,7 +28,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	kafkago "github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 type kafkaWriteMessage interface {

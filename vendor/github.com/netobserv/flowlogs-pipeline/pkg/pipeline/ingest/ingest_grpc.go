@@ -2,7 +2,11 @@ package ingest
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
@@ -15,6 +19,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	grpc2 "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
@@ -33,14 +38,14 @@ type GRPCProtobuf struct {
 }
 
 func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (*GRPCProtobuf, error) {
-	netObserv := api.IngestGRPCProto{}
+	cfg := api.IngestGRPCProto{}
 	if params.Ingest != nil && params.Ingest.GRPC != nil {
-		netObserv = *params.Ingest.GRPC
+		cfg = *params.Ingest.GRPC
 	}
-	if netObserv.Port == 0 {
-		return nil, fmt.Errorf("ingest port not specified")
+	if cfg.Port == 0 {
+		return nil, errors.New("ingest port not specified")
 	}
-	bufLen := netObserv.BufferLen
+	bufLen := cfg.BufferLen
 	if bufLen == 0 {
 		bufLen = defaultBufferLen
 	}
@@ -54,8 +59,40 @@ func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (
 		withBatchSizeBytes(),
 		withStageDuration(),
 	)
-	collector, err := grpc.StartCollector(netObserv.Port, flowPackets,
-		grpc.WithGRPCServerOptions(grpc2.UnaryInterceptor(instrumentGRPC(metrics))))
+	var opts []grpc2.ServerOption
+	// GRPC metrics
+	opts = append(opts, grpc2.UnaryInterceptor(instrumentGRPC(metrics)))
+
+	if cfg.CertPath != "" && cfg.KeyPath != "" {
+		// TLS
+		cert, err := tls.LoadX509KeyPair(cfg.CertPath, cfg.KeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load configured certificate: %w", err)
+		}
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.NoClientCert,
+		}
+		if cfg.ClientCAPath != "" {
+			// mTLS
+			caCert, err := os.ReadFile(cfg.ClientCAPath)
+			if err != nil {
+				return nil, fmt.Errorf("cannot load configured client CA certificate: %w", err)
+			}
+			pool := x509.NewCertPool()
+			pool.AppendCertsFromPEM(caCert)
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+			tlsCfg.ClientCAs = pool
+			glog.Info("Starting GRPC server with mTLS")
+		} else {
+			glog.Info("Starting GRPC server with TLS")
+		}
+		opts = append(opts, grpc2.Creds(credentials.NewTLS(tlsCfg)))
+	} else {
+		glog.Info("Starting GRPC server - no TLS")
+	}
+
+	collector, err := grpc.StartCollector(cfg.Port, flowPackets, grpc.WithGRPCServerOptions(opts...))
 	if err != nil {
 		return nil, err
 	}

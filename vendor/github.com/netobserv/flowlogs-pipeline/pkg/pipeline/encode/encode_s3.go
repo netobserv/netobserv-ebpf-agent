@@ -19,6 +19,7 @@ package encode
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -32,7 +33,6 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const (

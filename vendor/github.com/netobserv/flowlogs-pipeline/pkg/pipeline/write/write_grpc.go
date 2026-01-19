@@ -46,7 +46,7 @@ func NewWriteGRPC(params config.StageParam) (Writer, error) {
 		return nil, fmt.Errorf("write.grpc param is mandatory: %v", params.Write)
 	}
 	logrus.Debugf("NewWriteGRPC ConnectClient %s:%d...", writeGRPC.hostIP, writeGRPC.hostPort)
-	clientConn, err := grpc.ConnectClient(writeGRPC.hostIP, writeGRPC.hostPort)
+	clientConn, err := grpc.ConnectClient(writeGRPC.hostIP, writeGRPC.hostPort, nil)
 	if err != nil {
 		return nil, err
 	}
