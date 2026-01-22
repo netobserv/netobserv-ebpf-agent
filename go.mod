@@ -15,7 +15,7 @@ require (
 	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20250227173154-57a2590a1d16
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/segmentio/kafka-go v0.4.49
+	github.com/segmentio/kafka-go v0.4.50
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/vishvananda/netlink v1.3.1-0.20250425193846-9d88d8385bf9
