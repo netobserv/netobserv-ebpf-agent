@@ -24,7 +24,6 @@ static inline void dump_xlated_flow(struct xlat_metrics_t *flow) {
 
 static void __always_inline parse_tuple(struct nf_conntrack_tuple *t, struct xlat_metrics_t *flow,
                                         u16 zone_id, u16 family, u8 protocol, bool invert) {
-    __builtin_memset(flow, 0, sizeof(*flow));
     if (invert) {
         if (is_transport_protocol(protocol)) {
             flow->dport = bpf_ntohs(t->src.u.all);
@@ -74,6 +73,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
                                                     u16 family, u16 eth_protocol) {
     long ret = 0;
     struct xlat_metrics_t orig;
+    __builtin_memset(&orig, 0, sizeof(orig));
 
     parse_tuple(orig_t, &orig, zone_id, family, id->transport_protocol, false);
 
