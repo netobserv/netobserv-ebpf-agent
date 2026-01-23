@@ -19,12 +19,14 @@ type Config struct {
 	secondaryNetworks []api.SecondaryNetwork
 	hasMultus         bool
 	hasUDN            bool
+	trackedKinds      []string
 }
 
-func NewConfig(cfg api.NetworkTransformKubeConfig) Config {
+func NewConfig(cfg *api.NetworkTransformKubeConfig) Config {
 	c := Config{
 		managedCNI:        cfg.ManagedCNI,
 		secondaryNetworks: cfg.SecondaryNetworks,
+		trackedKinds:      cfg.TrackedKinds,
 	}
 	if c.managedCNI == nil {
 		c.managedCNI = []string{api.OVN}

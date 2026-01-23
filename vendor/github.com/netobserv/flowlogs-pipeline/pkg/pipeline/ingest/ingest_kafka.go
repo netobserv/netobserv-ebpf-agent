@@ -18,6 +18,7 @@
 package ingest
 
 import (
+	"context"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
@@ -28,7 +29,6 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 var klog = logrus.WithField("component", "ingest.Kafka")
