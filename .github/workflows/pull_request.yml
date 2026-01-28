@@ -13,7 +13,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v3
       with:
-        go-version: '1.24'
+        go-version: '1.25'
     - name: Install make
       run: sudo apt -y install make
     - name: Run verification and tests

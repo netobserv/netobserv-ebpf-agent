@@ -31,7 +31,7 @@ jobs:
       - name: set up go 1.x
         uses: actions/setup-go@v3
         with:
-          go-version: '1.24'
+          go-version: '1.25'
       - name: docker login to quay.io
         uses: docker/login-action@v2
         with:
