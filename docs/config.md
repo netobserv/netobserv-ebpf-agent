@@ -80,6 +80,11 @@ The following environment variables are available to configure the NetObserv eBP
   See [docs](./rtt_calculations.md) for more details on this feature.
 * `ENABLE_PKT_DROPS` (default: `false` disabled). If `true` enables packet drops eBPF hook to be able to capture drops flows in the ebpf agent.
 * `ENABLE_DNS_TRACKING` (default: `false` disabled). If `true` enables DNS tracking to calculate DNS latency for the captured flows in the ebpf agent.
+* `QUIC_TRACKING_MODE` (default: `0`).
+  * `0`: disable QUIC tracking
+  * `1`: enable QUIC tracking, limited to **UDP/443** (lower overhead / fewer false positives)
+  * `2`: enable QUIC tracking on **any UDP port** (RFC 9312-friendly)
+* Deprecated (kept for backwards compatibility):
 * `ENABLE_PCA` (default: `false` disabled). If `true` enables Packet Capture Agent. 
 * `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
   `PCA_FILTER=tcp,22`.

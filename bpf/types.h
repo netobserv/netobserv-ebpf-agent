@@ -316,5 +316,28 @@ struct ssl_data_event_t {
 
 // Force emitting enums/structs into the ELF
 const static struct ssl_data_event_t *unused14 __attribute__((unused));
+// QUIC flow metrics
+typedef struct quic_metrics_t {
+    u64 start_mono_time_ts;
+    u64 end_mono_time_ts;
+    u64 bytes;
+    u32 packets;
+    u32 version;       // QUIC version (from long header), 0 if unknown
+    u16 eth_protocol;  // ETH_P_IP or ETH_P_IPV6
+    u8 seen_long_hdr;  // Saw handshake packets (long header)
+    u8 seen_short_hdr; // Saw established packets (short header)
+} quic_metrics;
+
+// Force emitting struct into the ELF
+const static struct quic_metrics_t *unused15 __attribute__((unused));
+
+typedef enum quic_config_t {
+    QUIC_CONFIG_DISABLED,
+    QUIC_CONFIG_ENABLED,
+    QUIC_CONFIG_ANY_UDP_PORT,
+} quic_config;
+
+// Force emitting enums/structs into the ELF/BTF (for bpf2go -type quic_config_t)
+const static enum quic_config_t *unused16 __attribute__((unused, used));
 
 #endif /* __TYPES_H__ */
