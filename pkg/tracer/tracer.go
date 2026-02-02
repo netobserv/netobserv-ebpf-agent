@@ -410,12 +410,23 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
 		}
-		log.Infof("BPFManager mode: loading SSL data event pinned maps")
-		mPath = path.Join(pinDir, sslDataEventMap)
-		objects.BpfMaps.SslDataEventMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		// Only load SSL map if OpenSSL tracking is enabled
+		if cfg.EnableOpenSSLTracking {
+			log.Infof("BPFManager mode: loading SSL data event pinned maps")
+			mPath = path.Join(pinDir, sslDataEventMap)
+			objects.BpfMaps.SslDataEventMap, err = cilium.LoadPinnedMap(mPath, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+			}
+
+			// Initialize the ringbuffer reader for SSL events
+			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
+			if err != nil {
+				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
+			}
 		}
+
 		log.Infof("BPFManager mode: loading DNS name pinned maps")
 		mPath = path.Join(pinDir, dnsNameMap)
 		objects.BpfMaps.DnsNameMap, err = cilium.LoadPinnedMap(mPath, opts)
