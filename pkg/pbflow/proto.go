@@ -101,6 +101,13 @@ func FlowToPB(fr *model.Record) *Record {
 			pbflowRecord.IpsecEncrypted = uint32(1)
 		}
 	}
+	if fr.Metrics.QuicMetrics != nil {
+		pbflowRecord.Quic = &Quic{
+			Version:      uint32(fr.Metrics.QuicMetrics.Version),
+			SeenLongHdr:  uint32(fr.Metrics.QuicMetrics.SeenLongHdr),
+			SeenShortHdr: uint32(fr.Metrics.QuicMetrics.SeenShortHdr),
+		}
+	}
 	pbflowRecord.DupList = make([]*DupMapEntry, 0)
 	for _, intf := range fr.Interfaces {
 		pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
@@ -194,6 +201,13 @@ func PBToFlow(pb *Record) *model.Record {
 	}
 	if pb.IpsecEncrypted != 0 {
 		out.Metrics.AdditionalMetrics.IpsecEncrypted = true
+	}
+	if pb.Quic != nil {
+		out.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{
+			Version:      pb.Quic.Version,
+			SeenLongHdr:  uint8(pb.Quic.SeenLongHdr),
+			SeenShortHdr: uint8(pb.Quic.SeenShortHdr),
+		}
 	}
 	if len(pb.GetDupList()) != 0 {
 		for _, entry := range pb.GetDupList() {
