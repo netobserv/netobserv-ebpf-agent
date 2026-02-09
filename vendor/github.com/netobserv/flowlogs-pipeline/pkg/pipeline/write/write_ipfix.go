@@ -47,13 +47,15 @@ type FieldMap struct {
 	Getter  func(entities.InfoElementWithValue) any
 	Setter  func(entities.InfoElementWithValue, any)
 	Matcher func(entities.InfoElementWithValue, any) bool
+	Default func(entities.InfoElementWithValue)
 }
 
 // IPv6Type value as defined in IEEE 802: https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 const IPv6Type uint16 = 0x86DD
 
 var (
-	ilog       = logrus.WithField("component", "write.Ipfix")
+	ilog = logrus.WithField("component", "write.Ipfix")
+	// See RFC 5102: https://www.rfc-editor.org/rfc/rfc5102
 	IANAFields = []string{
 		"ethernetType",
 		"flowDirection",
@@ -68,12 +70,16 @@ var (
 		"packetDeltaCount",
 		"interfaceName",
 		"tcpControlBits",
+		"postNAPTSourceTransportPort",
+		"postNAPTDestinationTransportPort",
 	}
 	IPv4IANAFields = append([]string{
 		"sourceIPv4Address",
 		"destinationIPv4Address",
 		"icmpTypeIPv4",
 		"icmpCodeIPv4",
+		"postNATSourceIPv4Address",
+		"postNATDestinationIPv4Address",
 	}, IANAFields...)
 	IPv6IANAFields = append([]string{
 		"sourceIPv6Address",
@@ -81,6 +87,8 @@ var (
 		"nextHeaderIPv6",
 		"icmpTypeIPv6",
 		"icmpCodeIPv6",
+		"postNATSourceIPv6Address",
+		"postNATDestinationIPv6Address",
 	}, IANAFields...)
 	KubeFields = []entities.InfoElement{
 		{Name: "sourcePodNamespace", ElementId: 7733, DataType: entities.String, Len: 65535},
@@ -95,6 +103,8 @@ var (
 		{Name: "interfaces", ElementId: 7741, DataType: entities.String, Len: 65535},
 		{Name: "directions", ElementId: 7742, DataType: entities.String, Len: 65535},
 	}
+	CustomNetworkFieldsV4 = []entities.InfoElement{}
+	CustomNetworkFieldsV6 = []entities.InfoElement{}
 
 	MapIPFIXKeys = map[string]FieldMap{
 		"sourceIPv4Address": {
@@ -320,6 +330,64 @@ var (
 			Getter: func(elt entities.InfoElementWithValue) any { return int64(elt.GetUnsigned64Value()) },
 			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned64Value(uint64(rec.(int64))) },
 		},
+		"postNAPTSourceTransportPort": {
+			Key:    "XlatSrcPort",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned16Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned16Value(rec.(uint16)) },
+		},
+		"postNAPTDestinationTransportPort": {
+			Key:    "XlatDstPort",
+			Getter: func(elt entities.InfoElementWithValue) any { return elt.GetUnsigned16Value() },
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetUnsigned16Value(rec.(uint16)) },
+		},
+		"postNATSourceIPv4Address": {
+			Key: "XlatSrcAddr",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				if net.IPv4zero.Equal(elt.GetIPAddressValue()) {
+					return nil
+				}
+				return elt.GetIPAddressValue().String()
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+			// Force zero-IP by default to avoid go-ipfix throwing an error: https://github.com/vmware/go-ipfix/blob/d9256ccb0ed9e3ae38c3a2bf3d6ce1ce01c9ac4f/pkg/entities/ie.go#L596
+			Default: func(elt entities.InfoElementWithValue) { elt.SetIPAddressValue(net.IPv4zero) },
+		},
+		"postNATDestinationIPv4Address": {
+			Key: "XlatDstAddr",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				if net.IPv4zero.Equal(elt.GetIPAddressValue()) {
+					return nil
+				}
+				return elt.GetIPAddressValue().String()
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+			// Force zero-IP by default to avoid go-ipfix throwing an error: https://github.com/vmware/go-ipfix/blob/d9256ccb0ed9e3ae38c3a2bf3d6ce1ce01c9ac4f/pkg/entities/ie.go#L596
+			Default: func(elt entities.InfoElementWithValue) { elt.SetIPAddressValue(net.IPv4zero) },
+		},
+		"postNATSourceIPv6Address": {
+			Key: "XlatSrcAddr",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				if net.IPv6zero.Equal(elt.GetIPAddressValue()) {
+					return nil
+				}
+				return elt.GetIPAddressValue().String()
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+			// Force zero-IP by default to avoid go-ipfix throwing an error: https://github.com/vmware/go-ipfix/blob/d9256ccb0ed9e3ae38c3a2bf3d6ce1ce01c9ac4f/pkg/entities/ie.go#L602
+			Default: func(elt entities.InfoElementWithValue) { elt.SetIPAddressValue(net.IPv6zero) },
+		},
+		"postNATDestinationIPv6Address": {
+			Key: "XlatDstAddr",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				if net.IPv6zero.Equal(elt.GetIPAddressValue()) {
+					return nil
+				}
+				return elt.GetIPAddressValue().String()
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
+			// Force zero-IP by default to avoid go-ipfix throwing an error: https://github.com/vmware/go-ipfix/blob/d9256ccb0ed9e3ae38c3a2bf3d6ce1ce01c9ac4f/pkg/entities/ie.go#L602
+			Default: func(elt entities.InfoElementWithValue) { elt.SetIPAddressValue(net.IPv6zero) },
+		},
 	}
 )
 
@@ -338,8 +406,14 @@ func addElementToTemplate(elementName string, value []byte, elements *[]entities
 	return nil
 }
 
-func addNetworkEnrichmentToTemplate(elements *[]entities.InfoElementWithValue, registryID uint32) error {
-	for _, field := range CustomNetworkFields {
+func addNetworkEnrichmentToTemplate(elements *[]entities.InfoElementWithValue, registryID uint32, v6 bool) error {
+	fields := CustomNetworkFields
+	if v6 {
+		fields = append(fields, CustomNetworkFieldsV6...)
+	} else {
+		fields = append(fields, CustomNetworkFieldsV4...)
+	}
+	for _, field := range fields {
 		if err := addElementToTemplate(field.Name, nil, elements, registryID); err != nil {
 			return err
 		}
@@ -365,6 +439,8 @@ func loadCustomRegistry(enterpriseID uint32) error {
 	allCustom := []entities.InfoElement{}
 	allCustom = append(allCustom, KubeFields...)
 	allCustom = append(allCustom, CustomNetworkFields...)
+	allCustom = append(allCustom, CustomNetworkFieldsV4...)
+	allCustom = append(allCustom, CustomNetworkFieldsV6...)
 	for _, f := range allCustom {
 		f.EnterpriseId = enterpriseID
 		err = registry.PutInfoElement(f, enterpriseID)
@@ -376,95 +452,80 @@ func loadCustomRegistry(enterpriseID uint32) error {
 	return nil
 }
 
-func prepareTemplate(templateID uint16, enrichEnterpriseID uint32, fields []string) (entities.Set, []entities.InfoElementWithValue, error) {
+func prepareTemplate(templateID uint16, enrichEnterpriseID uint32, v6 bool) (entities.Set, []entities.InfoElementWithValue, error) {
 	templateSet := entities.NewSet(false)
 	err := templateSet.PrepareSet(entities.Template, templateID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to prepare set (v6=%t), %w", v6, err)
 	}
 	elements := make([]entities.InfoElementWithValue, 0)
+	var fields []string
+	if v6 {
+		fields = IPv6IANAFields
+	} else {
+		fields = IPv4IANAFields
+	}
 
 	for _, field := range fields {
 		err = addElementToTemplate(field, nil, &elements, registry.IANAEnterpriseID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("failed to add %s to template (v6=%t), %w", field, v6, err)
 		}
 	}
 	if enrichEnterpriseID != 0 {
 		err = addKubeContextToTemplate(&elements, enrichEnterpriseID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("failed to add k8s context (v6=%t), %w", v6, err)
 		}
-		err = addNetworkEnrichmentToTemplate(&elements, enrichEnterpriseID)
+		err = addNetworkEnrichmentToTemplate(&elements, enrichEnterpriseID, v6)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("failed to add network enrichment (v6=%t), %w", v6, err)
 		}
 	}
 	err = templateSet.AddRecord(elements, templateID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to add record (v6=%t), %w", v6, err)
 	}
 
 	return templateSet, elements, nil
 }
 
-func setElementValue(record config.GenericMap, ieValPtr *entities.InfoElementWithValue) error {
-	ieVal := *ieValPtr
-	name := ieVal.GetName()
-	mapping, ok := MapIPFIXKeys[name]
-	if !ok {
-		return nil
-	}
-	if value := record[mapping.Key]; value != nil {
-		mapping.Setter(ieVal, value)
-	}
-	return nil
-}
-
-func setEntities(record config.GenericMap, elements *[]entities.InfoElementWithValue) error {
-	for _, ieVal := range *elements {
-		err := setElementValue(record, &ieVal)
-		if err != nil {
-			return err
+func createDataRecord(flow config.GenericMap, elements []entities.InfoElementWithValue) {
+	for _, ieVal := range elements {
+		name := ieVal.GetName()
+		if mapping, ok := MapIPFIXKeys[name]; ok {
+			if value := flow[mapping.Key]; value != nil {
+				mapping.Setter(ieVal, value)
+			} else if mapping.Default != nil {
+				mapping.Default(ieVal)
+			}
 		}
 	}
-	return nil
 }
 
 func (t *writeIpfix) sendDataRecord(record config.GenericMap, v6 bool) error {
 	dataSet := entities.NewSet(false)
+	var dataRecord []entities.InfoElementWithValue
 	var templateID uint16
 	if v6 {
 		templateID = t.templateIDv6
-		err := setEntities(record, &t.entitiesV6)
-		if err != nil {
-			return err
-		}
+		dataRecord = t.entitiesV6
 	} else {
 		templateID = t.templateIDv4
-		err := setEntities(record, &t.entitiesV4)
-		if err != nil {
-			return err
-		}
+		dataRecord = t.entitiesV4
 	}
+	createDataRecord(record, dataRecord)
 	err := dataSet.PrepareSet(entities.Data, templateID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare set (v6: %t): %w", v6, err)
 	}
-	if v6 {
-		err = dataSet.AddRecord(t.entitiesV6, templateID)
-		if err != nil {
-			return err
-		}
-	} else {
-		err = dataSet.AddRecord(t.entitiesV4, templateID)
-		if err != nil {
-			return err
-		}
+	err = dataSet.AddRecord(dataRecord, templateID)
+	if err != nil {
+		return fmt.Errorf("failed to add record (v6: %t): %w", v6, err)
 	}
 	_, err = t.exporter.SendSet(dataSet)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to send set (v6: %t): %w", v6, err)
 	}
 	return nil
 }
@@ -521,20 +582,20 @@ func NewWriteIpfix(params config.StageParam) (Writer, error) {
 	}
 
 	idV4 := exporter.NewTemplateID()
-	setV4, entitiesV4, err := prepareTemplate(idV4, eeid, IPv4IANAFields)
+	setV4, entitiesV4, err := prepareTemplate(idV4, eeid, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare IPv4 template: %w", err)
 	}
 
 	idV6 := exporter.NewTemplateID()
-	setV6, entitiesV6, err := prepareTemplate(idV6, eeid, IPv6IANAFields)
+	setV6, entitiesV6, err := prepareTemplate(idV6, eeid, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare IPv6 template: %w", err)
 	}
 
 	// First send sync
 	if _, err := exporter.SendSet(setV4); err != nil {
-		return nil, fmt.Errorf("failed to send IPv6 template: %w", err)
+		return nil, fmt.Errorf("failed to send IPv4 template: %w", err)
 	}
 	if _, err := exporter.SendSet(setV6); err != nil {
 		return nil, fmt.Errorf("failed to send IPv6 template: %w", err)

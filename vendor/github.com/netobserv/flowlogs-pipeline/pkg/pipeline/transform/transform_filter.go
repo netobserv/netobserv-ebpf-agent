@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Knetic/govaluate"
@@ -42,6 +43,7 @@ type Filter struct {
 	Rules         []api.TransformFilterRule
 	KeepRules     []predicateRule
 	SamplingField string
+	m             sync.RWMutex
 }
 
 type predicateRule struct {
@@ -51,6 +53,9 @@ type predicateRule struct {
 
 // Transform transforms a flow; if false is returned as a second argument, the entry is dropped
 func (f *Filter) Transform(entry config.GenericMap) (config.GenericMap, bool) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+
 	tlog.Tracef("f = %v", f)
 	outputEntry := entry.Copy()
 	labels := make(map[string]string)
@@ -226,21 +231,19 @@ func storeSampling(entry config.GenericMap, value int, samplingField string) {
 	}
 }
 
-// NewTransformFilter create a new filter transform
-func NewTransformFilter(params config.StageParam) (Transformer, error) {
-	tlog.Debugf("entering NewTransformFilter")
+func (f *Filter) configure(cfg *api.TransformFilter) error {
 	keepRules := []predicateRule{}
 	rules := []api.TransformFilterRule{}
 	var samplingField string
-	if params.Transform != nil && params.Transform.Filter != nil {
-		samplingField = params.Transform.Filter.SamplingField
-		params.Transform.Filter.Preprocess()
-		for i := range params.Transform.Filter.Rules {
-			baseRules := &params.Transform.Filter.Rules[i]
+	if cfg != nil {
+		samplingField = cfg.SamplingField
+		cfg.Preprocess()
+		for i := range cfg.Rules {
+			baseRules := &cfg.Rules[i]
 			if baseRules.Type == api.KeepEntryQuery {
 				predicate, err := dsl.Parse(baseRules.KeepEntryQuery)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				keepRules = append(keepRules, predicateRule{
 					sampling:  baseRules.KeepEntrySampling,
@@ -251,10 +254,35 @@ func NewTransformFilter(params config.StageParam) (Transformer, error) {
 			}
 		}
 	}
-	transformFilter := &Filter{
-		Rules:         rules,
-		KeepRules:     keepRules,
-		SamplingField: samplingField,
+	f.Rules = rules
+	f.KeepRules = keepRules
+	f.SamplingField = samplingField
+	return nil
+}
+
+func (f *Filter) Update(stage config.StageParam) {
+	f.m.Lock()
+	defer f.m.Unlock()
+
+	cfg := api.TransformFilter{}
+	if stage.Transform != nil && stage.Transform.Filter != nil {
+		cfg = *stage.Transform.Filter
 	}
-	return transformFilter, nil
+	if err := f.configure(&cfg); err != nil {
+		tlog.Errorf("Received invalid config update: %v - error: %v", cfg, err)
+		return
+	}
+	tlog.Infof("Received config update: %v", cfg)
+}
+
+// NewTransformFilter create a new filter transform
+func NewTransformFilter(params config.StageParam) (Transformer, error) {
+	tlog.Debugf("entering NewTransformFilter")
+	f := &Filter{}
+	if params.Transform != nil && params.Transform.Filter != nil {
+		if err := f.configure(params.Transform.Filter); err != nil {
+			return nil, err
+		}
+	}
+	return f, nil
 }

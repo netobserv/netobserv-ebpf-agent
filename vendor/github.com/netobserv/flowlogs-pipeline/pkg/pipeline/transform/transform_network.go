@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
@@ -42,6 +44,7 @@ type Network struct {
 	svcNames     *netdb.ServiceNames
 	snLabels     []subnetLabel
 	ipLabelCache *utils.TimedCache
+	m            sync.RWMutex
 }
 
 type subnetLabel struct {
@@ -53,6 +56,9 @@ type subnetLabel struct {
 func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bool) {
 	// copy input entry before transform to avoid alteration on parallel stages
 	outputEntry := inputEntry.Copy()
+
+	n.m.RLock()
+	defer n.m.RUnlock()
 
 	for _, rule := range n.Rules {
 		switch rule.Type {
@@ -171,9 +177,69 @@ func (n *Network) applySubnetLabel(strIP string) string {
 	return ""
 }
 
-// NewTransformNetwork create a new transform
-//
-//nolint:cyclop
+func parseSubnets(cfg *api.TransformNetwork) ([]subnetLabel, error) {
+	var subnetCats []subnetLabel
+	for _, category := range cfg.SubnetLabels {
+		var cidrs []*net.IPNet
+		for _, cidr := range category.CIDRs {
+			_, parsed, err := net.ParseCIDR(cidr)
+			if err != nil {
+				return nil, fmt.Errorf("category %s: fail to parse CIDR, %w", category.Name, err)
+			}
+			cidrs = append(cidrs, parsed)
+		}
+		if len(cidrs) > 0 {
+			subnetCats = append(subnetCats, subnetLabel{name: category.Name, cidrs: cidrs})
+		}
+	}
+	return subnetCats, nil
+}
+
+// Update: only reconfigure subnet labels
+func (n *Network) Update(stage config.StageParam) {
+	cfg := api.TransformNetwork{}
+	if stage.Transform != nil && stage.Transform.Network != nil {
+		cfg = *stage.Transform.Network
+	}
+	cfg.Preprocess()
+
+	subnetCats, err := parseSubnets(&cfg)
+	if err != nil {
+		tlog.Errorf("Received invalid config update: %v - error: %v", cfg, err)
+		return
+	}
+
+	tlog.Infof("Received config update: %v", cfg)
+	if !reflect.DeepEqual(cfg.Rules, n.Rules) {
+		tlog.Warn("Configured rules have changed: feature not implemented")
+	}
+	if !reflect.DeepEqual(cfg.DirectionInfo, n.DirectionInfo) {
+		tlog.Warn("Configured directionInfo has changed: feature not implemented")
+	}
+
+	n.m.Lock()
+	defer n.m.Unlock()
+	n.snLabels = subnetCats
+	n.ipLabelCache.Clear()
+}
+
+func initNetworkServices(cfg *api.TransformNetwork) (*netdb.ServiceNames, error) {
+	pFilename, sFilename := cfg.GetServiceFiles()
+	var err error
+	protos, err := os.Open(pFilename)
+	if err != nil {
+		return nil, fmt.Errorf("opening protocols file %q: %w", pFilename, err)
+	}
+	defer protos.Close()
+	services, err := os.Open(sFilename)
+	if err != nil {
+		return nil, fmt.Errorf("opening services file %q: %w", sFilename, err)
+	}
+	defer services.Close()
+	return netdb.LoadServicesDB(protos, services)
+}
+
+// NewTransformNetwork create a new network transform
 func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metrics) (Transformer, error) {
 	var locationDBConfig *api.NetworkAddLocationRule
 	var needToInitKubeData = false
@@ -202,11 +268,7 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 			if err := validateReinterpretDirectionConfig(&jsonNetworkTransform.DirectionInfo); err != nil {
 				return nil, err
 			}
-		case api.NetworkAddSubnetLabel:
-			if len(jsonNetworkTransform.SubnetLabels) == 0 {
-				return nil, fmt.Errorf("a rule '%s' was found, but there are no subnet labels configured", api.NetworkAddSubnetLabel)
-			}
-		case api.NetworkAddSubnet, api.NetworkDecodeTCPFlags:
+		case api.NetworkAddSubnetLabel, api.NetworkAddSubnet, api.NetworkDecodeTCPFlags:
 			// nothing
 		}
 	}
@@ -214,7 +276,7 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 	if locationDBConfig != nil {
 		err := location.InitLocationDB(locationDBConfig.FilePath)
 		if err != nil {
-			log.Debugf("location.InitLocationDB error: %v", err)
+			log.Warnf("location.InitLocationDB error: %v", err)
 		}
 	}
 
@@ -227,37 +289,16 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 
 	var servicesDB *netdb.ServiceNames
 	if needToInitNetworkServices {
-		pFilename, sFilename := jsonNetworkTransform.GetServiceFiles()
-		var err error
-		protos, err := os.Open(pFilename)
-		if err != nil {
-			return nil, fmt.Errorf("opening protocols file %q: %w", pFilename, err)
-		}
-		defer protos.Close()
-		services, err := os.Open(sFilename)
-		if err != nil {
-			return nil, fmt.Errorf("opening services file %q: %w", sFilename, err)
-		}
-		defer services.Close()
-		servicesDB, err = netdb.LoadServicesDB(protos, services)
+		db, err := initNetworkServices(&jsonNetworkTransform)
 		if err != nil {
 			return nil, err
 		}
+		servicesDB = db
 	}
 
-	var subnetCats []subnetLabel
-	for _, category := range jsonNetworkTransform.SubnetLabels {
-		var cidrs []*net.IPNet
-		for _, cidr := range category.CIDRs {
-			_, parsed, err := net.ParseCIDR(cidr)
-			if err != nil {
-				return nil, fmt.Errorf("category %s: fail to parse CIDR, %w", category.Name, err)
-			}
-			cidrs = append(cidrs, parsed)
-		}
-		if len(cidrs) > 0 {
-			subnetCats = append(subnetCats, subnetLabel{name: category.Name, cidrs: cidrs})
-		}
+	subnetCats, err := parseSubnets(&jsonNetworkTransform)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Network{

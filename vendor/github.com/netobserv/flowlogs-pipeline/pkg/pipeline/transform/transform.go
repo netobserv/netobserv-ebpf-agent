@@ -25,6 +25,7 @@ import (
 
 type Transformer interface {
 	Transform(in config.GenericMap) (config.GenericMap, bool)
+	Update(config.StageParam)
 }
 
 type transformNone struct {
@@ -33,6 +34,10 @@ type transformNone struct {
 // Transform transforms a flow before being stored
 func (t *transformNone) Transform(f config.GenericMap) (config.GenericMap, bool) {
 	return f, true
+}
+
+func (t *transformNone) Update(_ config.StageParam) {
+	log.Warn("Transform None, update not supported")
 }
 
 // NewTransformNone create a new transform
