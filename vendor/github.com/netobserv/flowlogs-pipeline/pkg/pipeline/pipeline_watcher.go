@@ -22,14 +22,8 @@ type pipelineConfigWatcher struct {
 	pipelineEntryMap map[string]*pipelineEntry
 }
 
-func newPipelineConfigWatcher(cfg *config.Root, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
-	if cfg.DynamicParameters.Name == "" ||
-		cfg.DynamicParameters.Namespace == "" ||
-		cfg.DynamicParameters.FileName == "" {
-		return nil, nil
-	}
-
-	config, err := utils.LoadK8sConfig(cfg.DynamicParameters.KubeConfigPath)
+func newPipelineConfigWatcher(cfg config.DynamicParameters, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
+	config, err := utils.LoadK8sConfig(cfg.KubeConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -41,16 +35,16 @@ func newPipelineConfigWatcher(cfg *config.Root, pipelineEntryMap map[string]*pip
 	pipelineCW := pipelineConfigWatcher{
 		clientSet:        *clientset,
 		pipelineEntryMap: pipelineEntryMap,
-		cmName:           cfg.DynamicParameters.Name,
-		cmNamespace:      cfg.DynamicParameters.Namespace,
-		configFile:       cfg.DynamicParameters.FileName,
+		cmName:           cfg.Name,
+		cmNamespace:      cfg.Namespace,
+		configFile:       cfg.FileName,
 	}
 
 	return &pipelineCW, nil
-
 }
 
 func (pcw *pipelineConfigWatcher) Run() {
+	log.Info("Start watching config")
 	for {
 		watcher, err := pcw.clientSet.CoreV1().ConfigMaps(pcw.cmNamespace).Watch(context.TODO(),
 			metav1.SingleObject(metav1.ObjectMeta{Name: pcw.cmName, Namespace: pcw.cmNamespace}))
@@ -96,9 +90,12 @@ func (pcw *pipelineConfigWatcher) updateFromConfigmap(cm *corev1.ConfigMap) {
 			log.Errorf("Cannot parse config: %v", err)
 			return
 		}
+		log.Debugf("Received a config update")
 		for _, param := range config.Parameters {
 			if pentry, ok := pcw.pipelineEntryMap[param.Name]; ok {
 				pcw.updateEntry(pentry, param)
+			} else {
+				log.Warnf("Unable to match updated config with a stage; name=%s", param.Name)
 			}
 		}
 	}
@@ -108,6 +105,8 @@ func (pcw *pipelineConfigWatcher) updateEntry(pEntry *pipelineEntry, param confi
 	switch pEntry.stageType {
 	case StageEncode:
 		pEntry.Encoder.Update(param)
+	case StageTransform:
+		pEntry.Transformer.Update(param)
 	default:
 		log.Warningf("Hot reloading not supported for: %s", pEntry.stageType)
 	}
