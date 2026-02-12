@@ -237,6 +237,96 @@ func TestAccumulateAdditional(t *testing.T) {
 	}, flow)
 }
 
+func TestAccumulateQuic(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+	}}
+
+	// First QUIC metric should set base timestamps and initialize QuicMetrics.
+	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+		EthProtocol:     3,
+		Version:         1,
+		SeenLongHdr:     1,
+		SeenShortHdr:    0,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3, EthProtocol: 3},
+		QuicMetrics: &ebpf.BpfQuicMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			EthProtocol:     3,
+			Version:         1,
+			SeenLongHdr:     1,
+			SeenShortHdr:    0,
+		},
+	}, flow)
+
+	// Second QUIC metric should update max fields.
+	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+		StartMonoTimeTs: 30,
+		EndMonoTimeTs:   30,
+		EthProtocol:     3,
+		Version:         2,
+		SeenLongHdr:     0,
+		SeenShortHdr:    1,
+	})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3, EthProtocol: 3},
+		QuicMetrics: &ebpf.BpfQuicMetrics{
+			StartMonoTimeTs: 25,
+			EndMonoTimeTs:   25,
+			EthProtocol:     3,
+			Version:         2,
+			SeenLongHdr:     1,
+			SeenShortHdr:    1,
+		},
+	}, flow)
+}
+
+func TestAccumulateQuic_NilNoop(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+		EthProtocol:     2048,
+	}}
+	before := flow
+	flow.AccumulateQuic(nil)
+	assert.Equal(t, before, flow)
+}
+
+func TestAccumulateQuic_DoesNotDecrease(t *testing.T) {
+	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		StartMonoTimeTs: 10,
+		EndMonoTimeTs:   20,
+		Packets:         3,
+		EthProtocol:     2048,
+	}}
+	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+		StartMonoTimeTs: 25,
+		EndMonoTimeTs:   25,
+		EthProtocol:     2048,
+		Version:         2,
+		SeenLongHdr:     1,
+		SeenShortHdr:    1,
+	})
+	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+		StartMonoTimeTs: 30,
+		EndMonoTimeTs:   30,
+		EthProtocol:     2048,
+		Version:         1, // lower than existing
+		SeenLongHdr:     0,
+		SeenShortHdr:    0,
+	})
+	assert.Equal(t, uint32(2), flow.QuicMetrics.Version)
+	assert.Equal(t, uint8(1), flow.QuicMetrics.SeenLongHdr)
+	assert.Equal(t, uint8(1), flow.QuicMetrics.SeenShortHdr)
+}
+
 func TestAccumulateNowBase(t *testing.T) {
 	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
 	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
@@ -271,5 +361,12 @@ func TestAccumulateNowBase(t *testing.T) {
 	assert.Equal(t, BpfFlowContent{
 		BpfFlowMetrics:    &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+	}, flow)
+
+	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3})
+	assert.Equal(t, BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
+		QuicMetrics:    &ebpf.BpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
 	}, flow)
 }

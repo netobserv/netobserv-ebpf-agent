@@ -178,6 +178,7 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 		UseEbpfManager:                 cfg.EbpfProgramManagerMode,
 		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
 		EnableIPsecTracker:             cfg.EnableIPsecTracking,
+		QUICTrackingMode:               cfg.QUICTrackingMode,
 		FilterConfig:                   filterRules,
 		EnableOpenSSLTracking:          cfg.EnableOpenSSLTracking,
 		OpenSSLPath:                    cfg.OpenSSLPath,

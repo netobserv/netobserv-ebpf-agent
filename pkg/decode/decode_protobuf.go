@@ -170,6 +170,12 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		out["NetworkEvents"] = fr.NetworkMonitorEventsMD
 	}
 
+	if fr.Metrics.QuicMetrics != nil {
+		out["QuicVersion"] = fr.Metrics.QuicMetrics.Version
+		out["QuicSeenLongHdr"] = fr.Metrics.QuicMetrics.SeenLongHdr
+		out["QuicSeenShortHdr"] = fr.Metrics.QuicMetrics.SeenShortHdr
+	}
+
 	return out
 }
 
