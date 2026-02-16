@@ -162,7 +162,7 @@ func (b *builder) readStages() error {
 	for _, param := range b.configParams {
 		log.Debugf("stage = %v", param.Name)
 		if _, exists := b.pipelineEntryMap[param.Name]; exists {
-			return fmt.Errorf("duplicate stage name '%s' found in pipeline definition", param.Name)
+			return fmt.Errorf("duplicate stage name '%s' found in pipeline definition [%v]", param.Name, param)
 		}
 		pEntry := pipelineEntry{
 			stageName: param.Name,

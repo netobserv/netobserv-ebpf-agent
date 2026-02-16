@@ -51,6 +51,10 @@ func (g *Generic) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	return outputEntry, ok
 }
 
+func (g *Generic) Update(_ config.StageParam) {
+	log.Warn("Transform Generic, update not supported")
+}
+
 func (g *Generic) performMultiplier(entry config.GenericMap, transformRule api.GenericTransformRule, outputEntry config.GenericMap) bool {
 	ok := true
 	switch val := entry[transformRule.Input].(type) {
