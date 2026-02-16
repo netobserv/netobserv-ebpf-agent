@@ -26,6 +26,11 @@ OCI_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 OCI_BIN ?= $(shell basename ${OCI_BIN_PATH})
 OCI_BUILD_OPTS ?=
 
+ifeq ("$(OCI_BIN)","docker")
+# https://stackoverflow.com/questions/75521775/buildx-docker-image-claims-to-be-a-manifest-list
+EXTRA_BUILD_FLAGS ?= --provenance=false
+endif
+
 ifneq ($(CLEAN_BUILD),)
 	BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
 	BUILD_SHA := $(shell git rev-parse --short HEAD)
@@ -51,7 +56,7 @@ EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 # build a single arch target provided as argument
 define build_target
 	echo 'building image for arch $(1)'; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} -t ${IMAGE}-$(1) -f Dockerfile .;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --load --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${IMAGE}-$(1) -f Dockerfile .;
 endef
 
 # push a single arch target image
