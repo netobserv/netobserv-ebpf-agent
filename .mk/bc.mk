@@ -54,7 +54,7 @@ define build_bc_target
 	echo 'building bytecode image for arch $(1)'; \
 	echo '${PROGRAMS}' | jq empty || { echo "Invalid JSON in PROGRAMS"; exit 1; }; \
 	echo '${MAPS}' | jq empty || { echo "Invalid JSON in MAPS"; exit 1; }; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${PROGRAMS}' --build-arg MAPS='${MAPS}' --build-arg BC_AMD64_EL=bpf_x86_bpfel.o --build-arg BC_ARM64_EL=bpf_arm64_bpfel.o --build-arg BC_S390X_EB=bpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=bpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} -t ${BC_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${PROGRAMS}' --build-arg MAPS='${MAPS}' --build-arg BC_AMD64_EL=bpf_x86_bpfel.o --build-arg BC_ARM64_EL=bpf_arm64_bpfel.o --build-arg BC_S390X_EB=bpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=bpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${BC_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
 endef
 
 # push a single arch target image
