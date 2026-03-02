@@ -59,9 +59,9 @@ jobs:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             var fs = require('fs');
-            var issueNumber = Number(fs.readFileSync('./pr-id').trim());
-            var shortSha = fs.readFileSync('./short-sha').trim();
-            var bcImage = fs.readFileSync('./bc-name').trim();
+            var issueNumber = Number(fs.readFileSync('./pr-id'));
+            var shortSha = String(fs.readFileSync('./short-sha')).trim();
+            var bcImage = fs.readFileSync('./bc-name');
             github.rest.issues.createComment({
               issue_number: issueNumber,
               owner: context.repo.owner,
