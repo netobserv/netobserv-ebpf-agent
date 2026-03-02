@@ -254,6 +254,7 @@ tar-image: image-build ## Build single arch (amd64) and save as a tar
 	mkdir -p ./out
 	$(OCI_BIN) save -o out/ebpf-agent.tar $(IMAGE)
 	echo $(IMAGE) > ./out/name
+	echo "foo"
 
 .PHONY: tar-bc-image
 tar-bc-image: MULTIARCH_TARGETS=amd64
