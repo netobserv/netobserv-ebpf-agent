@@ -44,12 +44,12 @@ jobs:
         run: |
           docker load --input ./ebpf-agent.tar
           docker load --input ./ebpf-agent-bc.tar
-      - name: docker login to quay.io
-        uses: docker/login-action@v2
-        with:
-          username: ${{ env.WF_REGISTRY_USER }}
-          password: ${{ secrets.QUAY_SECRET }}
-          registry: quay.io
+      # - name: docker login to quay.io
+      #   uses: docker/login-action@v2
+      #   with:
+      #     username: ${{ env.WF_REGISTRY_USER }}
+      #     password: ${{ secrets.QUAY_SECRET }}
+      #     registry: quay.io
       - name: push images
         run: |
           DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
