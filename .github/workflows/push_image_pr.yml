@@ -61,14 +61,12 @@ jobs:
             var fs = require('fs');
             var issueNumber = Number(fs.readFileSync('./pr-id'));
             var shortSha = fs.readFileSync('./short-sha');
-            # var mainImage = fs.readFileSync('./name');
             var bcImage = fs.readFileSync('./bc-name');
             github.rest.issues.createComment({
               issue_number: issueNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `New images:
-            ${mainImage}
             ${bcImage}
 
             They will expire after two weeks.
