@@ -1,60 +1,76 @@
-name: Build and push PR image to quay.io
+name: Push PR image to quay.io
 on:
-  pull_request_target:
-    types: [labeled]
+  workflow_run:
+    workflows: ["Build PR image and upload artifact"]
+    types:
+      - completed
 
 env:
   WF_REGISTRY_USER: netobserv+github_ci
-  WF_REGISTRY: quay.io/netobserv
-  WF_IMAGE: netobserv-ebpf-agent
-  WF_BC_IMAGE: ebpf-bytecode
-  WF_ORG: netobserv
 
 jobs:
   push-pr-image:
-    if: ${{ github.event.label.name == 'ok-to-test' }}
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
     name: push PR image
     runs-on: ubuntu-latest
     steps:
-      - name: install make
-        run: sudo apt-get install make
-      - name: set up go 1.x
-        uses: actions/setup-go@v3
+      - name: download artifact
+        uses: actions/github-script@v3.1.0
         with:
-          go-version: '1.25'
-      - name: checkout
-        uses: actions/checkout@v3
-        with:
-          ref: "refs/pull/${{ github.event.number }}/merge"
+          script: |
+            var artifacts = await github.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter(artifact => artifact.name == "pr")[0];
+            var download = await github.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
+      - run: unzip artifact
+      - name: load images
+        run: |
+          docker load --input ./ebpf-agent.tar
+          docker load --input ./ebpf-agent-bc.tar
       - name: docker login to quay.io
         uses: docker/login-action@v2
         with:
           username: ${{ env.WF_REGISTRY_USER }}
           password: ${{ secrets.QUAY_SECRET }}
           registry: quay.io
-      - name: get short sha
-        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: build and push bytecode image
-        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE_ORG=${{ env.WF_ORG }} IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make bc-images
-      - name: build and push manifest with images
-        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE_ORG=${{ env.WF_ORG }} IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make images
+      - name: push images
+        run: |
+          DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
+          DOCKER_BUILDKIT=1 docker push $(cat ./name)
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
+            var fs = require('fs');
+            var issueNumber = Number(fs.readFileSync('./pr-id'));
+            var shortSha = fs.readFileSync('./short-sha');
+            var mainImage = fs.readFileSync('./name');
+            var bcImage = fs.readFileSync('./bc-name');
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `New images:
-            ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:${{ env.short_sha }}
-            ${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }}
+            ${mainImage}
+            ${bcImage}
 
-            These will expire after two weeks.
+            They will expire after two weeks.
 
             To deploy this build, run from the operator repo, assuming the operator is running:
             \`\`\`bash
-            USER=netobserv VERSION=${{ env.short_sha }} make set-agent-image
+            USER=netobserv VERSION=${shortSha} make set-agent-image
             \`\`\`
             `
             })

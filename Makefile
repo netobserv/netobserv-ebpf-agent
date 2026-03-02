@@ -247,5 +247,21 @@ extract-binaries: ## Extract all MULTIARCH_TARGETS binaries
 	mkdir -p release-assets; \
 	$(foreach target,$(MULTIARCH_TARGETS),$(call extract_target,$(target)))
 
+.PHONY: tar-image
+tar-image: MULTIARCH_TARGETS=amd64
+tar-image: image-build ## Build single arch (amd64) and save as a tar
+	$(OCI_BIN) tag $(IMAGE)-amd64 $(IMAGE)
+	mkdir -p ./out
+	$(OCI_BIN) save -o out/ebpf-agent.tar $(IMAGE)
+	echo $(IMAGE) > ./out/name
+
+.PHONY: tar-bc-image
+tar-bc-image: MULTIARCH_TARGETS=amd64
+tar-bc-image: bc-image-build ## Build single arch (amd64) bytecode and save as a tar
+	$(OCI_BIN) tag $(BC_IMAGE)-amd64 $(BC_IMAGE)
+	mkdir -p ./out
+	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_IMAGE)
+	echo $(BC_IMAGE) > ./out/bc-name
+
 include .mk/bc.mk
 include .mk/shortcuts.mk
