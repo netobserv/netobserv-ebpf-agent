@@ -42,7 +42,7 @@ jobs:
       # - run: unzip artifact
       - name: load images
         run: |
-          docker load --input ./ebpf-agent.tar
+          # docker load --input ./ebpf-agent.tar
           docker load --input ./ebpf-agent-bc.tar
       # - name: docker login to quay.io
       #   uses: docker/login-action@v2
@@ -52,8 +52,8 @@ jobs:
       #     registry: quay.io
       - name: push images
         run: |
+          # DOCKER_BUILDKIT=1 docker push $(cat ./name)
           DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
-          DOCKER_BUILDKIT=1 docker push $(cat ./name)
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
@@ -61,7 +61,7 @@ jobs:
             var fs = require('fs');
             var issueNumber = Number(fs.readFileSync('./pr-id'));
             var shortSha = fs.readFileSync('./short-sha');
-            var mainImage = fs.readFileSync('./name');
+            # var mainImage = fs.readFileSync('./name');
             var bcImage = fs.readFileSync('./bc-name');
             github.rest.issues.createComment({
               issue_number: issueNumber,
