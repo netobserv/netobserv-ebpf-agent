@@ -25,8 +25,8 @@ jobs:
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: build and save bytecode image
         run: OCI_BUILD_OPTS="--label quay.expires-after=2w" BC_IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make tar-bc-image
-      - name: build and save image
-        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make tar-image
+      # - name: build and save image
+      #   run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${{ env.short_sha }} CLEAN_BUILD=1 make tar-image
       - name: save PR number
         run: |
           echo ${{ github.event.number }} > ./out/pr-id
