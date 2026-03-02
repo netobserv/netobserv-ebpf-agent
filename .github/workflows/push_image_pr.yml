@@ -50,10 +50,10 @@ jobs:
       #     username: ${{ env.WF_REGISTRY_USER }}
       #     password: ${{ secrets.QUAY_SECRET }}
       #     registry: quay.io
-      - name: push images
-        run: |
-          # DOCKER_BUILDKIT=1 docker push $(cat ./name)
-          DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
+      # - name: push images
+      #   run: |
+      #     # DOCKER_BUILDKIT=1 docker push $(cat ./name)
+      #     DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
       - uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
