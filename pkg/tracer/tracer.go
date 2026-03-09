@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
@@ -70,6 +71,8 @@ const (
 	constEnableOpenSSLTracking          = "enable_openssl_tracking"
 	sslDataEventMap                     = "ssl_data_event_map"
 	dnsNameMap                          = "dns_name_map"
+	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
+	ringbufMinSize                      = 4096
 )
 
 const (
@@ -112,27 +115,11 @@ type FlowFetcher struct {
 }
 
 type FlowFetcherConfig struct {
-	EnableIngress                  bool
-	EnableEgress                   bool
-	IngressTCXAnchor               string
-	EgressTCXAnchor                string
-	Debug                          bool
-	Sampling                       int
-	CacheMaxSize                   int
-	EnablePktDrops                 bool
-	EnableDNSTracker               bool
-	DNSTrackerPort                 uint16
-	EnableRTT                      bool
-	EnableNetworkEventsMonitoring  bool
-	NetworkEventsMonitoringGroupID int
-	EnablePCA                      bool
-	EnablePktTranslation           bool
-	UseEbpfManager                 bool
-	BpfManBpfFSPath                string
-	EnableIPsecTracker             bool
-	FilterConfig                   []*FilterConfig
-	EnableOpenSSLTracking          bool
-	OpenSSLPath                    string
+	config.Agent
+	EnableIngress bool
+	EnableEgress  bool
+	Debug         bool
+	FilterConfig  []*FilterConfig
 }
 
 type variablesMapping struct {
@@ -155,7 +142,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		filter = NewFilter(cfg.FilterConfig)
 	}
 
-	if !cfg.UseEbpfManager {
+	if !cfg.EbpfProgramManagerMode {
 		if err := rlimit.RemoveMemlock(); err != nil {
 			log.WithError(err).
 				Warn("can't remove mem lock. The agent will not be able to start eBPF programs")
@@ -166,12 +153,23 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		}
 
 		// Resize maps according to user-provided configuration
-		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxSize)
-		sizeMapForFeature(spec, aggregatedFlowsDNS, cfg.EnableDNSTracker, cfg.CacheMaxSize)
-		sizeMapForFeature(spec, aggregatedFlowsNetworkEvents, cfg.EnableNetworkEventsMonitoring, cfg.CacheMaxSize)
-		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxSize)
-		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslation, cfg.CacheMaxSize)
-		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracker, cfg.CacheMaxSize)
+		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, aggregatedFlowsDNS, cfg.EnableDNSTracking, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, aggregatedFlowsNetworkEvents, cfg.EnableNetworkEventsMonitoring, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslationTracking, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracking, cfg.CacheMaxFlows)
+
+		// Minimize direct-flows ringbuf if unused
+		if !cfg.EnableFlowsRingbufFallback {
+			spec.Maps[directFlowsMap].MaxEntries = ringbufMinSize
+		}
+		// Minimize SSL maps if SSL is disabled
+		if !cfg.EnableOpenSSLTracking {
+			spec.Maps[sslDataEventMap].MaxEntries = ringbufMinSize
+		}
+		// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
+		spec.Maps[pcaRecordsMap].MaxEntries = ringbufMinSize
 
 		// remove pinning from all maps
 		for _, m := range []string{
@@ -215,17 +213,9 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 
 		log.Debugf("Deleting specs for PCA")
 		// Deleting specs for PCA
-		// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
-		spec.Maps[pcaRecordsMap].MaxEntries = 1
-
 		objects.TcxEgressPcaParse = nil
 		objects.TcIngressPcaParse = nil
 		delete(spec.Programs, constPcaEnable)
-
-		// Minimize SSL maps if SSL is disabled
-		if !cfg.EnableOpenSSLTracking {
-			spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
-		}
 
 		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
 			pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
@@ -267,7 +257,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			}
 		}
 	next:
-		if cfg.EnablePktTranslation {
+		if cfg.EnablePktTranslationTracking {
 			nfNatManIPLink, err = link.Kprobe("nf_nat_manip_pkt", objects.TrackNatManipPkt, nil)
 			if err != nil {
 				log.Warningf("failed to attach the BPF program to nat_manip kprobe: %v", err)
@@ -275,7 +265,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			}
 		}
 
-		if cfg.EnableIPsecTracker {
+		if cfg.EnableIPsecTracking {
 			xfrmInputKProbeLink, err = link.Kprobe("xfrm_input", objects.XfrmInputKprobe, nil)
 			if err != nil {
 				log.Warningf("failed to attach the BPF KProbe program to xfrm_input: %v", err)
@@ -471,8 +461,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		sslDataEventsReader:         sslDataEvents,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
-		egressTCXAnchor:             tcxAnchor(cfg.EgressTCXAnchor),
-		ingressTCXAnchor:            tcxAnchor(cfg.IngressTCXAnchor),
+		egressTCXAnchor:             tcxAnchor(cfg.TCXAttachAnchorEgress),
+		ingressTCXAnchor:            tcxAnchor(cfg.TCXAttachAnchorIngress),
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		pinDir:                      pinDir,
@@ -1071,7 +1061,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	}
 
 	flowMap := m.objects.AggregatedFlows
-	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxSize)
+	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxFlows)
 	var ids []ebpf.BpfFlowId
 	var id ebpf.BpfFlowId
 	var baseMetrics ebpf.BpfFlowMetrics
@@ -1100,7 +1090,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	}
 
 	// Reiterate on per-cpu maps
-	if m.config.EnableDNSTracker {
+	if m.config.EnableDNSTracking {
 		var dns []ebpf.BpfDnsMetrics
 		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
 			for _, entry := range dns {
@@ -1127,7 +1117,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		})
 		met.FlowBufferSizeGauge.WithBufferName("networkeventsmap").Set(float64(countNetEv))
 	}
-	if m.config.EnablePktTranslation {
+	if m.config.EnablePktTranslationTracking {
 		var xlat []ebpf.BpfXlatMetrics
 		countXlat := lookupAndDeletePerCPUMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
 			for _, entry := range xlat {
@@ -1136,7 +1126,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		})
 		met.FlowBufferSizeGauge.WithBufferName("xlatmap").Set(float64(countXlat))
 	}
-	if m.config.EnableRTT || m.config.EnableIPsecTracker {
+	if m.config.EnableRTT || m.config.EnableIPsecTracking {
 		var addit []ebpf.BpfAdditionalMetrics
 		countAddit := lookupAndDeletePerCPUMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
 			for _, entry := range addit {
@@ -1186,7 +1176,8 @@ func lookupAndDeletePerCPUMap(
 func (m *FlowFetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
 	globalCounters := map[ebpf.BpfGlobalCountersKeyT]prometheus.Counter{
-		ebpf.BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED:               met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
+		ebpf.BpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotCreateFlowsHashMap"),
+		ebpf.BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
 		ebpf.BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
 		ebpf.BpfGlobalCountersKeyTFILTER_REJECT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterReject"),
 		ebpf.BpfGlobalCountersKeyTFILTER_ACCEPT:                       met.FilteredFlowsCounter.WithSourceAndReason("flow-filtering", "FilterAccept"),
@@ -1667,6 +1658,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
 	delete(spec.Programs, constEnablePktTranslation)
 	delete(spec.Programs, constEnableIPsec)
+	delete(spec.Programs, constEnableDirectFlowRingbuf)
 	delete(spec.Programs, constEnableOpenSSLTracking)
 	delete(spec.Programs, dnsNameMap)
 
@@ -1725,7 +1717,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		egressFilters:            map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		ingressFilters:           map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		qdiscs:                   map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
-		cacheMaxSize:             cfg.CacheMaxSize,
+		cacheMaxSize:             cfg.CacheMaxFlows,
 		enableIngress:            cfg.EnableIngress,
 		enableEgress:             cfg.EnableEgress,
 		egressTCXLink:            map[ifaces.InterfaceKey]link.Link{},
@@ -2122,10 +2114,10 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	}
 	enableDNSTracking := 0
 	dnsTrackerPort := uint16(dnsDefaultPort)
-	if cfg.EnableDNSTracker {
+	if cfg.EnableDNSTracking {
 		enableDNSTracking = 1
-		if cfg.DNSTrackerPort != 0 {
-			dnsTrackerPort = cfg.DNSTrackerPort
+		if cfg.DNSTrackingPort != 0 {
+			dnsTrackerPort = cfg.DNSTrackingPort
 		}
 	}
 	if enableDNSTracking == 0 {
@@ -2149,11 +2141,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
 	}
 	enablePktTranslation := 0
-	if cfg.EnablePktTranslation {
+	if cfg.EnablePktTranslationTracking {
 		enablePktTranslation = 1
 	}
 	enableIPsec := 0
-	if cfg.EnableIPsecTracker {
+	if cfg.EnableIPsecTracking {
 		enableIPsec = 1
 	}
 	if enableIPsec == 0 {
@@ -2161,6 +2153,10 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		spec.Maps[ipsecOutputMap].MaxEntries = 1
 	}
 
+	enableDirectFlowRingbuf := 0
+	if cfg.EnableFlowsRingbufFallback {
+		enableDirectFlowRingbuf = 1
+	}
 	enableOpenSSLTracking := 0
 	if cfg.EnableOpenSSLTracking {
 		enableOpenSSLTracking = 1
@@ -2178,6 +2174,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
 		{constEnablePktTranslation, uint8(enablePktTranslation)},
 		{constEnableIPsec, uint8(enableIPsec)},
+		{constEnableDirectFlowRingbuf, uint8(enableDirectFlowRingbuf)},
 		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
 	}
 

@@ -241,7 +241,8 @@ typedef struct dns_flow_id_t {
 
 // Enum to define global counters keys and share it with userspace
 typedef enum global_counters_key_t {
-    HASHMAP_FLOWS_DROPPED,
+    HASHMAP_FAIL_UPDATE_FLOW,
+    HASHMAP_FAIL_CREATE_FLOW,
     HASHMAP_FAIL_UPDATE_DNS,
     FILTER_REJECT,
     FILTER_ACCEPT,

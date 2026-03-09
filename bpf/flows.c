@@ -208,9 +208,6 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
         long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {
-            if (trace_messages && ret != -EEXIST) {
-                bpf_printk("error adding flow %d\n", ret);
-            }
             if (ret == -EEXIST) {
                 flow_metrics *aggregate_flow =
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
@@ -222,9 +219,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                         bpf_printk("failed to update an exising flow\n");
                     }
                     // Update global counter for hashmap update errors
-                    increase_counter(HASHMAP_FLOWS_DROPPED);
+                    increase_counter(HASHMAP_FAIL_UPDATE_FLOW);
                 }
-            } else {
+            } else if (enable_directflows_ringbuf > 0) {
                 // usually error -16 (-EBUSY) or -7 (E2BIG) is printed here.
                 // In this case, we send the single-packet flow via ringbuffer as in the worst case we can have
                 // a repeated INTERSECTION of flows (different flows aggregating different packets),
@@ -242,6 +239,12 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 record->id = id;
                 record->metrics = new_flow;
                 bpf_ringbuf_submit(record, 0);
+            } else {
+                if (trace_messages) {
+                    bpf_printk("error adding flow %d\n", ret);
+                }
+                // Update global counter for hashmap create errors
+                increase_counter(HASHMAP_FAIL_CREATE_FLOW);
             }
         }
     }
