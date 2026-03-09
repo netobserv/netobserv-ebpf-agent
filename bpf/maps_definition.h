@@ -6,7 +6,7 @@
 // Common Ringbuffer as a conduit for ingress/egress flows to userspace
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
+    __uint(max_entries, 1 << 24); // 16MB
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } direct_flows SEC(".maps");
 
@@ -149,7 +149,7 @@ struct {
 // Ringbuf for SSL data events
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 27); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
+    __uint(max_entries, 1 << 14); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ssl_data_event_map SEC(".maps");
 
