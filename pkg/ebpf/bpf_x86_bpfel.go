@@ -156,17 +156,18 @@ type BpfFlowRecordT struct {
 type BpfGlobalCountersKeyT uint32
 
 const (
-	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED               BpfGlobalCountersKeyT = 0
-	BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS             BpfGlobalCountersKeyT = 1
-	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 2
-	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 3
-	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 4
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 5
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 6
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 7
-	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 8
-	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 9
-	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 10
+	BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW            BpfGlobalCountersKeyT = 0
+	BpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW            BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS             BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 4
+	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 5
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 6
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 7
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 9
+	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 10
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 11
 )
 
 type BpfNetworkEventsMetrics BpfNetworkEventsMetricsT
@@ -325,6 +326,7 @@ type BpfMapSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfVariableSpecs struct {
 	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
+	EnableDirectflowsRingbuf       *ebpf.VariableSpec `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
 	EnableIpsec                    *ebpf.VariableSpec `ebpf:"enable_ipsec"`
@@ -408,6 +410,7 @@ func (m *BpfMaps) Close() error {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfVariables struct {
 	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
+	EnableDirectflowsRingbuf       *ebpf.Variable `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
 	EnableIpsec                    *ebpf.Variable `ebpf:"enable_ipsec"`
