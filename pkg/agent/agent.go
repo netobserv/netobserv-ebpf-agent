@@ -161,26 +161,11 @@ func FlowsAgent(cfg *config.Agent) (*Flows, error) {
 	}
 
 	ebpfConfig := &tracer.FlowFetcherConfig{
-		EnableIngress:                  ingress,
-		EnableEgress:                   egress,
-		IngressTCXAnchor:               cfg.TCXAttachAnchorIngress,
-		EgressTCXAnchor:                cfg.TCXAttachAnchorEgress,
-		Debug:                          debug,
-		Sampling:                       cfg.Sampling,
-		CacheMaxSize:                   cfg.CacheMaxFlows,
-		EnablePktDrops:                 cfg.EnablePktDrops,
-		EnableDNSTracker:               cfg.EnableDNSTracking,
-		DNSTrackerPort:                 cfg.DNSTrackingPort,
-		EnableRTT:                      cfg.EnableRTT,
-		EnableNetworkEventsMonitoring:  cfg.EnableNetworkEventsMonitoring,
-		NetworkEventsMonitoringGroupID: cfg.NetworkEventsMonitoringGroupID,
-		EnablePktTranslation:           cfg.EnablePktTranslationTracking,
-		UseEbpfManager:                 cfg.EbpfProgramManagerMode,
-		BpfManBpfFSPath:                cfg.BpfManBpfFSPath,
-		EnableIPsecTracker:             cfg.EnableIPsecTracking,
-		FilterConfig:                   filterRules,
-		EnableOpenSSLTracking:          cfg.EnableOpenSSLTracking,
-		OpenSSLPath:                    cfg.OpenSSLPath,
+		Agent:         *cfg,
+		EnableIngress: ingress,
+		EnableEgress:  egress,
+		Debug:         debug,
+		FilterConfig:  filterRules,
 	}
 
 	fetcher, err := tracer.NewFlowFetcher(ebpfConfig, m)
@@ -211,12 +196,20 @@ func flowsAgent(
 	samplingGauge.Set(float64(cfg.Sampling))
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.StaleEntriesEvictTimeout, m, s, cfg.EnableUDNMapping)
-	rbTracer := flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
+	var rbTracer *flow.RingBufTracer
+	if cfg.EnableFlowsRingbufFallback {
+		rbTracer = flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
+	}
 	var rbSSLTracer *flow.RingBufTracer
 	if cfg.EnableOpenSSLTracking {
 		rbSSLTracer = flow.NewSSLRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
 	}
-	accounter := flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.EnableUDNMapping)
+
+	// Accounter is used alongside with either rbTracer or rbSSLTracer
+	var accounter *flow.Accounter
+	if rbTracer != nil || rbSSLTracer != nil {
+		accounter = flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.EnableUDNMapping)
+	}
 	limiter := flow.NewCapacityLimiter(m)
 
 	informer := createInformer(cfg, m)
@@ -402,38 +395,46 @@ func (f *Flows) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 	}
 	alog.Debug("connecting flows processing graph")
 	mapTracer := node.AsStart(f.mapTracer.TraceLoop(ctx, f.cfg.ForceGC))
-	rbTracer := node.AsStart(f.rbTracer.TraceLoop(ctx))
-	var rbSSLTracer *node.Start[*model.RawRecord]
-	if f.cfg.EnableOpenSSLTracking {
+	var rbTracer, rbSSLTracer *node.Start[*model.RawRecord]
+	if f.rbTracer != nil {
+		rbTracer = node.AsStart(f.rbTracer.TraceLoop(ctx))
+	}
+	if f.rbSSLTracer != nil {
 		rbSSLTracer = node.AsStart(f.rbSSLTracer.TraceLoop(ctx))
 	}
 
-	accounter := node.AsMiddle(f.accounter.Account,
-		node.ChannelBufferLen(f.cfg.BuffersLength))
+	var accounter *node.Middle[*model.RawRecord, []*model.Record]
+	if f.accounter != nil {
+		accounter = node.AsMiddle(f.accounter.Account, node.ChannelBufferLen(f.cfg.BuffersLength))
+	}
 
-	limiter := node.AsMiddle(f.limiter.Limit,
-		node.ChannelBufferLen(f.cfg.BuffersLength))
+	limiter := node.AsMiddle(f.limiter.Limit, node.ChannelBufferLen(f.cfg.BuffersLength))
 
 	ebl := f.cfg.ExporterBufferLength
 	if ebl == 0 {
 		ebl = f.cfg.BuffersLength
 	}
 
-	export := node.AsTerminal(f.exporter,
-		node.ChannelBufferLen(ebl))
+	export := node.AsTerminal(f.exporter, node.ChannelBufferLen(ebl))
 
-	rbTracer.SendsTo(accounter)
-	if rbSSLTracer != nil {
+	if rbTracer != nil && accounter != nil {
+		rbTracer.SendsTo(accounter)
+	}
+	if rbSSLTracer != nil && accounter != nil {
 		rbSSLTracer.SendsTo(accounter)
 	}
 
 	mapTracer.SendsTo(limiter)
-	accounter.SendsTo(limiter)
+	if accounter != nil {
+		accounter.SendsTo(limiter)
+	}
 	limiter.SendsTo(export)
 
 	alog.Debug("starting graph")
 	mapTracer.Start()
-	rbTracer.Start()
+	if rbTracer != nil {
+		rbTracer.Start()
+	}
 	if rbSSLTracer != nil {
 		rbSSLTracer.Start()
 	}
