@@ -42,7 +42,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:latest
+          image: nginx:1.29.4-alpine
 ---
 # Used for single-packet test
 apiVersion: v1
