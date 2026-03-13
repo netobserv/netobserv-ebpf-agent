@@ -45,11 +45,12 @@ github.com/cenkalti/rpc2/jsonrpc
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/cilium/ebpf v0.20.0
+# github.com/cilium/ebpf v0.21.0
 ## explicit; go 1.24.0
 github.com/cilium/ebpf
 github.com/cilium/ebpf/asm
 github.com/cilium/ebpf/btf
+github.com/cilium/ebpf/features
 github.com/cilium/ebpf/internal
 github.com/cilium/ebpf/internal/efw
 github.com/cilium/ebpf/internal/epoll
