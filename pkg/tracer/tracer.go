@@ -1164,7 +1164,10 @@ func lookupAndDeletePerCPUMap(
 		}
 		flow, found := flows[id]
 		if !found {
-			flow = model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
+			// Skip orphaned supplementary metrics that don't have a corresponding main flow.
+			// This can happen when the main flow was evicted or filtered out but supplementary
+			// metrics (DNS, IPsec, RTT, etc.) still exist in their per-CPU maps.
+			continue
 		}
 		accumulator(&flow)
 		flows[id] = flow
