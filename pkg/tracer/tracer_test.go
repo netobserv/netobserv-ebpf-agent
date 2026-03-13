@@ -28,8 +28,7 @@ func (m *mockMap) LookupAndDelete(id *ebpf.BpfFlowId, receiver interface{}) erro
 		return nil
 	}
 	// Copy the value to the receiver
-	switch v := receiver.(type) {
-	case *[]ebpf.BpfAdditionalMetrics:
+	if v, ok := receiver.(*[]ebpf.BpfAdditionalMetrics); ok {
 		*v = val.([]ebpf.BpfAdditionalMetrics)
 	}
 	delete(m.data, *id)
@@ -41,7 +40,7 @@ type mockIterator struct {
 	index int
 }
 
-func (i *mockIterator) Next(id *ebpf.BpfFlowId, value interface{}) bool {
+func (i *mockIterator) Next(id *ebpf.BpfFlowId, _ interface{}) bool {
 	i.index++
 	if i.index >= len(i.keys) {
 		return false
