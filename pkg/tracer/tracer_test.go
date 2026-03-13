@@ -81,20 +81,20 @@ func TestLookupAndDeletePerCPUMapOrphanedMetrics(t *testing.T) {
 		data: map[ebpf.BpfFlowId]interface{}{
 			mainFlowID: []ebpf.BpfAdditionalMetrics{
 				{
-					FlowRtt:            100,
-					IpsecEncrypted:     true,
-					IpsecEncryptedRet:  0,
-					StartMonoTimeTs:    1000,
-					EndMonoTimeTs:      2000,
+					FlowRtt:           100,
+					IpsecEncrypted:    true,
+					IpsecEncryptedRet: 0,
+					StartMonoTimeTs:   1000,
+					EndMonoTimeTs:     2000,
 				},
 			},
 			orphanedFlowID: []ebpf.BpfAdditionalMetrics{
 				{
-					FlowRtt:            200,
-					IpsecEncrypted:     true,
-					IpsecEncryptedRet:  0,
-					StartMonoTimeTs:    1000,
-					EndMonoTimeTs:      2000,
+					FlowRtt:           200,
+					IpsecEncrypted:    true,
+					IpsecEncryptedRet: 0,
+					StartMonoTimeTs:   1000,
+					EndMonoTimeTs:     2000,
 				},
 			},
 		},
@@ -144,20 +144,20 @@ func TestLookupAndDeletePerCPUMapOrphanedMetrics(t *testing.T) {
 	additionalMetricsMap.data = map[ebpf.BpfFlowId]interface{}{
 		mainFlowID: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowRtt:            100,
-				IpsecEncrypted:     true,
-				IpsecEncryptedRet:  0,
-				StartMonoTimeTs:    1000,
-				EndMonoTimeTs:      2000,
+				FlowRtt:           100,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
+				StartMonoTimeTs:   1000,
+				EndMonoTimeTs:     2000,
 			},
 		},
 		orphanedFlowID: []ebpf.BpfAdditionalMetrics{
 			{
-				FlowRtt:            200,
-				IpsecEncrypted:     true,
-				IpsecEncryptedRet:  0,
-				StartMonoTimeTs:    1000,
-				EndMonoTimeTs:      2000,
+				FlowRtt:           200,
+				IpsecEncrypted:    true,
+				IpsecEncryptedRet: 0,
+				StartMonoTimeTs:   1000,
+				EndMonoTimeTs:     2000,
 			},
 		},
 	}
