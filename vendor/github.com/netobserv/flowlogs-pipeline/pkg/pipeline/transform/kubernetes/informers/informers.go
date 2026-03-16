@@ -26,7 +26,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -42,10 +42,9 @@ import (
 )
 
 const (
-	kubeConfigEnvVariable = "KUBECONFIG"
-	syncTime              = 10 * time.Minute
-	IndexCustom           = "byCustomKey"
-	IndexIP               = "byIP"
+	syncTime    = 10 * time.Minute
+	IndexCustom = "byCustomKey"
+	IndexIP     = "byIP"
 )
 
 var (
@@ -513,7 +512,7 @@ func (k *Informers) InitFromConfig(kubeconfig string, infConfig *Config, opMetri
 	k.stopChan = make(chan struct{})
 	k.mdStopChan = make(chan struct{})
 
-	kconf, err := utils.LoadK8sConfig(kubeconfig)
+	kconf, err := k8sutils.LoadK8sConfig(kubeconfig)
 	if err != nil {
 		return err
 	}

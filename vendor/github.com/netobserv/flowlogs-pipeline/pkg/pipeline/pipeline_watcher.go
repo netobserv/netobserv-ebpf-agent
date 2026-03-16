@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,7 +23,7 @@ type pipelineConfigWatcher struct {
 }
 
 func newPipelineConfigWatcher(cfg config.DynamicParameters, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
-	config, err := utils.LoadK8sConfig(cfg.KubeConfigPath)
+	config, err := k8sutils.LoadK8sConfig(cfg.KubeConfigPath)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/write"
-	k8sutils "github.com/netobserv/flowlogs-pipeline/pkg/utils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"

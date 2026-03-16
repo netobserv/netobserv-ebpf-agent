@@ -72,6 +72,7 @@ func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (
 		tlsCfg := &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.NoClientCert,
+			MinVersion:   tls.VersionTLS13,
 		}
 		if cfg.ClientCAPath != "" {
 			// mTLS
