@@ -139,10 +139,10 @@ func (c *ingestIPFIX) initCollectorListener(ctx context.Context) {
 				if len(c.Mapping) > 0 {
 					sNF.Config = &producer.ProducerConfig{
 						IPFIX: producer.IPFIXProducerConfig{
-							Mapping: c.Mapping,
+							Mapping: convertAPIMapping(c.Mapping),
 						},
 						NetFlowV9: producer.NetFlowV9ProducerConfig{
-							Mapping: c.Mapping,
+							Mapping: convertAPIMapping(c.Mapping),
 						},
 					}
 				}
@@ -167,6 +167,20 @@ func (c *ingestIPFIX) initCollectorListener(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+func convertAPIMapping(in []api.NetFlowMapField) []producer.NetFlowMapField {
+	var out []producer.NetFlowMapField
+	for _, m := range in {
+		out = append(out, producer.NetFlowMapField{
+			PenProvided: m.PenProvided,
+			Type:        m.Type,
+			Pen:         m.Pen,
+			Destination: m.Destination,
+			Endian:      producer.EndianType(m.Endian),
+		})
+	}
+	return out
 }
 
 func (c *ingestIPFIX) processLogLines(out chan<- config.GenericMap) {
