@@ -29,7 +29,7 @@ func TestConversions(t *testing.T) {
 		expected *config.GenericMap
 	}{
 		{
-			name: "TCP record",
+			name: "TCP record with TLS",
 			flow: &model.Record{
 				ID: ebpf.BpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
@@ -40,15 +40,18 @@ func TestConversions(t *testing.T) {
 				},
 				Metrics: model.BpfFlowContent{
 					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
-						EthProtocol: 2048,
-						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
-						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-						Bytes:       456,
-						Packets:     123,
-						Flags:       0x100,
-						Dscp:        64,
-						Sampling:    1,
-						SslVersion:  0x0303,
+						EthProtocol:    2048,
+						SrcMac:         model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
+						DstMac:         model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+						Bytes:          456,
+						Packets:        123,
+						Flags:          0x100,
+						Dscp:           64,
+						Sampling:       1,
+						SslVersion:     0x0304,
+						TlsTypes:       0x22,
+						TlsCipherSuite: 0x1302,
+						TlsKeyShare:    0x1d,
 					},
 					DNSMetrics:        &ebpf.BpfDnsMetrics{Errno: 0},
 					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
@@ -80,7 +83,10 @@ func TestConversions(t *testing.T) {
 				"AgentIP":         "10.11.12.13",
 				"IPSecRetCode":    0,
 				"IPSecStatus":     "success",
-				"TLSVersion":      "TLS 1.2",
+				"TLSVersion":      "TLS 1.3",
+				"TLSCipherSuite":  "TLS_AES_256_GCM_SHA384",
+				"TLSCurve":        "X25519",
+				"TLSTypes":        []string{"ServerHello", "AppData"},
 			},
 		},
 		{

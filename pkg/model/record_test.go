@@ -52,6 +52,11 @@ func TestRecordBinaryEncoding(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
+		0x03, 0x03, // u16 ssl_version
+		0x00, 0x00, // u16 tls_cipher_suite
+		0x00, 0x00, // u16 tls_key_share
+		0x21,                   // u8 tls_types
+		0x00,                   // u8 misc_flags
 		0x00, 0x00, 0x00, 0x00, // 4 bytes padding
 	}))
 	require.NoError(t, err)
@@ -83,6 +88,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			NbObservedIntf:     2,
 			ObservedIntf:       [MaxObservedInterfaces]uint32{7, 8},
 			ObservedDirection:  [MaxObservedInterfaces]uint8{1, 0},
+			SslVersion:         0x0303,
+			TlsTypes:           0x21,
 		},
 	}, *fr)
 	// assert that IP addresses are interpreted as IPv4 addresses

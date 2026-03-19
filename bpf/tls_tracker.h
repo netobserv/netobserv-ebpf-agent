@@ -271,6 +271,9 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
 // Extract TLS info
 static inline int track_tls(struct __sk_buff *skb, u8 proto, void *l4_hdr, u8 flags,
                             tls_info *tls) {
+    if (enable_tls_usage_tracking == 0) {
+        return TLSTRACKER_UNKNOWN;
+    }
     if (proto == IPPROTO_TCP && flags & 0x10) {
         // TCP ACK
         return track_tls_tcp(skb, l4_hdr, tls);
