@@ -178,10 +178,11 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
                 ext_read++;
             } else if (ext_hdr.type == 0x0033) {
                 // Key Share Extension (TLS 1.3)
-    // The Server Hello Key Share contains:
-    // Group (2 bytes) + Key Exchange Length (2 bytes) + Key Exchange Data
+                // The Server Hello Key Share contains:
+                // Group (2 bytes) + Key Exchange Length (2 bytes) + Key Exchange Data
                 u16 key_share;
-                if (bpf_skb_load_bytes(skb, offset + ext_offset, &key_share, sizeof(key_share)) < 0) {
+                if (bpf_skb_load_bytes(skb, offset + ext_offset, &key_share, sizeof(key_share)) <
+                    0) {
                     return TLSTRACKER_UNKNOWN;
                 }
                 tls->key_share = bpf_ntohs(key_share);
