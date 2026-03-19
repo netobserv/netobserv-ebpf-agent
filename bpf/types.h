@@ -120,6 +120,7 @@ typedef struct flow_metrics_t {
     u32 observed_intf[MAX_OBSERVED_INTERFACES];
     u16 ssl_version;
     u16 tls_cipher_suite;
+    u16 tls_key_share;
     u8 tls_types;
     u8 misc_flags;
 } flow_metrics;
@@ -229,8 +230,9 @@ typedef struct pkt_info_t {
 
 // Internal structure: TLS info.
 typedef struct tls_info_t {
-    u16 version;
+    u16 hello_version;
     u16 cipher_suite;
+    u16 key_share;
     u8 type;
 } tls_info;
 

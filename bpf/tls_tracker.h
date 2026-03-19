@@ -49,7 +49,6 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
     if (handshake_version < 0x0300 || handshake_version > 0x0303) {
         return TLSTRACKER_UNKNOWN;
     }
-    tls->version = handshake_version;
     tls->type = TLSTRACKER_BF_CLIENT_HELLO;
     if (handshake_version == 0x0303) {
         // Check extensions to discriminate 1.2 and 1.3
@@ -105,8 +104,8 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
                         return TLSTRACKER_UNKNOWN;
                     }
                     version = bpf_ntohs(version);
-                    if (version > tls->version) {
-                        tls->version = version;
+                    if (version > tls->hello_version) {
+                        tls->hello_version = version;
                     }
                     supportedversions_offset += 2;
                 }
@@ -116,6 +115,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
             ext_offset += ext_hdr.len;
         }
     }
+    tls->hello_version = handshake_version;
     return TLSTRACKER_MATCHED;
 }
 
@@ -131,7 +131,6 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
     if (handshake_version < 0x0300 || handshake_version > 0x0303) {
         return TLSTRACKER_UNKNOWN;
     }
-    tls->version = handshake_version;
     tls->type = TLSTRACKER_BF_SERVER_HELLO;
     if (handshake_version == 0x0303) {
         // Check extensions to discriminate 1.2 and 1.3
@@ -156,6 +155,7 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
         exts_len = bpf_ntohs(exts_len);
         offset += 2;
         u16 ext_offset = 0;
+        u8 ext_read = 0;
         // Read up to 30 extensions
         for (int i = 0; i < 30; i++) {
             if (ext_offset >= exts_len) {
@@ -174,13 +174,27 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
                 if (bpf_skb_load_bytes(skb, offset + ext_offset, &version, sizeof(version)) < 0) {
                     return TLSTRACKER_UNKNOWN;
                 }
-                tls->version = bpf_ntohs(version);
-                // Stop reading here
+                tls->hello_version = bpf_ntohs(version);
+                ext_read++;
+            } else if (ext_hdr.type == 0x0033) {
+                // Key Share Extension (TLS 1.3)
+    // The Server Hello Key Share contains:
+    // Group (2 bytes) + Key Exchange Length (2 bytes) + Key Exchange Data
+                u16 key_share;
+                if (bpf_skb_load_bytes(skb, offset + ext_offset, &key_share, sizeof(key_share)) < 0) {
+                    return TLSTRACKER_UNKNOWN;
+                }
+                tls->key_share = bpf_ntohs(key_share);
+                ext_read++;
+            }
+            if (ext_read == 2) {
+                // Return after 0x002b and 0x0033 are read
                 return TLSTRACKER_MATCHED;
             }
             ext_offset += ext_hdr.len;
         }
     }
+    tls->hello_version = handshake_version;
     return TLSTRACKER_MATCHED;
 }
 
@@ -234,7 +248,6 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
         case 0x0c:
         case 0x0e:
             // Still sounds like a valid handshake, assume it is
-            tls->version = rec.version;
             tls->type = TLSTRACKER_BF_OTHER_HANDSHAKE;
             return TLSTRACKER_MATCHED;
         }
@@ -242,15 +255,12 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
         return TLSTRACKER_UNKNOWN;
     }
     case CONTENT_TYPE_CHANGE_CIPHER:
-        tls->version = rec.version;
         tls->type = TLSTRACKER_BF_CHANGE_CIPHER;
         return TLSTRACKER_MATCHED;
     case CONTENT_TYPE_ALERT:
-        tls->version = rec.version;
         tls->type = TLSTRACKER_BF_ALERT;
         return TLSTRACKER_MATCHED;
     case CONTENT_TYPE_APP_DATA:
-        tls->version = rec.version;
         tls->type = TLSTRACKER_BF_APP_DATA;
         return TLSTRACKER_MATCHED;
     }

@@ -95,41 +95,6 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
                                                  tls_info *tls) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
     int maxReached = 0;
-    if (tls->version > 0 && aggregate_flow->ssl_version != tls->version) {
-        // Got a TLS packet with different version that previously known
-        if (aggregate_flow->tls_types & TLSTRACKER_BF_SERVER_HELLO ||
-            aggregate_flow->tls_types & TLSTRACKER_BF_CLIENT_HELLO) {
-            // Previously had client or server hello, which normally means version was well identified
-            if (aggregate_flow->ssl_version == 0 || aggregate_flow->ssl_version == 0xffff) {
-                // Previous version wasn't well identified, overwrite it
-                // TODO: remove next line
-                // bpf_printk("Overwrite 0xffff version with %d", tls->version);
-            } else if (tls->type == TLSTRACKER_BF_SERVER_HELLO ||
-                       tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
-                // Inconsistency: different client/server hello received with different versions
-                // TODO: remove next line
-                bpf_printk("Inconsistent TLS with several hellos: old version=%d, new version=%d",
-                           aggregate_flow->ssl_version, tls->version);
-                // } else {
-                //     // Ignoring version from non-hello, as it should be less accurate
-                //     // TODO: remove next line
-                //     bpf_printk("Ignoring non-hello version=%d", tls->version);
-            }
-        } else if (aggregate_flow->ssl_version == 0xffff ||
-                   tls->type == TLSTRACKER_BF_SERVER_HELLO ||
-                   tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
-            // Didn't have hello yet, now we do: overwrite the version, as it should be more accurate
-            // TODO: remove next line
-            bpf_printk("Overwriting version with more accurate one: old version=%d, new version=%d",
-                       aggregate_flow->ssl_version, tls->version);
-        } else {
-            // Haven't seen a hello at this point, and the versions mismatch; write the version even though it's probably still not accurate
-            // TODO: remove next line
-            bpf_printk("Inconsistent TLS with several non-hellos: old version=%d, new version=%d",
-                       aggregate_flow->ssl_version, tls->version);
-        }
-    }
-
     bpf_spin_lock(&aggregate_flow->lock);
     if (aggregate_flow->if_index_first_seen == if_index) {
         aggregate_flow->packets += 1;
@@ -138,32 +103,19 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         aggregate_flow->flags |= pkt->flags;
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
-        if (tls->version > 0 && aggregate_flow->ssl_version != tls->version) {
-            // Got a TLS packet with different version that previously known
-            if (aggregate_flow->tls_types & TLSTRACKER_BF_SERVER_HELLO ||
-                aggregate_flow->tls_types & TLSTRACKER_BF_CLIENT_HELLO) {
-                // Previously had client or server hello, which normally means version was well identified
-                if (aggregate_flow->ssl_version == 0 || aggregate_flow->ssl_version == 0xffff) {
-                    // Previous version wasn't well identified, overwrite it
-                    aggregate_flow->ssl_version = tls->version;
-                } else if (tls->type == TLSTRACKER_BF_SERVER_HELLO ||
-                           tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
-                    // Inconsistency: different client/server hello received with different versions
-                    aggregate_flow->misc_flags |= MISC_FLAGS_SSL_MISMATCH;
-                } // else: ignoring version from non-hello, as it should be less accurate
-            } else if (aggregate_flow->ssl_version == 0xffff ||
-                       tls->type == TLSTRACKER_BF_SERVER_HELLO ||
-                       tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
-                // Didn't have hello yet, now we do: overwrite the version, as it should be more accurate
-                aggregate_flow->ssl_version = tls->version;
+        if (tls->hello_version > 0 && aggregate_flow->ssl_version != tls->hello_version) {
+            if (aggregate_flow->ssl_version == 0) {
+                aggregate_flow->ssl_version = tls->hello_version;
             } else {
-                // Haven't seen a hello at this point, and the versions mismatch; write the version even though it's probably still not accurate
+                // Inconsistency: different client/server hello received with different versions
                 aggregate_flow->misc_flags |= MISC_FLAGS_SSL_MISMATCH;
-                aggregate_flow->ssl_version = tls->version;
             }
         }
         if (tls->cipher_suite > 0 && tls->type == TLSTRACKER_BF_SERVER_HELLO) {
             aggregate_flow->tls_cipher_suite = tls->cipher_suite;
+        }
+        if (tls->key_share > 0 && tls->type == TLSTRACKER_BF_SERVER_HELLO) {
+            aggregate_flow->tls_key_share = tls->key_share;
         }
         aggregate_flow->tls_types |= tls->type;
     } else if (if_index != 0) {
@@ -257,10 +209,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     tls_info tls;
     __builtin_memset(&tls, 0, sizeof(tls));
-    int tls_ret = track_tls(skb, pkt.id->transport_protocol, pkt.l4_hdr, pkt.flags, &tls);
-    if (tls_ret == TLSTRACKER_UNKNOWN) {
-        tls.version = 0xffff;
-    }
+    track_tls(skb, pkt.id->transport_protocol, pkt.l4_hdr, pkt.flags, &tls);
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
         update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction,
@@ -281,8 +230,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         new_flow.sampling = flow_sampling;
         __builtin_memcpy(new_flow.dst_mac, eth->h_dest, ETH_ALEN);
         __builtin_memcpy(new_flow.src_mac, eth->h_source, ETH_ALEN);
-        new_flow.ssl_version = tls.version;
+        new_flow.ssl_version = tls.hello_version;
         new_flow.tls_cipher_suite = tls.cipher_suite;
+        new_flow.tls_key_share = tls.key_share;
         new_flow.tls_types = tls.type;
 
         long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);

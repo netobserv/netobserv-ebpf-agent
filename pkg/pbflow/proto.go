@@ -71,6 +71,7 @@ func FlowToPB(fr *model.Record) *Record {
 		SslVersion:     uint32(fr.Metrics.SslVersion),
 		TlsTypes:       uint32(fr.Metrics.TlsTypes),
 		TlsCipherSuite: uint32(fr.Metrics.TlsCipherSuite),
+		TlsKeyShare:    uint32(fr.Metrics.TlsKeyShare),
 		SslMismatch:    fr.Metrics.HasSSLMismatch(),
 	}
 	if fr.Metrics.DNSMetrics != nil {
@@ -167,6 +168,7 @@ func PBToFlow(pb *Record) *model.Record {
 				SslVersion:     uint16(pb.SslVersion),
 				TlsTypes:       uint8(pb.TlsTypes),
 				TlsCipherSuite: uint16(pb.TlsCipherSuite),
+				TlsKeyShare:    uint16(pb.TlsKeyShare),
 			},
 			DNSMetrics: &ebpf.BpfDnsMetrics{
 				Id:      uint16(pb.DnsId),

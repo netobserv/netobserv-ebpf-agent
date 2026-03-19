@@ -231,18 +231,18 @@ func AllZeroIP(ip net.IP) bool {
 }
 
 func (r *BpfFlowContent) SSLVersionToString() string {
-	if r.SslVersion == 0 || r.SslVersion == 0xffff {
+	if r.SslVersion == 0 {
 		return ""
 	}
 	v := tls.VersionName(r.SslVersion)
-	if r.SslVersion == tls.VersionTLS12 && r.TlsTypes&TLSTrackerClientHello == 0 && r.TlsTypes&TLSTrackerServerHello == 0 {
-		// non-hello 1.3 are disguised as 1.2
-		v = v + " or " + tls.VersionName(tls.VersionTLS13)
-	}
 	if r.HasSSLMismatch() {
 		return "~ " + v
 	}
 	return v
+}
+
+func (r *BpfFlowContent) TLSTypesToStrings() []string {
+	return tlsTypesToStrings(r.TlsTypes)
 }
 
 func (r *BpfFlowContent) HasSSLMismatch() bool {
