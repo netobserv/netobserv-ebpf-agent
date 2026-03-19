@@ -95,6 +95,41 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
                                                  tls_info *tls) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
     int maxReached = 0;
+    if (tls->version > 0 && aggregate_flow->ssl_version != tls->version) {
+        // Got a TLS packet with different version that previously known
+        if (aggregate_flow->tls_types & TLSTRACKER_BF_SERVER_HELLO ||
+            aggregate_flow->tls_types & TLSTRACKER_BF_CLIENT_HELLO) {
+            // Previously had client or server hello, which normally means version was well identified
+            if (aggregate_flow->ssl_version == 0 || aggregate_flow->ssl_version == 0xffff) {
+                // Previous version wasn't well identified, overwrite it
+                // TODO: remove next line
+                // bpf_printk("Overwrite 0xffff version with %d", tls->version);
+            } else if (tls->type == TLSTRACKER_BF_SERVER_HELLO ||
+                       tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+                // Inconsistency: different client/server hello received with different versions
+                // TODO: remove next line
+                bpf_printk("Inconsistent TLS with several hellos: old version=%d, new version=%d",
+                           aggregate_flow->ssl_version, tls->version);
+                // } else {
+                //     // Ignoring version from non-hello, as it should be less accurate
+                //     // TODO: remove next line
+                //     bpf_printk("Ignoring non-hello version=%d", tls->version);
+            }
+        } else if (aggregate_flow->ssl_version == 0xffff ||
+                   tls->type == TLSTRACKER_BF_SERVER_HELLO ||
+                   tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+            // Didn't have hello yet, now we do: overwrite the version, as it should be more accurate
+            // TODO: remove next line
+            bpf_printk("Overwriting version with more accurate one: old version=%d, new version=%d",
+                       aggregate_flow->ssl_version, tls->version);
+        } else {
+            // Haven't seen a hello at this point, and the versions mismatch; write the version even though it's probably still not accurate
+            // TODO: remove next line
+            bpf_printk("Inconsistent TLS with several non-hellos: old version=%d, new version=%d",
+                       aggregate_flow->ssl_version, tls->version);
+        }
+    }
+
     bpf_spin_lock(&aggregate_flow->lock);
     if (aggregate_flow->if_index_first_seen == if_index) {
         aggregate_flow->packets += 1;
@@ -103,12 +138,27 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         aggregate_flow->flags |= pkt->flags;
         aggregate_flow->dscp = pkt->dscp;
         aggregate_flow->sampling = sampling;
-        // TODO: if we got NOTLS while we previously had TLS, set mismatch flag??
-        // TODO: merge, keeping more accurate data first; e.g. in 1.3 ServerHello is correctly identified while AppData is disguised as 1.2
         if (tls->version > 0 && aggregate_flow->ssl_version != tls->version) {
-            if (aggregate_flow->ssl_version == 0xff ||
-                tls->type == TLSTRACKER_BF_SERVER_HELLO ||
-                tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+            // Got a TLS packet with different version that previously known
+            if (aggregate_flow->tls_types & TLSTRACKER_BF_SERVER_HELLO ||
+                aggregate_flow->tls_types & TLSTRACKER_BF_CLIENT_HELLO) {
+                // Previously had client or server hello, which normally means version was well identified
+                if (aggregate_flow->ssl_version == 0 || aggregate_flow->ssl_version == 0xffff) {
+                    // Previous version wasn't well identified, overwrite it
+                    aggregate_flow->ssl_version = tls->version;
+                } else if (tls->type == TLSTRACKER_BF_SERVER_HELLO ||
+                           tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+                    // Inconsistency: different client/server hello received with different versions
+                    aggregate_flow->misc_flags |= MISC_FLAGS_SSL_MISMATCH;
+                } // else: ignoring version from non-hello, as it should be less accurate
+            } else if (aggregate_flow->ssl_version == 0xffff ||
+                       tls->type == TLSTRACKER_BF_SERVER_HELLO ||
+                       tls->type == TLSTRACKER_BF_CLIENT_HELLO) {
+                // Didn't have hello yet, now we do: overwrite the version, as it should be more accurate
+                aggregate_flow->ssl_version = tls->version;
+            } else {
+                // Haven't seen a hello at this point, and the versions mismatch; write the version even though it's probably still not accurate
+                aggregate_flow->misc_flags |= MISC_FLAGS_SSL_MISMATCH;
                 aggregate_flow->ssl_version = tls->version;
             }
         }

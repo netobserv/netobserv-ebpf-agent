@@ -92,14 +92,16 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
             ext_offset += 4;
             if (ext_hdr.type == 0x002b) {
                 // Supported Versions
-                u16 supportedversions_offset = 1;   // skip supported versions length (u8), it's always ext_hdr.len-1
+                u16 supportedversions_offset =
+                    1; // skip supported versions length (u8), it's always ext_hdr.len-1
                 // Read up to 5 versions
                 for (int j = 0; j < 5; j++) {
                     if (supportedversions_offset >= ext_hdr.len) {
                         break;
                     }
                     u16 version;
-                    if (bpf_skb_load_bytes(skb, offset + ext_offset + supportedversions_offset, &version, sizeof(version)) < 0) {
+                    if (bpf_skb_load_bytes(skb, offset + ext_offset + supportedversions_offset,
+                                           &version, sizeof(version)) < 0) {
                         return TLSTRACKER_UNKNOWN;
                     }
                     version = bpf_ntohs(version);
@@ -146,7 +148,7 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
             return TLSTRACKER_UNKNOWN;
         }
         tls->cipher_suite = bpf_ntohs(tls->cipher_suite);
-        offset += 3;        // Skip also compression (1B)
+        offset += 3; // Skip also compression (1B)
         // Read extensions
         if (bpf_skb_load_bytes(skb, offset, &exts_len, sizeof(exts_len)) < 0) {
             return TLSTRACKER_UNKNOWN;
@@ -256,7 +258,8 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
 }
 
 // Extract TLS info
-static inline int track_tls(struct __sk_buff *skb, u8 proto, void *l4_hdr, u8 flags, tls_info *tls) {
+static inline int track_tls(struct __sk_buff *skb, u8 proto, void *l4_hdr, u8 flags,
+                            tls_info *tls) {
     if (proto == IPPROTO_TCP && flags & 0x10) {
         // TCP ACK
         return track_tls_tcp(skb, l4_hdr, tls);

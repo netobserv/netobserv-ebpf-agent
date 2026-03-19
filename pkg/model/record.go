@@ -27,7 +27,9 @@ const (
 	MaxNetworkEvents         = 4
 	MaxObservedInterfaces    = 6
 
-	MiscFlagsSSLMismatch = 0x01
+	MiscFlagsSSLMismatch  = 0x01
+	TLSTrackerClientHello = 0x01
+	TLSTrackerServerHello = 0x02
 )
 
 var recordLog = logrus.WithField("component", "model")
@@ -229,12 +231,14 @@ func AllZeroIP(ip net.IP) bool {
 }
 
 func (r *BpfFlowContent) SSLVersionToString() string {
-	if r.SslVersion == 0 {
+	if r.SslVersion == 0 || r.SslVersion == 0xffff {
 		return ""
-	} else if r.SslVersion == 0xffff {
-		return "unknown"
 	}
 	v := tls.VersionName(r.SslVersion)
+	if r.SslVersion == tls.VersionTLS12 && r.TlsTypes&TLSTrackerClientHello == 0 && r.TlsTypes&TLSTrackerServerHello == 0 {
+		// non-hello 1.3 are disguised as 1.2
+		v = v + " or " + tls.VersionName(tls.VersionTLS13)
+	}
 	if r.HasSSLMismatch() {
 		return "~ " + v
 	}
