@@ -26,10 +26,7 @@ const (
 	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
 	MaxObservedInterfaces    = 6
-
-	MiscFlagsSSLMismatch  = 0x01
-	TLSTrackerClientHello = 0x01
-	TLSTrackerServerHello = 0x02
+	MiscFlagsSSLMismatch     = 0x01
 )
 
 var recordLog = logrus.WithField("component", "model")
