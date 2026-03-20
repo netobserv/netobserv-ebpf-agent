@@ -1,6 +1,7 @@
 package model
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ const (
 	NetworkEventsMaxEventsMD = 8
 	MaxNetworkEvents         = 4
 	MaxObservedInterfaces    = 6
+	MiscFlagsSSLMismatch     = 0x01
 )
 
 var recordLog = logrus.WithField("component", "model")
@@ -223,4 +225,23 @@ func AllZeroIP(ip net.IP) bool {
 		return true
 	}
 	return false
+}
+
+func (r *BpfFlowContent) SSLVersionToString() string {
+	if r.SslVersion == 0 {
+		return ""
+	}
+	v := tls.VersionName(r.SslVersion)
+	if r.HasSSLMismatch() {
+		return "~ " + v
+	}
+	return v
+}
+
+func (r *BpfFlowContent) TLSTypesToStrings() []string {
+	return tlsTypesToStrings(r.TlsTypes)
+}
+
+func (r *BpfFlowContent) HasSSLMismatch() bool {
+	return r.MiscFlags&MiscFlagsSSLMismatch > 0
 }
