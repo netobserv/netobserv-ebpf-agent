@@ -318,4 +318,16 @@ int tcx_egress_flow_parse(struct __sk_buff *skb) {
     return TCX_NEXT;
 }
 
+SEC("netkit/primary")
+int netkit_primary_flow_parse(struct __sk_buff *skb) {
+    flow_monitor(skb, EGRESS);
+    return NETKIT_NEXT;
+}
+
+SEC("netkit/peer")
+int netkit_peer_flow_parse(struct __sk_buff *skb) {
+    flow_monitor(skb, INGRESS);
+    return NETKIT_NEXT;
+}
+
 char _license[] SEC("license") = "GPL";

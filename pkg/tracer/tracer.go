@@ -99,6 +99,8 @@ type FlowFetcher struct {
 	rttKprobeLink               link.Link
 	egressTCXLink               map[ifaces.InterfaceKey]link.Link
 	ingressTCXLink              map[ifaces.InterfaceKey]link.Link
+	netkitPrimaryLinks          map[ifaces.InterfaceKey]link.Link
+	netkitPeerLinks             map[ifaces.InterfaceKey]link.Link
 	egressTCXAnchor             link.Anchor
 	ingressTCXAnchor            link.Anchor
 	networkEventsMonitoringLink link.Link
@@ -206,7 +208,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			log.Infof("kernel is realtime and older than 5.14.0-292 not all hooks are supported")
 		}
 		supportNetworkEvents := !kernel.IsKernelOlderThan("5.14.0-570")
-		objects, err = kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, spec, pinDir)
+		supportNetkit := kernel.IsKernelOlderThan("6.7.0")
+		objects, err = kernelSpecificLoadAndAssign(oldKernel, rtOldKernel, supportNetworkEvents, supportNetkit, spec, pinDir)
 		if err != nil {
 			return nil, err
 		}
@@ -463,6 +466,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		ingressTCXLink:              ingressTCXLink,
 		egressTCXAnchor:             tcxAnchor(cfg.TCXAttachAnchorEgress),
 		ingressTCXAnchor:            tcxAnchor(cfg.TCXAttachAnchorIngress),
+		netkitPrimaryLinks:          map[ifaces.InterfaceKey]link.Link{},
+		netkitPeerLinks:             map[ifaces.InterfaceKey]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		pinDir:                      pinDir,
@@ -471,6 +476,22 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 }
 
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
+	handle, err := netlink.NewHandleAt(iface.NetNS)
+	if err != nil {
+		return NewError("Attach:CantCreateHandle", fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err))
+	}
+	defer handle.Close()
+
+	lnk, err := handle.LinkByIndex(iface.Index)
+	if err != nil {
+		return NewError("Attach:CantLookupLink", fmt.Errorf("failed to lookup interface %d (%s): %w", iface.Index, iface.Name, err))
+	}
+	_, isNetkit := lnk.(*netlink.Netkit)
+	if isNetkit {
+		log.WithField("iface", iface.Name).Debug("detected netkit interface; attaching via netkit hooks")
+		return m.registerNetkit(iface)
+	}
+
 	if m.config.EnableEgress {
 		egrLink, err := m.attachTCXOnDirection(iface, "Egress", m.objects.BpfPrograms.TcxEgressFlowParse, cilium.AttachTCXEgress, m.egressTCXAnchor)
 		if err != nil {
@@ -529,9 +550,45 @@ func (m *FlowFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName stri
 	return lnk, nil
 }
 
+func withNetNS(targetNS netns.NsHandle, fn func() error) error {
+	if targetNS == netns.None() {
+		return fn()
+	}
+	originalNS, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get current netns: %w", err)
+	}
+	defer func() {
+		_ = netns.Set(originalNS)
+		originalNS.Close()
+	}()
+	if err := unix.Setns(int(targetNS), unix.CLONE_NEWNET); err != nil {
+		return fmt.Errorf("failed to setns to %s: %w", targetNS, err)
+	}
+	return fn()
+}
+
 func (m *FlowFetcher) DetachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	var oneErr error
+
+	hasNetkitLink := m.netkitPrimaryLinks[iface.InterfaceKey] != nil || m.netkitPeerLinks[iface.InterfaceKey] != nil
+	if hasNetkitLink {
+		if l := m.netkitPrimaryLinks[iface.InterfaceKey]; l != nil {
+			if err := l.Close(); err != nil {
+				oneErr = NewErrorNoRetry("Detach:CantCloseNetkitPrimaryLink", fmt.Errorf("failed to close netkit primary link: %w", err))
+			}
+		}
+		if l := m.netkitPeerLinks[iface.InterfaceKey]; l != nil {
+			if err := l.Close(); err != nil {
+				oneErr = NewErrorNoRetry("Detach:CantCloseNetkitPeerLink", fmt.Errorf("failed to close netkit peer link: %w", err))
+			}
+		}
+		delete(m.netkitPrimaryLinks, iface.InterfaceKey)
+		delete(m.netkitPeerLinks, iface.InterfaceKey)
+		return oneErr
+	}
+
 	if m.config.EnableEgress {
 		if l := m.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
@@ -640,6 +697,16 @@ func unregister(iface *ifaces.Interface) error {
 }
 
 func (m *FlowFetcher) UnRegister(iface *ifaces.Interface) error {
+	// netkit links are not automatically removed; close them explicitly.
+	if l := m.netkitPrimaryLinks[iface.InterfaceKey]; l != nil {
+		_ = l.Close()
+	}
+	if l := m.netkitPeerLinks[iface.InterfaceKey]; l != nil {
+		_ = l.Close()
+	}
+	delete(m.netkitPrimaryLinks, iface.InterfaceKey)
+	delete(m.netkitPeerLinks, iface.InterfaceKey)
+
 	// qdiscs, ingress and egress filters are automatically deleted so we don't need to
 	// specifically detach them from the ebpfFetcher
 	return unregister(iface)
@@ -660,6 +727,18 @@ func (m *FlowFetcher) Register(iface *ifaces.Interface) error {
 	if err != nil {
 		return fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
+
+	// netkit devices support native BPF attach points (netkit/primary, netkit/peer).
+	// Prefer those over TC filters/qdiscs when the interface is netkit.
+	if _, isNetkit := ipvlan.(*netlink.Netkit); isNetkit {
+		ilog.WithField("linkType", ipvlan.Type()).Debug("detected netkit interface; attaching via netkit hooks")
+		// Remove any stale TC filters from previous runs (best-effort).
+		if err := unregister(iface); err != nil {
+			ilog.WithError(err).Debug("failed to remove stale tc filters before netkit attach")
+		}
+		return m.registerNetkit(iface)
+	}
+
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
 		Handle:    netlink.MakeHandle(0xffff, 0),
@@ -761,6 +840,55 @@ func (m *FlowFetcher) registerIngress(iface *ifaces.Interface, ipvlan netlink.Li
 	return nil
 }
 
+func (m *FlowFetcher) registerNetkit(iface *ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
+	return withNetNS(iface.NetNS, func() error {
+		// Attach on primary side (draft mapping: EGRESS).
+		if m.config.EnableEgress {
+			if m.objects.BpfPrograms.NetkitPrimaryFlowParse == nil {
+				return fmt.Errorf("netkit primary program not loaded")
+			}
+			lnk, err := link.AttachNetkit(link.NetkitOptions{
+				Program:   m.objects.BpfPrograms.NetkitPrimaryFlowParse,
+				Attach:    cilium.AttachNetkitPrimary,
+				Interface: iface.Index,
+			})
+			if err != nil {
+				if errors.Is(err, fs.ErrExist) {
+					ilog.Debug("netkit primary link already exists; ignoring")
+				} else {
+					return fmt.Errorf("failed to attach netkit primary: %w", err)
+				}
+			} else {
+				m.netkitPrimaryLinks[iface.InterfaceKey] = lnk
+			}
+		}
+
+		// Attach on peer side (draft mapping: INGRESS).
+		if m.config.EnableIngress {
+			if m.objects.BpfPrograms.NetkitPeerFlowParse == nil {
+				return fmt.Errorf("netkit peer program not loaded")
+			}
+			lnk, err := link.AttachNetkit(link.NetkitOptions{
+				Program:   m.objects.BpfPrograms.NetkitPeerFlowParse,
+				Attach:    cilium.AttachNetkitPeer,
+				Interface: iface.Index,
+			})
+			if err != nil {
+				if errors.Is(err, fs.ErrExist) {
+					ilog.Debug("netkit peer link already exists; ignoring")
+				} else {
+					return fmt.Errorf("failed to attach netkit peer: %w", err)
+				}
+			} else {
+				m.netkitPeerLinks[iface.InterfaceKey] = lnk
+			}
+		}
+
+		return nil
+	})
+}
+
 // Close the eBPF fetcher from the system.
 // We don't need a "Close(iface)" method because the filters and qdiscs
 // are automatically removed when the interface is down
@@ -769,6 +897,23 @@ func (m *FlowFetcher) Close() error {
 	log.Debug("unregistering eBPF objects")
 
 	var errs []error
+
+	for _, l := range m.netkitPrimaryLinks {
+		if l == nil {
+			continue
+		}
+		if err := l.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	for _, l := range m.netkitPeerLinks {
+		if l == nil {
+			continue
+		}
+		if err := l.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 
 	if m.pktDropsTracePoint != nil {
 		if err := m.pktDropsTracePoint.Close(); err != nil {
@@ -1240,314 +1385,350 @@ func (m *FlowFetcher) lookupAndDeleteDNSMap(timeOut time.Duration) {
 	}
 }
 
-// kernelSpecificLoadAndAssign based on a kernel version, it will load only the supported eBPF hooks
-func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool, spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
-	objects := ebpf.BpfObjects{}
-
-	// Helper to remove common hooks
-	removeCommonHooks := func() {
-		delete(spec.Programs, pktDropHook)
-		delete(spec.Programs, networkEventsMonitoringHook)
+func deletePrograms(spec *cilium.CollectionSpec, programNames ...string) {
+	for _, name := range programNames {
+		delete(spec.Programs, name)
 	}
+}
 
-	// Helper to load and assign BPF objects
-	loadAndAssign := func(objects interface{}) error {
-		if err := spec.LoadAndAssign(objects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: pinDir}}); err != nil {
-			var ve *cilium.VerifierError
-			if errors.As(err, &ve) {
-				log.Infof("Verifier error: %+v", ve)
-			}
-			return fmt.Errorf("loading and assigning BPF objects: %w", err)
+func loadAndAssignPinned(spec *cilium.CollectionSpec, pinDir string, into interface{}) error {
+	if err := spec.LoadAndAssign(into, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: pinDir}}); err != nil {
+		var ve *cilium.VerifierError
+		if errors.As(err, &ve) {
+			log.Infof("Verifier error: %+v", ve)
 		}
-		return nil
+		return fmt.Errorf("loading and assigning BPF objects: %w", err)
+	}
+	return nil
+}
+
+func makeBpfObjects(programs ebpf.BpfPrograms, maps ebpf.BpfMaps) ebpf.BpfObjects {
+	return ebpf.BpfObjects{
+		BpfPrograms: programs,
+		BpfMaps:     maps,
+	}
+}
+
+func loadObjectsOldKernelRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	type newBpfPrograms struct {
+		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TcEgressPcaParse       *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse      *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse      *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse     *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	}
+	type newBpfObjects struct {
+		newBpfPrograms
+		ebpf.BpfMaps
 	}
 
-	// Configure BPF programs based on the kernel type
+	deletePrograms(spec, pktDropHook, networkEventsMonitoringHook, tcpRcvKprobe, tcpFentryHook)
+
+	var newObjects newBpfObjects
+	if err := loadAndAssignPinned(spec, pinDir, &newObjects); err != nil {
+		return ebpf.BpfObjects{}, err
+	}
+
+	return makeBpfObjects(
+		ebpf.BpfPrograms{
+			TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+			TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+			NetkitPrimaryFlowParse:  nil,
+			NetkitPeerFlowParse:     nil,
+			TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+			TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+			XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
+			XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
+			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
+			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
+			TcpRcvKprobe:            nil,
+			TcpRcvFentry:            nil,
+			KfreeSkb:                nil,
+			NetworkEventsMonitoring: nil,
+			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+		},
+		newObjects.BpfMaps,
+	), nil
+}
+
+func loadObjectsOldKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	type newBpfPrograms struct {
+		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TcEgressPcaParse       *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse      *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse      *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse     *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TCPRcvKprobe           *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	}
+	type newBpfObjects struct {
+		newBpfPrograms
+		ebpf.BpfMaps
+	}
+
+	deletePrograms(spec, pktDropHook, networkEventsMonitoringHook, tcpFentryHook)
+
+	var newObjects newBpfObjects
+	if err := loadAndAssignPinned(spec, pinDir, &newObjects); err != nil {
+		return ebpf.BpfObjects{}, err
+	}
+
+	return makeBpfObjects(
+		ebpf.BpfPrograms{
+			TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+			TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+			NetkitPrimaryFlowParse:  nil,
+			NetkitPeerFlowParse:     nil,
+			TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+			TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TcpRcvKprobe:            newObjects.TCPRcvKprobe,
+			TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+			XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
+			XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
+			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
+			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
+			TcpRcvFentry:            nil,
+			KfreeSkb:                nil,
+			NetworkEventsMonitoring: nil,
+			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+		},
+		newObjects.BpfMaps,
+	), nil
+}
+
+func loadObjectsRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	type newBpfPrograms struct {
+		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TcEgressPcaParse       *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse      *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse      *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse     *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TCPRcvFentry           *cilium.Program `ebpf:"tcp_rcv_fentry"`
+		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	}
+	type newBpfObjects struct {
+		newBpfPrograms
+		ebpf.BpfMaps
+	}
+
+	deletePrograms(spec, pktDropHook, networkEventsMonitoringHook, tcpRcvKprobe)
+
+	var newObjects newBpfObjects
+	if err := loadAndAssignPinned(spec, pinDir, &newObjects); err != nil {
+		return ebpf.BpfObjects{}, err
+	}
+
+	return makeBpfObjects(
+		ebpf.BpfPrograms{
+			TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+			TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+			NetkitPrimaryFlowParse:  nil,
+			NetkitPeerFlowParse:     nil,
+			TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+			TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TcpRcvFentry:            newObjects.TCPRcvFentry,
+			TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+			XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
+			XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
+			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
+			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
+			TcpRcvKprobe:            nil,
+			KfreeSkb:                nil,
+			NetworkEventsMonitoring: nil,
+			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+		},
+		newObjects.BpfMaps,
+	), nil
+}
+
+func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	type newBpfPrograms struct {
+		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TcEgressPcaParse       *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse      *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse      *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse     *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TCPRcvFentry           *cilium.Program `ebpf:"tcp_rcv_fentry"`
+		TCPRcvKprobe           *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+		KfreeSkb               *cilium.Program `ebpf:"kfree_skb"`
+		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	}
+	type newBpfObjects struct {
+		newBpfPrograms
+		ebpf.BpfMaps
+	}
+
+	var newObjects newBpfObjects
+	if err := loadAndAssignPinned(spec, pinDir, &newObjects); err != nil {
+		return ebpf.BpfObjects{}, err
+	}
+
+	return makeBpfObjects(
+		ebpf.BpfPrograms{
+			TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+			TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+			NetkitPrimaryFlowParse:  nil,
+			NetkitPeerFlowParse:     nil,
+			TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+			TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TcpRcvFentry:            newObjects.TCPRcvFentry,
+			TcpRcvKprobe:            newObjects.TCPRcvKprobe,
+			KfreeSkb:                newObjects.KfreeSkb,
+			TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+			XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
+			XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
+			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
+			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
+			NetworkEventsMonitoring: nil,
+			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+		},
+		newObjects.BpfMaps,
+	), nil
+}
+
+func loadObjectsWithNetkit(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	type newBpfPrograms struct {
+		TcEgressFlowParse       *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse      *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse  *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse     *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse      *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse     *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TcEgressPcaParse        *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse       *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse       *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse      *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TCPRcvFentry            *cilium.Program `ebpf:"tcp_rcv_fentry"`
+		TCPRcvKprobe            *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+		KfreeSkb                *cilium.Program `ebpf:"kfree_skb"`
+		TrackNatManipPkt        *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe      *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe     *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe         *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe        *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		ProbeEntrySSLWrite      *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		NetworkEventsMonitoring *cilium.Program `ebpf:"network_events_monitoring"`
+	}
+	type newBpfObjects struct {
+		newBpfPrograms
+		ebpf.BpfMaps
+	}
+
+	var newObjects newBpfObjects
+	if err := loadAndAssignPinned(spec, pinDir, &newObjects); err != nil {
+		return ebpf.BpfObjects{}, err
+	}
+
+	return makeBpfObjects(
+		ebpf.BpfPrograms{
+			TcEgressFlowParse:       newObjects.TcEgressFlowParse,
+			TcIngressFlowParse:      newObjects.TcIngressFlowParse,
+			NetkitPrimaryFlowParse:  newObjects.NetkitPrimaryFlowParse,
+			NetkitPeerFlowParse:     newObjects.NetkitPeerFlowParse,
+			TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
+			TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
+			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			TcpRcvFentry:            newObjects.TCPRcvFentry,
+			TcpRcvKprobe:            newObjects.TCPRcvKprobe,
+			KfreeSkb:                newObjects.KfreeSkb,
+			TrackNatManipPkt:        newObjects.TrackNatManipPkt,
+			XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
+			XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
+			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
+			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
+			NetworkEventsMonitoring: newObjects.NetworkEventsMonitoring,
+			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+		},
+		newObjects.BpfMaps,
+	), nil
+}
+
+// kernelSpecificLoadAndAssign based on a kernel version, it will load only the supported eBPF hooks
+func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool, supportNetkit bool, spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
+	var (
+		objects ebpf.BpfObjects
+		err     error
+	)
+
 	switch {
 	case oldKernel && rtKernel:
-		type newBpfPrograms struct {
-			TcEgressFlowParse   *cilium.Program `ebpf:"tc_egress_flow_parse"`
-			TcIngressFlowParse  *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-			TcxEgressFlowParse  *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-			TcxIngressFlowParse *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-			TcEgressPcaParse    *cilium.Program `ebpf:"tc_egress_pca_parse"`
-			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
-			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
-			XfrmInputKretprobe  *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
-			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
-			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
-		}
-		type newBpfObjects struct {
-			newBpfPrograms
-			ebpf.BpfMaps
-		}
-		var newObjects newBpfObjects
-		removeCommonHooks()
-		delete(spec.Programs, tcpRcvKprobe)
-		delete(spec.Programs, tcpFentryHook)
-
-		if err := loadAndAssign(&newObjects); err != nil {
-			return objects, err
-		}
-
-		objects = ebpf.BpfObjects{
-			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
-				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
-				XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
-				XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
-				XfrmInputKprobe:         newObjects.XfrmInputKprobe,
-				XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
-				TcpRcvKprobe:            nil,
-				TcpRcvFentry:            nil,
-				KfreeSkb:                nil,
-				NetworkEventsMonitoring: nil,
-				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			},
-			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:                  newObjects.DirectFlows,
-				AggregatedFlows:              newObjects.AggregatedFlows,
-				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
-				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
-				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
-				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
-				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
-				DnsFlows:                     newObjects.DnsFlows,
-				FilterMap:                    newObjects.FilterMap,
-				PeerFilterMap:                newObjects.PeerFilterMap,
-				GlobalCounters:               newObjects.GlobalCounters,
-				IpsecIngressMap:              newObjects.IpsecIngressMap,
-				IpsecEgressMap:               newObjects.IpsecEgressMap,
-				SslDataEventMap:              newObjects.SslDataEventMap,
-				DnsNameMap:                   newObjects.DnsNameMap,
-			},
-		}
-
+		objects, err = loadObjectsOldKernelRtKernel(spec, pinDir)
 	case oldKernel:
-		type newBpfPrograms struct {
-			TcEgressFlowParse   *cilium.Program `ebpf:"tc_egress_flow_parse"`
-			TcIngressFlowParse  *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-			TcxEgressFlowParse  *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-			TcxIngressFlowParse *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-			TcEgressPcaParse    *cilium.Program `ebpf:"tc_egress_pca_parse"`
-			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
-			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
-			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
-			XfrmInputKretprobe  *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
-			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
-			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
-		}
-		type newBpfObjects struct {
-			newBpfPrograms
-			ebpf.BpfMaps
-		}
-		var newObjects newBpfObjects
-		removeCommonHooks()
-		delete(spec.Programs, tcpFentryHook)
-
-		if err := loadAndAssign(&newObjects); err != nil {
-			return objects, err
-		}
-
-		objects = ebpf.BpfObjects{
-			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
-				TcpRcvKprobe:            newObjects.TCPRcvKprobe,
-				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
-				XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
-				XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
-				XfrmInputKprobe:         newObjects.XfrmInputKprobe,
-				XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
-				TcpRcvFentry:            nil,
-				KfreeSkb:                nil,
-				NetworkEventsMonitoring: nil,
-				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			},
-			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:                  newObjects.DirectFlows,
-				AggregatedFlows:              newObjects.AggregatedFlows,
-				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
-				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
-				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
-				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
-				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
-				DnsFlows:                     newObjects.DnsFlows,
-				FilterMap:                    newObjects.FilterMap,
-				PeerFilterMap:                newObjects.PeerFilterMap,
-				GlobalCounters:               newObjects.GlobalCounters,
-				IpsecIngressMap:              newObjects.IpsecIngressMap,
-				IpsecEgressMap:               newObjects.IpsecEgressMap,
-				SslDataEventMap:              newObjects.SslDataEventMap,
-				DnsNameMap:                   newObjects.DnsNameMap,
-			},
-		}
-
+		objects, err = loadObjectsOldKernel(spec, pinDir)
 	case rtKernel:
-		type newBpfPrograms struct {
-			TcEgressFlowParse   *cilium.Program `ebpf:"tc_egress_flow_parse"`
-			TcIngressFlowParse  *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-			TcxEgressFlowParse  *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-			TcxIngressFlowParse *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-			TcEgressPcaParse    *cilium.Program `ebpf:"tc_egress_pca_parse"`
-			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
-			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
-			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
-			XfrmInputKretprobe  *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
-			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
-			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
-		}
-		type newBpfObjects struct {
-			newBpfPrograms
-			ebpf.BpfMaps
-		}
-		var newObjects newBpfObjects
-		removeCommonHooks()
-		delete(spec.Programs, tcpRcvKprobe)
-
-		if err := loadAndAssign(&newObjects); err != nil {
-			return objects, err
-		}
-
-		objects = ebpf.BpfObjects{
-			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
-				TcpRcvFentry:            newObjects.TCPRcvFentry,
-				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
-				XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
-				XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
-				XfrmInputKprobe:         newObjects.XfrmInputKprobe,
-				XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
-				TcpRcvKprobe:            nil,
-				KfreeSkb:                nil,
-				NetworkEventsMonitoring: nil,
-				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			},
-			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:                  newObjects.DirectFlows,
-				AggregatedFlows:              newObjects.AggregatedFlows,
-				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
-				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
-				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
-				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
-				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
-				DnsFlows:                     newObjects.DnsFlows,
-				FilterMap:                    newObjects.FilterMap,
-				PeerFilterMap:                newObjects.PeerFilterMap,
-				GlobalCounters:               newObjects.GlobalCounters,
-				IpsecIngressMap:              newObjects.IpsecIngressMap,
-				IpsecEgressMap:               newObjects.IpsecEgressMap,
-				SslDataEventMap:              newObjects.SslDataEventMap,
-				DnsNameMap:                   newObjects.DnsNameMap,
-			},
-		}
-
+		objects, err = loadObjectsRtKernel(spec, pinDir)
 	case !supportNetworkEvents:
-		type newBpfPrograms struct {
-			TcEgressFlowParse   *cilium.Program `ebpf:"tc_egress_flow_parse"`
-			TcIngressFlowParse  *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-			TcxEgressFlowParse  *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-			TcxIngressFlowParse *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-			TcEgressPcaParse    *cilium.Program `ebpf:"tc_egress_pca_parse"`
-			TcIngressPcaParse   *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-			TcxEgressPcaParse   *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-			TcxIngressPcaParse  *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
-			TCPRcvFentry        *cilium.Program `ebpf:"tcp_rcv_fentry"`
-			TCPRcvKprobe        *cilium.Program `ebpf:"tcp_rcv_kprobe"`
-			KfreeSkb            *cilium.Program `ebpf:"kfree_skb"`
-			TrackNatManipPkt    *cilium.Program `ebpf:"track_nat_manip_pkt"`
-			XfrmInputKretprobe  *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-			XfrmOutputKretprobe *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-			XfrmInputKprobe     *cilium.Program `ebpf:"xfrm_input_kprobe"`
-			XfrmOutputKprobe    *cilium.Program `ebpf:"xfrm_output_kprobe"`
-			ProbeEntrySSLWrite  *cilium.Program `ebpf:"probe_entry_SSL_write"`
-		}
-		type newBpfObjects struct {
-			newBpfPrograms
-			ebpf.BpfMaps
-		}
-		var newObjects newBpfObjects
-
-		if err := loadAndAssign(&newObjects); err != nil {
-			return objects, err
-		}
-
-		objects = ebpf.BpfObjects{
-			BpfPrograms: ebpf.BpfPrograms{
-				TcEgressFlowParse:       newObjects.TcEgressFlowParse,
-				TcIngressFlowParse:      newObjects.TcIngressFlowParse,
-				TcxEgressFlowParse:      newObjects.TcxEgressFlowParse,
-				TcxIngressFlowParse:     newObjects.TcxIngressFlowParse,
-				TcEgressPcaParse:        newObjects.TcEgressPcaParse,
-				TcIngressPcaParse:       newObjects.TcIngressPcaParse,
-				TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
-				TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
-				TcpRcvFentry:            newObjects.TCPRcvFentry,
-				TcpRcvKprobe:            newObjects.TCPRcvKprobe,
-				KfreeSkb:                newObjects.KfreeSkb,
-				TrackNatManipPkt:        newObjects.TrackNatManipPkt,
-				XfrmInputKretprobe:      newObjects.XfrmInputKretprobe,
-				XfrmOutputKretprobe:     newObjects.XfrmOutputKretprobe,
-				XfrmInputKprobe:         newObjects.XfrmInputKprobe,
-				XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
-				NetworkEventsMonitoring: nil,
-				ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			},
-			BpfMaps: ebpf.BpfMaps{
-				DirectFlows:                  newObjects.DirectFlows,
-				AggregatedFlows:              newObjects.AggregatedFlows,
-				AggregatedFlowsDns:           newObjects.AggregatedFlowsDns,
-				AggregatedFlowsPktDrop:       newObjects.AggregatedFlowsPktDrop,
-				AggregatedFlowsNetworkEvents: newObjects.AggregatedFlowsNetworkEvents,
-				AggregatedFlowsXlat:          newObjects.AggregatedFlowsXlat,
-				AdditionalFlowMetrics:        newObjects.AdditionalFlowMetrics,
-				DnsFlows:                     newObjects.DnsFlows,
-				FilterMap:                    newObjects.FilterMap,
-				PeerFilterMap:                newObjects.PeerFilterMap,
-				GlobalCounters:               newObjects.GlobalCounters,
-				IpsecIngressMap:              newObjects.IpsecIngressMap,
-				IpsecEgressMap:               newObjects.IpsecEgressMap,
-				SslDataEventMap:              newObjects.SslDataEventMap,
-				DnsNameMap:                   newObjects.DnsNameMap,
-			},
-		}
-
+		objects, err = loadObjectsNoNetworkEvents(spec, pinDir)
+	case supportNetkit:
+		objects, err = loadObjectsWithNetkit(spec, pinDir)
 	default:
-		if err := loadAndAssign(&objects); err != nil {
-			return objects, err
+		if err = loadAndAssignPinned(spec, pinDir, &objects); err != nil {
+			break
 		}
+	}
+	if err != nil {
+		return ebpf.BpfObjects{}, err
 	}
 
 	// Release cached kernel BTF memory
@@ -1570,6 +1751,8 @@ type PacketFetcher struct {
 	egressAnchor             link.Anchor
 	egressTCXLink            map[ifaces.InterfaceKey]link.Link
 	ingressTCXLink           map[ifaces.InterfaceKey]link.Link
+	netkitPrimaryLink        map[ifaces.InterfaceKey]link.Link
+	netkitPeerLink           map[ifaces.InterfaceKey]link.Link
 	lookupAndDeleteSupported bool
 }
 
@@ -1625,10 +1808,12 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
 
 	type pcaBpfPrograms struct {
-		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
-		TcIngressPcaParse  *cilium.Program `ebpf:"tc_ingress_pca_parse"`
-		TcxEgressPcaParse  *cilium.Program `ebpf:"tcx_egress_pca_parse"`
-		TcxIngressPcaParse *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		TcEgressPcaParse      *cilium.Program `ebpf:"tc_egress_pca_parse"`
+		TcIngressPcaParse     *cilium.Program `ebpf:"tc_ingress_pca_parse"`
+		TcxEgressPcaParse     *cilium.Program `ebpf:"tcx_egress_pca_parse"`
+		TcxIngressPcaParse    *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		NetkitPrimaryPcaParse *cilium.Program `ebpf:"netkit_primary_pca_parse"`
+		NetkitPeerPcaParse    *cilium.Program `ebpf:"netkit_peer_pca_parse"`
 	}
 	type newBpfObjects struct {
 		pcaBpfPrograms
@@ -1661,7 +1846,6 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constEnableDirectFlowRingbuf)
 	delete(spec.Programs, constEnableOpenSSLTracking)
 	delete(spec.Programs, dnsNameMap)
-
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
 		if errors.As(err, &ve) {
@@ -1678,10 +1862,14 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
 			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
 			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
+			NetkitPrimaryPcaParse:   newObjects.NetkitPrimaryPcaParse,
+			NetkitPeerPcaParse:      newObjects.NetkitPeerPcaParse,
 			TcEgressFlowParse:       nil,
 			TcIngressFlowParse:      nil,
 			TcxEgressFlowParse:      nil,
 			TcxIngressFlowParse:     nil,
+			NetkitPrimaryFlowParse:  nil,
+			NetkitPeerFlowParse:     nil,
 			TcpRcvFentry:            nil,
 			TcpRcvKprobe:            nil,
 			KfreeSkb:                nil,
@@ -1722,6 +1910,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		enableEgress:             cfg.EnableEgress,
 		egressTCXLink:            map[ifaces.InterfaceKey]link.Link{},
 		ingressTCXLink:           map[ifaces.InterfaceKey]link.Link{},
+		netkitPrimaryLink:        map[ifaces.InterfaceKey]link.Link{},
+		netkitPeerLink:           map[ifaces.InterfaceKey]link.Link{},
 		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
 	}, nil
 }
@@ -1739,6 +1929,7 @@ func registerInterface(iface *ifaces.Interface) (*netlink.GenericQdisc, netlink.
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to lookup ipvlan device %d (%s): %w", iface.Index, iface.Name, err)
 	}
+
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: ipvlan.Attrs().Index,
 		Handle:    netlink.MakeHandle(0xffff, 0),
@@ -1762,8 +1953,17 @@ func registerInterface(iface *ifaces.Interface) (*netlink.GenericQdisc, netlink.
 }
 
 func (p *PacketFetcher) UnRegister(iface *ifaces.Interface) error {
+
+	if l := p.netkitPrimaryLink[iface.InterfaceKey]; l != nil {
+		_ = l.Close()
+	}
+	if l := p.netkitPeerLink[iface.InterfaceKey]; l != nil {
+		_ = l.Close()
+	}
+	delete(p.netkitPrimaryLink, iface.InterfaceKey)
+	delete(p.netkitPeerLink, iface.InterfaceKey)
 	// qdiscs, ingress and egress filters are automatically deleted so we don't need to
-	// specifically detach them from the ebpfFetcher
+	// specifically detach them from the packet fetcher
 	return unregister(iface)
 }
 
@@ -1772,6 +1972,10 @@ func (p *PacketFetcher) Register(iface *ifaces.Interface) error {
 	if err != nil {
 		return err
 	}
+	if _, isNetkit := ipvlan.(*netlink.Netkit); isNetkit {
+		return p.registerNetkit(iface)
+	}
+
 	p.qdiscs[iface.InterfaceKey] = qdisc
 
 	if err := p.registerEgress(iface, ipvlan); err != nil {
@@ -1780,9 +1984,76 @@ func (p *PacketFetcher) Register(iface *ifaces.Interface) error {
 	return p.registerIngress(iface, ipvlan)
 }
 
+func (p *PacketFetcher) registerNetkit(iface *ifaces.Interface) error {
+	ilog := log.WithField("iface", iface)
+	return withNetNS(iface.NetNS, func() error {
+		// Attach on primary side (draft mapping: EGRESS).
+		if p.enableEgress {
+			if p.objects.BpfPrograms.NetkitPrimaryPcaParse == nil {
+				return fmt.Errorf("netkit primary pca program not loaded")
+			}
+			lnk, err := link.AttachNetkit(link.NetkitOptions{
+				Program:   p.objects.BpfPrograms.NetkitPrimaryPcaParse,
+				Attach:    cilium.AttachNetkitPrimary,
+				Interface: iface.Index,
+			})
+			if err != nil {
+				if errors.Is(err, fs.ErrExist) {
+					ilog.Debug("netkit primary pca link already exists; ignoring")
+				} else {
+					return fmt.Errorf("failed to attach netkit primary pca: %w", err)
+				}
+			} else {
+				p.netkitPrimaryLink[iface.InterfaceKey] = lnk
+			}
+		}
+
+		// Attach on peer side (draft mapping: INGRESS).
+		if p.enableIngress {
+			if p.objects.BpfPrograms.NetkitPeerPcaParse == nil {
+				return fmt.Errorf("netkit peer pca program not loaded")
+			}
+			lnk, err := link.AttachNetkit(link.NetkitOptions{
+				Program:   p.objects.BpfPrograms.NetkitPeerPcaParse,
+				Attach:    cilium.AttachNetkitPeer,
+				Interface: iface.Index,
+			})
+			if err != nil {
+				if errors.Is(err, fs.ErrExist) {
+					ilog.Debug("netkit peer pca link already exists; ignoring")
+				} else {
+					return fmt.Errorf("failed to attach netkit peer pca: %w", err)
+				}
+			} else {
+				p.netkitPeerLink[iface.InterfaceKey] = lnk
+			}
+		}
+
+		return nil
+	})
+}
+
 func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
 	var oneErr error
+
+	hasNetkitLink := p.netkitPrimaryLink[iface.InterfaceKey] != nil || p.netkitPeerLink[iface.InterfaceKey] != nil
+	if hasNetkitLink {
+		if l := p.netkitPrimaryLink[iface.InterfaceKey]; l != nil {
+			if err := l.Close(); err != nil {
+				oneErr = NewErrorNoRetry("Detach:CantCloseNetkitPrimaryLink", fmt.Errorf("failed to close netkit primary link: %w", err))
+			}
+		}
+		if l := p.netkitPeerLink[iface.InterfaceKey]; l != nil {
+			if err := l.Close(); err != nil {
+				oneErr = NewErrorNoRetry("Detach:CantCloseNetkitPeerLink", fmt.Errorf("failed to close netkit peer link: %w", err))
+			}
+		}
+		delete(p.netkitPrimaryLink, iface.InterfaceKey)
+		delete(p.netkitPeerLink, iface.InterfaceKey)
+		return oneErr
+	}
+
 	if p.enableEgress {
 		if l := p.egressTCXLink[iface.InterfaceKey]; l != nil {
 			if err := l.Close(); err != nil {
@@ -1813,6 +2084,22 @@ func (p *PacketFetcher) DetachTCX(iface *ifaces.Interface) error {
 
 func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 	ilog := log.WithField("iface", iface)
+	handle, err := netlink.NewHandleAt(iface.NetNS)
+	if err != nil {
+		return NewError("Attach:CantCreateHandle", fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err))
+	}
+	defer handle.Close()
+
+	lnk, err := handle.LinkByIndex(iface.Index)
+	if err != nil {
+		return NewError("Attach:CantLookupLink", fmt.Errorf("failed to lookup interface %d (%s): %w", iface.Index, iface.Name, err))
+	}
+	_, isNetkit := lnk.(*netlink.Netkit)
+	if isNetkit {
+		ilog.Debug("detected netkit interface; attaching via netkit hooks")
+		return p.registerNetkit(iface)
+	}
+
 	if iface.NetNS != netns.None() {
 		originalNs, err := netns.Get()
 		if err != nil {
