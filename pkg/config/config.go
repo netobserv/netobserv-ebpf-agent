@@ -287,6 +287,12 @@ type Agent struct {
 	// See also: https://github.com/netobserv/netobserv-ebpf-agent/blob/main/docs/architecture.md
 	EnableFlowsRingbufFallback bool `env:"ENABLE_FLOWS_RINGBUF_FALLBACK" envDefault:"false"`
 
+	// QUICTrackingMode configures QUIC parsing in eBPF:
+	// -  0: disabled
+	// -  1: enabled (UDP/443 only)
+	// -  2: enabled (any UDP port)
+	QUICTrackingMode int `env:"QUIC_TRACKING_MODE" envDefault:"0"`
+
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */
