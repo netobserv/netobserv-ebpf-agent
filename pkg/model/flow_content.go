@@ -1,6 +1,8 @@
 package model
 
 import (
+	"math"
+
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
@@ -102,8 +104,8 @@ func (p *BpfFlowContent) AccumulateDrops(other *ebpf.BpfPktDropMetrics) {
 		return
 	}
 	// Drop statistics
-	p.PktDropMetrics.Bytes += other.Bytes
-	p.PktDropMetrics.Packets += other.Packets
+	p.PktDropMetrics.Bytes = addUint16(p.PktDropMetrics.Bytes, other.Bytes)
+	p.PktDropMetrics.Packets = addUint16(p.PktDropMetrics.Packets, other.Packets)
 	p.PktDropMetrics.LatestFlags |= other.LatestFlags
 	if other.LatestDropCause != 0 {
 		p.PktDropMetrics.LatestDropCause = other.LatestDropCause
@@ -123,8 +125,10 @@ func (p *BpfFlowContent) AccumulateNetworkEvents(other *ebpf.BpfNetworkEventsMet
 		return
 	}
 	// Network events
-	for _, md := range other.NetworkEvents {
-		if !AllZerosMetaData(md) && !networkEventsMDExist(p.NetworkEventsMetrics.NetworkEvents, md) {
+	for i, md := range other.NetworkEvents {
+		if other.Packets[i] != 0 && !networkEventsMDExist(p.NetworkEventsMetrics.NetworkEvents, md) {
+			p.NetworkEventsMetrics.Bytes[p.NetworkEventsMetrics.NetworkEventsIdx] = addUint16(p.NetworkEventsMetrics.Bytes[p.NetworkEventsMetrics.NetworkEventsIdx], other.Bytes[i])
+			p.NetworkEventsMetrics.Packets[p.NetworkEventsMetrics.NetworkEventsIdx] = addUint16(p.NetworkEventsMetrics.Packets[p.NetworkEventsMetrics.NetworkEventsIdx], other.Packets[i])
 			copy(p.NetworkEventsMetrics.NetworkEvents[p.NetworkEventsMetrics.NetworkEventsIdx][:], md[:])
 			p.NetworkEventsMetrics.NetworkEventsIdx = (p.NetworkEventsMetrics.NetworkEventsIdx + 1) % MaxNetworkEvents
 		}
@@ -178,4 +182,12 @@ func AllZerosMac(s [6]uint8) bool {
 		}
 	}
 	return true
+}
+
+func addUint16(a, b uint16) uint16 {
+	s := a + b
+	if s < a {
+		return math.MaxUint16
+	}
+	return s
 }

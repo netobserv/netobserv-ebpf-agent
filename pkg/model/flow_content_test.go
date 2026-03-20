@@ -114,6 +114,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 		EndMonoTimeTs:    25,
 		NetworkEventsIdx: 2,
 		NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}},
+		Bytes:            [MaxNetworkEvents]uint16{20, 25},
+		Packets:          [MaxNetworkEvents]uint16{1, 2},
 	})
 	assert.Equal(t, BpfFlowContent{
 		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
@@ -122,6 +124,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 			EndMonoTimeTs:    25,
 			NetworkEventsIdx: 2,
 			NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}},
+			Bytes:            [MaxNetworkEvents]uint16{20, 25},
+			Packets:          [MaxNetworkEvents]uint16{1, 2},
 		},
 	}, flow)
 
@@ -130,6 +134,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 		EndMonoTimeTs:    30,
 		NetworkEventsIdx: 2,
 		NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 2, 0, 0, 0, 0, 0, 0}, {1, 3, 0, 0, 0, 0, 0, 0}},
+		Bytes:            [MaxNetworkEvents]uint16{11, 12},
+		Packets:          [MaxNetworkEvents]uint16{1, 1},
 	})
 	assert.Equal(t, BpfFlowContent{
 		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
@@ -138,6 +144,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 			EndMonoTimeTs:    25,
 			NetworkEventsIdx: 3,
 			NetworkEvents:    [MaxNetworkEvents][NetworkEventsMaxEventsMD]uint8{{1, 1, 0, 0, 0, 0, 0, 0}, {1, 2, 0, 0, 0, 0, 0, 0}, {1, 3, 0, 0, 0, 0, 0, 0}},
+			Bytes:            [MaxNetworkEvents]uint16{20, 25, 12},
+			Packets:          [MaxNetworkEvents]uint16{1, 2, 1},
 		},
 	}, flow)
 }
