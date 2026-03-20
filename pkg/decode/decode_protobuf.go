@@ -9,6 +9,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils/networkevents"
 
 	"github.com/mdlayher/ethernet"
 	log "github.com/sirupsen/logrus"
@@ -392,6 +393,11 @@ func PktDropCauseToStr(dropCause uint32) string {
 	case skbDropReasonSubSysOpenVSwitch + 11:
 		return "OVS_DROP_IP_TTL"
 	}
+
+	if cause := networkevents.DropReasonCodeToString(dropCause); cause != "" {
+		return "NetworkEvent_" + cause
+	}
+
 	return "SKB_DROP_UNKNOWN_CAUSE"
 }
 

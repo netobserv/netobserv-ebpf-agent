@@ -370,4 +370,13 @@ static inline bool is_ipv4(u8 *ip) {
     }
     return false;
 }
+
+static inline u16 add_len_u16(u16 old, u64 add) {
+    if (add > 65535) {
+        return 65535;
+    }
+    u16 n = old + (u16)add;
+    return n < add ? 65535 : n;
+}
+
 #endif // __UTILS_H__

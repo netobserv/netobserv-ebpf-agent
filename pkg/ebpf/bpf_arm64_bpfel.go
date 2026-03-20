@@ -177,6 +177,8 @@ type BpfNetworkEventsMetricsT struct {
 	StartMonoTimeTs  uint64
 	EndMonoTimeTs    uint64
 	NetworkEvents    [4][8]uint8
+	Bytes            [4]uint16
+	Packets          [4]uint16
 	EthProtocol      uint16
 	NetworkEventsIdx uint8
 	_                [5]byte
@@ -188,8 +190,8 @@ type BpfPktDropMetricsT struct {
 	_               structs.HostLayout
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
-	Bytes           uint64
-	Packets         uint32
+	Bytes           uint16
+	Packets         uint16
 	LatestDropCause uint32
 	LatestFlags     uint16
 	EthProtocol     uint16

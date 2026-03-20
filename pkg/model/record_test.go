@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/gavv/monotime"
+	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils/networkevents"
 )
 
 func TestRecordBinaryEncoding(t *testing.T) {
@@ -92,6 +94,82 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	assert.Equal(t, "04:05:06:07:08:09", mac.String())
 }
 
+type FakeSampleDecoder struct{}
+
+func (d *FakeSampleDecoder) DecodeCookie8Bytes(cookie [8]byte) (ovnmodel.NetworkEvent, error) {
+	if cookie[0] == 1 {
+		return &ovnmodel.ACLEvent{
+			Action:    "allow",
+			Actor:     "NetworkPolicy",
+			Name:      "policy-1",
+			Namespace: "ns-1",
+			Direction: "Ingress",
+		}, nil
+	}
+	return &ovnmodel.ACLEvent{
+		Action:    "drop",
+		Actor:     "NetworkPolicy",
+		Name:      "policy-1",
+		Namespace: "ns-1",
+		Direction: "Ingress",
+	}, nil
+}
+
+func TestNewRecord_MergeNetworkEventsInEmptyDrops(t *testing.T) {
+	r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{},
+		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+			NetworkEvents:    [4][8]uint8{{1}, {2}},
+			Bytes:            [4]uint16{20, 25},
+			Packets:          [4]uint16{1, 2},
+			NetworkEventsIdx: 2,
+		},
+	}, time.Now(), uint64(monotime.Now()), &FakeSampleDecoder{}, map[string]string{})
+
+	assert.Equal(t, []map[string]string{
+		{"Action": "allow", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
+		{"Action": "drop", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
+	}, r.NetworkMonitorEventsMD)
+	assert.Equal(t, &ebpf.BpfPktDropMetrics{
+		Bytes:           25,
+		Packets:         2,
+		LatestDropCause: 0x1000004,
+	}, r.Metrics.PktDropMetrics)
+	assert.Equal(t, "NetworkPolicy", networkevents.DropReasonCodeToString(r.Metrics.PktDropMetrics.LatestDropCause))
+}
+
+func TestNewRecord_MergeNetworkEventsInExistingDrops(t *testing.T) {
+	r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{},
+		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+			Bytes:           100,
+			Packets:         10,
+			LatestDropCause: 5,
+			LatestFlags:     6,
+			LatestState:     7,
+		},
+		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+			NetworkEvents:    [4][8]uint8{{2}, {1}},
+			Bytes:            [4]uint16{20, 25},
+			Packets:          [4]uint16{1, 2},
+			NetworkEventsIdx: 2,
+		},
+	}, time.Now(), uint64(monotime.Now()), &FakeSampleDecoder{}, map[string]string{})
+
+	assert.Equal(t, []map[string]string{
+		{"Action": "drop", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
+		{"Action": "allow", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
+	}, r.NetworkMonitorEventsMD)
+	assert.Equal(t, &ebpf.BpfPktDropMetrics{
+		Bytes:           120,
+		Packets:         11,
+		LatestDropCause: 0x1000004,
+		LatestFlags:     6,
+		LatestState:     7,
+	}, r.Metrics.PktDropMetrics)
+	assert.Equal(t, "NetworkPolicy", networkevents.DropReasonCodeToString(r.Metrics.PktDropMetrics.LatestDropCause))
+}
+
 func TestParallelNewRecord(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < 10; i++ {
@@ -145,8 +223,8 @@ func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
 		0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u64 flow_start_time
 		0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u64 flow_end_time
 		// pkt_drops structure
-		0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, // u64 bytes
-		0x10, 0x11, 0x12, 0x13, // u32 packets
+		0x14, 0x15, // u16 bytes
+		0x12, 0x13, // u16 packets
 		0x11, 0, 0, 0, // cause
 		0x1c, 0x1d, // flags
 		0x03, 0x00, // u16 eth_protocol
@@ -161,8 +239,8 @@ func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
 		StartMonoTimeTs: 0x10,
 		EndMonoTimeTs:   0xFF,
 		EthProtocol:     3,
-		Packets:         0x13121110,
-		Bytes:           0x1b1a191817161514,
+		Packets:         0x1312,
+		Bytes:           0x1514,
 		LatestFlags:     0x1d1c,
 		LatestState:     0x1e,
 		LatestDropCause: 0x11,
@@ -180,6 +258,8 @@ func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u16 bytes[4]
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // u16 packets[4]
 		0x03, 0x00, // u16 eth_protocol
 		0x01,                         // u8 network_events_idx
 		0x00, 0x00, 0x00, 0x00, 0x00, // padding
@@ -198,6 +278,8 @@ func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
 				0x0,
 			},
 		},
+		Bytes:   [4]uint16{},
+		Packets: [4]uint16{},
 	}, met)
 }
 
