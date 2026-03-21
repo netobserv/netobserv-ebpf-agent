@@ -72,7 +72,6 @@ const (
 	sslDataEventMap                     = "ssl_data_event_map"
 	dnsNameMap                          = "dns_name_map"
 	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
-	ringbufMinSize                      = 4096
 )
 
 const (
@@ -159,6 +158,8 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxFlows)
 		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslationTracking, cfg.CacheMaxFlows)
 		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracking, cfg.CacheMaxFlows)
+
+		ringbufMinSize := uint32(os.Getpagesize())
 
 		// Minimize direct-flows ringbuf if unused
 		if !cfg.EnableFlowsRingbufFallback {
