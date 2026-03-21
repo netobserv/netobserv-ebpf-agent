@@ -1623,7 +1623,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 
 	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
-	spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
+	spec.Maps[sslDataEventMap].MaxEntries = uint32(os.Getpagesize()) // Minimum size for RINGBUF type maps
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
