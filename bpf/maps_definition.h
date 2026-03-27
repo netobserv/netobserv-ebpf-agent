@@ -152,5 +152,14 @@ struct {
     __uint(max_entries, 1 << 27); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ssl_data_event_map SEC(".maps");
+// QUIC flow tracking map - keyed by flow_id (like other flow maps)
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, flow_id);
+    __type(value, quic_metrics);
+    __uint(max_entries, 1 << 16);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} quic_flows SEC(".maps");
 
 #endif //__MAPS_DEFINITION_H__

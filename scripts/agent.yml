@@ -52,6 +52,8 @@ spec:
             value: "true"
           - name: OPENSSL_PATH
             value: "/usr/lib/aarch64-linux-gnu/libssl.so.1.1"
+          - name: QUIC_TRACKING_MODE
+            value: "1"
         volumeMounts:
             - name: bpf-kernel-debug
               mountPath: /sys/kernel/debug

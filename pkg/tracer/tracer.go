@@ -47,6 +47,7 @@ const (
 	pcaRecordsMap                = "packet_record"
 	ipsecInputMap                = "ipsec_ingress_map"
 	ipsecOutputMap               = "ipsec_egress_map"
+	quicFlowsMap                 = "quic_flows"
 	// constants defined in flows.c as "volatile const"
 	constSampling                       = "sampling"
 	constHasFilterSampling              = "has_filter_sampling"
@@ -73,6 +74,7 @@ const (
 	sslDataEventMap                     = "ssl_data_event_map"
 	dnsNameMap                          = "dns_name_map"
 	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
+	constEnableQUICTracking             = "enable_quic_tracking"
 )
 
 const (
@@ -191,6 +193,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			ipsecOutputMap,
 			sslDataEventMap,
 			dnsNameMap,
+			quicFlowsMap,
 		} {
 			spec.Maps[m].Pinning = 0
 		}
@@ -318,98 +321,93 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			Flags:     0,
 		}
 
-		log.Info("BPFManager mode: loading aggregated flows pinned maps")
-		mPath := path.Join(pinDir, aggregatedFlowsMap)
-		objects.BpfMaps.AggregatedFlows, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		loadPinnedMapInto := func(msg, mapName string, dst **cilium.Map) error {
+			log.Infof("BPFManager mode: loading %s pinned maps", msg)
+			mPath := path.Join(pinDir, mapName)
+			m, err := cilium.LoadPinnedMap(mPath, opts)
+			if err != nil {
+				return fmt.Errorf("failed to load %s: %w", mPath, err)
+			}
+			*dst = m
+			return nil
 		}
-		log.Info("BPFManager mode: loading aggregated flow DNS pinned maps")
-		mPath = path.Join(pinDir, aggregatedFlowsDNS)
-		objects.BpfMaps.AggregatedFlowsDns, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if err := loadPinnedMapInto("aggregated flows", aggregatedFlowsMap, &objects.BpfMaps.AggregatedFlows); err != nil {
+			return nil, err
 		}
-		log.Info("BPFManager mode: loading aggregated flow pkt drops pinned maps")
-		mPath = path.Join(pinDir, aggregatedFlowsPktDrop)
-		objects.BpfMaps.AggregatedFlowsPktDrop, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if err := loadPinnedMapInto("additional flow metrics", additionalFlowMetrics, &objects.BpfMaps.AdditionalFlowMetrics); err != nil {
+			return nil, err
 		}
-		log.Info("BPFManager mode: loading aggregated flow network events pinned maps")
-		mPath = path.Join(pinDir, aggregatedFlowsNetworkEvents)
-		objects.BpfMaps.AggregatedFlowsNetworkEvents, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if err := loadPinnedMapInto("direct flows", directFlowsMap, &objects.BpfMaps.DirectFlows); err != nil {
+			return nil, err
 		}
-		log.Info("BPFManager mode: loading aggregated flow translation pinned maps")
-		mPath = path.Join(pinDir, aggregatedFlowsXLat)
-		objects.BpfMaps.AggregatedFlowsXlat, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if err := loadPinnedMapInto("global counters", globalCountersMap, &objects.BpfMaps.GlobalCounters); err != nil {
+			return nil, err
 		}
-		log.Info("BPFManager mode: loading additional flow metrics pinned maps")
-		mPath = path.Join(pinDir, additionalFlowMetrics)
-		objects.BpfMaps.AdditionalFlowMetrics, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnableDNSTracking {
+			if err := loadPinnedMapInto("aggregated flow DNS", aggregatedFlowsDNS, &objects.BpfMaps.AggregatedFlowsDns); err != nil {
+				return nil, err
+			}
+
+			if err := loadPinnedMapInto("DNS flows", dnsLatencyMap, &objects.BpfMaps.DnsFlows); err != nil {
+				return nil, err
+			}
+
+			if err := loadPinnedMapInto("DNS name", dnsNameMap, &objects.BpfMaps.DnsNameMap); err != nil {
+				return nil, err
+			}
 		}
-		log.Info("BPFManager mode: loading direct flows pinned maps")
-		mPath = path.Join(pinDir, directFlowsMap)
-		objects.BpfMaps.DirectFlows, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnablePktDrops {
+			if err := loadPinnedMapInto("aggregated flow pkt drops", aggregatedFlowsPktDrop, &objects.BpfMaps.AggregatedFlowsPktDrop); err != nil {
+				return nil, err
+			}
 		}
-		log.Infof("BPFManager mode: loading DNS flows pinned maps")
-		mPath = path.Join(pinDir, dnsLatencyMap)
-		objects.BpfMaps.DnsFlows, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnableNetworkEventsMonitoring {
+			if err := loadPinnedMapInto("aggregated flow network events", aggregatedFlowsNetworkEvents, &objects.BpfMaps.AggregatedFlowsNetworkEvents); err != nil {
+				return nil, err
+			}
 		}
-		log.Infof("BPFManager mode: loading filter pinned maps")
-		mPath = path.Join(pinDir, filterMap)
-		objects.BpfMaps.FilterMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnablePktTranslationTracking {
+			if err := loadPinnedMapInto("aggregated flow translation", aggregatedFlowsXLat, &objects.BpfMaps.AggregatedFlowsXlat); err != nil {
+				return nil, err
+			}
 		}
-		log.Infof("BPFManager mode: loading Peerfilter pinned maps")
-		mPath = path.Join(pinDir, peerFilterMap)
-		objects.BpfMaps.PeerFilterMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if filter != nil {
+			if err := loadPinnedMapInto("filter", filterMap, &objects.BpfMaps.FilterMap); err != nil {
+				return nil, err
+			}
+			if err := loadPinnedMapInto("peerfilter", peerFilterMap, &objects.BpfMaps.PeerFilterMap); err != nil {
+				return nil, err
+			}
 		}
-		log.Infof("BPFManager mode: loading global counters pinned maps")
-		mPath = path.Join(pinDir, globalCountersMap)
-		objects.BpfMaps.GlobalCounters, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnablePCA {
+			if err := loadPinnedMapInto("packet record", pcaRecordsMap, &objects.BpfMaps.PacketRecord); err != nil {
+				return nil, err
+			}
 		}
-		log.Infof("BPFManager mode: loading packet record pinned maps")
-		mPath = path.Join(pinDir, pcaRecordsMap)
-		objects.BpfMaps.PacketRecord, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
-		}
-		log.Infof("BPFManager mode: loading skb input pinned maps")
-		mPath = path.Join(pinDir, ipsecInputMap)
-		objects.BpfMaps.IpsecIngressMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
-		}
-		log.Infof("BPFManager mode: loading skb output pinned maps")
-		mPath = path.Join(pinDir, ipsecOutputMap)
-		objects.BpfMaps.IpsecEgressMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+
+		if cfg.EnableIPsecTracking {
+			if err := loadPinnedMapInto("skb input", ipsecInputMap, &objects.BpfMaps.IpsecIngressMap); err != nil {
+				return nil, err
+			}
+			if err := loadPinnedMapInto("skb output", ipsecOutputMap, &objects.BpfMaps.IpsecEgressMap); err != nil {
+				return nil, err
+			}
 		}
 
 		// Only load SSL map if OpenSSL tracking is enabled
 		if cfg.EnableOpenSSLTracking {
-			log.Infof("BPFManager mode: loading SSL data event pinned maps")
-			mPath = path.Join(pinDir, sslDataEventMap)
-			objects.BpfMaps.SslDataEventMap, err = cilium.LoadPinnedMap(mPath, opts)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+			if err := loadPinnedMapInto("SSL data event", sslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
+				return nil, err
 			}
 
 			// Initialize the ringbuffer reader for SSL events
@@ -419,11 +417,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			}
 		}
 
-		log.Infof("BPFManager mode: loading DNS name pinned maps")
-		mPath = path.Join(pinDir, dnsNameMap)
-		objects.BpfMaps.DnsNameMap, err = cilium.LoadPinnedMap(mPath, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", mPath, err)
+		if cfg.QUICTrackingMode != 0 {
+			if err := loadPinnedMapInto("QUIC flows", quicFlowsMap, &objects.BpfMaps.QuicFlows); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -945,6 +942,12 @@ func (m *FlowFetcher) Close() error {
 		if err := m.objects.DnsNameMap.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.QuicFlows.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.QuicFlows.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -1095,8 +1098,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	if m.config.EnableDNSTracking {
 		var dns []ebpf.BpfDnsMetrics
 		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
-			for _, entry := range dns {
-				flow.AccumulateDNS(&entry)
+			for i := range dns {
+				flow.AccumulateDNS(&dns[i])
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("dnsmap").Set(float64(countDNS))
@@ -1104,8 +1107,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	if m.config.EnablePktDrops {
 		var pktDrops []ebpf.BpfPktDropMetrics
 		countDrops := lookupAndDeletePerCPUMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
-			for _, entry := range pktDrops {
-				flow.AccumulateDrops(&entry)
+			for i := range pktDrops {
+				flow.AccumulateDrops(&pktDrops[i])
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("pktdropsmap").Set(float64(countDrops))
@@ -1113,8 +1116,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	if m.config.EnableNetworkEventsMonitoring {
 		var netev []ebpf.BpfNetworkEventsMetrics
 		countNetEv := lookupAndDeletePerCPUMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
-			for _, entry := range netev {
-				flow.AccumulateNetworkEvents(&entry)
+			for i := range netev {
+				flow.AccumulateNetworkEvents(&netev[i])
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("networkeventsmap").Set(float64(countNetEv))
@@ -1122,8 +1125,8 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	if m.config.EnablePktTranslationTracking {
 		var xlat []ebpf.BpfXlatMetrics
 		countXlat := lookupAndDeletePerCPUMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
-			for _, entry := range xlat {
-				flow.AccumulateXlat(&entry)
+			for i := range xlat {
+				flow.AccumulateXlat(&xlat[i])
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("xlatmap").Set(float64(countXlat))
@@ -1131,11 +1134,56 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 	if m.config.EnableRTT || m.config.EnableIPsecTracking {
 		var addit []ebpf.BpfAdditionalMetrics
 		countAddit := lookupAndDeletePerCPUMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
-			for _, entry := range addit {
-				flow.AccumulateAdditional(&entry)
+			for i := range addit {
+				flow.AccumulateAdditional(&addit[i])
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+	}
+	if m.config.QUICTrackingMode != 0 {
+		var quic []ebpf.BpfQuicMetrics
+		countQuic := lookupAndDeletePerCPUMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
+			for i := range quic {
+				flow.AccumulateQuic(&quic[i])
+			}
+		})
+		met.FlowBufferSizeGauge.WithBufferName("quicmap").Set(float64(countQuic))
+
+		if m.config.Debug {
+			logged := 0
+			const maxLogged = 10
+			var b strings.Builder
+			for id, f := range flows {
+				if logged >= maxLogged {
+					break
+				}
+				if f.QuicMetrics == nil {
+					continue
+				}
+				qm := f.QuicMetrics
+				if qm.SeenLongHdr == 0 && qm.SeenShortHdr == 0 && qm.Version == 0 {
+					continue
+				}
+				if logged > 0 {
+					b.WriteString(" | ")
+				}
+				// Format: src>dst p=<proto> v=<version> lh=<seenLongHdr> sh=<seenShortHdr>
+				b.WriteString(fmt.Sprintf(
+					"%s:%d>%s:%d p=%d v=%d lh=%d sh=%d",
+					model.IP(model.IPAddr(id.SrcIp)).String(), id.SrcPort,
+					model.IP(model.IPAddr(id.DstIp)).String(), id.DstPort,
+					id.TransportProtocol,
+					qm.Version, qm.SeenLongHdr, qm.SeenShortHdr,
+				))
+				logged++
+			}
+			if logged > 0 {
+				log.WithFields(logrus.Fields{
+					"quicFlowsLogged": logged,
+					"quicFlowsSample": b.String(),
+				}).Debug("QUIC flow metrics sample")
+			}
+		}
 	}
 	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
@@ -1335,6 +1383,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecEgressMap:               newObjects.IpsecEgressMap,
 				SslDataEventMap:              newObjects.SslDataEventMap,
 				DnsNameMap:                   newObjects.DnsNameMap,
+				QuicFlows:                    newObjects.QuicFlows,
 			},
 		}
 
@@ -1405,6 +1454,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecEgressMap:               newObjects.IpsecEgressMap,
 				SslDataEventMap:              newObjects.SslDataEventMap,
 				DnsNameMap:                   newObjects.DnsNameMap,
+				QuicFlows:                    newObjects.QuicFlows,
 			},
 		}
 
@@ -1475,6 +1525,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecEgressMap:               newObjects.IpsecEgressMap,
 				SslDataEventMap:              newObjects.SslDataEventMap,
 				DnsNameMap:                   newObjects.DnsNameMap,
+				QuicFlows:                    newObjects.QuicFlows,
 			},
 		}
 
@@ -1545,6 +1596,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 				IpsecEgressMap:               newObjects.IpsecEgressMap,
 				SslDataEventMap:              newObjects.SslDataEventMap,
 				DnsNameMap:                   newObjects.DnsNameMap,
+				QuicFlows:                    newObjects.QuicFlows,
 			},
 		}
 
@@ -1621,6 +1673,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ipsecOutputMap,
 		sslDataEventMap,
 		dnsNameMap,
+		quicFlowsMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
@@ -1651,6 +1704,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, additionalFlowMetrics)
 	delete(spec.Programs, ipsecInputMap)
 	delete(spec.Programs, ipsecOutputMap)
+	delete(spec.Programs, quicFlowsMap)
 	delete(spec.Programs, constSampling)
 	delete(spec.Programs, constHasFilterSampling)
 	delete(spec.Programs, constTraceMessages)
@@ -1665,6 +1719,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constEnableDirectFlowRingbuf)
 	delete(spec.Programs, constEnableOpenSSLTracking)
 	delete(spec.Programs, dnsNameMap)
+	delete(spec.Programs, constEnableQUICTracking)
 
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
@@ -2169,6 +2224,16 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	if cfg.EnableOpenSSLTracking {
 		enableOpenSSLTracking = 1
 	}
+
+	// enable_quic_tracking mode:
+	// QUIC_CONFIG_DISABLED = 0, QUIC_CONFIG_ENABLED = 1, QUIC_CONFIG_ANY_UDP_PORT = 2.
+	enableQUICTracking := ebpf.BpfQuicConfigTQUIC_CONFIG_DISABLED
+	switch cfg.QUICTrackingMode {
+	case 2:
+		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ANY_UDP_PORT
+	case 1:
+		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ENABLED
+	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
 		{constSampling, uint32(cfg.Sampling)},
@@ -2185,6 +2250,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constEnableDirectFlowRingbuf, uint8(enableDirectFlowRingbuf)},
 		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
 		{constEnableTLSUsageTracking, uint8(enableTLSTracking)},
+		{constEnableQUICTracking, uint8(enableQUICTracking)},
 	}
 
 	for _, mapping := range variables {
