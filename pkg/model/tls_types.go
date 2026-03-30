@@ -13,14 +13,6 @@ var tlsTypes = []tlsType{
 	{value: 16, name: "Alert"},
 	{value: 32, name: "AppData"},
 }
-var typesMap map[string]uint8
-
-func init() {
-	typesMap = make(map[string]uint8, len(tlsTypes))
-	for _, t := range tlsTypes {
-		typesMap[t.name] = t.value
-	}
-}
 
 func tlsTypesToStrings(bitfield uint8) []string {
 	var values []string

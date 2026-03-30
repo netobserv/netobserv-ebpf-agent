@@ -54,7 +54,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
         // Check extensions to discriminate 1.2 and 1.3
         u8 session_len, compr_len;
         u16 cipher_len, exts_len;
-        offset += 32; /*skip random*/
+        offset += 32; // skip random
         // Read session
         if (bpf_skb_load_bytes(skb, offset, &session_len, sizeof(session_len)) < 0) {
             return TLSTRACKER_UNKNOWN;
@@ -88,7 +88,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
             }
             ext_hdr.type = bpf_ntohs(ext_hdr.type);
             ext_hdr.len = bpf_ntohs(ext_hdr.len);
-            ext_offset += 4;
+            ext_offset += 4; // 2 bytes for type, 2 bytes for length
             if (ext_hdr.type == 0x002b) {
                 // Supported Versions
                 u16 supportedversions_offset =
@@ -136,7 +136,7 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
         // Check extensions to discriminate 1.2 and 1.3
         u8 session_len;
         u16 exts_len;
-        offset += 32; /*skip random*/
+        offset += 32; // skip random
         // Read session
         if (bpf_skb_load_bytes(skb, offset, &session_len, sizeof(session_len)) < 0) {
             return TLSTRACKER_UNKNOWN;
@@ -167,7 +167,7 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
             }
             ext_hdr.type = bpf_ntohs(ext_hdr.type);
             ext_hdr.len = bpf_ntohs(ext_hdr.len);
-            ext_offset += 4;
+            ext_offset += 4; // 2 bytes for type, 2 bytes for length
             if (ext_hdr.type == 0x002b) {
                 // Supported Versions: single version expected
                 u16 version;
@@ -218,6 +218,7 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
     if ((bpf_skb_load_bytes(skb, offset, &rec, sizeof(rec))) < 0) {
         return TLSTRACKER_NOTLS;
     }
+    // Record header = 5 bytes: 1 for content type, 2 for version, 2 for following message length (which we don't need to keep)
     offset += 5;
     rec.version = bpf_ntohs(rec.version);
 
@@ -236,6 +237,7 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
         if (bpf_skb_load_bytes(skb, offset, &handshake, sizeof(handshake)) < 0) {
             return TLSTRACKER_NOTLS;
         }
+        // Handshake header = 4 bytes: 1 for handshake type, 3 for following length (which we don't need to keep)
         offset += 4;
 
         // From now on, if we fail to read what we expect, this was either not a TLS packet, or a FINISHED message.
