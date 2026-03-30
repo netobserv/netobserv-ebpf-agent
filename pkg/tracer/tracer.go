@@ -72,6 +72,7 @@ const (
 	sslDataEventMap                     = "ssl_data_event_map"
 	dnsNameMap                          = "dns_name_map"
 	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
+	ringbufMinSize                      = 4096
 )
 
 const (
@@ -158,8 +159,6 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxFlows)
 		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslationTracking, cfg.CacheMaxFlows)
 		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracking, cfg.CacheMaxFlows)
-
-		ringbufMinSize := uint32(os.Getpagesize())
 
 		// Minimize direct-flows ringbuf if unused
 		if !cfg.EnableFlowsRingbufFallback {
@@ -1623,7 +1622,7 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	}
 
 	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
-	spec.Maps[sslDataEventMap].MaxEntries = uint32(os.Getpagesize()) // Minimum size for RINGBUF type maps
+	spec.Maps[sslDataEventMap].MaxEntries = 4096 // Minimum size for RINGBUF type maps
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
