@@ -34,6 +34,35 @@ func TestMapToStrings(t *testing.T) {
 	}, asStrings)
 }
 
+func TestMapToStringsUnstructured(t *testing.T) {
+	// This test simulates an unstructured flow, as if read from Loki by the web console
+	ne1 := map[string]any{}
+	ne2 := map[string]any{}
+	for k, v := range ToMap(&ovnmodel.ACLEvent{
+		Action:    "allow",
+		Actor:     "EgressFirewall",
+		Name:      "policy-1",
+		Namespace: "ns-1",
+		Direction: "Egress",
+	}) {
+		ne1[k] = v
+	}
+	for k, v := range ToMap(&ovnmodel.ACLEvent{
+		Action:    "drop",
+		Actor:     "NetworkPolicy",
+		Name:      "policy-2",
+		Namespace: "ns-2",
+		Direction: "Ingress",
+	}) {
+		ne2[k] = v
+	}
+	asStrings := MapToStrings(config.GenericMap{"NetworkEvents": []any{ne1, ne2}})
+	assert.Equal(t, []string{
+		"Allowed by egress firewall in namespace ns-1",
+		"Dropped by network policy policy-2 in namespace ns-2, direction Ingress",
+	}, asStrings)
+}
+
 func TestNetworkEventsCauseConversions(t *testing.T) {
 	code, isDrop := ToDropReasonCode(&ovnmodel.ACLEvent{
 		Action:    "drop",
