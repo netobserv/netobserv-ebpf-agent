@@ -147,8 +147,8 @@ func NewRecord(
 							}
 						} else {
 							record.Metrics.PktDropMetrics.LatestDropCause = cause
-							record.Metrics.PktDropMetrics.Bytes = addUint16(metrics.PktDropMetrics.Bytes, metrics.NetworkEventsMetrics.Bytes[i])
-							record.Metrics.PktDropMetrics.Packets = addUint16(metrics.PktDropMetrics.Packets, metrics.NetworkEventsMetrics.Packets[i])
+							record.Metrics.PktDropMetrics.Bytes = addUint16(record.Metrics.PktDropMetrics.Bytes, metrics.NetworkEventsMetrics.Bytes[i])
+							record.Metrics.PktDropMetrics.Packets = addUint16(record.Metrics.PktDropMetrics.Packets, metrics.NetworkEventsMetrics.Packets[i])
 						}
 					}
 				}

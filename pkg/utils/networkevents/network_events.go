@@ -53,12 +53,10 @@ func ToMap(netev ovnmodel.NetworkEvent) map[string]string {
 
 func MapToStrings(flow config.GenericMap) []string {
 	if ne, found := flow["NetworkEvents"]; found {
-		if neList, isList := ne.([]any); isList {
+		if neList, ok := ne.([]map[string]string); ok {
 			var messages []string
-			for _, item := range neList {
-				if neItem, isMap := item.(map[string]any); isMap {
-					messages = append(messages, itemToString(neItem))
-				}
+			for _, ne := range neList {
+				messages = append(messages, itemToString(ne))
 			}
 			return messages
 		}
@@ -66,28 +64,19 @@ func MapToStrings(flow config.GenericMap) []string {
 	return nil
 }
 
-func itemToString(in map[string]any) string {
-	if msg := getAsString(in, "Message"); msg != "" {
+func itemToString(in map[string]string) string {
+	if msg := in["Message"]; msg != "" {
 		return msg
 	}
-	if feat := getAsString(in, "Feature"); feat == "acl" {
+	if feat := in["Feature"]; feat == "acl" {
 		aclObj := ovnmodel.ACLEvent{
-			Action:    getAsString(in, "Action"),
-			Actor:     getAsString(in, "Type"),
-			Name:      getAsString(in, "Name"),
-			Namespace: getAsString(in, "Namespace"),
-			Direction: getAsString(in, "Direction"),
+			Action:    in["Action"],
+			Actor:     in["Type"],
+			Name:      in["Name"],
+			Namespace: in["Namespace"],
+			Direction: in["Direction"],
 		}
 		return aclObj.String()
-	}
-	return ""
-}
-
-func getAsString(in map[string]any, key string) string {
-	if anyV, hasKey := in[key]; hasKey {
-		if v, isStr := anyV.(string); isStr {
-			return v
-		}
 	}
 	return ""
 }

@@ -171,8 +171,10 @@ const (
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 7
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 8
 	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 9
-	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 10
-	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 11
+	BpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW             BpfGlobalCountersKeyT = 10
+	BpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       BpfGlobalCountersKeyT = 11
+	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 12
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 13
 )
 
 type BpfNetworkEventsMetrics BpfNetworkEventsMetricsT

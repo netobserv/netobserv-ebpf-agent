@@ -3,9 +3,36 @@ package networkevents
 import (
 	"testing"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	ovnmodel "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/model"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMapToStrings(t *testing.T) {
+	flow := config.GenericMap{
+		"NetworkEvents": []map[string]string{
+			ToMap(&ovnmodel.ACLEvent{
+				Action:    "allow",
+				Actor:     "EgressFirewall",
+				Name:      "policy-1",
+				Namespace: "ns-1",
+				Direction: "Egress",
+			}),
+			ToMap(&ovnmodel.ACLEvent{
+				Action:    "drop",
+				Actor:     "NetworkPolicy",
+				Name:      "policy-2",
+				Namespace: "ns-2",
+				Direction: "Ingress",
+			}),
+		},
+	}
+	asStrings := MapToStrings(flow)
+	assert.Equal(t, []string{
+		"Allowed by egress firewall in namespace ns-1",
+		"Dropped by network policy policy-2 in namespace ns-2, direction Ingress",
+	}, asStrings)
+}
 
 func TestNetworkEventsCauseConversions(t *testing.T) {
 	code, isDrop := ToDropReasonCode(&ovnmodel.ACLEvent{
@@ -13,7 +40,7 @@ func TestNetworkEventsCauseConversions(t *testing.T) {
 		Actor:     "EgressFirewall",
 		Name:      "policy-1",
 		Namespace: "ns-1",
-		Direction: "Ingress",
+		Direction: "Egress",
 	})
 	assert.Equal(t, uint32(0x1000001), code)
 	assert.True(t, isDrop)

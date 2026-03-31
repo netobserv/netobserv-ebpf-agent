@@ -35,11 +35,16 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
                 extra_metrics->packets[idx] = 1;
                 extra_metrics->bytes[idx] = add_len_u16(0, len);
                 extra_metrics->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
+                if (extra_metrics->network_events_idx == 0) {
+                    increase_counter(NETWORK_EVENTS_OVERFLOW);
+                }
             } else {
                 extra_metrics->packets[exist] = add_len_u16(extra_metrics->packets[exist], 1);
                 extra_metrics->bytes[exist] = add_len_u16(extra_metrics->bytes[exist], len);
             }
             return 0;
+        } else {
+            increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
         }
     }
     return -1;
