@@ -1,6 +1,7 @@
 package decode
 
 import (
+	"crypto/tls"
 	"fmt"
 	"syscall"
 	"time"
@@ -92,6 +93,19 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 
 	if fr.Metrics.Sampling != 0 {
 		out["Sampling"] = fr.Metrics.Sampling
+	}
+
+	if tlsVersion := fr.Metrics.SSLVersionToString(); tlsVersion != "" {
+		out["TLSVersion"] = tlsVersion
+	}
+	if fr.Metrics.TlsTypes > 0 {
+		out["TLSTypes"] = fr.Metrics.TLSTypesToStrings()
+	}
+	if fr.Metrics.TlsCipherSuite != 0 {
+		out["TLSCipherSuite"] = tls.CipherSuiteName(fr.Metrics.TlsCipherSuite)
+	}
+	if fr.Metrics.TlsKeyShare != 0 {
+		out["TLSCurve"] = tls.CurveID(fr.Metrics.TlsKeyShare).String()
 	}
 
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
