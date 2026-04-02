@@ -45,7 +45,7 @@ eBPF verifier requirements:
 ## Effective Prompting
 
 **Good Example:**
-```
+```text
 Update bpf/flows.c to add packet drop reason tracking. Store drop reason in
 additional_flow_metrics PerCPU map. Update pkg/tracer/tracer.go to read and
 merge drop reasons. Add DROPS_TRACKING env var in pkg/config/config.go
@@ -53,7 +53,7 @@ merge drop reasons. Add DROPS_TRACKING env var in pkg/config/config.go
 ```
 
 **Bad Example:**
-```
+```text
 Add drop tracking to eBPF
 ```
 
@@ -66,7 +66,7 @@ Add drop tracking to eBPF
 ## Common Task Templates
 
 ### Add eBPF Feature
-```
+```text
 Add PacketDrop tracking to monitor dropped packets:
 
 1. eBPF Implementation:
@@ -92,7 +92,7 @@ For features NOT requiring privileged mode (e.g., DNSTracking, FlowRTT), skip pr
 ```
 
 ### Add Configuration Parameter
-```
+```text
 Add cache timeout configuration:
 1. Update pkg/config/config.go:
    - Add field to Agent struct with env: tag
@@ -104,7 +104,7 @@ Add cache timeout configuration:
 ```
 
 ### Add Flow Field
-```
+```text
 Add new flow field for packet metadata:
 1. Update proto/flow.proto with new field
 2. Run make prereqs (ensures protoc is installed)
@@ -117,7 +117,7 @@ Add new flow field for packet metadata:
 ```
 
 ### Debug Packet Capture Issues
-```
+```text
 Flows not captured for specific interface:
 Check pkg/tracer/tracer.go:
 - Verify TC/TCX hook attachment in AttachTCX() or Register()
@@ -127,7 +127,7 @@ Suggest fixes with proper error handling patterns.
 ```
 
 ### Modify Flow Aggregation
-```
+```text
 Change flow aggregation logic in pkg/flow/account.go:
 - Review existing Accounter struct
 - Check cache eviction policy (maxEntries, evictTimeout)
@@ -136,7 +136,7 @@ Change flow aggregation logic in pkg/flow/account.go:
 ```
 
 ### Add Exporter Configuration
-```
+```text
 Add request timeout to GRPC exporter:
 1. Update pkg/config/config.go with timeout-related env vars
 2. Update pkg/exporter/grpc_proto.go to use timeout config
@@ -195,7 +195,7 @@ Certain features require privileged mode for kernel debug filesystem access or s
 
 ## Code Review Checklist
 
-```
+```text
 Review for:
 1. eBPF verifier compliance (bounded loops, stack limit)
 2. Kernel 5.8+ compatibility (no newer eBPF features)
@@ -210,7 +210,7 @@ Review for:
 ## Testing
 
 ### Unit Tests
-```
+```text
 Generate tests for flow aggregation in pkg/flow/account.go:
 - Cache eviction on max entries
 - Cache eviction on timeout
@@ -220,7 +220,7 @@ Use standard Go testing patterns.
 ```
 
 ### E2E Tests
-```
+```text
 Test on Kind cluster:
 1. make tests-e2e (installs prereqs, builds image, runs tests)
    - Builds localhost/ebpf-agent:test image
@@ -255,7 +255,7 @@ make image-build image-push     # Build and push image
 
 ## AI Workflow Example
 
-```
+```text
 1. Research: "Explain RTT tracking implementation in bpf/rtt_tracker.h"
 2. Plan: "Add TCP retransmit tracking - suggest eBPF hook and data structure"
 3. Implement: "Implement with proper map storage and userspace reading"
