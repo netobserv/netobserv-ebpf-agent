@@ -163,7 +163,7 @@ Export modes (check `EXPORT` env var):
 ### eBPF Maps
 - **aggregated_flows**: `BPF_MAP_TYPE_HASH` (global, not per-CPU) - main flow aggregation
 - **additional_flow_metrics**: `BPF_MAP_TYPE_PERCPU_HASH` - RTT, IPsec metrics
-- **aggregated_flows_dns**, **aggregated_flows_pkt_drop**, **aggregated_flows_network_events**: PerCPU maps for DNS, drops, network events
+- **aggregated_flows_dns**, **aggregated_flows_pkt_drop**, **aggregated_flows_network_events**, **aggregated_flows_xlat**: PerCPU maps for DNS, drops, network events, and address translation
 - **dns_flows**: Global map for DNS request/response matching
 - See [docs/ebpf_implementation.md](./docs/ebpf_implementation.md) for details on per-CPU vs regular maps
 
