@@ -67,15 +67,28 @@ Add drop tracking to eBPF
 
 ### Add eBPF Feature
 ```
-Add DNS query tracking to bpf/flows.c:
-1. Define data structure in bpf/types.h (e.g., dns_query_t)
-2. Update TC hook in bpf/flows.c to detect DNS packets
-3. Store in appropriate map (dns_flows for req/resp matching, or additional_flow_metrics)
-4. Update pkg/tracer/tracer.go to read new data from eBPF maps
-5. Update pkg/flow/ tracers (tracer_map.go, tracer_ringbuf.go) to handle new data
-6. Run make docker-generate to regenerate binaries
-7. Test on actual kernel environment (not just unit tests)
-8. Document in docs/architecture.md if adding new map
+Add PacketDrop tracking to monitor dropped packets:
+
+1. eBPF Implementation:
+   - Define data structure in bpf/types.h (e.g., pkt_drop_t with state, drop_cause)
+   - Update bpf/flows.c to hook into kfree_skb tracepoint
+   - Store drop metadata in flow_record_t or additional_flow_metrics PerCPU map
+   - Access kernel debug filesystem (/sys/kernel/debug) for tracepoint data
+
+2. Userspace Integration:
+   - Update pkg/tracer/tracer.go to read drop data from eBPF maps
+   - Update pkg/flow/ tracers (tracer_map.go, tracer_ringbuf.go) to handle drop events
+   - Add drop fields to proto/flow.proto (PktDropBytes, PktDropPackets, PktDropLatestState, etc.)
+   - Run make gen-protobuf to regenerate pkg/pbflow/
+
+3. Build and Test:
+   - Run make docker-generate to regenerate eBPF binaries
+   - Test on actual kernel with privileged mode enabled (requires /sys/kernel/debug mount)
+   - Document in docs/architecture.md if adding new map
+
+Note: PacketDrop feature requires privileged mode for kernel debug filesystem access.
+Other privileged-mode features: NetworkEvents, UDNMapping (debug fs), SR-IOV (secondary interfaces).
+For features NOT requiring privileged mode (e.g., DNSTracking, FlowRTT), skip privileged testing.
 ```
 
 ### Add Configuration Parameter
@@ -139,14 +152,13 @@ Export modes (check `EXPORT` env var):
 - **GRPC**: Export to flowlogs-pipeline via gRPC (default)
 - **Kafka**: Export to Kafka topics
 - **direct-flp**: Embed flowlogs-pipeline in agent process (configured via `FLP_CONFIG`)
-
-Note: IPFIX export exists but is not actively maintained. For IPFIX, export to flowlogs-pipeline first, then configure IPFIX within flowlogs-pipeline.
+- **IPFIX collectors**: Export to flowlogs-pipeline (via GRPC/Kafka/direct-flp), then configure IPFIX export within flowlogs-pipeline
 
 ### Performance
 - **Sampling**: `SAMPLING` env var (agent default: 0 = disabled, commonly deployed: 50 = 1:50 packets). Lower = more flows/resources
 - **Caching**: `CACHE_MAX_FLOWS` (default: 5000), `CACHE_ACTIVE_TIMEOUT` (default: 5s)
 - **Memory**: Watch for eBPF map sizes and userspace cache
-- **Metrics**: Prometheus metrics exposed on `METRICS_SERVER_PORT` (default: 8080)
+- **Metrics**: Prometheus metrics exposed on `METRICS_SERVER_PORT` (default: 9090)
 
 ### eBPF Maps
 - **aggregated_flows**: `BPF_MAP_TYPE_HASH` (global, not per-CPU) - main flow aggregation
@@ -156,18 +168,26 @@ Note: IPFIX export exists but is not actively maintained. For IPFIX, export to f
 - See [docs/ebpf_implementation.md](./docs/ebpf_implementation.md) for details on per-CPU vs regular maps
 
 ### Deployment Requirements
+
+**Default mode (granular capabilities):**
 Agent requires Linux capabilities:
 - `BPF`: Use eBPF programs and maps
 - `PERFMON`: Access perf monitoring
 - `NET_ADMIN`: Attach/detach TC programs, TCX hooks
 
-Kubernetes securityContext:
-```yaml
-securityContext:
-  runAsUser: 0
-  capabilities:
-    add: [BPF, PERFMON, NET_ADMIN]
-```
+**Privileged mode (when required):**
+Certain features require privileged mode for kernel debug filesystem access or secondary interface monitoring:
+- **PacketDrop**: Packet drop flows logging (requires /sys/kernel/debug)
+- **NetworkEvents**: Network policy correlation (requires /sys/kernel/debug)
+- **UDNMapping**: User Defined Networks mapping (requires /sys/kernel/debug)
+- **SR-IOV support**: Secondary interface monitoring
+
+**Compatibility notes:**
+- Some older Kubernetes distributions (Kind, K3s, Rancher Desktop) don't recognize `BPF` and `PERFMON` capabilities
+- In these cases, privileged mode is required even for basic features
+- See README.md for tested distribution compatibility matrix
+
+**Deployment:** When using Network Observability Operator, configure via FlowCollector CR. For standalone deployment, see deployment examples in [deployments/](./deployments/).
 
 ### Flow Filtering
 - Configured via `FLOW_FILTER_RULES` env var (JSON format)
