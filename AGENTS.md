@@ -47,7 +47,7 @@ eBPF verifier requirements:
 **Good Example:**
 ```text
 Update bpf/flows.c to add packet drop reason tracking. Store drop reason in
-additional_flow_metrics PerCPU map. Update pkg/tracer/tracer.go to read and
+additional_flow_metrics per-CPU map. Update pkg/tracer/tracer.go to read and
 merge drop reasons. Add DROPS_TRACKING env var in pkg/config/config.go
 (default: false). Run make docker-generate and add unit tests.
 ```
@@ -72,7 +72,7 @@ Add PacketDrop tracking to monitor dropped packets:
 1. eBPF Implementation:
    - Define data structure in bpf/types.h (e.g., pkt_drop_t with state, drop_cause)
    - Update bpf/flows.c to hook into kfree_skb tracepoint
-   - Store drop metadata in flow_record_t or additional_flow_metrics PerCPU map
+   - Store drop metadata in flow_record_t or additional_flow_metrics per-CPU map
    - Access kernel debug filesystem (/sys/kernel/debug) for tracepoint data
 
 2. Userspace Integration:
@@ -163,7 +163,7 @@ Export modes (check `EXPORT` env var):
 ### eBPF Maps
 - **aggregated_flows**: `BPF_MAP_TYPE_HASH` (global, not per-CPU) - main flow aggregation
 - **additional_flow_metrics**: `BPF_MAP_TYPE_PERCPU_HASH` - RTT, IPsec metrics
-- **aggregated_flows_dns**, **aggregated_flows_pkt_drop**, **aggregated_flows_network_events**, **aggregated_flows_xlat**: PerCPU maps for DNS, drops, network events, and address translation
+- **aggregated_flows_dns**, **aggregated_flows_pkt_drop**, **aggregated_flows_network_events**, **aggregated_flows_xlat**: per-CPU maps for DNS, drops, network events, and address translation
 - **dns_flows**: Global map for DNS request/response matching
 - See [docs/ebpf_implementation.md](./docs/ebpf_implementation.md) for details on per-CPU vs regular maps
 
