@@ -87,7 +87,7 @@ func FlowToPB(fr *model.Record) *Record {
 		}
 	}
 	if fr.Metrics.PktDropMetrics != nil {
-		pbflowRecord.PktDropBytes = fr.Metrics.PktDropMetrics.Bytes
+		pbflowRecord.PktDropBytes = uint64(fr.Metrics.PktDropMetrics.Bytes)
 		pbflowRecord.PktDropPackets = uint64(fr.Metrics.PktDropMetrics.Packets)
 		pbflowRecord.PktDropLatestFlags = uint32(fr.Metrics.PktDropMetrics.LatestFlags)
 		pbflowRecord.PktDropLatestState = uint32(fr.Metrics.PktDropMetrics.LatestState)
@@ -178,8 +178,8 @@ func PBToFlow(pb *Record) *model.Record {
 				Latency: uint64(pb.DnsLatency.AsDuration()),
 			},
 			PktDropMetrics: &ebpf.BpfPktDropMetrics{
-				Bytes:           pb.PktDropBytes,
-				Packets:         uint32(pb.PktDropPackets),
+				Bytes:           uint16(pb.PktDropBytes),
+				Packets:         uint16(pb.PktDropPackets),
 				LatestFlags:     uint16(pb.PktDropLatestFlags),
 				LatestState:     uint8(pb.PktDropLatestState),
 				LatestDropCause: pb.PktDropLatestDropCause,

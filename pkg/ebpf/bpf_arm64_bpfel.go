@@ -171,8 +171,10 @@ const (
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 7
 	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 8
 	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 9
-	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 10
-	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 11
+	BpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW             BpfGlobalCountersKeyT = 10
+	BpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       BpfGlobalCountersKeyT = 11
+	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 12
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 13
 )
 
 type BpfNetworkEventsMetrics BpfNetworkEventsMetricsT
@@ -182,6 +184,8 @@ type BpfNetworkEventsMetricsT struct {
 	StartMonoTimeTs  uint64
 	EndMonoTimeTs    uint64
 	NetworkEvents    [4][8]uint8
+	Bytes            [4]uint16
+	Packets          [4]uint16
 	EthProtocol      uint16
 	NetworkEventsIdx uint8
 	_                [5]byte
@@ -193,8 +197,8 @@ type BpfPktDropMetricsT struct {
 	_               structs.HostLayout
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
-	Bytes           uint64
-	Packets         uint32
+	Bytes           uint16
+	Packets         uint16
 	LatestDropCause uint32
 	LatestFlags     uint16
 	EthProtocol     uint16

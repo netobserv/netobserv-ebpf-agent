@@ -7,17 +7,17 @@
 
 #include "utils.h"
 
-static inline bool md_already_exists(u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD], u8 *md) {
+static inline int md_already_exists(u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD], u8 *md) {
     for (u8 i = 0; i < MAX_NETWORK_EVENTS; i++) {
         if (__builtin_memcmp(network_events[i], md, MAX_EVENT_MD) == 0) {
-            return true;
+            return i;
         }
     }
-    return false;
+    return -1;
 }
 
 static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8 md_len,
-                                                                 u8 *user_cookie) {
+                                                                 u8 *user_cookie, u64 len) {
     u8 cookie[MAX_EVENT_MD];
 
     bpf_probe_read_kernel(cookie, md_len, user_cookie);
@@ -29,11 +29,22 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
         extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
         // Needed to check length here again to keep JIT verifier happy
         if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
-            if (!md_already_exists(extra_metrics->network_events, (u8 *)cookie)) {
+            int exist = md_already_exists(extra_metrics->network_events, (u8 *)cookie);
+            if (exist < 0) {
                 __builtin_memcpy(extra_metrics->network_events[idx], cookie, MAX_EVENT_MD);
+                extra_metrics->packets[idx] = 1;
+                extra_metrics->bytes[idx] = add_len_u16(0, len);
                 extra_metrics->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
+                if (extra_metrics->network_events_idx == 0) {
+                    increase_counter(NETWORK_EVENTS_OVERFLOW);
+                }
+            } else {
+                extra_metrics->packets[exist] = add_len_u16(extra_metrics->packets[exist], 1);
+                extra_metrics->bytes[exist] = add_len_u16(extra_metrics->bytes[exist], len);
             }
             return 0;
+        } else {
+            increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
         }
     }
     return -1;
@@ -43,6 +54,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     u8 dscp = 0, protocol = 0, md_len = 0;
     u16 family = 0, flags = 0, eth_protocol = 0;
     u8 *user_cookie = NULL;
+    u64 len = 0;
     long ret = 0;
     flow_id id;
 
@@ -87,7 +99,9 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
         return 0;
     }
 
-    ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
+    len = BPF_CORE_READ(skb, len);
+
+    ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
     if (ret == 0) {
         return ret;
     }
@@ -101,6 +115,8 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     new_flow.eth_protocol = eth_protocol;
     new_flow.network_events_idx = 0;
     bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);
+    new_flow.packets[0] = 1;
+    new_flow.bytes[0] = add_len_u16(0, len);
     new_flow.network_events_idx++;
     ret = bpf_map_update_elem(&aggregated_flows_network_events, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
@@ -108,7 +124,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
             bpf_printk("error network events creating new flow %d\n", ret);
         }
         if (ret == -EEXIST) {
-            ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie);
+            ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
             if (ret != 0 && trace_messages) {
                 bpf_printk("error network events failed to update an existing flow %d\n", ret);
             }
