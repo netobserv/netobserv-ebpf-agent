@@ -75,6 +75,7 @@ message Record {
   uint32 tls_types = 35;
   uint32 tls_cipher_suite = 36;
   uint32 tls_key_share = 37;
+  Quic quic = 38;
 }
 
 message DataLink {
@@ -116,4 +117,10 @@ message Xlat {
   uint32 src_port = 3;
   uint32 dst_port = 4;
   uint32 zone_id = 5;
+}
+
+message Quic {
+  uint32 version = 1;
+  uint32 seen_long_hdr = 2;
+  uint32 seen_short_hdr = 3;
 }

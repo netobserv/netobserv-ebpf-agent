@@ -18,4 +18,5 @@ volatile const u8 enable_ipsec = 0;
 volatile const u8 enable_openssl_tracking = 0;
 volatile const u8 enable_directflows_ringbuf = 0;
 volatile const u8 enable_tls_usage_tracking = 0;
+volatile const u8 enable_quic_tracking = 0;
 #endif //__CONFIGS_H__

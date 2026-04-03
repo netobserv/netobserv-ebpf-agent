@@ -206,6 +206,29 @@ type BpfPktDropMetricsT struct {
 	_               [3]byte
 }
 
+type BpfQuicConfigT uint32
+
+const (
+	BpfQuicConfigTQUIC_CONFIG_DISABLED     BpfQuicConfigT = 0
+	BpfQuicConfigTQUIC_CONFIG_ENABLED      BpfQuicConfigT = 1
+	BpfQuicConfigTQUIC_CONFIG_ANY_UDP_PORT BpfQuicConfigT = 2
+)
+
+type BpfQuicMetrics BpfQuicMetricsT
+
+type BpfQuicMetricsT struct {
+	_               structs.HostLayout
+	StartMonoTimeTs uint64
+	EndMonoTimeTs   uint64
+	Bytes           uint64
+	Packets         uint32
+	Version         uint32
+	EthProtocol     uint16
+	SeenLongHdr     uint8
+	SeenShortHdr    uint8
+	_               [4]byte
+}
+
 type BpfSslDataEventT struct {
 	_           structs.HostLayout
 	TimestampNs uint64
@@ -327,6 +350,7 @@ type BpfMapSpecs struct {
 	IpsecIngressMap              *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
 	PacketRecord                 *ebpf.MapSpec `ebpf:"packet_record"`
 	PeerFilterMap                *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	QuicFlows                    *ebpf.MapSpec `ebpf:"quic_flows"`
 	SslDataEventMap              *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
 }
 
@@ -343,6 +367,7 @@ type BpfVariableSpecs struct {
 	EnableOpensslTracking          *ebpf.VariableSpec `ebpf:"enable_openssl_tracking"`
 	EnablePca                      *ebpf.VariableSpec `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
+	EnableQuicTracking             *ebpf.VariableSpec `ebpf:"enable_quic_tracking"`
 	EnableRtt                      *ebpf.VariableSpec `ebpf:"enable_rtt"`
 	EnableTlsUsageTracking         *ebpf.VariableSpec `ebpf:"enable_tls_usage_tracking"`
 	FilterKey                      *ebpf.VariableSpec `ebpf:"filter_key"`
@@ -391,6 +416,7 @@ type BpfMaps struct {
 	IpsecIngressMap              *ebpf.Map `ebpf:"ipsec_ingress_map"`
 	PacketRecord                 *ebpf.Map `ebpf:"packet_record"`
 	PeerFilterMap                *ebpf.Map `ebpf:"peer_filter_map"`
+	QuicFlows                    *ebpf.Map `ebpf:"quic_flows"`
 	SslDataEventMap              *ebpf.Map `ebpf:"ssl_data_event_map"`
 }
 
@@ -411,6 +437,7 @@ func (m *BpfMaps) Close() error {
 		m.IpsecIngressMap,
 		m.PacketRecord,
 		m.PeerFilterMap,
+		m.QuicFlows,
 		m.SslDataEventMap,
 	)
 }
@@ -428,6 +455,7 @@ type BpfVariables struct {
 	EnableOpensslTracking          *ebpf.Variable `ebpf:"enable_openssl_tracking"`
 	EnablePca                      *ebpf.Variable `ebpf:"enable_pca"`
 	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`
+	EnableQuicTracking             *ebpf.Variable `ebpf:"enable_quic_tracking"`
 	EnableRtt                      *ebpf.Variable `ebpf:"enable_rtt"`
 	EnableTlsUsageTracking         *ebpf.Variable `ebpf:"enable_tls_usage_tracking"`
 	FilterKey                      *ebpf.Variable `ebpf:"filter_key"`
