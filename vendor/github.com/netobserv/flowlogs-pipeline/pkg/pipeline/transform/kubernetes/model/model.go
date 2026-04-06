@@ -18,12 +18,13 @@ const (
 type ResourceMetaData struct {
 	// Informers need that internal object is an ObjectMeta instance
 	metav1.ObjectMeta
-	Kind             string
-	OwnerName        string
-	OwnerKind        string
-	HostName         string
-	HostIP           string
-	NetworkName      string
-	IPs              []string
-	SecondaryNetKeys []string
+	Kind              string
+	OwnerName         string
+	OwnerKind         string
+	HostName          string
+	HostIP            string
+	NetworkName       string
+	IPs               []string
+	SecondaryNetKeys  []string
+	SecondaryNetNames map[string]string
 }

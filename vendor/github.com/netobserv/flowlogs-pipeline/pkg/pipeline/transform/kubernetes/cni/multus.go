@@ -21,20 +21,15 @@ const (
 type MultusHandler struct {
 }
 
-type SecondaryNetKey struct {
-	NetworkName string
-	Key         string
-}
-
 func (m *MultusHandler) Manages(indexKey string) bool {
 	return indexKey == indexIP || indexKey == indexMAC || indexKey == indexInterface
 }
 
-func (m *MultusHandler) BuildKeys(flow config.GenericMap, rule *api.K8sRule, secNets []api.SecondaryNetwork) []SecondaryNetKey {
+func (m *MultusHandler) BuildKeys(flow config.GenericMap, rule *api.K8sRule, secNets []api.SecondaryNetwork) []string {
 	if len(secNets) == 0 {
 		return nil
 	}
-	var keys []SecondaryNetKey
+	var keys []string
 	for _, sn := range secNets {
 		snKeys := m.buildSNKeys(flow, rule, &sn)
 		if snKeys != nil {
@@ -44,8 +39,8 @@ func (m *MultusHandler) BuildKeys(flow config.GenericMap, rule *api.K8sRule, sec
 	return keys
 }
 
-func (m *MultusHandler) buildSNKeys(flow config.GenericMap, rule *api.K8sRule, sn *api.SecondaryNetwork) []SecondaryNetKey {
-	var keys []SecondaryNetKey
+func (m *MultusHandler) buildSNKeys(flow config.GenericMap, rule *api.K8sRule, sn *api.SecondaryNetwork) []string {
+	var keys []string
 
 	var ip, mac string
 	var interfaces []string
@@ -77,55 +72,73 @@ func (m *MultusHandler) buildSNKeys(flow config.GenericMap, rule *api.K8sRule, s
 
 	macIP := "~" + ip + "~" + strings.ToLower(mac)
 	if interfaces == nil {
-		return []SecondaryNetKey{{NetworkName: sn.Name, Key: macIP}}
+		return []string{macIP}
 	}
 	for _, intf := range interfaces {
-		keys = append(keys, SecondaryNetKey{NetworkName: sn.Name, Key: intf + macIP})
+		keys = append(keys, intf+macIP)
 	}
 
 	return keys
 }
 
-func (m *MultusHandler) GetPodUniqueKeys(pod *v1.Pod, secNets []api.SecondaryNetwork) ([]string, error) {
+// GetPodUniqueKeys returns both flat keys and named keys
+func (m *MultusHandler) GetPodUniqueKeys(pod *v1.Pod, secNets []api.SecondaryNetwork) ([]string, map[string]string, error) {
 	if len(secNets) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	// Cf https://k8snetworkplumbingwg.github.io/multus-cni/docs/quickstart.html#network-status-annotations
 	if statusAnnotationJSON, ok := pod.Annotations[statusAnnotation]; ok {
 		var networks []NetStatItem
 		if err := json.Unmarshal([]byte(statusAnnotationJSON), &networks); err != nil {
-			return nil, fmt.Errorf("failed to index from network-status annotation, cannot read annotation %s: %w", statusAnnotation, err)
+			return nil, nil, fmt.Errorf("failed to index from network-status annotation, cannot read annotation %s: %w", statusAnnotation, err)
 		}
-		var keys []string
+		namedKeys := make(map[string]string)
+		var flatKeys []string
 		for _, network := range networks {
-			for _, snConfig := range secNets {
-				if snConfig.Name == network.Name {
-					keys = append(keys, network.Keys(snConfig)...)
+			// Ignore default network, focus on secondary
+			if !network.Default {
+				for _, snConfig := range secNets {
+					keys := network.Keys(snConfig.Index)
+					flatKeys = append(flatKeys, keys...)
+					for _, k := range keys {
+						namedKeys[k] = network.Name
+					}
 				}
 			}
 		}
-		return keys, nil
+		return flatKeys, namedKeys, nil
 	}
 	// Annotation not present => just ignore, no error
-	return nil, nil
+	return nil, nil, nil
 }
 
 type NetStatItem struct {
 	Name      string   `json:"name"`
+	Default   bool     `json:"default"`
 	Interface string   `json:"interface"`
 	IPs       []string `json:"ips"`
 	MAC       string   `json:"mac"`
 }
 
-func (n *NetStatItem) Keys(snConfig api.SecondaryNetwork) []string {
+func (n *NetStatItem) Keys(configuredIndex map[string]any) []string {
 	var mac, intf string
-	if _, ok := snConfig.Index[indexMAC]; ok {
+	// Return nil when the network info misses any configured index
+	if _, ok := configuredIndex[indexMAC]; ok {
+		if len(n.MAC) == 0 {
+			return nil
+		}
 		mac = n.MAC
 	}
-	if _, ok := snConfig.Index[indexInterface]; ok {
+	if _, ok := configuredIndex[indexInterface]; ok {
+		if len(n.Interface) == 0 {
+			return nil
+		}
 		intf = n.Interface
 	}
-	if _, ok := snConfig.Index[indexIP]; ok {
+	if _, ok := configuredIndex[indexIP]; ok {
+		if len(n.IPs) == 0 {
+			return nil
+		}
 		var keys []string
 		for _, ip := range n.IPs {
 			keys = append(keys, key(intf, ip, mac))

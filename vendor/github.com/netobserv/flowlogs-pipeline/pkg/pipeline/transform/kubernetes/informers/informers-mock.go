@@ -14,14 +14,8 @@ import (
 
 var (
 	secondaryNetConfig = []api.SecondaryNetwork{
-		{
-			Name:  "my-network",
-			Index: map[string]any{"mac": nil},
-		},
-		{
-			Name:  "ovn-udn",
-			Index: map[string]any{"udn": nil},
-		},
+		{Index: map[string]any{"mac": nil}},
+		{Index: map[string]any{"udn": nil}},
 	}
 )
 
@@ -73,7 +67,7 @@ func (m *InformerMock) GetIndexer() cache.Indexer {
 	return args.Get(0).(cache.Indexer)
 }
 
-func (m *IndexerMock) MockPod(ip, mac, intf, name, namespace, nodeIP, ownerName, ownerKind string) {
+func (m *IndexerMock) MockPod(primaryIP, name, namespace, nodeIP, ownerName, ownerKind string, secondaryNet *cni.NetStatItem) {
 	res := model.ResourceMetaData{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -85,18 +79,17 @@ func (m *IndexerMock) MockPod(ip, mac, intf, name, namespace, nodeIP, ownerName,
 		HostIP:    nodeIP,
 	}
 	m.parentChecker(&res)
-	if len(mac) > 0 {
-		nsi := cni.NetStatItem{
-			Interface: intf,
-			MAC:       mac,
-			IPs:       []string{ip},
+	if secondaryNet != nil {
+		res.SecondaryNetKeys = secondaryNet.Keys(secondaryNetConfig[0].Index)
+		res.SecondaryNetNames = make(map[string]string)
+		for _, k := range res.SecondaryNetKeys {
+			res.SecondaryNetNames[k] = secondaryNet.Name
 		}
-		res.SecondaryNetKeys = nsi.Keys(secondaryNetConfig[0])
 		m.On("ByIndex", IndexCustom, res.SecondaryNetKeys[0]).Return([]interface{}{&res}, nil)
 	}
-	if len(ip) > 0 {
-		res.IPs = []string{ip}
-		m.On("ByIndex", IndexIP, ip).Return([]interface{}{&res}, nil)
+	if len(primaryIP) > 0 {
+		res.IPs = []string{primaryIP}
+		m.On("ByIndex", IndexIP, primaryIP).Return([]interface{}{&res}, nil)
 	}
 }
 
@@ -221,10 +214,11 @@ func (f *FakeInformers) InitFromConfig(_ string, _ *Config, _ *operational.Metri
 	return nil
 }
 
-func (f *FakeInformers) IndexLookup(keys []cni.SecondaryNetKey, ip string) *model.ResourceMetaData {
+func (f *FakeInformers) IndexLookup(keys []string, ip string) *model.ResourceMetaData {
 	for _, key := range keys {
-		i := f.customKeysInfo[key.Key]
+		i := f.customKeysInfo[key]
 		if i != nil {
+			i.NetworkName = i.SecondaryNetNames[key]
 			return i
 		}
 	}

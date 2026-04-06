@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
 )
@@ -19,7 +18,7 @@ func NewInformerDatasource(kubeconfig string, infConfig *informers.Config, opMet
 	return &Datasource{Informers: inf}, nil
 }
 
-func (d *Datasource) IndexLookup(potentialKeys []cni.SecondaryNetKey, ip string) *model.ResourceMetaData {
+func (d *Datasource) IndexLookup(potentialKeys []string, ip string) *model.ResourceMetaData {
 	return d.Informers.IndexLookup(potentialKeys, ip)
 }
 
