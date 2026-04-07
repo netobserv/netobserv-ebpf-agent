@@ -1,0 +1,172 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: "Be concise and direct. No fluff."
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  poem: false
+  sequence_diagrams: false
+  review_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: false
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+    - WIP
+
+  path_filters:
+    # generated deepcopy
+    - "!**/zz_generated.deepcopy.go"
+    - "!vendor/"
+    # Generated eBPF bytecode and bindings
+    - "!**/*_bpfel.go"
+    - "!**/*_bpfeb.go"
+    - "!**/*_bpfel.o"
+    - "!**/*_bpfeb.o"
+    # Architecture-specific vmlinux headers (kernel generated)
+    - "!**/vmlinux*.h"
+    # Generated protobuf code
+    - "!**/*.pb.go"
+    - "!**/*_grpc.pb.go"
+
+  path_instructions:
+    - path: "bpf/**/*.c"
+      instructions: |
+        When reviewing eBPF C code:
+        - Verify proper bounds checking for array/map accesses
+        - Check for BPF verifier compliance (no unbounded loops, stack size limits)
+        - Ensure proper use of BPF helpers and kernel compatibility
+        - Review map definitions for correct sizing and key/value types
+        - Check for potential race conditions in map operations
+        - Verify CO-RE (Compile Once - Run Everywhere) relocations are used correctly
+    - path: "bpf/**/*.h"
+      instructions: |
+        When reviewing eBPF headers:
+        - Ensure struct definitions match between kernel and userspace
+        - Verify packed attributes and alignment for cross-boundary structs
+        - Check endianness handling for network byte order conversions
+    - path: "proto/**/*.proto"
+      instructions: |
+        When reviewing Protocol Buffer definitions:
+        - Verify field numbers are never reused
+        - Check for proper use of reserved fields
+        - Ensure backward compatibility for API changes
+        - Review message naming conventions
+
+  tools:
+    # already run in CI (code-style workflow)
+    golangci-lint:
+      enabled: false
+
+    # useful for this project
+    shellcheck:
+      enabled: true
+    yamllint:
+      enabled: true
+    hadolint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    checkov:
+      enabled: true
+    markdownlint:
+      enabled: true
+
+    # C/eBPF code analysis
+    cppcheck:
+      enabled: true
+    clang:
+      enabled: true
+
+    # Security scanning
+    semgrep:
+      enabled: true
+    trufflehog:
+      enabled: true
+
+    # not relevant to this project
+    ruff:
+      enabled: false
+    biome:
+      enabled: false
+    swiftlint:
+      enabled: false
+    phpstan:
+      enabled: false
+    phpmd:
+      enabled: false
+    phpcs:
+      enabled: false
+    eslint:
+      enabled: false
+    flake8:
+      enabled: false
+    rubocop:
+      enabled: false
+    detekt:
+      enabled: false
+    pmd:
+      enabled: false
+    clippy:
+      enabled: false
+    pylint:
+      enabled: false
+    oxc:
+      enabled: false
+    stylelint:
+      enabled: false
+    htmlhint:
+      enabled: false
+    prismaLint:
+      enabled: false
+    shopifyThemeCheck:
+      enabled: false
+    luacheck:
+      enabled: false
+    brakeman:
+      enabled: false
+    dotenvLint:
+      enabled: false
+    emberTemplateLint:
+      enabled: false
+    psscriptanalyzer:
+      enabled: false
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  web_search:
+    enabled: true
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+  linked_repositories:
+  - repository: "netobserv/netobserv-operator"
+    instructions: "Integrates with netobserv operator. The agent is deployed and managed by this operator. Consider operator configuration changes when reviewing agent API changes."
+  - repository: "netobserv/flowlogs-pipeline"
+    instructions: "Consumes flow data from this agent. Consider flowlogs-pipeline parsing logic when reviewing protobuf/gRPC API changes or flow structure modifications."
