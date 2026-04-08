@@ -121,26 +121,6 @@ func InitLocationDB(filepath string) error {
 
 		unzipErr := unzip(filepath, dbFileLocation)
 		if unzipErr != nil {
-			file, openErr := os.Open(dbFileLocation + "/" + dbFilename)
-			if openErr == nil {
-				fi, fileStatErr := file.Stat()
-				if fileStatErr == nil {
-					log.Infof("length of %s is: %d", dbFileLocation+"/"+dbFilename, fi.Size())
-					_ = file.Close()
-				} else {
-					log.Infof("file.Stat err %v", fileStatErr)
-				}
-			} else {
-				log.Infof("os.Open err %v", openErr)
-			}
-
-			fileContent, readFileErr := os.ReadFile(dbFileLocation + "/" + dbFilename)
-			if readFileErr == nil {
-				log.Infof("content of first 100 bytes of %s is: %s", dbFileLocation+"/"+dbFilename, fileContent[:100])
-			} else {
-				log.Infof("os.ReadFile err %v", readFileErr)
-			}
-
 			return fmt.Errorf("failed unzip %w ", unzipErr)
 		}
 	} else {
