@@ -186,7 +186,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	}
 
 	if fr.Metrics.QuicMetrics != nil {
-		out["QuicVersion"] = fr.Metrics.QuicMetrics.Version
+		out["QuicVersion"] = fr.Metrics.QuicVersionToString()
 		out["QuicSeenLongHdr"] = fr.Metrics.QuicMetrics.SeenLongHdr
 		out["QuicSeenShortHdr"] = fr.Metrics.QuicMetrics.SeenShortHdr
 	}

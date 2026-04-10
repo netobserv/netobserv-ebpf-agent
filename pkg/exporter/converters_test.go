@@ -139,7 +139,7 @@ func TestConversions(t *testing.T) {
 				"Interfaces":       []string{"eth0"},
 				"Udns":             []string{""},
 				"AgentIP":          "10.11.12.13",
-				"QuicVersion":      1,
+				"QuicVersion":      "QUIC v2",
 				"QuicSeenLongHdr":  1,
 				"QuicSeenShortHdr": 1,
 			},

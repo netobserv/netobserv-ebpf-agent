@@ -340,8 +340,6 @@ const static struct ssl_data_event_t *unused14 __attribute__((unused));
 typedef struct quic_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
-    u64 bytes;
-    u32 packets;
     u32 version;       // QUIC version (from long header), 0 if unknown
     u16 eth_protocol;  // ETH_P_IP or ETH_P_IPV6
     u8 seen_long_hdr;  // Saw handshake packets (long header)

@@ -232,8 +232,6 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
     quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
     if (flow) {
         flow->end_mono_time_ts = now;
-        flow->packets++;
-        flow->bytes += len;
         if (hdr_type == QUIC_HEADER_TYPE_LONG) {
             flow->seen_long_hdr = 1;
             if (version != 0)
@@ -245,8 +243,6 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
         quic_metrics new_flow = {
             .start_mono_time_ts = now,
             .end_mono_time_ts = now,
-            .bytes = len,
-            .packets = 1,
             .version = version,
             .eth_protocol = eth_protocol,
             .seen_long_hdr = (hdr_type == QUIC_HEADER_TYPE_LONG) ? 1 : 0,
@@ -261,8 +257,6 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
                 quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
                 if (flow) {
                     flow->end_mono_time_ts = now;
-                    flow->packets++;
-                    flow->bytes += len;
                     if (hdr_type == QUIC_HEADER_TYPE_LONG) {
                         flow->seen_long_hdr = 1;
                         if (version != 0)

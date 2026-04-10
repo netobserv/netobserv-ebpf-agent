@@ -220,13 +220,10 @@ type BpfQuicMetricsT struct {
 	_               structs.HostLayout
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
-	Bytes           uint64
-	Packets         uint32
 	Version         uint32
 	EthProtocol     uint16
 	SeenLongHdr     uint8
 	SeenShortHdr    uint8
-	_               [4]byte
 }
 
 type BpfSslDataEventT struct {
