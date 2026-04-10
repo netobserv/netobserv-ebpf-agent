@@ -1148,42 +1148,6 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("quicmap").Set(float64(countQuic))
-
-		if m.config.Debug {
-			logged := 0
-			const maxLogged = 10
-			var b strings.Builder
-			for id, f := range flows {
-				if logged >= maxLogged {
-					break
-				}
-				if f.QuicMetrics == nil {
-					continue
-				}
-				qm := f.QuicMetrics
-				if qm.SeenLongHdr == 0 && qm.SeenShortHdr == 0 && qm.Version == 0 {
-					continue
-				}
-				if logged > 0 {
-					b.WriteString(" | ")
-				}
-				// Format: src>dst p=<proto> v=<version> lh=<seenLongHdr> sh=<seenShortHdr>
-				b.WriteString(fmt.Sprintf(
-					"%s:%d>%s:%d p=%d v=%d lh=%d sh=%d",
-					model.IP(model.IPAddr(id.SrcIp)).String(), id.SrcPort,
-					model.IP(model.IPAddr(id.DstIp)).String(), id.DstPort,
-					id.TransportProtocol,
-					qm.Version, qm.SeenLongHdr, qm.SeenShortHdr,
-				))
-				logged++
-			}
-			if logged > 0 {
-				log.WithFields(logrus.Fields{
-					"quicFlowsLogged": logged,
-					"quicFlowsSample": b.String(),
-				}).Debug("QUIC flow metrics sample")
-			}
-		}
 	}
 	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))

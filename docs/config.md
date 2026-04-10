@@ -84,7 +84,6 @@ The following environment variables are available to configure the NetObserv eBP
   * `0`: disable QUIC tracking
   * `1`: enable QUIC tracking, limited to **UDP/443** (lower overhead / fewer false positives)
   * `2`: enable QUIC tracking on **any UDP port** (RFC 9312-friendly)
-* Deprecated (kept for backwards compatibility):
 * `ENABLE_PCA` (default: `false` disabled). If `true` enables Packet Capture Agent. 
 * `PCA_FILTER` (default: `none`). Works only when `ENABLE_PCA` is set. Accepted format <protocol,portnumber>. Example 
   `PCA_FILTER=tcp,22`.

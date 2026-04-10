@@ -168,7 +168,7 @@ func TestPBFlowToMap(t *testing.T) {
 		"IPSecRetCode":     int32(0),
 		"IPSecStatus":      "success",
 		"TLSVersion":       "TLS 1.2",
-		"QuicVersion":      uint32(1),
+		"QuicVersion":      "QUIC v2",
 		"QuicSeenLongHdr":  uint8(1),
 		"QuicSeenShortHdr": uint8(1),
 	}, out)
@@ -223,7 +223,7 @@ func TestRecordToMap_OptionalMetrics(t *testing.T) {
 			assert.Equal(t, tt.expectKeys, ok)
 
 			if tt.expectKeys {
-				assert.Equal(t, uint32(1), out["QuicVersion"])
+				assert.Equal(t, "QUIC v2", out["QuicVersion"])
 				assert.Equal(t, uint8(1), out["QuicSeenLongHdr"])
 				assert.Equal(t, uint8(1), out["QuicSeenShortHdr"])
 			}

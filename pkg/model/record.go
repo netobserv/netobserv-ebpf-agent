@@ -255,3 +255,16 @@ func (r *BpfFlowContent) TLSTypesToStrings() []string {
 func (r *BpfFlowContent) HasSSLMismatch() bool {
 	return r.MiscFlags&MiscFlagsSSLMismatch > 0
 }
+
+func (r *BpfFlowContent) QuicVersionToString() string {
+	if r.QuicMetrics == nil {
+		return ""
+	}
+	switch r.QuicMetrics.Version {
+	case 0:
+		return "QUIC v1"
+	case 1:
+		return "QUIC v2"
+	}
+	return "unknown"
+}
