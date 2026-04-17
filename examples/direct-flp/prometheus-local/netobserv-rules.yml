@@ -1,0 +1,44 @@
+# Recording + alert rules for the netobserv direct-flp / prom-local example.
+# After reload, use Graph → metric name (e.g. netobserv:tcp_flow_rtt:milliseconds).
+
+groups:
+  - name: netobserv-recording
+    interval: 15s
+    rules:
+      # sum of drop packets attributed to flows, grouped by last kernel drop cause
+      - record: netobserv:pkt_drop_packets:sum_by_cause
+        expr: sum by (PktDropLatestDropCause) (netobserv_pkt_drop_packets)
+
+      # TCP SRTT in milliseconds (source series is nanoseconds)
+      - record: netobserv:tcp_flow_rtt:milliseconds
+        expr: netobserv_tcp_flow_rtt_ns / 1e6
+
+      # per-series max DNS latency over 5m (requires ≥10s scrape; matches global interval)
+      - record: netobserv:dns_latency_ms:max_over_5m
+        expr: max_over_time(netobserv_dns_latency_ms[5m])
+
+      # up to 10 flows with largest last-reported byte gauge (high-cardinality labels preserved)
+      - record: netobserv:flow_bytes:top10
+        expr: topk(10, netobserv_flow_bytes)
+
+      # optional: rough “change” signal for byte gauges (can be noisy)
+      - record: netobserv:flow_bytes:deriv_2m
+        expr: deriv(netobserv_flow_bytes[2m])
+
+      - record: netobserv:ipsec_flow_bytes:sum_by_status
+        expr: sum by (IPSecStatus) (netobserv_ipsec_flow_bytes)
+
+      - record: netobserv:tls_flow_bytes:count_by_version
+        expr: count by (TLSVersion) (netobserv_tls_flow_bytes)
+
+  - name: netobserv-alerts
+    rules:
+      # Fires when no netobserv flow byte series exist (scrape down, agent stopped, or no traffic yet).
+      - alert: NetobservNoFlowMetrics
+        expr: absent(netobserv_flow_bytes)
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: No netobserv_flow_bytes series scraped
+          description: Prometheus has not recorded netobserv_flow_bytes in 3m. Check agent, :9102/metrics, and host.docker.internal from the container.
