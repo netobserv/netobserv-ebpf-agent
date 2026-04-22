@@ -61,10 +61,6 @@ type PriorityWriteSchedulerConfig struct {
 // Deprecated: The RFC 7540 write scheduler has known bugs and performance issues,
 // and RFC 7540 prioritization was deprecated in RFC 9113.
 func NewPriorityWriteScheduler(cfg *PriorityWriteSchedulerConfig) WriteScheduler {
-	return newPriorityWriteSchedulerRFC7540(cfg)
-}
-
-func newPriorityWriteSchedulerRFC7540(cfg *PriorityWriteSchedulerConfig) WriteScheduler {
 	if cfg == nil {
 		// For justification of these defaults, see:
 		// https://docs.google.com/document/d/1oLhNg1skaWD4_DtaoCxdSRN5erEXrH-KnLrMwEpOtFY

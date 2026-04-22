@@ -69,7 +69,6 @@ const (
 	defaultNetworkEventsGroupID         = 10
 	constEnableIPsec                    = "enable_ipsec"
 	constEnableOpenSSLTracking          = "enable_openssl_tracking"
-	constEnableTLSUsageTracking         = "enable_tls_usage_tracking"
 	sslDataEventMap                     = "ssl_data_event_map"
 	dnsNameMap                          = "dns_name_map"
 	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
@@ -2156,10 +2155,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		spec.Maps[ipsecInputMap].MaxEntries = 1
 		spec.Maps[ipsecOutputMap].MaxEntries = 1
 	}
-	enableTLSTracking := 0
-	if cfg.EnableTLSTracking {
-		enableTLSTracking = 1
-	}
 
 	enableDirectFlowRingbuf := 0
 	if cfg.EnableFlowsRingbufFallback {
@@ -2184,7 +2179,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constEnableIPsec, uint8(enableIPsec)},
 		{constEnableDirectFlowRingbuf, uint8(enableDirectFlowRingbuf)},
 		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
-		{constEnableTLSUsageTracking, uint8(enableTLSTracking)},
 	}
 
 	for _, mapping := range variables {

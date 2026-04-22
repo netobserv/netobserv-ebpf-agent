@@ -70,11 +70,6 @@ message Record {
   uint32 ipsec_encrypted = 30;
   int32 ipsec_encrypted_ret = 31;
   string dns_name = 32;
-  uint32 ssl_version = 33;
-  bool ssl_mismatch = 34;
-  uint32 tls_types = 35;
-  uint32 tls_cipher_suite = 36;
-  uint32 tls_key_share = 37;
 }
 
 message DataLink {
