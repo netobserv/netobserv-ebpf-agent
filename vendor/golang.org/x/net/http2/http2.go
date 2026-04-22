@@ -173,6 +173,7 @@ const (
 	SettingMaxFrameSize          SettingID = 0x5
 	SettingMaxHeaderListSize     SettingID = 0x6
 	SettingEnableConnectProtocol SettingID = 0x8
+	SettingNoRFC7540Priorities   SettingID = 0x9
 )
 
 var settingName = map[SettingID]string{
@@ -183,6 +184,7 @@ var settingName = map[SettingID]string{
 	SettingMaxFrameSize:          "MAX_FRAME_SIZE",
 	SettingMaxHeaderListSize:     "MAX_HEADER_LIST_SIZE",
 	SettingEnableConnectProtocol: "ENABLE_CONNECT_PROTOCOL",
+	SettingNoRFC7540Priorities:   "NO_RFC7540_PRIORITIES",
 }
 
 func (s SettingID) String() string {
