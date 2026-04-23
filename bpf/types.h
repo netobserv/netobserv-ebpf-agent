@@ -142,8 +142,8 @@ typedef struct dns_metrics_t {
 typedef struct pkt_drop_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
-    u16 bytes;
-    u16 packets;
+    u64 bytes;
+    u32 packets;
     u32 latest_drop_cause;
     u16 latest_flags;
     u16 eth_protocol;
@@ -154,8 +154,6 @@ typedef struct network_events_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
-    u16 bytes[MAX_NETWORK_EVENTS];
-    u16 packets[MAX_NETWORK_EVENTS];
     u16 eth_protocol;
     u8 network_events_idx;
 } network_events_metrics;
@@ -268,8 +266,6 @@ typedef enum global_counters_key_t {
     NETWORK_EVENTS_ERR_GROUPID_MISMATCH,
     NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS,
     NETWORK_EVENTS_GOOD,
-    NETWORK_EVENTS_OVERFLOW,
-    NETWORK_EVENTS_COOKIE_TOO_BIG,
     OBSERVED_INTF_MISSED,
     MAX_COUNTERS,
 } global_counters_key;
