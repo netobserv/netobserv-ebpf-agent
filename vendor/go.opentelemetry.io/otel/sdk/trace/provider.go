@@ -303,7 +303,14 @@ func (p *TracerProvider) Shutdown(ctx context.Context) error {
 		sps.state.Do(func() {
 			err = sps.sp.Shutdown(ctx)
 		})
-		retErr = errors.Join(retErr, err)
+		if err != nil {
+			if retErr == nil {
+				retErr = err
+			} else {
+				// Poor man's list of errors
+				retErr = fmt.Errorf("%w; %w", retErr, err)
+			}
+		}
 	}
 	p.spanProcessors.Store(&spanProcessorStates{})
 	return retErr
