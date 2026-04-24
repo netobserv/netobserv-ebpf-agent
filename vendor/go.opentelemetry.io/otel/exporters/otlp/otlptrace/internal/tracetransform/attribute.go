@@ -93,7 +93,6 @@ func Value(v attribute.Value) *commonpb.AnyValue {
 				Values: stringSliceValues(v.AsStringSlice()),
 			},
 		}
-	case attribute.EMPTY:
 	default:
 		av.Value = &commonpb.AnyValue_StringValue{
 			StringValue: "INVALID",

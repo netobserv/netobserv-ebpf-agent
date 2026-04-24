@@ -26,19 +26,17 @@ const (
 
 // periodicReaderConfig contains configuration options for a PeriodicReader.
 type periodicReaderConfig struct {
-	interval                 time.Duration
-	timeout                  time.Duration
-	producers                []Producer
-	cardinalityLimitSelector CardinalityLimitSelector
+	interval  time.Duration
+	timeout   time.Duration
+	producers []Producer
 }
 
 // newPeriodicReaderConfig returns a periodicReaderConfig configured with
 // options.
 func newPeriodicReaderConfig(options []PeriodicReaderOption) periodicReaderConfig {
 	c := periodicReaderConfig{
-		interval:                 envDuration(envInterval, defaultInterval),
-		timeout:                  envDuration(envTimeout, defaultTimeout),
-		cardinalityLimitSelector: defaultCardinalityLimitSelector,
+		interval: envDuration(envInterval, defaultInterval),
+		timeout:  envDuration(envTimeout, defaultTimeout),
 	}
 	for _, o := range options {
 		c = o.applyPeriodic(c)
@@ -113,13 +111,12 @@ func NewPeriodicReader(exporter Exporter, options ...PeriodicReaderOption) *Peri
 		context.Background(),
 	)
 	r := &PeriodicReader{
-		interval:                 conf.interval,
-		timeout:                  conf.timeout,
-		exporter:                 exporter,
-		flushCh:                  make(chan chan error),
-		cancel:                   cancel,
-		done:                     make(chan struct{}),
-		cardinalityLimitSelector: conf.cardinalityLimitSelector,
+		interval: conf.interval,
+		timeout:  conf.timeout,
+		exporter: exporter,
+		flushCh:  make(chan chan error),
+		cancel:   cancel,
+		done:     make(chan struct{}),
 		rmPool: sync.Pool{
 			New: func() any {
 				return &metricdata.ResourceMetrics{}
@@ -173,8 +170,6 @@ type PeriodicReader struct {
 
 	rmPool sync.Pool
 
-	cardinalityLimitSelector CardinalityLimitSelector
-
 	inst *observ.Instrumentation
 }
 
@@ -225,11 +220,6 @@ func (r *PeriodicReader) aggregation(
 	kind InstrumentKind,
 ) Aggregation { // nolint:revive  // import-shadow for method scoped by type.
 	return r.exporter.Aggregation(kind)
-}
-
-// cardinalityLimit returns the cardinality limit for kind.
-func (r *PeriodicReader) cardinalityLimit(kind InstrumentKind) (int, bool) {
-	return r.cardinalityLimitSelector(kind)
 }
 
 // collectAndExport gather all metric data related to the periodicReader r from
