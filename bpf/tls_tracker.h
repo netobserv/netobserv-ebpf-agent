@@ -280,7 +280,7 @@ static inline int track_tls(struct __sk_buff *skb, u8 proto, void *l4_hdr, u8 fl
         // TCP ACK
         return track_tls_tcp(skb, l4_hdr, tls);
     }
-    // TODO: UDP/QUIC
+    // TODO: UDP
     return TLSTRACKER_UNKNOWN;
 }
 
