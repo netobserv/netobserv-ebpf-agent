@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/sdk/internal/x"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
@@ -28,9 +27,8 @@ type hotColdHistogramPoint[N int64 | float64] struct {
 	hcwg         hotColdWaitGroup
 	hotColdPoint [2]histogramPointCounters[N]
 
-	attrs     attribute.Set
-	res       FilteredExemplarReservoir[N]
-	startTime time.Time
+	attrs attribute.Set
+	res   FilteredExemplarReservoir[N]
 }
 
 // histogramPointCounters contains only the atomic counter data, and is used by
@@ -300,7 +298,6 @@ func (s *cumulativeHistogram[N]) measure(
 					counts: make([]atomic.Uint64, len(s.bounds)+1),
 				},
 			},
-			startTime: now(),
 		}
 		return hPt
 	}).(*hotColdHistogramPoint[N])
@@ -342,23 +339,16 @@ func (s *cumulativeHistogram[N]) collect(
 	// current length for capacity.
 	hDPts := reset(h.DataPoints, 0, s.values.Len())
 
-	perSeriesStartTimeEnabled := x.PerSeriesStartTimestamps.Enabled()
-
 	var i int
 	s.values.Range(func(_, value any) bool {
 		val := value.(*hotColdHistogramPoint[N])
-
-		startTime := s.start
-		if perSeriesStartTimeEnabled {
-			startTime = val.startTime
-		}
 		// swap, observe, and clear the point
 		readIdx := val.hcwg.swapHotAndWait()
 		var bucketCounts []uint64
 		count := val.hotColdPoint[readIdx].loadCountsInto(&bucketCounts)
 		newPt := metricdata.HistogramDataPoint[N]{
 			Attributes: val.attrs,
-			StartTime:  startTime,
+			StartTime:  s.start,
 			Time:       t,
 			Count:      count,
 			Bounds:     bounds,
