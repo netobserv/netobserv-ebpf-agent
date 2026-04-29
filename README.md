@@ -77,6 +77,8 @@ sudo -E bin/netobserv-ebpf-agent
 
 For more information about configuring flowlogs-pipeline, please refer to [its documentation](https://github.com/netobserv/flowlogs-pipeline).
 
+For **direct-flp** with embedded Prometheus metrics, optional RTT/DNS/packet-drop/IPsec/TLS features, and a local Prometheus (Docker) including recording rules and an example alert, see [examples/direct-flp/prometheus-local/README.md](./examples/direct-flp/prometheus-local/README.md).
+
 To deploy locally, use instructions from [flowlogs-dump (like tcpdump)](./examples/flowlogs-dump/README.md).    
 To deploy it as a Pod, you can check the [deployment examples](./deployments).
 
