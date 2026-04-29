@@ -289,6 +289,10 @@ type BpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
 	KfreeSkb                *ebpf.ProgramSpec `ebpf:"kfree_skb"`
+	NetkitPeerFlowParse     *ebpf.ProgramSpec `ebpf:"netkit_peer_flow_parse"`
+	NetkitPeerPcaParse      *ebpf.ProgramSpec `ebpf:"netkit_peer_pca_parse"`
+	NetkitPrimaryFlowParse  *ebpf.ProgramSpec `ebpf:"netkit_primary_flow_parse"`
+	NetkitPrimaryPcaParse   *ebpf.ProgramSpec `ebpf:"netkit_primary_pca_parse"`
 	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
 	ProbeEntrySSL_write     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
 	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
@@ -446,6 +450,10 @@ type BpfVariables struct {
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
 	KfreeSkb                *ebpf.Program `ebpf:"kfree_skb"`
+	NetkitPeerFlowParse     *ebpf.Program `ebpf:"netkit_peer_flow_parse"`
+	NetkitPeerPcaParse      *ebpf.Program `ebpf:"netkit_peer_pca_parse"`
+	NetkitPrimaryFlowParse  *ebpf.Program `ebpf:"netkit_primary_flow_parse"`
+	NetkitPrimaryPcaParse   *ebpf.Program `ebpf:"netkit_primary_pca_parse"`
 	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
 	ProbeEntrySSL_write     *ebpf.Program `ebpf:"probe_entry_SSL_write"`
 	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
@@ -468,6 +476,10 @@ type BpfPrograms struct {
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
 		p.KfreeSkb,
+		p.NetkitPeerFlowParse,
+		p.NetkitPeerPcaParse,
+		p.NetkitPrimaryFlowParse,
+		p.NetkitPrimaryPcaParse,
 		p.NetworkEventsMonitoring,
 		p.ProbeEntrySSL_write,
 		p.TcEgressFlowParse,
