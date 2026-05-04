@@ -3,7 +3,7 @@ module github.com/netobserv/netobserv-ebpf-agent
 go 1.25.0
 
 require (
-	github.com/caarlos0/env/v11 v11.4.0
+	github.com/caarlos0/env/v11 v11.4.1
 	github.com/cilium/ebpf v0.21.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
