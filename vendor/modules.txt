@@ -294,8 +294,8 @@ github.com/mwitkow/go-conntrack
 # github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 ## explicit
 github.com/mxk/go-flowrate/flowrate
-# github.com/netobserv/flowlogs-pipeline v1.11.3-community
-## explicit; go 1.25.0
+# github.com/netobserv/flowlogs-pipeline v1.10.1-community
+## explicit; go 1.24.0
 github.com/netobserv/flowlogs-pipeline/pkg/api
 github.com/netobserv/flowlogs-pipeline/pkg/config
 github.com/netobserv/flowlogs-pipeline/pkg/dsl
@@ -327,7 +327,6 @@ github.com/netobserv/flowlogs-pipeline/pkg/prometheus
 github.com/netobserv/flowlogs-pipeline/pkg/server
 github.com/netobserv/flowlogs-pipeline/pkg/utils
 github.com/netobserv/flowlogs-pipeline/pkg/utils/filters
-github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils
 # github.com/netobserv/gopipes v0.3.0
 ## explicit; go 1.18
 github.com/netobserv/gopipes/pkg/node
@@ -902,7 +901,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# k8s.io/api v0.35.3
+# k8s.io/api v0.35.0
 ## explicit; go 1.25.0
 k8s.io/api/admissionregistration/v1
 k8s.io/api/admissionregistration/v1alpha1
@@ -961,7 +960,7 @@ k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
 k8s.io/api/storagemigration/v1beta1
-# k8s.io/apimachinery v0.35.3
+# k8s.io/apimachinery v0.35.0
 ## explicit; go 1.25.0
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
@@ -1030,7 +1029,7 @@ k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/netutil
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/client-go v0.35.3
+# k8s.io/client-go v0.35.0
 ## explicit; go 1.25.0
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1alpha1

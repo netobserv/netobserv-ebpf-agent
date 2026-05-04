@@ -64,16 +64,6 @@ func computeHash(keys []string) uint64 {
 	return h
 }
 
-func (tc *TimedCache) Clear() {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	tc.cacheList = list.New()
-	tc.cacheMap = make(TimedCacheMap)
-	if tc.cacheLenMetric != nil {
-		tc.cacheLenMetric.Set(0)
-	}
-}
-
 func (tc *TimedCache) GetCacheEntry(keys []string) (interface{}, bool) {
 	h := computeHash(keys)
 	tc.mu.RLock()
@@ -145,7 +135,7 @@ func (tc *TimedCache) CleanupExpiredEntries(expiry time.Duration, callback Cache
 		"mapLen":  len(tc.cacheMap),
 		"listLen": tc.cacheList.Len(),
 	})
-	clog.Debugf("cleaning up expired entries")
+	clog.Debugf("cleaning up expried entries")
 
 	expireTime := time.Now().Add(-expiry)
 	deleted := 0

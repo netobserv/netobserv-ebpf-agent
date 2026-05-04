@@ -24,8 +24,9 @@ import (
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -41,9 +42,10 @@ import (
 )
 
 const (
-	syncTime    = 10 * time.Minute
-	IndexCustom = "byCustomKey"
-	IndexIP     = "byIP"
+	kubeConfigEnvVariable = "KUBECONFIG"
+	syncTime              = 10 * time.Minute
+	IndexCustom           = "byCustomKey"
+	IndexIP               = "byIP"
 )
 
 var (
@@ -51,7 +53,7 @@ var (
 )
 
 type Interface interface {
-	IndexLookup([]string, string) *model.ResourceMetaData
+	IndexLookup([]cni.SecondaryNetKey, string) *model.ResourceMetaData
 	GetNodeByName(string) (*model.ResourceMetaData, error)
 	InitFromConfig(string, *Config, *operational.Metrics) error
 }
@@ -82,7 +84,7 @@ var (
 	}
 )
 
-func (k *Informers) IndexLookup(potentialKeys []string, ip string) *model.ResourceMetaData {
+func (k *Informers) IndexLookup(potentialKeys []cni.SecondaryNetKey, ip string) *model.ResourceMetaData {
 	if info, ok := k.fetchInformers(potentialKeys, ip); ok {
 		k.checkParent(info)
 		return info
@@ -91,7 +93,7 @@ func (k *Informers) IndexLookup(potentialKeys []string, ip string) *model.Resour
 	return nil
 }
 
-func (k *Informers) fetchInformers(potentialKeys []string, ip string) (*model.ResourceMetaData, bool) {
+func (k *Informers) fetchInformers(potentialKeys []cni.SecondaryNetKey, ip string) (*model.ResourceMetaData, bool) {
 	if info, ok := k.fetchPodInformer(potentialKeys, ip); ok {
 		// it might happen that the Host is discovered after the Pod
 		if info.HostName == "" {
@@ -110,7 +112,7 @@ func (k *Informers) fetchInformers(potentialKeys []string, ip string) (*model.Re
 	return nil, false
 }
 
-func (k *Informers) fetchPodInformer(potentialKeys []string, ip string) (*model.ResourceMetaData, bool) {
+func (k *Informers) fetchPodInformer(potentialKeys []cni.SecondaryNetKey, ip string) (*model.ResourceMetaData, bool) {
 	// 1. Check if the unique key matches any Pod (secondary networks / multus case)
 	if info, ok := k.infoForCustomKeys(k.pods.GetIndexer(), "Pod", potentialKeys); ok {
 		return info, ok
@@ -123,22 +125,22 @@ func (k *Informers) increaseIndexerHits(kind, namespace, network, warn string) {
 	k.indexerHitMetric.WithLabelValues(kind, namespace, network, warn).Inc()
 }
 
-func (k *Informers) infoForCustomKeys(idx cache.Indexer, kind string, potentialKeys []string) (*model.ResourceMetaData, bool) {
+func (k *Informers) infoForCustomKeys(idx cache.Indexer, kind string, potentialKeys []cni.SecondaryNetKey) (*model.ResourceMetaData, bool) {
 	for _, key := range potentialKeys {
-		objs, err := idx.ByIndex(IndexCustom, key)
+		objs, err := idx.ByIndex(IndexCustom, key.Key)
 		if err != nil {
-			k.increaseIndexerHits(kind, "", "", "informer error")
+			k.increaseIndexerHits(kind, "", key.NetworkName, "informer error")
 			log.WithError(err).WithField("key", key).Debug("error accessing unique key index, ignoring")
 			return nil, false
 		}
 		if len(objs) > 0 {
 			info := objs[0].(*model.ResourceMetaData)
-			info.NetworkName = info.SecondaryNetNames[key]
+			info.NetworkName = key.NetworkName
 			if len(objs) > 1 {
-				k.increaseIndexerHits(kind, info.Namespace, info.NetworkName, "multiple matches")
+				k.increaseIndexerHits(kind, info.Namespace, key.NetworkName, "multiple matches")
 				log.WithField("key", key).Debugf("found %d objects matching this key, returning first", len(objs))
 			} else {
-				k.increaseIndexerHits(kind, info.Namespace, info.NetworkName, "")
+				k.increaseIndexerHits(kind, info.Namespace, key.NetworkName, "")
 			}
 			log.Tracef("infoForUniqueKey found key %v", info)
 			return info, true
@@ -375,28 +377,21 @@ func (k *Informers) initPodInformer(informerFactory inf.SharedInformerFactory, c
 			}
 		}
 		// Index from secondary network info
-		namedKeys := make(map[string]string)
-		var flatKeys []string
+		var keys []string
+		var err error
 		if cfg.hasMultus {
-			if fk, nk, err := multus.GetPodUniqueKeys(pod, cfg.secondaryNetworks); err != nil {
+			keys, err = multus.GetPodUniqueKeys(pod, cfg.secondaryNetworks)
+			if err != nil {
 				// Log the error as Info, do not block other ips indexing
 				log.WithError(err).Infof("Secondary network cannot be identified")
-			} else {
-				flatKeys = append(flatKeys, fk...)
-				for k, v := range nk {
-					namedKeys[k] = v
-				}
 			}
 		}
 		if cfg.hasUDN {
-			if fk, nk, err := udn.GetPodUniqueKeys(context.Background(), dynClient, pod); err != nil {
+			if udnKeys, err := udn.GetPodUniqueKeys(context.Background(), dynClient, pod); err != nil {
 				// Log the error as Info, do not block other ips indexing
 				log.WithError(err).Infof("UDNs cannot be identified")
 			} else {
-				flatKeys = append(flatKeys, fk...)
-				for k, v := range nk {
-					namedKeys[k] = v
-				}
+				keys = append(keys, udnKeys...)
 			}
 		}
 
@@ -408,14 +403,13 @@ func (k *Informers) initPodInformer(informerFactory inf.SharedInformerFactory, c
 				Annotations:     pod.Annotations,
 				OwnerReferences: pod.OwnerReferences,
 			},
-			Kind:              model.KindPod,
-			OwnerName:         pod.Name,
-			OwnerKind:         model.KindPod,
-			HostIP:            pod.Status.HostIP,
-			HostName:          pod.Spec.NodeName,
-			SecondaryNetKeys:  flatKeys,
-			SecondaryNetNames: namedKeys,
-			IPs:               ips,
+			Kind:             model.KindPod,
+			OwnerName:        pod.Name,
+			OwnerKind:        model.KindPod,
+			HostIP:           pod.Status.HostIP,
+			HostName:         pod.Spec.NodeName,
+			SecondaryNetKeys: keys,
+			IPs:              ips,
 		}
 		if len(pod.OwnerReferences) > 0 {
 			obj.OwnerKind = pod.OwnerReferences[0].Kind
@@ -519,7 +513,7 @@ func (k *Informers) InitFromConfig(kubeconfig string, infConfig *Config, opMetri
 	k.stopChan = make(chan struct{})
 	k.mdStopChan = make(chan struct{})
 
-	kconf, err := k8sutils.LoadK8sConfig(kubeconfig)
+	kconf, err := utils.LoadK8sConfig(kubeconfig)
 	if err != nil {
 		return err
 	}
