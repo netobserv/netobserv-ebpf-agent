@@ -19,7 +19,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/write"
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
+	k8sutils "github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -162,7 +162,7 @@ func (b *builder) readStages() error {
 	for _, param := range b.configParams {
 		log.Debugf("stage = %v", param.Name)
 		if _, exists := b.pipelineEntryMap[param.Name]; exists {
-			return fmt.Errorf("duplicate stage name '%s' found in pipeline definition [%v]", param.Name, param)
+			return fmt.Errorf("duplicate stage name '%s' found in pipeline definition", param.Name)
 		}
 		pEntry := pipelineEntry{
 			stageName: param.Name,

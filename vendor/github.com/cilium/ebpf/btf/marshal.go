@@ -78,13 +78,6 @@ type Builder struct {
 	stableIDs map[Type]TypeID
 	// Explicitly added strings.
 	strings *stringTableBuilder
-	// Deduplication data structure.
-	deduper *deduper
-}
-
-type BuilderOptions struct {
-	// Deduplicate enables type deduplication.
-	Deduplicate bool
 }
 
 // NewBuilder creates a Builder from a list of types.
@@ -92,20 +85,11 @@ type BuilderOptions struct {
 // It is more efficient than calling [Add] individually.
 //
 // Returns an error if adding any of the types fails.
-func NewBuilder(types []Type, opts *BuilderOptions) (*Builder, error) {
-	if opts == nil {
-		opts = &BuilderOptions{}
-	}
-
+func NewBuilder(types []Type) (*Builder, error) {
 	b := &Builder{
 		make([]Type, 0, len(types)),
 		make(map[Type]TypeID, len(types)),
 		nil,
-		nil,
-	}
-
-	if opts.Deduplicate {
-		b.deduper = newDeduper()
 	}
 
 	for _, typ := range types {
@@ -133,14 +117,6 @@ func (b *Builder) Add(typ Type) (TypeID, error) {
 		b.stableIDs = make(map[Type]TypeID)
 	}
 
-	if b.deduper != nil {
-		var err error
-		typ, err = b.deduper.deduplicate(typ)
-		if err != nil {
-			return 0, err
-		}
-	}
-
 	if _, ok := typ.(*Void); ok {
 		// Equality is weird for void, since it is a zero sized type.
 		return 0, nil
@@ -166,19 +142,6 @@ func (b *Builder) Add(typ Type) (TypeID, error) {
 
 	b.stableIDs[typ] = id
 	return id, nil
-}
-
-// Spec marshals the Builder's types and returns a new Spec to query them.
-//
-// The resulting Spec does not share any state with the Builder, subsequent
-// additions to the Builder will not affect the Spec.
-func (b *Builder) Spec() (*Spec, error) {
-	buf, err := b.Marshal(make([]byte, 0), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return loadRawSpec(buf, nil)
 }
 
 // Marshal encodes all types in the Marshaler into BTF wire format.

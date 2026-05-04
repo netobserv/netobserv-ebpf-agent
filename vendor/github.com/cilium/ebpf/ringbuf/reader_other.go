@@ -11,14 +11,12 @@ import (
 
 var ErrFlushed = epoll.ErrFlushed
 
-var _ poller = (*epollPoller)(nil)
-
-type epollPoller struct {
+type poller struct {
 	*epoll.Poller
 	events []unix.EpollEvent
 }
 
-func newPoller(fd int) (*epollPoller, error) {
+func newPoller(fd int) (*poller, error) {
 	ep, err := epoll.New()
 	if err != nil {
 		return nil, err
@@ -29,16 +27,15 @@ func newPoller(fd int) (*epollPoller, error) {
 		return nil, err
 	}
 
-	return &epollPoller{
+	return &poller{
 		Poller: ep,
 		events: make([]unix.EpollEvent, 1),
 	}, nil
 }
 
-// Wait blocks until data is available or the deadline is reached.
 // Returns [os.ErrDeadlineExceeded] if a deadline was set and no wakeup was received.
 // Returns [ErrFlushed] if the ring buffer was flushed manually.
-func (p *epollPoller) Wait(deadline time.Time) error {
+func (p *poller) Wait(deadline time.Time) error {
 	_, err := p.Poller.Wait(p.events, deadline)
 	return err
 }

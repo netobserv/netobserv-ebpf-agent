@@ -13,18 +13,16 @@ import (
 	"github.com/cilium/ebpf/internal/efw"
 )
 
-var ErrFlushed = errors.New("ring buffer flushed")
-
-var _ poller = (*windowsPoller)(nil)
-
-type windowsPoller struct {
+type poller struct {
 	closed      atomic.Bool
 	handle      windows.Handle
 	flushHandle windows.Handle
 	handles     []windows.Handle
 }
 
-func newPoller(fd int) (*windowsPoller, error) {
+var ErrFlushed = errors.New("ring buffer flushed")
+
+func newPoller(fd int) (*poller, error) {
 	handle, err := windows.CreateEvent(nil, 0, 0, nil)
 	if err != nil {
 		return nil, err
@@ -42,18 +40,17 @@ func newPoller(fd int) (*windowsPoller, error) {
 		return nil, err
 	}
 
-	return &windowsPoller{
+	return &poller{
 		handle:      handle,
 		flushHandle: flushHandle,
 		handles:     []windows.Handle{handle, flushHandle},
 	}, nil
 }
 
-// Wait blocks until data is available or the deadline is reached.
 // Returns [os.ErrDeadlineExceeded] if a deadline was set and no wakeup was received.
 // Returns [ErrFlushed] if the ring buffer was flushed manually.
 // Returns [os.ErrClosed] if the poller was closed.
-func (p *windowsPoller) Wait(deadline time.Time) error {
+func (p *poller) Wait(deadline time.Time) error {
 	if p.closed.Load() {
 		return os.ErrClosed
 	}
@@ -85,7 +82,7 @@ func (p *windowsPoller) Wait(deadline time.Time) error {
 }
 
 // Flush interrupts [Wait] with [ErrFlushed].
-func (p *windowsPoller) Flush() error {
+func (p *poller) Flush() error {
 	// Signal the handle to wake up any waiting threads
 	if err := windows.SetEvent(p.flushHandle); err != nil {
 		if errors.Is(err, windows.ERROR_INVALID_HANDLE) {
@@ -97,7 +94,7 @@ func (p *windowsPoller) Flush() error {
 	return nil
 }
 
-func (p *windowsPoller) Close() error {
+func (p *poller) Close() error {
 	p.closed.Store(true)
 
 	if err := p.Flush(); err != nil {

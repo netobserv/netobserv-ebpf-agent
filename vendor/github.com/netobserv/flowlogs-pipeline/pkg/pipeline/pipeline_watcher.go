@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
-	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,8 +22,14 @@ type pipelineConfigWatcher struct {
 	pipelineEntryMap map[string]*pipelineEntry
 }
 
-func newPipelineConfigWatcher(cfg config.DynamicParameters, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
-	config, err := k8sutils.LoadK8sConfig(cfg.KubeConfigPath)
+func newPipelineConfigWatcher(cfg *config.Root, pipelineEntryMap map[string]*pipelineEntry) (*pipelineConfigWatcher, error) {
+	if cfg.DynamicParameters.Name == "" ||
+		cfg.DynamicParameters.Namespace == "" ||
+		cfg.DynamicParameters.FileName == "" {
+		return nil, nil
+	}
+
+	config, err := utils.LoadK8sConfig(cfg.DynamicParameters.KubeConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -35,16 +41,16 @@ func newPipelineConfigWatcher(cfg config.DynamicParameters, pipelineEntryMap map
 	pipelineCW := pipelineConfigWatcher{
 		clientSet:        *clientset,
 		pipelineEntryMap: pipelineEntryMap,
-		cmName:           cfg.Name,
-		cmNamespace:      cfg.Namespace,
-		configFile:       cfg.FileName,
+		cmName:           cfg.DynamicParameters.Name,
+		cmNamespace:      cfg.DynamicParameters.Namespace,
+		configFile:       cfg.DynamicParameters.FileName,
 	}
 
 	return &pipelineCW, nil
+
 }
 
 func (pcw *pipelineConfigWatcher) Run() {
-	log.Info("Start watching config")
 	for {
 		watcher, err := pcw.clientSet.CoreV1().ConfigMaps(pcw.cmNamespace).Watch(context.TODO(),
 			metav1.SingleObject(metav1.ObjectMeta{Name: pcw.cmName, Namespace: pcw.cmNamespace}))
@@ -90,12 +96,9 @@ func (pcw *pipelineConfigWatcher) updateFromConfigmap(cm *corev1.ConfigMap) {
 			log.Errorf("Cannot parse config: %v", err)
 			return
 		}
-		log.Debugf("Received a config update")
 		for _, param := range config.Parameters {
 			if pentry, ok := pcw.pipelineEntryMap[param.Name]; ok {
 				pcw.updateEntry(pentry, param)
-			} else {
-				log.Warnf("Unable to match updated config with a stage; name=%s", param.Name)
 			}
 		}
 	}
@@ -105,8 +108,6 @@ func (pcw *pipelineConfigWatcher) updateEntry(pEntry *pipelineEntry, param confi
 	switch pEntry.stageType {
 	case StageEncode:
 		pEntry.Encoder.Update(param)
-	case StageTransform:
-		pEntry.Transformer.Update(param)
 	default:
 		log.Warningf("Hot reloading not supported for: %s", pEntry.stageType)
 	}

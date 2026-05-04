@@ -305,7 +305,6 @@ type ProgramInfo struct {
 
 	maps                 []MapID
 	insns                []byte
-	numInsns             uint32
 	jitedSize            uint32
 	verifiedInstructions uint32
 
@@ -373,7 +372,6 @@ func newProgramInfoFromFd(fd *sys.FD) (*ProgramInfo, error) {
 		jitedSize:            info.JitedProgLen,
 		loadTime:             time.Duration(info.LoadTime),
 		verifiedInstructions: info.VerifiedInsns,
-		numInsns:             info.XlatedProgLen,
 	}
 
 	// Supplement OBJ_INFO with data from /proc/self/fdinfo. It contains fields
@@ -418,20 +416,9 @@ func newProgramInfoFromFd(fd *sys.FD) (*ProgramInfo, error) {
 
 	if info.XlatedProgLen > 0 {
 		pi.insns = make([]byte, info.XlatedProgLen)
-		var info3 sys.ProgInfo
-		info3.XlatedProgLen = info.XlatedProgLen
-		info3.XlatedProgInsns = sys.SlicePointer(pi.insns)
-
-		// When kernel.kptr_restrict and net.core.bpf_jit_harden are both set, it causes the
-		// syscall to abort when trying to readback xlated instructions, skipping other info
-		// as well. So request xlated instructions separately.
-		if err := sys.ObjInfo(fd, &info3); err != nil {
-			return nil, err
-		}
-		if info3.XlatedProgInsns.IsNil() {
-			pi.restricted = true
-			pi.insns = nil
-		}
+		info2.XlatedProgLen = info.XlatedProgLen
+		info2.XlatedProgInsns = sys.SlicePointer(pi.insns)
+		makeSecondCall = true
 	}
 
 	if info.NrLineInfo > 0 {
@@ -490,51 +477,17 @@ func newProgramInfoFromFd(fd *sys.FD) (*ProgramInfo, error) {
 		if err := sys.ObjInfo(fd, &info2); err != nil {
 			return nil, err
 		}
-		if info.JitedProgLen > 0 && info2.JitedProgInsns.IsNil() {
-			// JIT information is not available due to kernel.kptr_restrict
-			pi.jitedInfo.lineInfos = nil
-			pi.jitedInfo.ksyms = nil
-			pi.jitedInfo.insns = nil
-			pi.jitedInfo.funcLens = nil
-		}
 	}
 
-	if len(pi.Name) == len(info.Name)-1 { // Possibly truncated, check BTF info for full name
-		name, err := readNameFromFunc(&pi)
-		if err == nil {
-			pi.Name = name
-		} // If an error occurs, keep the truncated name, which is better than none
+	if info.XlatedProgLen > 0 && info2.XlatedProgInsns.IsNil() {
+		pi.restricted = true
+		pi.insns = nil
+		pi.lineInfos = nil
+		pi.funcInfos = nil
+		pi.jitedInfo = programJitedInfo{}
 	}
 
 	return &pi, nil
-}
-
-func readNameFromFunc(pi *ProgramInfo) (string, error) {
-	if pi.numFuncInfos == 0 {
-		return "", errors.New("no function info")
-	}
-
-	spec, err := pi.btfSpec()
-	if err != nil {
-		return "", err
-	}
-
-	funcInfos, err := btf.LoadFuncInfos(
-		bytes.NewReader(pi.funcInfos),
-		internal.NativeEndian,
-		pi.numFuncInfos,
-		spec,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	for _, funcInfo := range funcInfos {
-		if funcInfo.Offset == 0 { // Information about the whole program
-			return funcInfo.Func.Name, nil
-		}
-	}
-	return "", errors.New("no function info about program")
 }
 
 func readProgramInfoFromProc(fd *sys.FD, pi *ProgramInfo) error {
@@ -628,6 +581,10 @@ var ErrRestrictedKernel = internal.ErrRestrictedKernel
 // ErrNotSupported if the program was created without BTF or if the kernel
 // doesn't support the field.
 func (pi *ProgramInfo) LineInfos() (btf.LineOffsets, error) {
+	if pi.restricted {
+		return nil, fmt.Errorf("line infos: %w", ErrRestrictedKernel)
+	}
+
 	if len(pi.lineInfos) == 0 {
 		return nil, fmt.Errorf("insufficient permissions or unsupported kernel: %w", ErrNotSupported)
 	}
@@ -708,20 +665,27 @@ func (pi *ProgramInfo) Instructions() (asm.Instructions, error) {
 				return nil, fmt.Errorf("unable to get BTF spec: %w", err)
 			}
 
-			lineInfos, err := btf.LoadLineInfos(bytes.NewReader(pi.lineInfos), internal.NativeEndian, pi.numLineInfos, spec)
+			lineInfos, err := btf.LoadLineInfos(
+				bytes.NewReader(pi.lineInfos),
+				internal.NativeEndian,
+				pi.numLineInfos,
+				spec,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("parse line info: %w", err)
 			}
 
-			funcInfos, err := btf.LoadFuncInfos(bytes.NewReader(pi.funcInfos), internal.NativeEndian, pi.numFuncInfos, spec)
+			funcInfos, err := btf.LoadFuncInfos(
+				bytes.NewReader(pi.funcInfos),
+				internal.NativeEndian,
+				pi.numFuncInfos,
+				spec,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("parse func info: %w", err)
 			}
 
-			iter := insns.Iterate()
-			for iter.Next() {
-				assignMetadata(iter.Ins, iter.Offset, &funcInfos, &lineInfos, nil)
-			}
+			btf.AssignMetadataToInstructions(insns, funcInfos, lineInfos, btf.CORERelocationInfos{})
 		}
 	}
 
@@ -744,6 +708,10 @@ func (pi *ProgramInfo) Instructions() (asm.Instructions, error) {
 //
 // Available from 4.13. Reading this metadata requires CAP_BPF or equivalent.
 func (pi *ProgramInfo) JitedSize() (uint32, error) {
+	if pi.restricted {
+		return 0, fmt.Errorf("jited size: %w", ErrRestrictedKernel)
+	}
+
 	if pi.jitedSize == 0 {
 		return 0, fmt.Errorf("insufficient permissions, unsupported kernel, or JIT compiler disabled: %w", ErrNotSupported)
 	}
@@ -753,12 +721,20 @@ func (pi *ProgramInfo) JitedSize() (uint32, error) {
 // TranslatedSize returns the size of the program's translated instructions in
 // bytes, after it has been verified and rewritten by the kernel.
 //
+// Returns an error wrapping [ErrRestrictedKernel] if translated instructions
+// are restricted by sysctls.
+//
 // Available from 4.13. Reading this metadata requires CAP_BPF or equivalent.
 func (pi *ProgramInfo) TranslatedSize() (int, error) {
-	if pi.numInsns == 0 {
+	if pi.restricted {
+		return 0, fmt.Errorf("xlated size: %w", ErrRestrictedKernel)
+	}
+
+	insns := len(pi.insns)
+	if insns == 0 {
 		return 0, fmt.Errorf("insufficient permissions or unsupported kernel: %w", ErrNotSupported)
 	}
-	return int(pi.numInsns), nil
+	return insns, nil
 }
 
 // MapIDs returns the maps related to the program.
@@ -856,6 +832,10 @@ func (pi *ProgramInfo) JitedFuncLens() ([]uint32, bool) {
 // ErrNotSupported if the program was created without BTF or if the kernel
 // doesn't support the field.
 func (pi *ProgramInfo) FuncInfos() (btf.FuncOffsets, error) {
+	if pi.restricted {
+		return nil, fmt.Errorf("func infos: %w", ErrRestrictedKernel)
+	}
+
 	if len(pi.funcInfos) == 0 {
 		return nil, fmt.Errorf("insufficient permissions or unsupported kernel: %w", ErrNotSupported)
 	}

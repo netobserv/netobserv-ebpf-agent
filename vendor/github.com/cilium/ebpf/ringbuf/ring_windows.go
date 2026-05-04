@@ -10,9 +10,7 @@ import (
 	"github.com/cilium/ebpf/internal/sys"
 )
 
-var _ eventRing = (*windowsEventRing)(nil)
-
-type windowsEventRing struct {
+type ringbufEventRing struct {
 	mapFd            *sys.FD
 	cons, prod, data *uint8
 	*ringReader
@@ -20,7 +18,7 @@ type windowsEventRing struct {
 	cleanup runtime.Cleanup
 }
 
-func newRingBufEventRing(mapFD, size int) (*windowsEventRing, error) {
+func newRingBufEventRing(mapFD, size int) (*ringbufEventRing, error) {
 	dupFd, err := efw.EbpfDuplicateFd(mapFD)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate map fd: %w", err)
@@ -48,7 +46,7 @@ func newRingBufEventRing(mapFD, size int) (*windowsEventRing, error) {
 	prodPos := (*uintptr)(unsafe.Pointer(prodPtr))
 	data := unsafe.Slice(dataPtr, dataLen*2)
 
-	ring := &windowsEventRing{
+	ring := &ringbufEventRing{
 		mapFd:      fd,
 		cons:       consPtr,
 		prod:       prodPtr,
@@ -62,7 +60,7 @@ func newRingBufEventRing(mapFD, size int) (*windowsEventRing, error) {
 	return ring, nil
 }
 
-func (ring *windowsEventRing) Close() error {
+func (ring *ringbufEventRing) Close() error {
 	ring.cleanup.Stop()
 
 	return errors.Join(

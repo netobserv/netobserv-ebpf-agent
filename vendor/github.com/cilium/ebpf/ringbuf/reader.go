@@ -19,21 +19,6 @@ var (
 	errBusy   = errors.New("sample not committed yet")
 )
 
-// poller abstracts platform-specific event notification.
-type poller interface {
-	Wait(deadline time.Time) error
-	Flush() error
-	Close() error
-}
-
-// eventRing abstracts platform-specific ring buffer memory access.
-type eventRing interface {
-	size() int
-	AvailableBytes() uint64
-	readRecord(rec *Record) error
-	Close() error
-}
-
 // ringbufHeader from 'struct bpf_ringbuf_hdr' in kernel/bpf/ringbuf.c
 type ringbufHeader struct {
 	Len uint32
@@ -64,11 +49,11 @@ type Record struct {
 // Reader allows reading bpf_ringbuf_output
 // from user space.
 type Reader struct {
-	poller poller
+	poller *poller
 
 	// mu protects read/write access to the Reader structure
 	mu         sync.Mutex
-	ring       eventRing
+	ring       *ringbufEventRing
 	haveData   bool
 	deadline   time.Time
 	bufferSize int
@@ -153,8 +138,7 @@ func (r *Reader) SetDeadline(t time.Time) {
 // See [ReadInto] for a more efficient version of this method.
 func (r *Reader) Read() (Record, error) {
 	var rec Record
-	err := r.ReadInto(&rec)
-	return rec, err
+	return rec, r.ReadInto(&rec)
 }
 
 // ReadInto is like Read except that it allows reusing Record and associated buffers.
