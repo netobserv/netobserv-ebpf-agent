@@ -85,7 +85,7 @@ func TestConversions(t *testing.T) {
 				"IPSecStatus":     "success",
 				"TLSVersion":      "TLS 1.3",
 				"TLSCipherSuite":  "TLS_AES_256_GCM_SHA384",
-				"TLSCurve":        "X25519",
+				"TLSGroup":        "X25519",
 				"TLSTypes":        []string{"ServerHello", "AppData"},
 			},
 		},

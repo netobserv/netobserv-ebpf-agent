@@ -106,7 +106,7 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 		out["TLSCipherSuite"] = tls.CipherSuiteName(fr.Metrics.TlsCipherSuite)
 	}
 	if fr.Metrics.TlsKeyShare != 0 {
-		out["TLSCurve"] = tls.CurveID(fr.Metrics.TlsKeyShare).String()
+		out["TLSGroup"] = tls.CurveID(fr.Metrics.TlsKeyShare).String()
 	}
 
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
