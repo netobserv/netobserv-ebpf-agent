@@ -26,7 +26,7 @@ github.com/beorn7/perks/quantile
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
 github.com/blang/semver/v4
-# github.com/caarlos0/env/v11 v11.4.0
+# github.com/caarlos0/env/v11 v11.4.1
 ## explicit; go 1.18
 github.com/caarlos0/env/v11
 # github.com/cenkalti/backoff/v4 v4.3.0
