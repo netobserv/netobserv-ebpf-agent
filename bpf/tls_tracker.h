@@ -22,7 +22,8 @@
 #define TLSTRACKER_BF_ALERT 0x10
 #define TLSTRACKER_BF_APP_DATA 0x20
 
-#define IS_KNOWN_VERSION(v) (v >= 0x0300 && v <= 0x0304)
+#define IS_KNOWN_VERSION(v) (v >= 0x0300 && v <= 0x0303)
+#define IS_KNOWN_VERSION_EXT(v) (v >= 0x0300 && v <= 0x0304)
 
 // https://www.rfc-editor.org/rfc/rfc5246
 struct tls_record {
@@ -108,7 +109,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
                     }
                     version = bpf_ntohs(version);
                     // Favor either known versions over unknown (e.g. 0x0304 over 0xDADA) or the higher one (e.g. 0x0304 over 0x0303)
-                    bool is_known = IS_KNOWN_VERSION(version);
+                    bool is_known = IS_KNOWN_VERSION_EXT(version);
                     if (!current_is_known && is_known) {
                         tls->hello_version = version;
                         current_is_known = true;
