@@ -22,6 +22,9 @@
 #define TLSTRACKER_BF_ALERT 0x10
 #define TLSTRACKER_BF_APP_DATA 0x20
 
+#define IS_KNOWN_VERSION(v) (v >= 0x0300 && v <= 0x0303)
+#define IS_KNOWN_VERSION_EXT(v) (v >= 0x0300 && v <= 0x0304)
+
 // https://www.rfc-editor.org/rfc/rfc5246
 struct tls_record {
     u8 content_type; // handshake, alert, change cipher, app data
@@ -46,7 +49,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
     handshake_version = bpf_ntohs(handshake_version);
     offset += 2;
     // Accept only 0300 (ssl v3), 0301 (tls 1.0), 0302 (tls 1.1) or 0303 (tls 1.2 or 1.3)
-    if (handshake_version < 0x0300 || handshake_version > 0x0303) {
+    if (!IS_KNOWN_VERSION(handshake_version)) {
         return TLSTRACKER_UNKNOWN;
     }
     tls->type = TLSTRACKER_BF_CLIENT_HELLO;
@@ -94,6 +97,7 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
                 u16 supportedversions_offset =
                     1; // skip supported versions length (u8), it's always ext_hdr.len-1
                 // Read up to 5 versions
+                bool current_is_known = false;
                 for (int j = 0; j < 5; j++) {
                     if (supportedversions_offset >= ext_hdr.len) {
                         break;
@@ -104,7 +108,12 @@ static inline int tls_read_client_hello(struct __sk_buff *skb, u32 offset, tls_i
                         return TLSTRACKER_UNKNOWN;
                     }
                     version = bpf_ntohs(version);
-                    if (version > tls->hello_version) {
+                    // Favor either known versions over unknown (e.g. 0x0304 over 0xDADA) or the higher one (e.g. 0x0304 over 0x0303)
+                    bool is_known = IS_KNOWN_VERSION_EXT(version);
+                    if (!current_is_known && is_known) {
+                        tls->hello_version = version;
+                        current_is_known = true;
+                    } else if (current_is_known == is_known && version > tls->hello_version) {
                         tls->hello_version = version;
                     }
                     supportedversions_offset += 2;
@@ -128,7 +137,7 @@ static inline int tls_read_server_hello(struct __sk_buff *skb, u32 offset, tls_i
     handshake_version = bpf_ntohs(handshake_version);
     offset += 2;
     // Accept only 0300 (ssl v3), 0301 (tls 1.0), 0302 (tls 1.1) or 0303 (tls 1.2 or 1.3)
-    if (handshake_version < 0x0300 || handshake_version > 0x0303) {
+    if (!IS_KNOWN_VERSION(handshake_version)) {
         return TLSTRACKER_UNKNOWN;
     }
     tls->type = TLSTRACKER_BF_SERVER_HELLO;
@@ -225,7 +234,7 @@ static inline int track_tls_tcp(struct __sk_buff *skb, void *l4_hdr, tls_info *t
     // Accept only 0300, 0301, 0302 or 0303
     // Note that for compatibility reasons, versions cannot be trusted here:
     // TLS 1.2 or 1.3 packets can be disguised as 1.0, hence further analysis is required
-    if (rec.version < 0x0300 || rec.version > 0x0303) {
+    if (!IS_KNOWN_VERSION(rec.version)) {
         return TLSTRACKER_NOTLS;
     }
 
