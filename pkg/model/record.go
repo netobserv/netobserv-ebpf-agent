@@ -266,5 +266,5 @@ func (r *BpfFlowContent) QuicVersionToString() string {
 	case 1:
 		return "QUIC v2"
 	}
-	return "unknown"
+	return fmt.Sprintf("QUIC Unknown (%d)", r.QuicMetrics.Version)
 }
