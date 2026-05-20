@@ -59,7 +59,7 @@ jobs:
             const upload_url = '${{ steps.create_release.outputs.upload_url }}';
             for (let file of await fs.readdir('./release-assets')) {
               console.log('uploading', file);
-              await github.repos.uploadReleaseAsset({
+              await github.rest.repos.uploadReleaseAsset({
                 url: upload_url,
                 name: file,
                 data: await fs.readFile(`./release-assets/${file}`)
