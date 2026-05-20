@@ -23,9 +23,9 @@ WORKDIR /
 RUN curl -fSL https://go.dev/dl/go$GOVERSION.linux-$TARGETARCH.tar.gz -o go.tar.gz && \
     tar -xzf go.tar.gz && rm go.tar.gz
 
-ENV GOROOT /go
+ENV GOROOT=/go
 RUN mkdir -p /gopath
-ENV GOPATH /gopath
+ENV GOPATH=/gopath
 RUN mkdir -p /protoc
 WORKDIR /protoc
 
@@ -33,7 +33,7 @@ WORKDIR /protoc
 RUN curl -fSL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOCVERSION/protoc-${PROTOCVERSION}-linux-${EXTENSION}.zip -o protoc.zip && \
     unzip protoc.zip && rm protoc.zip
 
-ENV PATH $GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
+ENV PATH=$GOROOT/bin:$GOPATH/bin:/protoc/bin:$PATH
 
 WORKDIR /tmp
 # Copies some pre-required Go dependencies to avoid downloading them on each build
