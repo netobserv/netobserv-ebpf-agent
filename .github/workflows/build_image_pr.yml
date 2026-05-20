@@ -14,7 +14,7 @@ jobs:
     name: Build PR image and upload artifact
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install make
         run: sudo apt -y install make
       - name: get short sha

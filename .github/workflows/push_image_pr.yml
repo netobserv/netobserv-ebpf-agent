@@ -36,7 +36,7 @@ jobs:
         run: |
           DOCKER_BUILDKIT=1 docker push $(cat ./name)
           DOCKER_BUILDKIT=1 docker push $(cat ./bc-name)
-      - uses: actions/github-script@v6
+      - uses: actions/github-script@v9
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
