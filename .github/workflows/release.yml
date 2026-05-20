@@ -10,11 +10,13 @@ env:
 
 jobs:
   push-image:
-    name: push image
+    name: build and push release
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: validate tag
         run: |
           tag=`git describe --exact-match --tags 2> /dev/null`
@@ -28,10 +30,6 @@ jobs:
           fi
       - name: install make
         run: sudo apt-get install make
-      - name: set up go 1.x
-        uses: actions/setup-go@v3
-        with:
-          go-version: '1.25'
       - name: docker login to quay.io
         uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
         with:
@@ -53,7 +51,7 @@ jobs:
           draft: true
           prerelease: false
       - name: upload binaries
-        uses: actions/github-script@v2
+        uses: actions/github-script@v9
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |

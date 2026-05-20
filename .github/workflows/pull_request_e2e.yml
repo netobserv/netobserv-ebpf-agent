@@ -2,10 +2,11 @@ name: pull request - e2e tests
 
 #todo: check caching dependencies: https://github.com/actions/cache
 on:
-  push:
-    branches: [ 'main', 'release-*' ]
   pull_request:
     branches: [ 'main', 'release-*' ]
+
+permissions:
+  contents: read
 
 jobs:
   e2e-tests:
@@ -15,11 +16,13 @@ jobs:
     - name: install make
       run: sudo apt-get install make
     - name: set up go 1.x
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.22'
+        go-version: '1.25'
     - name: checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
+      with:
+        persist-credentials: false
     - name: run end-to-end tests
       run: make tests-e2e
     - name: upload e2e test logs
