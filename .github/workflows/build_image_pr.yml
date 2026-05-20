@@ -8,6 +8,9 @@ env:
   WF_IMAGE: netobserv-ebpf-agent
   WF_BC_IMAGE: ebpf-bytecode
 
+permissions:
+  contents: read
+
 jobs:
   build-pr-image:
     if: ${{ github.event.label.name == 'ok-to-test' }}

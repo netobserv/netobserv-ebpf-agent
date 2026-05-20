@@ -9,6 +9,9 @@ env:
   WF_MULTIARCH_TARGETS: amd64 arm64 ppc64le s390x
   WF_VERSION: ${{ github.ref_name }}
 
+permissions:
+  contents: read
+
 jobs:
   push-image:
     name: build and push images

@@ -10,7 +10,7 @@ env:
 
 jobs:
   push-image:
-    name: push image
+    name: build and push release
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -51,7 +51,7 @@ jobs:
           draft: true
           prerelease: false
       - name: upload binaries
-        uses: actions/github-script@v2
+        uses: actions/github-script@v9
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
