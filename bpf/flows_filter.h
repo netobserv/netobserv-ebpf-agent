@@ -65,6 +65,8 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
             if (flow_filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip,
                                              eth_protocol) < 0) {
                 BPF_PRINTK("peerCIDR failed to setup lookup key\n");
+                // Reset the action for default behaviour
+                *action = MAX_FILTER_ACTIONS;
                 result = 0;
                 goto end;
             }
@@ -75,6 +77,8 @@ static __always_inline int do_flow_filter_lookup(flow_id *id, struct filter_key_
                 result++;
             } else {
                 BPF_PRINTK("peerCIDR couldn't find a matching key\n");
+                // Reset the action for default behaviour
+                *action = MAX_FILTER_ACTIONS;
                 result = 0;
                 goto end;
             }
