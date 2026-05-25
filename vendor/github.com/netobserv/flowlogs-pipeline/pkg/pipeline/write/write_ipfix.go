@@ -56,6 +56,7 @@ const IPv6Type uint16 = 0x86DD
 var (
 	ilog = logrus.WithField("component", "write.Ipfix")
 	// See RFC 5102: https://www.rfc-editor.org/rfc/rfc5102
+	// See also: https://www.iana.org/assignments/ipfix/ipfix.xhtml
 	IANAFields = []string{
 		"ethernetType",
 		"flowDirection",
@@ -72,6 +73,8 @@ var (
 		"tcpControlBits",
 		"postNAPTSourceTransportPort",
 		"postNAPTDestinationTransportPort",
+		"selectorAlgorithm",   // https://datatracker.ietf.org/doc/html/rfc5477
+		"samplingProbability", // https://datatracker.ietf.org/doc/html/rfc5477
 	}
 	IPv4IANAFields = append([]string{
 		"sourceIPv4Address",
@@ -387,6 +390,36 @@ var (
 			Setter: func(elt entities.InfoElementWithValue, rec any) { elt.SetIPAddressValue(net.ParseIP(rec.(string))) },
 			// Force zero-IP by default to avoid go-ipfix throwing an error: https://github.com/vmware/go-ipfix/blob/d9256ccb0ed9e3ae38c3a2bf3d6ce1ce01c9ac4f/pkg/entities/ie.go#L602
 			Default: func(elt entities.InfoElementWithValue) { elt.SetIPAddressValue(net.IPv6zero) },
+		},
+		"selectorAlgorithm": {
+			// https://datatracker.ietf.org/doc/html/rfc5477#section-8.2.1
+			Key: "Sampling",
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				if interval, ok := rec.(uint32); ok && interval > 0 {
+					// Only "4" Uniform probabilistic Sampling is supported
+					elt.SetUnsigned16Value(4)
+				}
+			},
+			Matcher: func(_ entities.InfoElementWithValue, _ any) bool { return true },
+		},
+		"samplingProbability": {
+			Key: "Sampling",
+			Getter: func(elt entities.InfoElementWithValue) any {
+				// probability to interval
+				p := elt.GetFloat64Value()
+				if p == 0 {
+					// Unset sampling => 0
+					return 0
+				}
+				return uint32(1 / p)
+			},
+			Setter: func(elt entities.InfoElementWithValue, rec any) {
+				// interval to probability
+				if interval, ok := rec.(uint32); ok && interval > 0 {
+					p := 1.0 / float64(interval)
+					elt.SetFloat64Value(p)
+				}
+			},
 		},
 	}
 )
