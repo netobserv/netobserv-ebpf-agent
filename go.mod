@@ -7,7 +7,7 @@ require (
 	github.com/cilium/ebpf v0.21.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
-	github.com/gopacket/gopacket v1.5.0
+	github.com/gopacket/gopacket v1.6.0
 	github.com/mariomac/guara v0.0.0-20250408105519-1e4dbdfb7136
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/netobserv/flowlogs-pipeline v1.11.4-community.0.20260521155724-7ee2fbbc7651
