@@ -29,16 +29,19 @@ func (r *PushRequest) MarshalJSON() ([]byte, error) {
 		stream.WriteObjectStart()
 		stream.WriteObjectField("stream")
 		stream.WriteObjectStart()
-		lbs, err := parser.ParseMetric(s.Labels)
+		lbs, err := parser.NewParser(parser.Options{}).ParseMetric(s.Labels)
 		if err != nil {
 			continue
 		}
-		for i, lb := range lbs {
-			stream.WriteObjectField(lb.Name)
-			stream.WriteStringWithHTMLEscaped(lb.Value)
-			if i != len(lbs)-1 {
+		lbsMap := lbs.Map()
+		ilbl := 0
+		for name, value := range lbsMap {
+			stream.WriteObjectField(name)
+			stream.WriteStringWithHTMLEscaped(value)
+			if ilbl != len(lbsMap)-1 {
 				stream.WriteMore()
 			}
+			ilbl++
 		}
 		stream.WriteObjectEnd()
 		stream.WriteMore()

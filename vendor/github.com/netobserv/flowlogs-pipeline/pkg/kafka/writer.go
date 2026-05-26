@@ -1,11 +1,13 @@
 package kafka
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/compress"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,6 +61,14 @@ func NewWriter(config *api.EncodeKafka) (*kafkago.Writer, error) {
 		transport.SASL = m
 	}
 
+	var compression compress.Compression
+	if config.Compression != "" {
+		if err := compression.UnmarshalText([]byte(config.Compression)); err != nil {
+			return nil, fmt.Errorf("wrong Kafka compression value %q (admitted: none, gzip, snappy, lz4, zstd): %w",
+				config.Compression, err)
+		}
+	}
+
 	kafkaWriter := kafkago.Writer{
 		Addr:         kafkago.TCP(config.Address),
 		Topic:        config.Topic,
@@ -67,6 +77,7 @@ func NewWriter(config *api.EncodeKafka) (*kafkago.Writer, error) {
 		WriteTimeout: time.Duration(writeTimeoutSecs) * time.Second,
 		BatchSize:    config.BatchSize,
 		BatchBytes:   config.BatchBytes,
+		Compression:  compression,
 		// Temporary fix may be we should implement a batching systems
 		// https://github.com/segmentio/kafka-go/issues/326#issuecomment-519375403
 		BatchTimeout: time.Nanosecond,

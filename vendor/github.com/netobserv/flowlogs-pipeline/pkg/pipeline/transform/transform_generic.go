@@ -33,7 +33,6 @@ type Generic struct {
 // Transform transforms a flow to a new set of keys
 func (g *Generic) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 	var outputEntry config.GenericMap
-	ok := true
 	glog.Tracef("Transform input = %v", entry)
 	if g.policy != "replace_keys" {
 		outputEntry = entry.Copy()
@@ -41,23 +40,24 @@ func (g *Generic) Transform(entry config.GenericMap) (config.GenericMap, bool) {
 		outputEntry = config.GenericMap{}
 	}
 	for _, transformRule := range g.rules {
-		if transformRule.Multiplier != 0 {
-			ok = g.performMultiplier(entry, transformRule, outputEntry)
-		} else {
-			outputEntry[transformRule.Output] = entry[transformRule.Input]
+		if value, hasKey := entry[transformRule.Input]; hasKey {
+			if transformRule.Multiplier != 0 {
+				g.multiply(value, transformRule, outputEntry)
+			} else {
+				outputEntry[transformRule.Output] = value
+			}
 		}
 	}
 	glog.Tracef("Transform output = %v", outputEntry)
-	return outputEntry, ok
+	return outputEntry, true
 }
 
 func (g *Generic) Update(_ config.StageParam) {
 	log.Warn("Transform Generic, update not supported")
 }
 
-func (g *Generic) performMultiplier(entry config.GenericMap, transformRule api.GenericTransformRule, outputEntry config.GenericMap) bool {
-	ok := true
-	switch val := entry[transformRule.Input].(type) {
+func (g *Generic) multiply(value any, transformRule api.GenericTransformRule, outputEntry config.GenericMap) {
+	switch val := value.(type) {
 	case int:
 		outputEntry[transformRule.Output] = transformRule.Multiplier * val
 	case uint:
@@ -83,10 +83,9 @@ func (g *Generic) performMultiplier(entry config.GenericMap, transformRule api.G
 	case float64:
 		outputEntry[transformRule.Output] = float64(transformRule.Multiplier) * val
 	default:
-		ok = false
-		glog.Errorf("%s not of numerical type; cannot perform multiplication", transformRule.Output)
+		// Do not log an error in fast data path, downgrade severity to debug; ideally it should be counted in error metrics
+		glog.Debugf("%s not of numerical type; cannot perform multiplication", transformRule.Output)
 	}
-	return ok
 }
 
 // NewTransformGeneric create a new transform

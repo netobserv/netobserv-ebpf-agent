@@ -293,18 +293,18 @@ func (c *Client) Stop() {
 // updateStreamLagMetrics updates lag metrics to match HTTP client behavior
 func (c *Client) updateStreamLagMetrics(streams []logproto.Stream) {
 	for _, s := range streams {
-		lbls, err := parser.ParseMetric(s.Labels)
+		lbls, err := parser.NewParser(parser.Options{}).ParseMetric(s.Labels)
 		if err != nil {
 			// is this possible?
 			level.Warn(c.logger).Log("msg", "error converting stream label string to label.Labels, cannot update lagging metric", "error", err)
 			return
 		}
 		var lblSet model.LabelSet
-		for i := range lbls {
-			if lbls[i].Name == metrics.LatencyLabel {
+		for name, value := range lbls.Map() {
+			if name == metrics.LatencyLabel {
 				lblSet = model.LabelSet{
 					model.LabelName(metrics.HostLabel):    model.LabelValue(c.cfg.ServerAddress),
-					model.LabelName(metrics.LatencyLabel): model.LabelValue(lbls[i].Value),
+					model.LabelName(metrics.LatencyLabel): model.LabelValue(value),
 				}
 			}
 		}

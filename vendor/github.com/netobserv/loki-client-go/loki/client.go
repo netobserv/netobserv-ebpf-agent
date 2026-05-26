@@ -216,18 +216,18 @@ func (c *Client) sendBatch(tenantID string, batch *batch) {
 			metrics.SentBytes.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(bufBytes)
 			metrics.SentEntries.WithLabelValues(c.cfg.URL.Host, transportHTTP).Add(float64(entriesCount))
 			for _, s := range batch.streams {
-				lbls, err := parser.ParseMetric(s.Labels)
+				lbls, err := parser.NewParser(parser.Options{}).ParseMetric(s.Labels)
 				if err != nil {
 					// is this possible?
 					level.Warn(c.logger).Log("msg", "error converting stream label string to label.Labels, cannot update lagging metric", "error", err)
 					return
 				}
 				var lblSet model.LabelSet
-				for i := range lbls {
-					if lbls[i].Name == metrics.LatencyLabel {
+				for name, value := range lbls.Map() {
+					if name == metrics.LatencyLabel {
 						lblSet = model.LabelSet{
 							model.LabelName(metrics.HostLabel):    model.LabelValue(c.cfg.URL.Host),
-							model.LabelName(metrics.LatencyLabel): model.LabelValue(lbls[i].Value),
+							model.LabelName(metrics.LatencyLabel): model.LabelValue(value),
 						}
 					}
 				}
