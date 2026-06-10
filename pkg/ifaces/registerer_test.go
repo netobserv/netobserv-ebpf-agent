@@ -144,7 +144,8 @@ func TestRegisterer_Lookup(t *testing.T) {
 	}
 
 	// test no match (wrong ifindex)
-	_, ok = registry.IfaceNameForIndexAndMAC(5, [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
+	_, ok = registry.IfaceNameForIndexAndMAC(20, [6]uint8{0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
+	// Note: if that test fails on your machine, it may be that you actually have a corresponding interface index; you can increase the index in this test
 	assert.False(t, ok)
 }
 
