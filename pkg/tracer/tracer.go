@@ -31,10 +31,51 @@ import (
 )
 
 const (
-	qdiscType                   = "clsact"
-	networkEventsMonitoringHook = "psample_sample_packet"
-	dnsDefaultPort              = 53
-	defaultNetworkEventsGroupID = 10
+	qdiscType = "clsact"
+	// ebpf map names as defined in bpf/maps_definition.h
+	aggregatedFlowsMap           = "aggregated_flows"
+	aggregatedFlowsDNS           = "aggregated_flows_dns"
+	aggregatedFlowsPktDrop       = "aggregated_flows_pkt_drop"
+	aggregatedFlowsNetworkEvents = "aggregated_flows_network_events"
+	aggregatedFlowsXLat          = "aggregated_flows_xlat"
+	additionalFlowMetrics        = "additional_flow_metrics"
+	directFlowsMap               = "direct_flows"
+	dnsLatencyMap                = "dns_flows"
+	filterMap                    = "filter_map"
+	peerFilterMap                = "peer_filter_map"
+	globalCountersMap            = "global_counters"
+	pcaRecordsMap                = "packet_record"
+	ipsecInputMap                = "ipsec_ingress_map"
+	ipsecOutputMap               = "ipsec_egress_map"
+	quicFlowsMap                 = "quic_flows"
+	// constants defined in flows.c as "volatile const"
+	constSampling                       = "sampling"
+	constHasFilterSampling              = "has_filter_sampling"
+	constTraceMessages                  = "trace_messages"
+	constEnableRtt                      = "enable_rtt"
+	constEnableDNSTracking              = "enable_dns_tracking"
+	constDNSTrackingPorts               = "dns_ports"
+	constDNSTrackingPortsCount          = "dns_ports_count"
+	maxDNSPorts                         = 8
+	constEnableFlowFiltering            = "enable_flows_filtering"
+	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
+	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
+	constEnablePktTranslation           = "enable_pkt_translation_tracking"
+	pktDropHook                         = "kfree_skb"
+	constPcaEnable                      = "enable_pca"
+	tcEgressFilterName                  = "tc/tc_egress_flow_parse"
+	tcIngressFilterName                 = "tc/tc_ingress_flow_parse"
+	tcpFentryHook                       = "tcp_rcv_fentry"
+	tcpRcvKprobe                        = "tcp_rcv_kprobe"
+	networkEventsMonitoringHook         = "psample_sample_packet"
+	defaultNetworkEventsGroupID         = 10
+	constEnableIPsec                    = "enable_ipsec"
+	constEnableOpenSSLTracking          = "enable_openssl_tracking"
+	constEnableTLSUsageTracking         = "enable_tls_usage_tracking"
+	sslDataEventMap                     = "ssl_data_event_map"
+	dnsNameMap                          = "dns_name_map"
+	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
+	constEnableQUICTracking             = "enable_quic_tracking"
 )
 
 const (
@@ -1814,34 +1855,35 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ebpf.BpfMaps
 	}
 	var newObjects newBpfObjects
-	delete(spec.Programs, ebpf.BpfProgKfreeSkb)
-	delete(spec.Programs, ebpf.BpfProgNetworkEventsMonitoring)
-	delete(spec.Programs, ebpf.BpfProgTcpRcvKprobe)
-	delete(spec.Programs, ebpf.BpfProgTcpRcvFentry)
-	delete(spec.Programs, ebpf.BpfMapAggregatedFlows)
-	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsDns)
-	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsNetworkEvents)
-	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsPktDrop)
-	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsXlat)
-	delete(spec.Programs, ebpf.BpfMapAdditionalFlowMetrics)
-	delete(spec.Programs, ebpf.BpfMapIpsecIngressMap)
-	delete(spec.Programs, ebpf.BpfMapIpsecEgressMap)
-	delete(spec.Programs, ebpf.BpfMapQuicFlows)
-	delete(spec.Programs, ebpf.BpfVarSampling)
-	delete(spec.Programs, ebpf.BpfVarHasFilterSampling)
-	delete(spec.Programs, ebpf.BpfVarTraceMessages)
-	delete(spec.Programs, ebpf.BpfVarEnableDnsTracking)
-	delete(spec.Programs, ebpf.BpfVarDnsPort)
-	delete(spec.Programs, ebpf.BpfVarEnableRtt)
-	delete(spec.Programs, ebpf.BpfVarEnableFlowsFiltering)
-	delete(spec.Programs, ebpf.BpfVarEnableNetworkEventsMonitoring)
-	delete(spec.Programs, ebpf.BpfVarNetworkEventsMonitoringGroupid)
-	delete(spec.Programs, ebpf.BpfVarEnablePktTranslationTracking)
-	delete(spec.Programs, ebpf.BpfVarEnableIpsec)
-	delete(spec.Programs, ebpf.BpfVarEnableDirectflowsRingbuf)
-	delete(spec.Programs, ebpf.BpfVarEnableOpensslTracking)
-	delete(spec.Programs, ebpf.BpfMapDnsNameMap)
-	delete(spec.Programs, ebpf.BpfVarEnableQuicTracking)
+	delete(spec.Programs, pktDropHook)
+	delete(spec.Programs, networkEventsMonitoringHook)
+	delete(spec.Programs, tcpRcvKprobe)
+	delete(spec.Programs, tcpFentryHook)
+	delete(spec.Programs, aggregatedFlowsMap)
+	delete(spec.Programs, aggregatedFlowsDNS)
+	delete(spec.Programs, aggregatedFlowsNetworkEvents)
+	delete(spec.Programs, aggregatedFlowsPktDrop)
+	delete(spec.Programs, aggregatedFlowsXLat)
+	delete(spec.Programs, additionalFlowMetrics)
+	delete(spec.Programs, ipsecInputMap)
+	delete(spec.Programs, ipsecOutputMap)
+	delete(spec.Programs, quicFlowsMap)
+	delete(spec.Programs, constSampling)
+	delete(spec.Programs, constHasFilterSampling)
+	delete(spec.Programs, constTraceMessages)
+	delete(spec.Programs, constEnableDNSTracking)
+	delete(spec.Programs, constDNSTrackingPorts)
+	delete(spec.Programs, constDNSTrackingPortsCount)
+	delete(spec.Programs, constEnableRtt)
+	delete(spec.Programs, constEnableFlowFiltering)
+	delete(spec.Programs, constEnableNetworkEventsMonitoring)
+	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
+	delete(spec.Programs, constEnablePktTranslation)
+	delete(spec.Programs, constEnableIPsec)
+	delete(spec.Programs, constEnableDirectFlowRingbuf)
+	delete(spec.Programs, constEnableOpenSSLTracking)
+	delete(spec.Programs, dnsNameMap)
+	delete(spec.Programs, constEnableQUICTracking)
 
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
@@ -2386,6 +2428,27 @@ func setVariable(spec *cilium.CollectionSpec, key string, value interface{}) err
 	return nil
 }
 
+// parseDNSTrackingPorts validates and converts DNS ports slice to array
+func parseDNSTrackingPorts(ports []uint16) ([maxDNSPorts]uint16, uint8) {
+	dnsPorts := [maxDNSPorts]uint16{}
+	dnsPortsCount := uint8(0)
+
+	for _, port := range ports {
+		if int(dnsPortsCount) >= maxDNSPorts {
+			log.Warnf("DNS tracking ports exceed maximum of %d, ignoring extra ports", maxDNSPorts)
+			break
+		}
+		dnsPorts[dnsPortsCount] = port
+		dnsPortsCount++
+	}
+
+	if dnsPortsCount == 0 {
+		log.Warn("No valid DNS tracking ports configured, DNS tracking will not work")
+	}
+
+	return dnsPorts, dnsPortsCount
+}
+
 func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, filter *Filter) error {
 	traceMsgs := 0
 	if cfg.Debug {
@@ -2396,12 +2459,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		enableRtt = 1
 	}
 	enableDNSTracking := 0
-	dnsTrackerPort := uint16(dnsDefaultPort)
+	dnsPorts := [maxDNSPorts]uint16{}
+	dnsPortsCount := uint8(0)
 	if cfg.EnableDNSTracking {
 		enableDNSTracking = 1
-		if cfg.DNSTrackingPort != 0 {
-			dnsTrackerPort = cfg.DNSTrackingPort
-		}
+		dnsPorts, dnsPortsCount = parseDNSTrackingPorts(cfg.DNSTrackingPorts)
 	}
 	if enableDNSTracking == 0 {
 		spec.Maps[ebpf.BpfMapDnsFlows].MaxEntries = 1
@@ -2460,21 +2522,22 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
-		{ebpf.BpfVarSampling, uint32(cfg.Sampling)},
-		{ebpf.BpfVarHasFilterSampling, hasFilterSampling},
-		{ebpf.BpfVarTraceMessages, uint8(traceMsgs)},
-		{ebpf.BpfVarEnableRtt, uint8(enableRtt)},
-		{ebpf.BpfVarEnableDnsTracking, uint8(enableDNSTracking)},
-		{ebpf.BpfVarDnsPort, dnsTrackerPort},
-		{ebpf.BpfVarEnableFlowsFiltering, uint8(enableFlowFiltering)},
-		{ebpf.BpfVarEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
-		{ebpf.BpfVarNetworkEventsMonitoringGroupid, uint8(networkEventsMonitoringGroupID)},
-		{ebpf.BpfVarEnablePktTranslationTracking, uint8(enablePktTranslation)},
-		{ebpf.BpfVarEnableIpsec, uint8(enableIPsec)},
-		{ebpf.BpfVarEnableDirectflowsRingbuf, uint8(enableDirectFlowRingbuf)},
-		{ebpf.BpfVarEnableOpensslTracking, uint8(enableOpenSSLTracking)},
-		{ebpf.BpfVarEnableTlsUsageTracking, uint8(enableTLSTracking)},
-		{ebpf.BpfVarEnableQuicTracking, uint8(enableQUICTracking)},
+		{constSampling, uint32(cfg.Sampling)},
+		{constHasFilterSampling, hasFilterSampling},
+		{constTraceMessages, uint8(traceMsgs)},
+		{constEnableRtt, uint8(enableRtt)},
+		{constEnableDNSTracking, uint8(enableDNSTracking)},
+		{constDNSTrackingPorts, dnsPorts},
+		{constDNSTrackingPortsCount, dnsPortsCount},
+		{constEnableFlowFiltering, uint8(enableFlowFiltering)},
+		{constEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
+		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
+		{constEnablePktTranslation, uint8(enablePktTranslation)},
+		{constEnableIPsec, uint8(enableIPsec)},
+		{constEnableDirectFlowRingbuf, uint8(enableDirectFlowRingbuf)},
+		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
+		{constEnableTLSUsageTracking, uint8(enableTLSTracking)},
+		{constEnableQUICTracking, uint8(enableQUICTracking)},
 	}
 
 	for _, mapping := range variables {
