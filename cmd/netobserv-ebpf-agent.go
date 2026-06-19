@@ -13,6 +13,7 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/sirupsen/logrus"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/server"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 
@@ -45,10 +46,11 @@ func main() {
 	}
 	setLoggerVerbosity(&config)
 
-	if config.ProfilePort != 0 {
+	if config.PprofAddr != "" {
 		go func() {
-			logrus.WithField("port", config.ProfilePort).Info("starting PProf HTTP listener")
-			logrus.WithError(http.ListenAndServe(fmt.Sprintf(":%d", config.ProfilePort), nil)).
+			logrus.WithField("addr", config.PprofAddr).Info("starting PProf HTTP listener")
+			srv := server.Default(&http.Server{Addr: config.PprofAddr})
+			logrus.WithError(srv.ListenAndServe()).
 				Error("PProf HTTP listener stopped working")
 		}()
 	}

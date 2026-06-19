@@ -74,8 +74,8 @@ The following environment variables are available to configure the NetObserv eBP
   * `KAFKA_TLS_CA_CERT_PATH` (default: unset). Path to the Kafka server certificate for TLS connections.
   * `KAFKA_TLS_USER_CERT_PATH` (default: unset). Path to the user (client) certificate for mutual TLS connections.
   * `KAFKA_TLS_USER_KEY_PATH` (default: unset). Path to the user (client) private key for mutual TLS connections.
-* `PROFILE_PORT` (default: unset). Sets the listening port for [Go's Pprof tool](https://pkg.go.dev/net/http/pprof).
-  If it is not set, profile is disabled.
+* `PPROF_ADDR` (default: unset). Sets the listening address for [Go's Pprof tool](https://pkg.go.dev/net/http/pprof). Do not expose publicly.
+  If it is not set, profiling is disabled.
 * `ENABLE_RTT` (default: `false` disabled). If `true` enables RTT calculations for the captured flows in the ebpf agent.
   See [docs](./rtt_calculations.md) for more details on this feature.
 * `ENABLE_PKT_DROPS` (default: `false` disabled). If `true` enables packet drops eBPF hook to be able to capture drops flows in the ebpf agent.
