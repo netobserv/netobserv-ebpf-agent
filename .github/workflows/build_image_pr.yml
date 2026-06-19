@@ -12,6 +12,12 @@ permissions:
   contents: read
 
 jobs:
+  aaa:
+    name: aaa
+    runs-on: ubuntu-latest
+    steps:
+    - name: View PR author
+      run: echo "This PR is opened by ${{ github.event.pull_request.user.login }} ."
   build-pr-image:
     if: ${{ github.event.label.name == 'ok-to-test' }}
     name: Build PR image and upload artifact
