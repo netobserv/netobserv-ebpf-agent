@@ -1538,6 +1538,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 	return objects, nil
 }
+
 func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig, filter *attach.Filter) error {
 	traceMsgs := 0
 	if cfg.Debug {
@@ -1548,12 +1549,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		enableRtt = 1
 	}
 	enableDNSTracking := 0
-	dnsTrackerPort := uint16(netattach.DNSDefaultPort)
+	dnsPorts := [8]uint16{}
+	dnsPortsCount := uint8(0)
 	if cfg.Flows.EnableDNSTracking {
 		enableDNSTracking = 1
-		if cfg.Flows.DNSTrackingPort != 0 {
-			dnsTrackerPort = cfg.Flows.DNSTrackingPort
-		}
+		dnsPorts, dnsPortsCount = parseDNSTrackingPorts(cfg.DNSTrackingPorts)
 	}
 	if enableDNSTracking == 0 {
 		spec.Maps[ebpf.BpfMapDnsFlows].MaxEntries = 1
@@ -1617,7 +1617,8 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		{Key: ebpf.BpfVarTraceMessages, Value: uint8(traceMsgs)},
 		{Key: ebpf.BpfVarEnableRtt, Value: uint8(enableRtt)},
 		{Key: ebpf.BpfVarEnableDnsTracking, Value: uint8(enableDNSTracking)},
-		{Key: ebpf.BpfVarDnsPort, Value: dnsTrackerPort},
+		{Key: ebpf.BpfVarDnsPorts, Value: dnsPorts},
+		{Key: ebpf.BpfVarDnsPortsCount, Value: dnsPortsCount},
 		{Key: ebpf.BpfVarEnableFiltering, Value: uint8(enableFlowFiltering)},
 		{Key: ebpf.BpfVarEnableNetworkEventsMonitoring, Value: uint8(enableNetworkEventsMonitoring)},
 		{Key: ebpf.BpfVarNetworkEventsMonitoringGroupid, Value: uint8(networkEventsMonitoringGroupID)},
@@ -1636,6 +1637,27 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 	}
 
 	return nil
+}
+
+// parseDNSTrackingPorts validates and converts DNS ports slice to array
+func parseDNSTrackingPorts(ports []uint16) ([8]uint16, uint8) {
+	dnsPorts := [8]uint16{}
+	dnsPortsCount := uint8(0)
+
+	for _, port := range ports {
+		if int(dnsPortsCount) >= 8 {
+			log.Warnf("DNS tracking ports exceed maximum of %d, ignoring extra ports", 8)
+			break
+		}
+		dnsPorts[dnsPortsCount] = port
+		dnsPortsCount++
+	}
+
+	if dnsPortsCount == 0 {
+		log.Warn("No valid DNS tracking ports configured, DNS tracking will not work")
+	}
+
+	return dnsPorts, dnsPortsCount
 }
 
 func sizeMapForFeature(spec *cilium.CollectionSpec, name string, enabled bool, size int) {
