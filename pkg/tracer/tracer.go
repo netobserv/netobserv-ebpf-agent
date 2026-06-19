@@ -54,8 +54,9 @@ const (
 	constTraceMessages                  = "trace_messages"
 	constEnableRtt                      = "enable_rtt"
 	constEnableDNSTracking              = "enable_dns_tracking"
-	constDNSTrackingPort                = "dns_port"
-	dnsDefaultPort                      = 53
+	constDNSTrackingPorts               = "dns_ports"
+	constDNSTrackingPortsCount          = "dns_ports_count"
+	maxDNSPorts                         = 8
 	constEnableFlowFiltering            = "enable_flows_filtering"
 	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
@@ -1673,7 +1674,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, constHasFilterSampling)
 	delete(spec.Programs, constTraceMessages)
 	delete(spec.Programs, constEnableDNSTracking)
-	delete(spec.Programs, constDNSTrackingPort)
+	delete(spec.Programs, constDNSTrackingPorts)
+	delete(spec.Programs, constDNSTrackingPortsCount)
 	delete(spec.Programs, constEnableRtt)
 	delete(spec.Programs, constEnableFlowFiltering)
 	delete(spec.Programs, constEnableNetworkEventsMonitoring)
@@ -2126,6 +2128,27 @@ func setVariable(spec *cilium.CollectionSpec, key string, value interface{}) err
 	return nil
 }
 
+// parseDNSTrackingPorts validates and converts DNS ports slice to array
+func parseDNSTrackingPorts(ports []uint16) ([maxDNSPorts]uint16, uint8) {
+	dnsPorts := [maxDNSPorts]uint16{}
+	dnsPortsCount := uint8(0)
+
+	for _, port := range ports {
+		if int(dnsPortsCount) >= maxDNSPorts {
+			log.Warnf("DNS tracking ports exceed maximum of %d, ignoring extra ports", maxDNSPorts)
+			break
+		}
+		dnsPorts[dnsPortsCount] = port
+		dnsPortsCount++
+	}
+
+	if dnsPortsCount == 0 {
+		log.Warn("No valid DNS tracking ports configured, DNS tracking will not work")
+	}
+
+	return dnsPorts, dnsPortsCount
+}
+
 func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, filter *Filter) error {
 	traceMsgs := 0
 	if cfg.Debug {
@@ -2136,12 +2159,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		enableRtt = 1
 	}
 	enableDNSTracking := 0
-	dnsTrackerPort := uint16(dnsDefaultPort)
+	dnsPorts := [maxDNSPorts]uint16{}
+	dnsPortsCount := uint8(0)
 	if cfg.EnableDNSTracking {
 		enableDNSTracking = 1
-		if cfg.DNSTrackingPort != 0 {
-			dnsTrackerPort = cfg.DNSTrackingPort
-		}
+		dnsPorts, dnsPortsCount = parseDNSTrackingPorts(cfg.DNSTrackingPorts)
 	}
 	if enableDNSTracking == 0 {
 		spec.Maps[dnsLatencyMap].MaxEntries = 1
@@ -2205,7 +2227,8 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{constTraceMessages, uint8(traceMsgs)},
 		{constEnableRtt, uint8(enableRtt)},
 		{constEnableDNSTracking, uint8(enableDNSTracking)},
-		{constDNSTrackingPort, dnsTrackerPort},
+		{constDNSTrackingPorts, dnsPorts},
+		{constDNSTrackingPortsCount, dnsPortsCount},
 		{constEnableFlowFiltering, uint8(enableFlowFiltering)},
 		{constEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
 		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},

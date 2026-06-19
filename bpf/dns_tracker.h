@@ -6,7 +6,6 @@
 #define __DNS_TRACKER_H__
 #include "utils.h"
 
-#define DNS_DEFAULT_PORT 53
 #define DNS_QR_FLAG 0x8000
 #define UDP_MAXMSG 512
 
@@ -65,11 +64,23 @@ static __always_inline u8 calc_dns_header_offset(pkt_info *pkt, void *data_end) 
     return len;
 }
 
+static __always_inline bool is_dns_port(u16 port) {
+    // Bounded loop for eBPF verifier
+    for (u8 i = 0; i < MAX_DNS_PORTS; i++) {
+        if (i >= dns_ports_count) {
+            break;
+        }
+        if (port == dns_ports[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static __always_inline int track_dns_packet(struct __sk_buff *skb, pkt_info *pkt) {
     void *data_end = (void *)(long)skb->data_end;
     int ret = 0;
-    if (pkt->id->dst_port == dns_port || pkt->id->src_port == dns_port ||
-        pkt->id->dst_port == DNS_DEFAULT_PORT || pkt->id->src_port == DNS_DEFAULT_PORT) {
+    if (is_dns_port(pkt->id->dst_port) || is_dns_port(pkt->id->src_port)) {
         dns_flow_id dns_req;
         __builtin_memset(&dns_req, 0, sizeof(dns_req));
 

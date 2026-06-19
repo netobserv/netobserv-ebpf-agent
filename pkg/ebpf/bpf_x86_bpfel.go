@@ -355,7 +355,8 @@ type BpfMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfVariableSpecs struct {
-	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
+	DnsPorts                       *ebpf.VariableSpec `ebpf:"dns_ports"`
+	DnsPortsCount                  *ebpf.VariableSpec `ebpf:"dns_ports_count"`
 	EnableDirectflowsRingbuf       *ebpf.VariableSpec `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
@@ -443,7 +444,8 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfVariables struct {
-	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
+	DnsPorts                       *ebpf.Variable `ebpf:"dns_ports"`
+	DnsPortsCount                  *ebpf.Variable `ebpf:"dns_ports_count"`
 	EnableDirectflowsRingbuf       *ebpf.Variable `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
