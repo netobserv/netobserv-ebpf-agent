@@ -33,7 +33,7 @@ endif
 
 ifneq ($(CLEAN_BUILD),)
 	BUILD_DATE := $(shell date +%Y-%m-%d\ %H:%M)
-	BUILD_SHA := $(shell git rev-parse --short HEAD)
+	BUILD_SHA := $(shell git rev-parse --short=8 HEAD)
 	LDFLAGS ?= -X 'main.buildVersion=${VERSION}-${BUILD_SHA}' -X 'main.buildDate=${BUILD_DATE}'
 endif
 
@@ -303,7 +303,6 @@ tar-image: image-build ## Build single arch (amd64) and save as a tar
 	$(OCI_BIN) tag $(IMAGE)-amd64 $(IMAGE)
 	mkdir -p ./out
 	$(OCI_BIN) save -o out/ebpf-agent.tar $(IMAGE)
-	echo $(IMAGE) > ./out/name
 
 .PHONY: tar-bc-image
 tar-bc-image: MULTIARCH_TARGETS=amd64
@@ -311,7 +310,6 @@ tar-bc-image: bc-image-build ## Build single arch (amd64) bytecode and save as a
 	$(OCI_BIN) tag $(BC_IMAGE)-amd64 $(BC_IMAGE)
 	mkdir -p ./out
 	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_IMAGE)
-	echo $(BC_IMAGE) > ./out/bc-name
 
 include .mk/bc.mk
 include .mk/shortcuts.mk
