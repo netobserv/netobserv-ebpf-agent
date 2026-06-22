@@ -32,6 +32,11 @@ jobs:
             echo "::error::Could not get a unique PR, aborting"
             exit 1
           fi
+          has_label=$(echo ${pr_json} | jq '[.[0].labels[].name] | any(. == "ok-to-test")')
+          if [[ "$has_label" != "true" ]]; then
+            echo "::error::PR does not have the ok-to-test label, aborting"
+            exit 1
+          fi
           echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_ENV
           head_sha=$(echo ${pr_json} | jq -r '.[0].head.sha')
           echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_ENV
