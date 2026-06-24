@@ -258,14 +258,14 @@ func (cs *connectionStore) len() int {
 // value.
 func schedulingGroupToLabelValue(groupIdx int, group api.ConnTrackSchedulingGroup) string {
 	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf("%v: ", groupIdx))
+	fmt.Fprintf(&sb, "%v: ", groupIdx)
 	var keys []string
 	for k := range group.Selector {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%s=%v, ", k, group.Selector[k]))
+		fmt.Fprintf(&sb, "%s=%v, ", k, group.Selector[k])
 	}
 	if len(group.Selector) == 0 {
 		sb.WriteString("DEFAULT")
