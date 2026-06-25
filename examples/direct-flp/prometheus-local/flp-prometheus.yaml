@@ -1,0 +1,111 @@
+# Flowlogs-pipeline config for EXPORT=direct-flp (ingest is provided by the agent).
+# Exposes Prometheus metrics on :9102/metrics (see metricsSettings).
+# Agent operational metrics stay on METRICS_SERVER_PORT (default 9090).
+log-level: info
+metricsSettings:
+  address: "0.0.0.0"
+  port: 9102
+pipeline:
+  - name: encode_prom
+    follows: preset-ingester
+parameters:
+  - name: encode_prom
+    encode:
+      type: prom
+      prom:
+        prefix: netobserv_
+        expiryTime: 5m
+        metrics:
+          - name: flow_bytes
+            type: gauge
+            help: Last observed byte count for a flow (high-cardinality labels; local lab only).
+            filters:
+              - key: Bytes
+                type: presence
+            valueKey: Bytes
+            labels:
+              - SrcAddr
+              - DstAddr
+              - SrcPort
+              - DstPort
+              - Proto
+          - name: flow_packets
+            type: gauge
+            help: Last observed packet count for a flow.
+            filters:
+              - key: Packets
+                type: presence
+            valueKey: Packets
+            labels:
+              - SrcAddr
+              - DstAddr
+              - SrcPort
+              - DstPort
+              - Proto
+          - name: dns_latency_ms
+            type: gauge
+            help: DNS request/response latency in milliseconds when DNS tracking is enabled.
+            filters:
+              - key: DnsLatencyMs
+                type: presence
+            valueKey: DnsLatencyMs
+            labels:
+              - SrcAddr
+              - DstAddr
+              - DstPort
+              - DnsFlagsResponseCode
+          - name: tcp_flow_rtt_ns
+            type: gauge
+            help: TCP smoothed RTT in nanoseconds when RTT tracking is enabled.
+            filters:
+              - key: TimeFlowRttNs
+                type: presence
+            valueKey: TimeFlowRttNs
+            labels:
+              - SrcAddr
+              - DstAddr
+              - DstPort
+              - Proto
+          - name: pkt_drop_packets
+            type: gauge
+            help: Kernel packet drops attributed to the flow when packet drop tracking is enabled.
+            filters:
+              - key: PktDropPackets
+                type: presence
+            valueKey: PktDropPackets
+            labels:
+              - SrcAddr
+              - DstAddr
+              - PktDropLatestDropCause
+          - name: ipsec_flow_bytes
+            type: gauge
+            help: Last observed bytes for flows where IPsec encryption was detected (ENABLE_IPSEC_TRACKING).
+            filters:
+              - key: Bytes
+                type: presence
+              - key: IPSecStatus
+                type: presence
+            valueKey: Bytes
+            labels:
+              - SrcAddr
+              - DstAddr
+              - DstPort
+              - Proto
+              - IPSecStatus
+              - IPSecRetCode
+          - name: tls_flow_bytes
+            type: gauge
+            help: Last observed bytes for flows where TLS metadata was captured (ENABLE_TLS_TRACKING).
+            filters:
+              - key: Bytes
+                type: presence
+              - key: TLSVersion
+                type: presence
+            valueKey: Bytes
+            labels:
+              - SrcAddr
+              - DstAddr
+              - DstPort
+              - Proto
+              - TLSVersion
+              - TLSCipherSuite
