@@ -49,7 +49,7 @@ func main() {
 	if config.PprofAddr != "" {
 		go func() {
 			logrus.WithField("addr", config.PprofAddr).Info("starting PProf HTTP listener")
-			srv := server.Default(&http.Server{Addr: config.PprofAddr})
+			srv := server.Default(&http.Server{Addr: config.PprofAddr, Handler: http.DefaultServeMux})
 			logrus.WithError(srv.ListenAndServe()).
 				Error("PProf HTTP listener stopped working")
 		}()
