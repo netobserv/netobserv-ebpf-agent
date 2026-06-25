@@ -13,9 +13,9 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/sirupsen/logrus"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/server"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/server"
 
 	_ "net/http/pprof"
 )
