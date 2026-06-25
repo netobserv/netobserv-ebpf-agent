@@ -1,8 +1,9 @@
 # Profiling guide
 
-1. Run the agent with the `PROFILE_PORT` variable set to e.g. 6060.
-   - If you are executing the agent from the Openshift NetObserv Operator, you can do it by
+1. Run the agent with the `PPROF_ADDR` variable set to a listening address. For security, prefer using the local loop ("127.0.0.1:6060") rather than a broader exposition ("0.0.0.0:6060" or ":6060"), or make sure to restrict who has access to this address, as it can leak sensitive data.
+   - If you are executing the agent from the NetObserv Operator, you can do it by
      adding the following section to your `ebpf` spec:
+
    ```yaml
    apiVersion: flows.netobserv.io/v1alpha1
    kind: FlowCollector
@@ -11,15 +12,15 @@
    spec:
      agent:
        ebpf:
-         debug:
+         advanced:
            env:
-             PROFILE_PORT: "6060"
+             PPROF_ADDR: "127.0.0.1:6060"
     ```
 
-2. If you are running OpenShift/Kubernetes, port-forward the pod that you want to profile.
+2. If you are running Kubernetes, port-forward the pod that you want to profile.
 
     ```
-    oc -n netobserv-privileged port-forward <netobserv-ebpf-agent pod name> 6060
+    kubectl -n netobserv-privileged port-forward <netobserv-ebpf-agent pod name> 6060
     ```
    
 3. Download the required profiles:
