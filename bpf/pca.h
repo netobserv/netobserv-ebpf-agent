@@ -102,4 +102,15 @@ int tcx_egress_pca_parse(struct __sk_buff *skb) {
     return TCX_NEXT;
 }
 
+SEC("netkit/primary")
+int netkit_primary_pca_parse(struct __sk_buff *skb) {
+    export_packet_payload(skb, EGRESS);
+    return NETKIT_NEXT;
+}
+
+SEC("netkit/peer")
+int netkit_peer_pca_parse(struct __sk_buff *skb) {
+    export_packet_payload(skb, INGRESS);
+    return NETKIT_NEXT;
+}
 #endif /* __PCA_H__ */
