@@ -11,6 +11,7 @@ import (
 func buildTLSConfig(cfg *config.Agent) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: cfg.KafkaTLSInsecureSkipVerify,
+		MinVersion:         tls.VersionTLS13,
 	}
 	if cfg.KafkaTLSCACertPath != "" {
 		caCert, err := os.ReadFile(cfg.KafkaTLSCACertPath)
