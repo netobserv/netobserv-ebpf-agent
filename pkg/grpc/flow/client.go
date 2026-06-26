@@ -38,7 +38,8 @@ func ConnectClient(hostIP string, hostPort int, caPath, userCertPath, userKeyPat
 		pool := x509.NewCertPool()
 		pool.AppendCertsFromPEM(caCert)
 		tlsConfig := &tls.Config{
-			RootCAs: pool,
+			RootCAs:    pool,
+			MinVersion: tls.VersionTLS13,
 		}
 		if userCertPath != "" && userKeyPath != "" {
 			clog.Info("Starting GRPC client with mTLS")

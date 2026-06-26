@@ -36,9 +36,9 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 
 	httpServer := &http.Server{
 		Addr: addr,
-		// TLS clients must use TLS 1.2 or higher
+		// TLS clients must use TLS 1.3 or higher
 		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion: tls.VersionTLS13,
 		},
 	}
 	// The Handler function provides a default handler to expose metrics
