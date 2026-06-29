@@ -7,7 +7,7 @@ metadata:
 spec:
   containers:
     - name: fedora
-      image: fedora:43
+      image: fedora:44
       command:
         - sh
         - -c
