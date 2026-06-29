@@ -43,7 +43,7 @@ jobs:
           echo "main_image=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${head_sha::8}" >> $GITHUB_ENV
           echo "bc_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:${head_sha::8}" >> $GITHUB_ENV
       - name: download artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: pr
           run-id: ${{github.event.workflow_run.id }}
@@ -64,7 +64,7 @@ jobs:
         run: |
           DOCKER_BUILDKIT=1 docker push ${{ env.main_image }}
           DOCKER_BUILDKIT=1 docker push ${{ env.bc_image }}
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
