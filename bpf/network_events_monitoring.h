@@ -20,6 +20,9 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
                                                                  u8 *user_cookie, u64 len) {
     u8 cookie[MAX_EVENT_MD];
 
+    if (md_len == 0 || md_len > MAX_EVENT_MD) {
+        return -1;
+    }
     bpf_probe_read_kernel(cookie, md_len, user_cookie);
 
     network_events_metrics *extra_metrics =
