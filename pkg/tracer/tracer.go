@@ -18,7 +18,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -31,50 +30,10 @@ import (
 )
 
 const (
-	qdiscType = "clsact"
-	// ebpf map names as defined in bpf/maps_definition.h
-	aggregatedFlowsMap           = "aggregated_flows"
-	aggregatedFlowsDNS           = "aggregated_flows_dns"
-	aggregatedFlowsPktDrop       = "aggregated_flows_pkt_drop"
-	aggregatedFlowsNetworkEvents = "aggregated_flows_network_events"
-	aggregatedFlowsXLat          = "aggregated_flows_xlat"
-	additionalFlowMetrics        = "additional_flow_metrics"
-	directFlowsMap               = "direct_flows"
-	dnsLatencyMap                = "dns_flows"
-	filterMap                    = "filter_map"
-	peerFilterMap                = "peer_filter_map"
-	globalCountersMap            = "global_counters"
-	pcaRecordsMap                = "packet_record"
-	ipsecInputMap                = "ipsec_ingress_map"
-	ipsecOutputMap               = "ipsec_egress_map"
-	quicFlowsMap                 = "quic_flows"
-	// constants defined in flows.c as "volatile const"
-	constSampling                       = "sampling"
-	constHasFilterSampling              = "has_filter_sampling"
-	constTraceMessages                  = "trace_messages"
-	constEnableRtt                      = "enable_rtt"
-	constEnableDNSTracking              = "enable_dns_tracking"
-	constDNSTrackingPort                = "dns_port"
-	dnsDefaultPort                      = 53
-	constEnableFlowFiltering            = "enable_flows_filtering"
-	constEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
-	constNetworkEventsMonitoringGroupID = "network_events_monitoring_groupid"
-	constEnablePktTranslation           = "enable_pkt_translation_tracking"
-	pktDropHook                         = "kfree_skb"
-	constPcaEnable                      = "enable_pca"
-	tcEgressFilterName                  = "tc/tc_egress_flow_parse"
-	tcIngressFilterName                 = "tc/tc_ingress_flow_parse"
-	tcpFentryHook                       = "tcp_rcv_fentry"
-	tcpRcvKprobe                        = "tcp_rcv_kprobe"
-	networkEventsMonitoringHook         = "psample_sample_packet"
-	defaultNetworkEventsGroupID         = 10
-	constEnableIPsec                    = "enable_ipsec"
-	constEnableOpenSSLTracking          = "enable_openssl_tracking"
-	constEnableTLSUsageTracking         = "enable_tls_usage_tracking"
-	sslDataEventMap                     = "ssl_data_event_map"
-	dnsNameMap                          = "dns_name_map"
-	constEnableDirectFlowRingbuf        = "enable_directflows_ringbuf"
-	constEnableQUICTracking             = "enable_quic_tracking"
+	qdiscType                   = "clsact"
+	networkEventsMonitoringHook = "psample_sample_packet"
+	dnsDefaultPort              = 53
+	defaultNetworkEventsGroupID = 10
 )
 
 const (
@@ -155,45 +114,45 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		}
 
 		// Resize maps according to user-provided configuration
-		spec.Maps[aggregatedFlowsMap].MaxEntries = uint32(cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, aggregatedFlowsDNS, cfg.EnableDNSTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, aggregatedFlowsNetworkEvents, cfg.EnableNetworkEventsMonitoring, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, aggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, aggregatedFlowsXLat, cfg.EnablePktTranslationTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, additionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracking, cfg.CacheMaxFlows)
+		spec.Maps[ebpf.BpfMapAggregatedFlows].MaxEntries = uint32(cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, cfg.EnableDNSTracking, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsNetworkEvents, cfg.EnableNetworkEventsMonitoring, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsPktDrop, cfg.EnablePktDrops, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsXlat, cfg.EnablePktTranslationTracking, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAdditionalFlowMetrics, cfg.EnableRTT || cfg.EnableIPsecTracking, cfg.CacheMaxFlows)
 
 		ringbufMinSize := uint32(os.Getpagesize())
 
 		// Minimize direct-flows ringbuf if unused
 		if !cfg.EnableFlowsRingbufFallback {
-			spec.Maps[directFlowsMap].MaxEntries = ringbufMinSize
+			spec.Maps[ebpf.BpfMapDirectFlows].MaxEntries = ringbufMinSize
 		}
 		// Minimize SSL maps if SSL is disabled
 		if !cfg.EnableOpenSSLTracking {
-			spec.Maps[sslDataEventMap].MaxEntries = ringbufMinSize
+			spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = ringbufMinSize
 		}
 		// Always set pcaRecordsMap to the minimum in FlowFetcher - PCA and Flow Fetcher are mutually exclusive.
-		spec.Maps[pcaRecordsMap].MaxEntries = ringbufMinSize
+		spec.Maps[ebpf.BpfMapPacketRecord].MaxEntries = ringbufMinSize
 
 		// remove pinning from all maps
 		for _, m := range []string{
-			aggregatedFlowsMap,
-			aggregatedFlowsDNS,
-			aggregatedFlowsNetworkEvents,
-			aggregatedFlowsPktDrop,
-			aggregatedFlowsXLat,
-			additionalFlowMetrics,
-			directFlowsMap,
-			dnsLatencyMap,
-			filterMap,
-			peerFilterMap,
-			globalCountersMap,
-			pcaRecordsMap,
-			ipsecInputMap,
-			ipsecOutputMap,
-			sslDataEventMap,
-			dnsNameMap,
-			quicFlowsMap,
+			ebpf.BpfMapAggregatedFlows,
+			ebpf.BpfMapAggregatedFlowsDns,
+			ebpf.BpfMapAggregatedFlowsNetworkEvents,
+			ebpf.BpfMapAggregatedFlowsPktDrop,
+			ebpf.BpfMapAggregatedFlowsXlat,
+			ebpf.BpfMapAdditionalFlowMetrics,
+			ebpf.BpfMapDirectFlows,
+			ebpf.BpfMapDnsFlows,
+			ebpf.BpfMapFilterMap,
+			ebpf.BpfMapPeerFilterMap,
+			ebpf.BpfMapGlobalCounters,
+			ebpf.BpfMapPacketRecord,
+			ebpf.BpfMapIpsecIngressMap,
+			ebpf.BpfMapIpsecEgressMap,
+			ebpf.BpfMapSslDataEventMap,
+			ebpf.BpfMapDnsNameMap,
+			ebpf.BpfMapQuicFlows,
 		} {
 			spec.Maps[m].Pinning = 0
 		}
@@ -220,10 +179,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		// Deleting specs for PCA
 		objects.TcxEgressPcaParse = nil
 		objects.TcIngressPcaParse = nil
-		delete(spec.Programs, constPcaEnable)
+		delete(spec.Programs, ebpf.BpfVarEnablePca)
 
 		if cfg.EnablePktDrops && !oldKernel && !rtOldKernel {
-			pktDropsLink, err = link.Tracepoint("skb", pktDropHook, objects.KfreeSkb, nil)
+			pktDropsLink, err = link.Tracepoint("skb", ebpf.BpfProgKfreeSkb, objects.KfreeSkb, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to attach the BPF program to kfree_skb tracepoint: %w", err)
 			}
@@ -332,81 +291,81 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 			return nil
 		}
 
-		if err := loadPinnedMapInto("aggregated flows", aggregatedFlowsMap, &objects.BpfMaps.AggregatedFlows); err != nil {
+		if err := loadPinnedMapInto("aggregated flows", ebpf.BpfMapAggregatedFlows, &objects.BpfMaps.AggregatedFlows); err != nil {
 			return nil, err
 		}
 
-		if err := loadPinnedMapInto("additional flow metrics", additionalFlowMetrics, &objects.BpfMaps.AdditionalFlowMetrics); err != nil {
+		if err := loadPinnedMapInto("additional flow metrics", ebpf.BpfMapAdditionalFlowMetrics, &objects.BpfMaps.AdditionalFlowMetrics); err != nil {
 			return nil, err
 		}
 
-		if err := loadPinnedMapInto("direct flows", directFlowsMap, &objects.BpfMaps.DirectFlows); err != nil {
+		if err := loadPinnedMapInto("direct flows", ebpf.BpfMapDirectFlows, &objects.BpfMaps.DirectFlows); err != nil {
 			return nil, err
 		}
 
-		if err := loadPinnedMapInto("global counters", globalCountersMap, &objects.BpfMaps.GlobalCounters); err != nil {
+		if err := loadPinnedMapInto("global counters", ebpf.BpfMapGlobalCounters, &objects.BpfMaps.GlobalCounters); err != nil {
 			return nil, err
 		}
 
 		if cfg.EnableDNSTracking {
-			if err := loadPinnedMapInto("aggregated flow DNS", aggregatedFlowsDNS, &objects.BpfMaps.AggregatedFlowsDns); err != nil {
+			if err := loadPinnedMapInto("aggregated flow DNS", ebpf.BpfMapAggregatedFlowsDns, &objects.BpfMaps.AggregatedFlowsDns); err != nil {
 				return nil, err
 			}
 
-			if err := loadPinnedMapInto("DNS flows", dnsLatencyMap, &objects.BpfMaps.DnsFlows); err != nil {
+			if err := loadPinnedMapInto("DNS flows", ebpf.BpfMapDnsFlows, &objects.BpfMaps.DnsFlows); err != nil {
 				return nil, err
 			}
 
-			if err := loadPinnedMapInto("DNS name", dnsNameMap, &objects.BpfMaps.DnsNameMap); err != nil {
+			if err := loadPinnedMapInto("DNS name", ebpf.BpfMapDnsNameMap, &objects.BpfMaps.DnsNameMap); err != nil {
 				return nil, err
 			}
 		}
 
 		if cfg.EnablePktDrops {
-			if err := loadPinnedMapInto("aggregated flow pkt drops", aggregatedFlowsPktDrop, &objects.BpfMaps.AggregatedFlowsPktDrop); err != nil {
+			if err := loadPinnedMapInto("aggregated flow pkt drops", ebpf.BpfMapAggregatedFlowsPktDrop, &objects.BpfMaps.AggregatedFlowsPktDrop); err != nil {
 				return nil, err
 			}
 		}
 
 		if cfg.EnableNetworkEventsMonitoring {
-			if err := loadPinnedMapInto("aggregated flow network events", aggregatedFlowsNetworkEvents, &objects.BpfMaps.AggregatedFlowsNetworkEvents); err != nil {
+			if err := loadPinnedMapInto("aggregated flow network events", ebpf.BpfMapAggregatedFlowsNetworkEvents, &objects.BpfMaps.AggregatedFlowsNetworkEvents); err != nil {
 				return nil, err
 			}
 		}
 
 		if cfg.EnablePktTranslationTracking {
-			if err := loadPinnedMapInto("aggregated flow translation", aggregatedFlowsXLat, &objects.BpfMaps.AggregatedFlowsXlat); err != nil {
+			if err := loadPinnedMapInto("aggregated flow translation", ebpf.BpfMapAggregatedFlowsXlat, &objects.BpfMaps.AggregatedFlowsXlat); err != nil {
 				return nil, err
 			}
 		}
 
 		if filter != nil {
-			if err := loadPinnedMapInto("filter", filterMap, &objects.BpfMaps.FilterMap); err != nil {
+			if err := loadPinnedMapInto("filter", ebpf.BpfMapFilterMap, &objects.BpfMaps.FilterMap); err != nil {
 				return nil, err
 			}
-			if err := loadPinnedMapInto("peerfilter", peerFilterMap, &objects.BpfMaps.PeerFilterMap); err != nil {
+			if err := loadPinnedMapInto("peerfilter", ebpf.BpfMapPeerFilterMap, &objects.BpfMaps.PeerFilterMap); err != nil {
 				return nil, err
 			}
 		}
 
 		if cfg.EnablePCA {
-			if err := loadPinnedMapInto("packet record", pcaRecordsMap, &objects.BpfMaps.PacketRecord); err != nil {
+			if err := loadPinnedMapInto("packet record", ebpf.BpfMapPacketRecord, &objects.BpfMaps.PacketRecord); err != nil {
 				return nil, err
 			}
 		}
 
 		if cfg.EnableIPsecTracking {
-			if err := loadPinnedMapInto("skb input", ipsecInputMap, &objects.BpfMaps.IpsecIngressMap); err != nil {
+			if err := loadPinnedMapInto("skb input", ebpf.BpfMapIpsecIngressMap, &objects.BpfMaps.IpsecIngressMap); err != nil {
 				return nil, err
 			}
-			if err := loadPinnedMapInto("skb output", ipsecOutputMap, &objects.BpfMaps.IpsecEgressMap); err != nil {
+			if err := loadPinnedMapInto("skb output", ebpf.BpfMapIpsecEgressMap, &objects.BpfMaps.IpsecEgressMap); err != nil {
 				return nil, err
 			}
 		}
 
 		// Only load SSL map if OpenSSL tracking is enabled
 		if cfg.EnableOpenSSLTracking {
-			if err := loadPinnedMapInto("SSL data event", sslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
+			if err := loadPinnedMapInto("SSL data event", ebpf.BpfMapSslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
 				return nil, err
 			}
 
@@ -418,7 +377,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		}
 
 		if cfg.QUICTrackingMode != 0 {
-			if err := loadPinnedMapInto("QUIC flows", quicFlowsMap, &objects.BpfMaps.QuicFlows); err != nil {
+			if err := loadPinnedMapInto("QUIC flows", ebpf.BpfMapQuicFlows, &objects.BpfMaps.QuicFlows); err != nil {
 				return nil, err
 			}
 		}
@@ -600,7 +559,7 @@ func unregister(iface *ifaces.Interface) error {
 		}
 		for _, filter := range ingressFilters {
 			if bpfFilter, ok := filter.(*netlink.BpfFilter); ok {
-				if strings.HasPrefix(bpfFilter.Name, tcIngressFilterName) {
+				if strings.HasPrefix(bpfFilter.Name, ebpf.BpfProgTcIngressFlowParse) {
 					ingressDevs = append(ingressDevs, l)
 				}
 			}
@@ -612,7 +571,7 @@ func unregister(iface *ifaces.Interface) error {
 		}
 		for _, filter := range egressFilters {
 			if bpfFilter, ok := filter.(*netlink.BpfFilter); ok {
-				if strings.HasPrefix(bpfFilter.Name, tcEgressFilterName) {
+				if strings.HasPrefix(bpfFilter.Name, ebpf.BpfProgTcEgressFlowParse) {
 					egressDevs = append(egressDevs, l)
 				}
 			}
@@ -709,7 +668,7 @@ func (m *FlowFetcher) registerEgress(iface *ifaces.Interface, ipvlan netlink.Lin
 	egressFilter := &netlink.BpfFilter{
 		FilterAttrs:  egressAttrs,
 		Fd:           m.objects.TcEgressFlowParse.FD(),
-		Name:         tcEgressFilterName,
+		Name:         ebpf.BpfProgTcEgressFlowParse,
 		DirectAction: true,
 	}
 	if err := handle.FilterDel(egressFilter); err == nil {
@@ -743,7 +702,7 @@ func (m *FlowFetcher) registerIngress(iface *ifaces.Interface, ipvlan netlink.Li
 	ingressFilter := &netlink.BpfFilter{
 		FilterAttrs:  ingressAttrs,
 		Fd:           m.objects.TcIngressFlowParse.FD(),
-		Name:         tcIngressFilterName,
+		Name:         ebpf.BpfProgTcIngressFlowParse,
 		DirectAction: true,
 	}
 	if err := handle.FilterDel(ingressFilter); err == nil {
@@ -1262,8 +1221,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 
 	// Helper to remove common hooks
 	removeCommonHooks := func() {
-		delete(spec.Programs, pktDropHook)
-		delete(spec.Programs, networkEventsMonitoringHook)
+		delete(spec.Programs, ebpf.BpfProgKfreeSkb)
+		delete(spec.Programs, ebpf.BpfProgNetworkEventsMonitoring)
 	}
 
 	// Helper to load and assign BPF objects
@@ -1303,8 +1262,8 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 		}
 		var newObjects newBpfObjects
 		removeCommonHooks()
-		delete(spec.Programs, tcpRcvKprobe)
-		delete(spec.Programs, tcpFentryHook)
+		delete(spec.Programs, ebpf.BpfProgTcpRcvKprobe)
+		delete(spec.Programs, ebpf.BpfProgTcpRcvFentry)
 
 		if err := loadAndAssign(&newObjects); err != nil {
 			return objects, err
@@ -1375,7 +1334,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 		}
 		var newObjects newBpfObjects
 		removeCommonHooks()
-		delete(spec.Programs, tcpFentryHook)
+		delete(spec.Programs, ebpf.BpfProgTcpRcvFentry)
 
 		if err := loadAndAssign(&newObjects); err != nil {
 			return objects, err
@@ -1446,7 +1405,7 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 		}
 		var newObjects newBpfObjects
 		removeCommonHooks()
-		delete(spec.Programs, tcpRcvKprobe)
+		delete(spec.Programs, ebpf.BpfProgTcpRcvKprobe)
 
 		if err := loadAndAssign(&newObjects); err != nil {
 			return objects, err
@@ -1570,9 +1529,6 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 		}
 	}
 
-	// Release cached kernel BTF memory
-	btf.FlushKernelSpec()
-
 	return objects, nil
 }
 
@@ -1609,8 +1565,8 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		pcaEnable = 1
 	}
 	variables := []variablesMapping{
-		{constSampling, uint32(cfg.Sampling)},
-		{constPcaEnable, uint8(pcaEnable)},
+		{ebpf.BpfVarSampling, uint32(cfg.Sampling)},
+		{ebpf.BpfVarEnablePca, uint8(pcaEnable)},
 	}
 
 	for _, mapping := range variables {
@@ -1621,29 +1577,29 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 
 	// remove pinning from all maps
 	for _, m := range []string{
-		aggregatedFlowsMap,
-		aggregatedFlowsDNS,
-		aggregatedFlowsNetworkEvents,
-		aggregatedFlowsPktDrop,
-		aggregatedFlowsXLat,
-		additionalFlowMetrics,
-		directFlowsMap,
-		dnsLatencyMap,
-		filterMap,
-		peerFilterMap,
-		globalCountersMap,
-		pcaRecordsMap,
-		ipsecInputMap,
-		ipsecOutputMap,
-		sslDataEventMap,
-		dnsNameMap,
-		quicFlowsMap,
+		ebpf.BpfMapAggregatedFlows,
+		ebpf.BpfMapAggregatedFlowsDns,
+		ebpf.BpfMapAggregatedFlowsNetworkEvents,
+		ebpf.BpfMapAggregatedFlowsPktDrop,
+		ebpf.BpfMapAggregatedFlowsXlat,
+		ebpf.BpfMapAdditionalFlowMetrics,
+		ebpf.BpfMapDirectFlows,
+		ebpf.BpfMapDnsFlows,
+		ebpf.BpfMapFilterMap,
+		ebpf.BpfMapPeerFilterMap,
+		ebpf.BpfMapGlobalCounters,
+		ebpf.BpfMapPacketRecord,
+		ebpf.BpfMapIpsecIngressMap,
+		ebpf.BpfMapIpsecEgressMap,
+		ebpf.BpfMapSslDataEventMap,
+		ebpf.BpfMapDnsNameMap,
+		ebpf.BpfMapQuicFlows,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
 
 	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
-	spec.Maps[sslDataEventMap].MaxEntries = uint32(os.Getpagesize()) // Minimum size for RINGBUF type maps
+	spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = uint32(os.Getpagesize()) // Minimum size for RINGBUF type maps
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
@@ -1656,34 +1612,34 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ebpf.BpfMaps
 	}
 	var newObjects newBpfObjects
-	delete(spec.Programs, pktDropHook)
-	delete(spec.Programs, networkEventsMonitoringHook)
-	delete(spec.Programs, tcpRcvKprobe)
-	delete(spec.Programs, tcpFentryHook)
-	delete(spec.Programs, aggregatedFlowsMap)
-	delete(spec.Programs, aggregatedFlowsDNS)
-	delete(spec.Programs, aggregatedFlowsNetworkEvents)
-	delete(spec.Programs, aggregatedFlowsPktDrop)
-	delete(spec.Programs, aggregatedFlowsXLat)
-	delete(spec.Programs, additionalFlowMetrics)
-	delete(spec.Programs, ipsecInputMap)
-	delete(spec.Programs, ipsecOutputMap)
-	delete(spec.Programs, quicFlowsMap)
-	delete(spec.Programs, constSampling)
-	delete(spec.Programs, constHasFilterSampling)
-	delete(spec.Programs, constTraceMessages)
-	delete(spec.Programs, constEnableDNSTracking)
-	delete(spec.Programs, constDNSTrackingPort)
-	delete(spec.Programs, constEnableRtt)
-	delete(spec.Programs, constEnableFlowFiltering)
-	delete(spec.Programs, constEnableNetworkEventsMonitoring)
-	delete(spec.Programs, constNetworkEventsMonitoringGroupID)
-	delete(spec.Programs, constEnablePktTranslation)
-	delete(spec.Programs, constEnableIPsec)
-	delete(spec.Programs, constEnableDirectFlowRingbuf)
-	delete(spec.Programs, constEnableOpenSSLTracking)
-	delete(spec.Programs, dnsNameMap)
-	delete(spec.Programs, constEnableQUICTracking)
+	delete(spec.Programs, ebpf.BpfProgKfreeSkb)
+	delete(spec.Programs, ebpf.BpfProgNetworkEventsMonitoring)
+	delete(spec.Programs, ebpf.BpfProgTcpRcvKprobe)
+	delete(spec.Programs, ebpf.BpfProgTcpRcvFentry)
+	delete(spec.Programs, ebpf.BpfMapAggregatedFlows)
+	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsDns)
+	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsNetworkEvents)
+	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsPktDrop)
+	delete(spec.Programs, ebpf.BpfMapAggregatedFlowsXlat)
+	delete(spec.Programs, ebpf.BpfMapAdditionalFlowMetrics)
+	delete(spec.Programs, ebpf.BpfMapIpsecIngressMap)
+	delete(spec.Programs, ebpf.BpfMapIpsecEgressMap)
+	delete(spec.Programs, ebpf.BpfMapQuicFlows)
+	delete(spec.Programs, ebpf.BpfVarSampling)
+	delete(spec.Programs, ebpf.BpfVarHasFilterSampling)
+	delete(spec.Programs, ebpf.BpfVarTraceMessages)
+	delete(spec.Programs, ebpf.BpfVarEnableDnsTracking)
+	delete(spec.Programs, ebpf.BpfVarDnsPort)
+	delete(spec.Programs, ebpf.BpfVarEnableRtt)
+	delete(spec.Programs, ebpf.BpfVarEnableFlowsFiltering)
+	delete(spec.Programs, ebpf.BpfVarEnableNetworkEventsMonitoring)
+	delete(spec.Programs, ebpf.BpfVarNetworkEventsMonitoringGroupid)
+	delete(spec.Programs, ebpf.BpfVarEnablePktTranslationTracking)
+	delete(spec.Programs, ebpf.BpfVarEnableIpsec)
+	delete(spec.Programs, ebpf.BpfVarEnableDirectflowsRingbuf)
+	delete(spec.Programs, ebpf.BpfVarEnableOpensslTracking)
+	delete(spec.Programs, ebpf.BpfMapDnsNameMap)
+	delete(spec.Programs, ebpf.BpfVarEnableQuicTracking)
 
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
@@ -2144,7 +2100,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		}
 	}
 	if enableDNSTracking == 0 {
-		spec.Maps[dnsLatencyMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapDnsFlows].MaxEntries = 1
 	}
 	enableFlowFiltering := 0
 	hasFilterSampling := uint8(0)
@@ -2152,8 +2108,8 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		enableFlowFiltering = 1
 		hasFilterSampling = filter.hasSampling()
 	} else {
-		spec.Maps[filterMap].MaxEntries = 1
-		spec.Maps[peerFilterMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapFilterMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries = 1
 	}
 	enableNetworkEventsMonitoring := 0
 	if cfg.EnableNetworkEventsMonitoring {
@@ -2172,8 +2128,8 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		enableIPsec = 1
 	}
 	if enableIPsec == 0 {
-		spec.Maps[ipsecInputMap].MaxEntries = 1
-		spec.Maps[ipsecOutputMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapIpsecIngressMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapIpsecEgressMap].MaxEntries = 1
 	}
 	enableTLSTracking := 0
 	if cfg.EnableTLSTracking {
@@ -2200,21 +2156,21 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
-		{constSampling, uint32(cfg.Sampling)},
-		{constHasFilterSampling, hasFilterSampling},
-		{constTraceMessages, uint8(traceMsgs)},
-		{constEnableRtt, uint8(enableRtt)},
-		{constEnableDNSTracking, uint8(enableDNSTracking)},
-		{constDNSTrackingPort, dnsTrackerPort},
-		{constEnableFlowFiltering, uint8(enableFlowFiltering)},
-		{constEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
-		{constNetworkEventsMonitoringGroupID, uint8(networkEventsMonitoringGroupID)},
-		{constEnablePktTranslation, uint8(enablePktTranslation)},
-		{constEnableIPsec, uint8(enableIPsec)},
-		{constEnableDirectFlowRingbuf, uint8(enableDirectFlowRingbuf)},
-		{constEnableOpenSSLTracking, uint8(enableOpenSSLTracking)},
-		{constEnableTLSUsageTracking, uint8(enableTLSTracking)},
-		{constEnableQUICTracking, uint8(enableQUICTracking)},
+		{ebpf.BpfVarSampling, uint32(cfg.Sampling)},
+		{ebpf.BpfVarHasFilterSampling, hasFilterSampling},
+		{ebpf.BpfVarTraceMessages, uint8(traceMsgs)},
+		{ebpf.BpfVarEnableRtt, uint8(enableRtt)},
+		{ebpf.BpfVarEnableDnsTracking, uint8(enableDNSTracking)},
+		{ebpf.BpfVarDnsPort, dnsTrackerPort},
+		{ebpf.BpfVarEnableFlowsFiltering, uint8(enableFlowFiltering)},
+		{ebpf.BpfVarEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
+		{ebpf.BpfVarNetworkEventsMonitoringGroupid, uint8(networkEventsMonitoringGroupID)},
+		{ebpf.BpfVarEnablePktTranslationTracking, uint8(enablePktTranslation)},
+		{ebpf.BpfVarEnableIpsec, uint8(enableIPsec)},
+		{ebpf.BpfVarEnableDirectflowsRingbuf, uint8(enableDirectFlowRingbuf)},
+		{ebpf.BpfVarEnableOpensslTracking, uint8(enableOpenSSLTracking)},
+		{ebpf.BpfVarEnableTlsUsageTracking, uint8(enableTLSTracking)},
+		{ebpf.BpfVarEnableQuicTracking, uint8(enableQUICTracking)},
 	}
 
 	for _, mapping := range variables {
