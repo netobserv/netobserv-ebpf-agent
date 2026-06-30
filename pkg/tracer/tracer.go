@@ -18,7 +18,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -1569,9 +1568,6 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 			return objects, err
 		}
 	}
-
-	// Release cached kernel BTF memory
-	btf.FlushKernelSpec()
 
 	return objects, nil
 }
