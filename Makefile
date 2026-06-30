@@ -9,6 +9,11 @@ VERSION ?= main
 GOARCH ?= amd64
 MULTIARCH_TARGETS ?= amd64
 
+# Run generator tooling natively on ARM64 hosts to avoid QEMU syscall/runtime
+# incompatibilities. Other hosts retain the existing amd64 generator behavior.
+GENERATOR_TARGETARCH ?= $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,amd64)
+GENERATOR_PROTOC_ARCH ?= $(if $(filter arm64,$(GENERATOR_TARGETARCH)),aarch_64,x86_64)
+
 # In CI, to be replaced by `netobserv`
 IMAGE_ORG ?= $(USER)
 
@@ -42,6 +47,7 @@ CILIUM_EBPF_VERSION := v0.22.0
 GOLANGCI_LINT_VERSION = v2.12.2
 GO_VERSION = 1.26.4
 PROTOC_VERSION = 3.19.4
+PROTOC ?= $(CURDIR)/protoc/bin/protoc
 PROTOC_GEN_GO_VERSION="v1.35.1"
 PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
 CLANG ?= clang
@@ -110,7 +116,7 @@ vendors: ## Check go vendors
 .PHONY: install-protoc
 install-protoc: ## Install protoc
 	curl -qL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/protoc-$(PROTOC_VERSION)-linux-x86_64.zip -o protoc.zip
-	unzip protoc.zip -d protoc && rm protoc.zip
+	unzip -o protoc.zip -d protoc && rm protoc.zip
 
 .PHONY: prereqs
 prereqs: ## Check if prerequisites are met, and install missing dependencies
@@ -122,7 +128,7 @@ prereqs: ## Check if prerequisites are met, and install missing dependencies
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go || go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
 	test -f $(shell go env GOPATH)/bin/protoc-gen-go-grpc || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
 	test -f $(shell go env GOPATH)/bin/kind || go install sigs.k8s.io/kind@latest
-	test "$(shell PATH="$$(pwd)/protoc/bin:$$PATH" && protoc --version)" = "libprotoc $(PROTOC_VERSION)" || $(MAKE) install-protoc
+	test "$$($(PROTOC) --version)" = "libprotoc $(PROTOC_VERSION)" || $(MAKE) install-protoc
 
 ##@ Develop
 
@@ -149,8 +155,8 @@ gen-bpf: prereqs ## Generate BPF (pkg/ebpf package)
 .PHONY: gen-protobuf
 gen-protobuf: prereqs ## Generate protocol buffer (pkg/proto package)
 	@echo "### Generating gRPC and Protocol Buffers code"
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/flow.proto
-	PATH="$(shell pwd)/protoc/bin:$$PATH" protoc --go_out=pkg --go-grpc_out=pkg proto/packet.proto
+	$(PROTOC) --go_out=pkg --go-grpc_out=pkg proto/flow.proto
+	$(PROTOC) --go_out=pkg --go-grpc_out=pkg proto/packet.proto
 
 # As generated artifacts are part of the code repo (pkg/ebpf and pkg/proto packages), you don't have
 # to run this target for each build. Only when you change the C code inside the bpf folder or the
@@ -162,7 +168,7 @@ generate: gen-bpf gen-protobuf
 .PHONY: docker-generate
 docker-generate: ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
-	$(OCI_BIN) buildx build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/amd64 --build-arg EXTENSION="x86_64" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)" --load
+	$(OCI_BIN) buildx build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/$(GENERATOR_TARGETARCH) --build-arg TARGETARCH="$(GENERATOR_TARGETARCH)" --build-arg EXTENSION="$(GENERATOR_PROTOC_ARCH)" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)" --load
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
 
 .PHONY: compile

@@ -266,6 +266,68 @@ type BpfXlatMetricsT struct {
 	EthProtocol     uint16
 }
 
+// Names of all BPF objects in the ELF.
+//
+// Used for safe lookups in a Collection or CollectionSpec.
+const (
+	BpfMapAdditionalFlowMetrics          = "additional_flow_metrics"
+	BpfMapAggregatedFlows                = "aggregated_flows"
+	BpfMapAggregatedFlowsDns             = "aggregated_flows_dns"
+	BpfMapAggregatedFlowsNetworkEvents   = "aggregated_flows_network_events"
+	BpfMapAggregatedFlowsPktDrop         = "aggregated_flows_pkt_drop"
+	BpfMapAggregatedFlowsXlat            = "aggregated_flows_xlat"
+	BpfMapDirectFlows                    = "direct_flows"
+	BpfMapDnsFlows                       = "dns_flows"
+	BpfMapDnsNameMap                     = "dns_name_map"
+	BpfMapFilterMap                      = "filter_map"
+	BpfMapGlobalCounters                 = "global_counters"
+	BpfMapIpsecEgressMap                 = "ipsec_egress_map"
+	BpfMapIpsecIngressMap                = "ipsec_ingress_map"
+	BpfMapPacketRecord                   = "packet_record"
+	BpfMapPeerFilterMap                  = "peer_filter_map"
+	BpfMapQuicFlows                      = "quic_flows"
+	BpfMapSslDataEventMap                = "ssl_data_event_map"
+	BpfProgKfreeSkb                      = "kfree_skb"
+	BpfProgNetworkEventsMonitoring       = "network_events_monitoring"
+	BpfProgProbeEntrySSL_write           = "probe_entry_SSL_write"
+	BpfProgTcEgressFlowParse             = "tc_egress_flow_parse"
+	BpfProgTcEgressPcaParse              = "tc_egress_pca_parse"
+	BpfProgTcIngressFlowParse            = "tc_ingress_flow_parse"
+	BpfProgTcIngressPcaParse             = "tc_ingress_pca_parse"
+	BpfProgTcpRcvFentry                  = "tcp_rcv_fentry"
+	BpfProgTcpRcvKprobe                  = "tcp_rcv_kprobe"
+	BpfProgTcxEgressFlowParse            = "tcx_egress_flow_parse"
+	BpfProgTcxEgressPcaParse             = "tcx_egress_pca_parse"
+	BpfProgTcxIngressFlowParse           = "tcx_ingress_flow_parse"
+	BpfProgTcxIngressPcaParse            = "tcx_ingress_pca_parse"
+	BpfProgTrackNatManipPkt              = "track_nat_manip_pkt"
+	BpfProgXfrmInputKprobe               = "xfrm_input_kprobe"
+	BpfProgXfrmInputKretprobe            = "xfrm_input_kretprobe"
+	BpfProgXfrmOutputKprobe              = "xfrm_output_kprobe"
+	BpfProgXfrmOutputKretprobe           = "xfrm_output_kretprobe"
+	BpfVarDnsPort                        = "dns_port"
+	BpfVarEnableDirectflowsRingbuf       = "enable_directflows_ringbuf"
+	BpfVarEnableDnsTracking              = "enable_dns_tracking"
+	BpfVarEnableFlowsFiltering           = "enable_flows_filtering"
+	BpfVarEnableIpsec                    = "enable_ipsec"
+	BpfVarEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
+	BpfVarEnableOpensslTracking          = "enable_openssl_tracking"
+	BpfVarEnablePca                      = "enable_pca"
+	BpfVarEnablePktTranslationTracking   = "enable_pkt_translation_tracking"
+	BpfVarEnableQuicTracking             = "enable_quic_tracking"
+	BpfVarEnableRtt                      = "enable_rtt"
+	BpfVarEnableTlsUsageTracking         = "enable_tls_usage_tracking"
+	BpfVarFilterKey                      = "filter_key"
+	BpfVarFilterValue                    = "filter_value"
+	BpfVarHasFilterSampling              = "has_filter_sampling"
+	BpfVarNetworkEventsMonitoringGroupid = "network_events_monitoring_groupid"
+	BpfVarSampling                       = "sampling"
+	BpfVarSslDataEvent                   = "ssl_data_event"
+	BpfVarTraceMessages                  = "trace_messages"
+	BpfVarUnused8                        = "unused8"
+	BpfVarUnused9                        = "unused9"
+)
+
 // LoadBpf returns the embedded CollectionSpec for Bpf.
 func LoadBpf() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_BpfBytes)
@@ -286,7 +348,7 @@ func LoadBpf() (*ebpf.CollectionSpec, error) {
 //	*BpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
-func LoadBpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
+func LoadBpfObjects(obj any, opts *ebpf.CollectionOptions) error {
 	spec, err := LoadBpf()
 	if err != nil {
 		return err
