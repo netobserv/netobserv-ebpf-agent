@@ -20,6 +20,7 @@ func TestWatcher(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10, metrics.NoOp())
+	watcher.netNamespaces = defaultNetNSForTest
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{

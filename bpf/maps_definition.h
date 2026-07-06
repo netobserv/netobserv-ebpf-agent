@@ -152,6 +152,21 @@ struct {
     __uint(max_entries, 1 << 27); // 16KB * 1000 events/sec * 5sec "eviction time" = ~128MB
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ssl_data_event_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, u64);
+    __type(value, struct ssl_read_active_t);
+} ssl_read_active_map SEC(".maps");
+
+// OpenSSL SSL* -> socket fd (populated by SSL_set_fd uprobe).
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 16384);
+    __type(key, u64);
+    __type(value, s32);
+} ssl_fd_map SEC(".maps");
 // QUIC flow tracking map - keyed by flow_id (like other flow maps)
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);

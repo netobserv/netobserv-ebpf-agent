@@ -22,6 +22,10 @@ var (
 	macOverlapped = [6]uint8{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
 )
 
+func defaultNetNSForTest() ([]string, error) {
+	return []string{""}, nil
+}
+
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
 	return NewInterface(index, name, mac, netns.None(), "")
 }
@@ -50,9 +54,10 @@ func TestPoller(t *testing.T) {
 	}
 	poller := NewPoller(5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
+	poller.netNamespaces = defaultNetNSForTest
 
-	updates, err := poller.Subscribe(ctx)
-	require.NoError(t, err)
+	updates := make(chan Event, 10)
+	go poller.pollForEvents(ctx, "", updates)
 	// first poll: two interfaces are added
 	assert.Equal(t,
 		Event{Type: EventAdded, Interface: simpleInterface(1, "foo", macFoo)},
@@ -82,11 +87,15 @@ func TestPoller(t *testing.T) {
 	)
 
 	// successive polls: no more events are forwarded
+	time.Sleep(poller.period * 2)
 	select {
 	case ev := <-updates:
 		require.Failf(t, "unexpected event", "%#v", ev)
 	default:
-		// ok!
+	}
+	cancel()
+	for ev := range updates {
+		_ = ev
 	}
 }
 

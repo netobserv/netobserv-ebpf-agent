@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -24,19 +23,18 @@ import (
 type Packets struct {
 	cfg *config.Agent
 
-	// input data providers
 	informer ifaces.Informer
 	ebpf     ebpfPacketFetcher
 
-	// processing nodes to be wired in the buildAndStartPipeline method
-	perfTracer   *flow.PerfTracer
-	packetbuffer *flow.PerfBuffer
-	exporter     node.TerminalFunc[[]*model.PacketRecord]
+	perfTracer        *flow.PerfTracer
+	packetbuffer      *flow.PerfBuffer
+	plaintextTracer   *flow.PlaintextTracer
+	plaintextBuffer   *flow.PlaintextBuffer
+	plaintextExporter node.TerminalFunc[[]*model.PlaintextRecord]
+	exporter          node.TerminalFunc[[]*model.PacketRecord]
 
-	// elements used to decorate flows with extra information
 	agentIP net.IP
-
-	status Status
+	status  Status
 }
 
 type ebpfPacketFetcher interface {
@@ -44,13 +42,12 @@ type ebpfPacketFetcher interface {
 	tcAttacher
 	LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte
 	ReadPerf() (ringbuf.Record, error)
+	ReadSSLRingBuf() (ringbuf.Record, error)
 }
 
 // PacketsAgent instantiates a new agent, given a configuration.
 func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 	plog.Info("initializing Packets agent")
-
-	// manage deprecated configs
 	config.ManageDeprecatedConfigs(cfg)
 
 	plog.Info("[PCA]acquiring Agent IP")
@@ -59,36 +56,18 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		return nil, fmt.Errorf("acquiring Agent IP: %w", err)
 	}
 
-	// configure selected exporter
-	packetexportFunc, err := buildPacketExporter(cfg)
+	packetexportFunc, plaintextExportFunc, err := buildPacketExporters(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	ingress, egress := flowDirections(cfg)
 	debug := cfg.LogLevel == logrus.TraceLevel.String() || cfg.LogLevel == logrus.DebugLevel.String()
-	filterRules := make([]*tracer.FilterConfig, 0)
-	var flowFilters []*config.FlowFilter
-	if err := json.Unmarshal([]byte(cfg.FlowFilterRules), &flowFilters); err != nil {
+	filterRules, err := parseFlowFilterRules(cfg.FlowFilterRules)
+	if err != nil {
 		return nil, err
 	}
 
-	for _, r := range flowFilters {
-		filterRules = append(filterRules, &tracer.FilterConfig{
-			Action:          r.Action,
-			Direction:       r.Direction,
-			IPCIDR:          r.IPCIDR,
-			Protocol:        r.Protocol,
-			PeerIP:          r.PeerIP,
-			PeerCIDR:        r.PeerCIDR,
-			DestinationPort: tracer.ConvertFilterPortsToInstr(r.DestinationPort, r.DestinationPortRange, r.DestinationPorts),
-			SourcePort:      tracer.ConvertFilterPortsToInstr(r.SourcePort, r.SourcePortRange, r.SourcePorts),
-			Port:            tracer.ConvertFilterPortsToInstr(r.Port, r.PortRange, r.Ports),
-			TCPFlags:        r.TCPFlags,
-			Drops:           r.Drops,
-			Sample:          r.Sample,
-		})
-	}
 	ebpfConfig := &tracer.FlowFetcherConfig{
 		Agent:         *cfg,
 		EnableIngress: ingress,
@@ -102,29 +81,61 @@ func PacketsAgent(cfg *config.Agent) (*Packets, error) {
 		return nil, err
 	}
 
-	return packetsAgent(cfg, fetcher, packetexportFunc, agentIP)
+	return packetsAgent(cfg, fetcher, fetcher.PlaintextScope(), packetexportFunc, plaintextExportFunc, agentIP)
 }
 
-// packetssAgent is a private constructor with injectable dependencies, usable for tests
 func packetsAgent(
 	cfg *config.Agent,
 	fetcher ebpfPacketFetcher,
+	plaintextProcessor flow.PlaintextProcessor,
 	packetexporter node.TerminalFunc[[]*model.PacketRecord],
+	plaintextExporter node.TerminalFunc[[]*model.PlaintextRecord],
 	agentIP net.IP,
 ) (*Packets, error) {
 	perfTracer := flow.NewPerfTracer(fetcher, cfg.CacheActiveTimeout)
 	packetbuffer := flow.NewPerfBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
 	informer := createInformer(cfg, metrics.NoOp())
 
-	return &Packets{
-		ebpf:         fetcher,
-		cfg:          cfg,
-		packetbuffer: packetbuffer,
-		perfTracer:   perfTracer,
-		informer:     informer,
-		agentIP:      agentIP,
-		exporter:     packetexporter,
-	}, nil
+	p := &Packets{
+		ebpf:              fetcher,
+		cfg:               cfg,
+		packetbuffer:      packetbuffer,
+		perfTracer:        perfTracer,
+		informer:          informer,
+		agentIP:           agentIP,
+		exporter:          packetexporter,
+		plaintextExporter: plaintextExporter,
+	}
+
+	if cfg.EnableOpenSSLTracking || cfg.EnableGoTLSTracking || cfg.EnableKTLSTracking {
+		p.plaintextTracer = flow.NewPlaintextTracer(fetcher, metrics.NoOp(), plaintextProcessor)
+		p.plaintextBuffer = flow.NewPlaintextBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
+	}
+
+	return p, nil
+}
+
+func buildPacketExporters(cfg *config.Agent) (
+	node.TerminalFunc[[]*model.PacketRecord],
+	node.TerminalFunc[[]*model.PlaintextRecord],
+	error,
+) {
+	switch cfg.Export {
+	case "grpc":
+		pkt, err := buildGRPCPacketExporter(cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		return pkt, nil, nil
+	case "direct-flp":
+		flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength, cfg.TLSPlaintextPreviewBytes)
+		if err != nil {
+			return nil, nil, err
+		}
+		return flpExporter.ExportPackets, flpExporter.ExportPlaintext, nil
+	default:
+		return nil, nil, fmt.Errorf("unsupported packet export type %s", cfg.Export)
+	}
 }
 
 func buildGRPCPacketExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
@@ -137,31 +148,9 @@ func buildGRPCPacketExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.Pack
 	if err != nil {
 		return nil, err
 	}
-
 	return pcapStreamer.ExportGRPCPackets, nil
 }
 
-func buildPacketExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
-	switch cfg.Export {
-	case "grpc":
-		return buildGRPCPacketExporter(cfg)
-	case "direct-flp":
-		return buildPacketDirectFLPExporter(cfg)
-	default:
-		return nil, fmt.Errorf("unsupported packet export type %s", cfg.Export)
-	}
-}
-
-func buildPacketDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.PacketRecord], error) {
-	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
-	if err != nil {
-		return nil, err
-	}
-	return flpExporter.ExportPackets, nil
-}
-
-// Run a Packets agent. The function will keep running in the same thread
-// until the passed context is canceled
 func (p *Packets) Run(ctx context.Context) error {
 	p.status = StatusStarting
 	plog.Info("Starting Packets agent")
@@ -200,23 +189,27 @@ func (p *Packets) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*
 			return nil, err
 		}
 	}
-	plog.Debug("connecting packets' processing graph")
-
-	perfTracer := node.AsStart(p.perfTracer.TraceLoop(ctx))
 
 	ebl := p.cfg.ExporterBufferLength
 	if ebl == 0 {
 		ebl = p.cfg.BuffersLength
 	}
 
+	perfTracer := node.AsStart(p.perfTracer.TraceLoop(ctx))
 	packetbuffer := node.AsMiddle(p.packetbuffer.PBuffer, node.ChannelBufferLen(p.cfg.BuffersLength))
-
-	perfTracer.SendsTo(packetbuffer)
-
 	export := node.AsTerminal(p.exporter, node.ChannelBufferLen(ebl))
-
+	perfTracer.SendsTo(packetbuffer)
 	packetbuffer.SendsTo(export)
 	perfTracer.Start()
+
+	if p.plaintextTracer != nil && p.plaintextExporter != nil {
+		ptTracer := node.AsStart(p.plaintextTracer.TraceLoop(ctx))
+		ptBuffer := node.AsMiddle(p.plaintextBuffer.PBuffer, node.ChannelBufferLen(p.cfg.BuffersLength))
+		ptExport := node.AsTerminal(p.plaintextExporter, node.ChannelBufferLen(ebl))
+		ptTracer.SendsTo(ptBuffer)
+		ptBuffer.SendsTo(ptExport)
+		ptTracer.Start()
+	}
 
 	return export, nil
 }

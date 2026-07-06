@@ -7,16 +7,18 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode/packets"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode/plaintext"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"gopkg.in/yaml.v2"
 )
 
 // DirectFLP flow exporter
 type DirectFLP struct {
-	fwd chan flpconfig.GenericMap
+	fwd                   chan flpconfig.GenericMap
+	plaintextPreviewBytes int
 }
 
-func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
+func StartDirectFLP(jsonConfig string, bufLen int, plaintextPreviewBytes int) (*DirectFLP, error) {
 	var cfg flpconfig.Root
 	// Note that, despite jsonConfig being json, we use yaml unmarshaler because the json one
 	// is screwed up for HTTPClientConfig in github.com/prometheus/common/config (used for Loki)
@@ -33,7 +35,10 @@ func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
 		return nil, fmt.Errorf("failed to initialize pipeline %w", err)
 	}
 
-	return &DirectFLP{fwd: fwd}, nil
+	return &DirectFLP{
+		fwd:                   fwd,
+		plaintextPreviewBytes: plaintextPreviewBytes,
+	}, nil
 }
 
 // ExportFlows accepts slices of *model.Record by its input channel, converts them
@@ -54,6 +59,15 @@ func (d *DirectFLP) ExportPackets(input <-chan []*model.PacketRecord) {
 			if len(packet.Stream) != 0 {
 				d.fwd <- packets.PacketToMap(packet)
 			}
+		}
+	}
+}
+
+// ExportPlaintext accepts slices of *model.PlaintextRecord and submits them to the pipeline.
+func (d *DirectFLP) ExportPlaintext(input <-chan []*model.PlaintextRecord) {
+	for inputRecords := range input {
+		for _, rec := range inputRecords {
+			d.fwd <- plaintext.ToMap(rec, d.plaintextPreviewBytes)
 		}
 	}
 }

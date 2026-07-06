@@ -68,7 +68,7 @@ type FlowFetcher struct {
 	xfrmOutputKretProbeLink     link.Link
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
-	sslUprobe                   link.Link
+	opensslAttacher             *opensslAttacher
 	sslDataEventsReader         *ringbuf.Reader
 	lookupAndDeleteSupported    bool
 	pinDir                      string
@@ -77,10 +77,11 @@ type FlowFetcher struct {
 
 type FlowFetcherConfig struct {
 	config.Agent
-	EnableIngress bool
-	EnableEgress  bool
-	Debug         bool
-	FilterConfig  []*FilterConfig
+	EnableIngress  bool
+	EnableEgress   bool
+	Debug          bool
+	FilterConfig   []*FilterConfig
+	PlaintextScope *PlaintextScope
 }
 
 type variablesMapping struct {
@@ -93,7 +94,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link
 	var xfrmInputKProbeLink, xfrmOutputKProbeLink link.Link
-	var sslUprobe link.Link
+	var opensslAtt *opensslAttacher
 	var sslDataEvents *ringbuf.Reader
 	var err error
 	objects := ebpf.BpfObjects{}
@@ -253,23 +254,17 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		}
 
 		// Setup SSL tracking if enabled
-		if cfg.EnableOpenSSLTracking {
-			// Read SSL data events from ringbuf
+		if opensslTrackingEnabled(cfg) {
 			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
 			if err != nil {
 				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
 			}
 
-			// Attach SSL uprobes
-			sslWriteLink, err := link.OpenExecutable(cfg.OpenSSLPath)
+			opensslAtt, err = attachOpenSSLUprobes(cfg, objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read, objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd)
 			if err != nil {
-				return nil, fmt.Errorf("failed to open executable %s: %w", cfg.OpenSSLPath, err)
+				return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
 			}
-			sslUprobe, err = sslWriteLink.Uprobe("SSL_write", objects.ProbeEntrySSL_write, nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to attach SSL_write uprobe: %w", err)
-			}
-			log.Infof("SSL tracking enabled with library: %s", cfg.OpenSSLPath)
+			log.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.OpenSSLPath)
 		}
 
 	} else {
@@ -415,7 +410,7 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
-		sslUprobe:                   sslUprobe,
+		opensslAttacher:             opensslAtt,
 		sslDataEventsReader:         sslDataEvents,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
@@ -778,10 +773,8 @@ func (m *FlowFetcher) Close() error {
 		}
 	}
 
-	if m.sslUprobe != nil {
-		if err := m.sslUprobe.Close(); err != nil {
-			errs = append(errs, err)
-		}
+	if m.opensslAttacher != nil {
+		m.opensslAttacher.Close()
 	}
 
 	if m.sslDataEventsReader != nil {
@@ -1539,6 +1532,9 @@ type PacketFetcher struct {
 	egressFilters            map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ingressFilters           map[ifaces.InterfaceKey]*netlink.BpfFilter
 	perfReader               *ringbuf.Reader
+	sslDataEventsReader      *ringbuf.Reader
+	opensslAttacher          *opensslAttacher
+	plaintextScope           *PlaintextScope
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
@@ -1575,6 +1571,21 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		}
 	}
 
+	if err := setTLSCaptureVariables(spec, cfg); err != nil {
+		return nil, err
+	}
+
+	if tlsPlaintextEnabled(cfg) {
+		cfg.PlaintextScope = NewPlaintextScope(
+			cfg.FilterConfig,
+			cfg.TLSPlaintextPIDAllowlist,
+			cfg.TLSPlaintextDedupEnabled,
+			cfg.TLSPlaintextDedupWindow,
+			cfg.TLSPlaintextMinBytes,
+		)
+		cfg.PlaintextScope.Start()
+	}
+
 	// remove pinning from all maps
 	for _, m := range []string{
 		ebpf.BpfMapAggregatedFlows,
@@ -1594,22 +1605,24 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ebpf.BpfMapSslDataEventMap,
 		ebpf.BpfMapDnsNameMap,
 		ebpf.BpfMapQuicFlows,
+		sockHashMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
 
-	// Always minimize SSL maps in PacketFetcher - SSL and Packet Fetcher are mutually exclusive
-	spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = uint32(os.Getpagesize()) // Minimum size for RINGBUF type maps
+	tlsMapSizing(spec, cfg)
 
 	type pcaBpfPrograms struct {
 		TcEgressPcaParse   *cilium.Program `ebpf:"tc_egress_pca_parse"`
 		TcIngressPcaParse  *cilium.Program `ebpf:"tc_ingress_pca_parse"`
 		TcxEgressPcaParse  *cilium.Program `ebpf:"tcx_egress_pca_parse"`
 		TcxIngressPcaParse *cilium.Program `ebpf:"tcx_ingress_pca_parse"`
+		tlsBpfPrograms
 	}
 	type newBpfObjects struct {
 		pcaBpfPrograms
 		ebpf.BpfMaps
+		ebpf.BpfVariables
 	}
 	var newObjects newBpfObjects
 	delete(spec.Programs, ebpf.BpfProgKfreeSkb)
@@ -1638,14 +1651,13 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, ebpf.BpfVarEnableIpsec)
 	delete(spec.Programs, ebpf.BpfVarEnableDirectflowsRingbuf)
 	delete(spec.Programs, ebpf.BpfVarEnableOpensslTracking)
+	delete(spec.Programs, constEnableGoTLSTracking)
+	delete(spec.Programs, constEnableKTLSTracking)
 	delete(spec.Programs, ebpf.BpfMapDnsNameMap)
 	delete(spec.Programs, ebpf.BpfVarEnableQuicTracking)
-
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
 		if errors.As(err, &ve) {
-			// Using %+v will print the whole verifier error, not just the last
-			// few lines.
 			plog.Infof("Verifier error: %+v", ve)
 		}
 		return nil, fmt.Errorf("loading and assigning BPF objects: %w", err)
@@ -1653,29 +1665,27 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 
 	objects = ebpf.BpfObjects{
 		BpfPrograms: ebpf.BpfPrograms{
-			TcEgressPcaParse:        newObjects.TcEgressPcaParse,
-			TcIngressPcaParse:       newObjects.TcIngressPcaParse,
-			TcxEgressPcaParse:       newObjects.TcxEgressPcaParse,
-			TcxIngressPcaParse:      newObjects.TcxIngressPcaParse,
-			TcEgressFlowParse:       nil,
-			TcIngressFlowParse:      nil,
-			TcxEgressFlowParse:      nil,
-			TcxIngressFlowParse:     nil,
-			TcpRcvFentry:            nil,
-			TcpRcvKprobe:            nil,
-			KfreeSkb:                nil,
-			NetworkEventsMonitoring: nil,
-			XfrmInputKretprobe:      nil,
-			XfrmOutputKretprobe:     nil,
-			XfrmInputKprobe:         nil,
-			XfrmOutputKprobe:        nil,
-			ProbeEntrySSL_write:     nil,
+			TcEgressPcaParse:       newObjects.TcEgressPcaParse,
+			TcIngressPcaParse:      newObjects.TcIngressPcaParse,
+			TcxEgressPcaParse:      newObjects.TcxEgressPcaParse,
+			TcxIngressPcaParse:     newObjects.TcxIngressPcaParse,
+			ProbeEntrySSL_write:    newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_setFd:    newObjects.ProbeEntrySSLSetFd,
+			ProbeEntrySSL_read:     newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:       newObjects.ProbeRetSSLRead,
+			ProbeEntryGotlsWrite:   newObjects.ProbeEntryGotlsWrite,
+			ProbeEntryGotlsRead:    newObjects.ProbeEntryGotlsRead,
+			ProbeRetGotlsRead:      newObjects.ProbeRetGotlsRead,
+			ProbeEntryGotlsReadRet: newObjects.ProbeEntryGotlsReadRet,
+			BpfSockops:             newObjects.BpfSockops,
+			BpfKtlsRedir:           newObjects.BpfKtlsRedir,
 		},
 		BpfMaps: ebpf.BpfMaps{
 			PacketRecord:    newObjects.PacketRecord,
 			SslDataEventMap: newObjects.SslDataEventMap,
 			FilterMap:       newObjects.FilterMap,
 			PeerFilterMap:   newObjects.PeerFilterMap,
+			SockHash:        newObjects.SockHash,
 		},
 	}
 
@@ -1684,13 +1694,17 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		return nil, fmt.Errorf("programming flow filter: %w", err)
 	}
 
-	// read packets from igress+egress perf array
 	packets, err := ringbuf.NewReader(objects.BpfMaps.PacketRecord)
 	if err != nil {
 		return nil, fmt.Errorf("accessing to perf: %w", err)
 	}
 
-	return &PacketFetcher{
+	tlsSetup, err := setupPacketFetcherTLS(spec, cfg, &newObjects.BpfMaps, &newObjects.tlsBpfPrograms)
+	if err != nil {
+		return nil, err
+	}
+
+	pf := &PacketFetcher{
 		objects:                  &objects,
 		perfReader:               packets,
 		egressFilters:            map[ifaces.InterfaceKey]*netlink.BpfFilter{},
@@ -1701,8 +1715,20 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		enableEgress:             cfg.EnableEgress,
 		egressTCXLink:            map[ifaces.InterfaceKey]link.Link{},
 		ingressTCXLink:           map[ifaces.InterfaceKey]link.Link{},
-		lookupAndDeleteSupported: true, // this will be turned off later if found to be not supported
-	}, nil
+		lookupAndDeleteSupported: true,
+	}
+	if tlsSetup != nil {
+		pf.sslDataEventsReader = tlsSetup.sslReader
+		pf.opensslAttacher = tlsSetup.opensslAttacher
+	}
+	pf.plaintextScope = cfg.PlaintextScope
+
+	return pf, nil
+}
+
+// PlaintextScope returns the plaintext scoping processor for TLS capture, if enabled.
+func (p *PacketFetcher) PlaintextScope() *PlaintextScope {
+	return p.plaintextScope
 }
 
 func registerInterface(iface *ifaces.Interface) (*netlink.GenericQdisc, netlink.Link, error) {
@@ -1973,24 +1999,28 @@ func (p *PacketFetcher) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	closePacketFetcherTLS(p)
+	if p.plaintextScope != nil {
+		p.plaintextScope.Close()
+		p.plaintextScope = nil
+	}
 	if p.objects != nil {
-		if err := p.objects.TcEgressPcaParse.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.objects.TcIngressPcaParse.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.objects.TcxEgressPcaParse.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.objects.TcxIngressPcaParse.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.objects.PacketRecord.Close(); err != nil {
+		if err := closePacketFetcherPrograms(p.objects); err != nil {
 			errs = append(errs, err)
 		}
 		p.objects = nil
 	}
+	errs = append(errs, closePacketFetcherNetlink(p)...)
+	errs = append(errs, closePacketFetcherTCX(p)...)
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.New(joinErrorStrings(errs))
+}
+
+func closePacketFetcherNetlink(p *PacketFetcher) []error {
+	var errs []error
 	for iface, ef := range p.egressFilters {
 		log.WithField("interface", iface).Debug("deleting egress filter")
 		if err := netlink.FilterDel(ef); err != nil {
@@ -2012,33 +2042,45 @@ func (p *PacketFetcher) Close() error {
 		}
 	}
 	p.qdiscs = map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
-	if len(errs) == 0 {
-		return nil
-	}
+	return errs
+}
 
+func closePacketFetcherTCX(p *PacketFetcher) []error {
+	var errs []error
 	for iface, l := range p.egressTCXLink {
-		log := log.WithField("interface", iface)
-		log.Debug("detach egress TCX hook")
-		l.Close()
-
+		log.WithField("interface", iface).Debug("detach egress TCX hook")
+		if err := l.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	p.egressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 	for iface, l := range p.ingressTCXLink {
-		log := log.WithField("interface", iface)
-		log.Debug("detach ingress TCX hook")
-		l.Close()
+		log.WithField("interface", iface).Debug("detach ingress TCX hook")
+		if err := l.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	p.ingressTCXLink = map[ifaces.InterfaceKey]link.Link{}
+	return errs
+}
 
+func joinErrorStrings(errs []error) string {
 	var errStrings []string
 	for _, err := range errs {
 		errStrings = append(errStrings, err.Error())
 	}
-	return errors.New(`errors: "` + strings.Join(errStrings, `", "`) + `"`)
+	return `errors: "` + strings.Join(errStrings, `", "`) + `"`
 }
 
 func (p *PacketFetcher) ReadPerf() (ringbuf.Record, error) {
 	return p.perfReader.Read()
+}
+
+func (p *PacketFetcher) ReadSSLRingBuf() (ringbuf.Record, error) {
+	if p.sslDataEventsReader == nil {
+		return ringbuf.Record{}, fmt.Errorf("SSL ring buffer not configured")
+	}
+	return p.sslDataEventsReader.Read()
 }
 
 func (p *PacketFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte {
@@ -2083,93 +2125,44 @@ func setVariable(spec *cilium.CollectionSpec, key string, value interface{}) err
 }
 
 func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, filter *Filter) error {
-	traceMsgs := 0
-	if cfg.Debug {
-		traceMsgs = 1
-	}
-	enableRtt := 0
-	if cfg.EnableRTT {
-		enableRtt = 1
-	}
-	enableDNSTracking := 0
-	dnsTrackerPort := uint16(dnsDefaultPort)
-	if cfg.EnableDNSTracking {
-		enableDNSTracking = 1
-		if cfg.DNSTrackingPort != 0 {
-			dnsTrackerPort = cfg.DNSTrackingPort
-		}
-	}
-	if enableDNSTracking == 0 {
-		spec.Maps[ebpf.BpfMapDnsFlows].MaxEntries = 1
-	}
-	enableFlowFiltering := 0
-	hasFilterSampling := uint8(0)
-	if filter != nil {
-		enableFlowFiltering = 1
-		hasFilterSampling = filter.hasSampling()
-	} else {
-		spec.Maps[ebpf.BpfMapFilterMap].MaxEntries = 1
-		spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries = 1
-	}
-	enableNetworkEventsMonitoring := 0
-	if cfg.EnableNetworkEventsMonitoring {
-		enableNetworkEventsMonitoring = 1
-	}
-	networkEventsMonitoringGroupID := defaultNetworkEventsGroupID
-	if cfg.NetworkEventsMonitoringGroupID > 0 {
-		networkEventsMonitoringGroupID = cfg.NetworkEventsMonitoringGroupID
-	}
-	enablePktTranslation := 0
-	if cfg.EnablePktTranslationTracking {
-		enablePktTranslation = 1
-	}
-	enableIPsec := 0
-	if cfg.EnableIPsecTracking {
-		enableIPsec = 1
-	}
-	if enableIPsec == 0 {
-		spec.Maps[ebpf.BpfMapIpsecIngressMap].MaxEntries = 1
-		spec.Maps[ebpf.BpfMapIpsecEgressMap].MaxEntries = 1
-	}
-	enableTLSTracking := 0
-	if cfg.EnableTLSTracking {
-		enableTLSTracking = 1
-	}
+	configureFlowSpecMapSizing(spec, cfg, filter)
 
-	enableDirectFlowRingbuf := 0
-	if cfg.EnableFlowsRingbufFallback {
-		enableDirectFlowRingbuf = 1
+	traceMsgs := boolUint8(cfg.Debug)
+	enableRtt := boolUint8(cfg.EnableRTT)
+	enableDNSTracking, dnsTrackerPort := flowDNSSpec(cfg)
+	enableFlowFiltering, hasFilterSampling := flowFilterSpec(filter)
+	enableNetworkEventsMonitoring := boolUint8(cfg.EnableNetworkEventsMonitoring)
+	networkEventsMonitoringGroupID := cfg.NetworkEventsMonitoringGroupID
+	if networkEventsMonitoringGroupID <= 0 {
+		networkEventsMonitoringGroupID = defaultNetworkEventsGroupID
 	}
-	enableOpenSSLTracking := 0
-	if cfg.EnableOpenSSLTracking {
-		enableOpenSSLTracking = 1
-	}
+	enablePktTranslation := boolUint8(cfg.EnablePktTranslationTracking)
+	enableIPsec := boolUint8(cfg.EnableIPsecTracking)
+	enableTLSTracking := boolUint8(cfg.EnableTLSTracking)
+	enableDirectFlowRingbuf := boolUint8(cfg.EnableFlowsRingbufFallback)
+	enableOpenSSLTracking := boolUint8(opensslTrackingEnabled(cfg))
+	enableGoTLSTracking := boolUint8(cfg.EnableGoTLSTracking)
+	enableKTLSTracking := boolUint8(cfg.EnableKTLSTracking)
+	enableQUICTracking := flowQUICSpec(cfg)
 
-	// enable_quic_tracking mode:
-	// QUIC_CONFIG_DISABLED = 0, QUIC_CONFIG_ENABLED = 1, QUIC_CONFIG_ANY_UDP_PORT = 2.
-	enableQUICTracking := ebpf.BpfQuicConfigTQUIC_CONFIG_DISABLED
-	switch cfg.QUICTrackingMode {
-	case 2:
-		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ANY_UDP_PORT
-	case 1:
-		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ENABLED
-	}
 	// When adding constants here, remember to delete them in NewPacketFetcher
 	variables := []variablesMapping{
 		{ebpf.BpfVarSampling, uint32(cfg.Sampling)},
 		{ebpf.BpfVarHasFilterSampling, hasFilterSampling},
-		{ebpf.BpfVarTraceMessages, uint8(traceMsgs)},
-		{ebpf.BpfVarEnableRtt, uint8(enableRtt)},
-		{ebpf.BpfVarEnableDnsTracking, uint8(enableDNSTracking)},
+		{ebpf.BpfVarTraceMessages, traceMsgs},
+		{ebpf.BpfVarEnableRtt, enableRtt},
+		{ebpf.BpfVarEnableDnsTracking, enableDNSTracking},
 		{ebpf.BpfVarDnsPort, dnsTrackerPort},
-		{ebpf.BpfVarEnableFlowsFiltering, uint8(enableFlowFiltering)},
-		{ebpf.BpfVarEnableNetworkEventsMonitoring, uint8(enableNetworkEventsMonitoring)},
+		{ebpf.BpfVarEnableFlowsFiltering, enableFlowFiltering},
+		{ebpf.BpfVarEnableNetworkEventsMonitoring, enableNetworkEventsMonitoring},
 		{ebpf.BpfVarNetworkEventsMonitoringGroupid, uint8(networkEventsMonitoringGroupID)},
-		{ebpf.BpfVarEnablePktTranslationTracking, uint8(enablePktTranslation)},
-		{ebpf.BpfVarEnableIpsec, uint8(enableIPsec)},
-		{ebpf.BpfVarEnableDirectflowsRingbuf, uint8(enableDirectFlowRingbuf)},
-		{ebpf.BpfVarEnableOpensslTracking, uint8(enableOpenSSLTracking)},
-		{ebpf.BpfVarEnableTlsUsageTracking, uint8(enableTLSTracking)},
+		{ebpf.BpfVarEnablePktTranslationTracking, enablePktTranslation},
+		{ebpf.BpfVarEnableIpsec, enableIPsec},
+		{ebpf.BpfVarEnableDirectflowsRingbuf, enableDirectFlowRingbuf},
+		{ebpf.BpfVarEnableOpensslTracking, enableOpenSSLTracking},
+		{constEnableGoTLSTracking, enableGoTLSTracking},
+		{constEnableKTLSTracking, enableKTLSTracking},
+		{ebpf.BpfVarEnableTlsUsageTracking, enableTLSTracking},
 		{ebpf.BpfVarEnableQuicTracking, uint8(enableQUICTracking)},
 	}
 
@@ -2180,6 +2173,58 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	}
 
 	return nil
+}
+
+func boolUint8(v bool) uint8 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func configureFlowSpecMapSizing(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, filter *Filter) {
+	shrinkMapWhenDisabled(spec, ebpf.BpfMapDnsFlows, cfg.EnableDNSTracking)
+	if filter == nil {
+		spec.Maps[ebpf.BpfMapFilterMap].MaxEntries = 1
+		spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries = 1
+	}
+	shrinkMapWhenDisabled(spec, ebpf.BpfMapIpsecIngressMap, cfg.EnableIPsecTracking)
+	shrinkMapWhenDisabled(spec, ebpf.BpfMapIpsecEgressMap, cfg.EnableIPsecTracking)
+}
+
+func shrinkMapWhenDisabled(spec *cilium.CollectionSpec, name string, enabled bool) {
+	if !enabled {
+		spec.Maps[name].MaxEntries = 1
+	}
+}
+
+func flowDNSSpec(cfg *FlowFetcherConfig) (uint8, uint16) {
+	if !cfg.EnableDNSTracking {
+		return 0, uint16(dnsDefaultPort)
+	}
+	port := uint16(dnsDefaultPort)
+	if cfg.DNSTrackingPort != 0 {
+		port = cfg.DNSTrackingPort
+	}
+	return 1, port
+}
+
+func flowFilterSpec(filter *Filter) (uint8, uint8) {
+	if filter == nil {
+		return 0, 0
+	}
+	return 1, filter.hasSampling()
+}
+
+func flowQUICSpec(cfg *FlowFetcherConfig) ebpf.BpfQuicConfigT {
+	switch cfg.QUICTrackingMode {
+	case 2:
+		return ebpf.BpfQuicConfigTQUIC_CONFIG_ANY_UDP_PORT
+	case 1:
+		return ebpf.BpfQuicConfigTQUIC_CONFIG_ENABLED
+	default:
+		return ebpf.BpfQuicConfigTQUIC_CONFIG_DISABLED
+	}
 }
 
 func tcxAnchor(anchor string) link.Anchor {

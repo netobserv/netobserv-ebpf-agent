@@ -226,14 +226,41 @@ type BpfQuicMetricsT struct {
 	SeenShortHdr    uint8
 }
 
+type BpfSockKey struct {
+	_          structs.HostLayout
+	RemoteIp   [16]uint8
+	LocalIp    [16]uint8
+	RemotePort uint32
+	LocalPort  uint32
+	Family     uint32
+}
+
 type BpfSslDataEventT struct {
 	_           structs.HostLayout
 	TimestampNs uint64
 	PidTgid     uint64
 	DataLen     int32
 	SslType     uint8
+	Direction   uint8
+	TlsSource   uint8
+	TupleValid  uint8
+	SrcPort     uint16
+	DstPort     uint16
+	SrcAddr     [16]uint8
+	DstAddr     [16]uint8
+	_           [4]byte
+	ConnUserPtr uint64
+	SocketFd    int32
 	Data        [16384]int8
-	_           [3]byte
+	_           [4]byte
+}
+
+type BpfSslReadActiveT struct {
+	_           structs.HostLayout
+	SslType     uint8
+	Pad         [7]uint8
+	BufUser     uint64
+	ConnUserPtr uint64
 }
 
 type BpfTcpFlagsT uint32
@@ -283,13 +310,26 @@ const (
 	BpfMapGlobalCounters                 = "global_counters"
 	BpfMapIpsecEgressMap                 = "ipsec_egress_map"
 	BpfMapIpsecIngressMap                = "ipsec_ingress_map"
+	BpfMapKtlsStats                      = "ktls_stats"
 	BpfMapPacketRecord                   = "packet_record"
 	BpfMapPeerFilterMap                  = "peer_filter_map"
 	BpfMapQuicFlows                      = "quic_flows"
+	BpfMapSockHash                       = "sock_hash"
 	BpfMapSslDataEventMap                = "ssl_data_event_map"
+	BpfMapSslFdMap                       = "ssl_fd_map"
+	BpfMapSslReadActiveMap               = "ssl_read_active_map"
+	BpfProgBpfKtlsRedir                  = "bpf_ktls_redir"
+	BpfProgBpfSockops                    = "bpf_sockops"
 	BpfProgKfreeSkb                      = "kfree_skb"
 	BpfProgNetworkEventsMonitoring       = "network_events_monitoring"
+	BpfProgProbeEntrySSL_read            = "probe_entry_SSL_read"
+	BpfProgProbeEntrySSL_setFd           = "probe_entry_SSL_set_fd"
 	BpfProgProbeEntrySSL_write           = "probe_entry_SSL_write"
+	BpfProgProbeEntryGotlsRead           = "probe_entry_gotls_read"
+	BpfProgProbeEntryGotlsReadRet        = "probe_entry_gotls_read_ret"
+	BpfProgProbeEntryGotlsWrite          = "probe_entry_gotls_write"
+	BpfProgProbeRetSSL_read              = "probe_ret_SSL_read"
+	BpfProgProbeRetGotlsRead             = "probe_ret_gotls_read"
 	BpfProgTcEgressFlowParse             = "tc_egress_flow_parse"
 	BpfProgTcEgressPcaParse              = "tc_egress_pca_parse"
 	BpfProgTcIngressFlowParse            = "tc_ingress_flow_parse"
@@ -309,7 +349,9 @@ const (
 	BpfVarEnableDirectflowsRingbuf       = "enable_directflows_ringbuf"
 	BpfVarEnableDnsTracking              = "enable_dns_tracking"
 	BpfVarEnableFlowsFiltering           = "enable_flows_filtering"
+	BpfVarEnableGotlsTracking            = "enable_gotls_tracking"
 	BpfVarEnableIpsec                    = "enable_ipsec"
+	BpfVarEnableKtlsTracking             = "enable_ktls_tracking"
 	BpfVarEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	BpfVarEnableOpensslTracking          = "enable_openssl_tracking"
 	BpfVarEnablePca                      = "enable_pca"
@@ -370,9 +412,18 @@ type BpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfProgramSpecs struct {
+	BpfKtlsRedir            *ebpf.ProgramSpec `ebpf:"bpf_ktls_redir"`
+	BpfSockops              *ebpf.ProgramSpec `ebpf:"bpf_sockops"`
 	KfreeSkb                *ebpf.ProgramSpec `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_read      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
+	ProbeEntryGotlsRead     *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_read"`
+	ProbeEntryGotlsReadRet  *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_read_ret"`
+	ProbeEntryGotlsWrite    *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_write"`
+	ProbeRetSSL_read        *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_read"`
+	ProbeRetGotlsRead       *ebpf.ProgramSpec `ebpf:"probe_ret_gotls_read"`
 	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
@@ -407,10 +458,14 @@ type BpfMapSpecs struct {
 	GlobalCounters               *ebpf.MapSpec `ebpf:"global_counters"`
 	IpsecEgressMap               *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
 	IpsecIngressMap              *ebpf.MapSpec `ebpf:"ipsec_ingress_map"`
+	KtlsStats                    *ebpf.MapSpec `ebpf:"ktls_stats"`
 	PacketRecord                 *ebpf.MapSpec `ebpf:"packet_record"`
 	PeerFilterMap                *ebpf.MapSpec `ebpf:"peer_filter_map"`
 	QuicFlows                    *ebpf.MapSpec `ebpf:"quic_flows"`
+	SockHash                     *ebpf.MapSpec `ebpf:"sock_hash"`
 	SslDataEventMap              *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
+	SslFdMap                     *ebpf.MapSpec `ebpf:"ssl_fd_map"`
+	SslReadActiveMap             *ebpf.MapSpec `ebpf:"ssl_read_active_map"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -421,7 +476,9 @@ type BpfVariableSpecs struct {
 	EnableDirectflowsRingbuf       *ebpf.VariableSpec `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.VariableSpec `ebpf:"enable_flows_filtering"`
+	EnableGotlsTracking            *ebpf.VariableSpec `ebpf:"enable_gotls_tracking"`
 	EnableIpsec                    *ebpf.VariableSpec `ebpf:"enable_ipsec"`
+	EnableKtlsTracking             *ebpf.VariableSpec `ebpf:"enable_ktls_tracking"`
 	EnableNetworkEventsMonitoring  *ebpf.VariableSpec `ebpf:"enable_network_events_monitoring"`
 	EnableOpensslTracking          *ebpf.VariableSpec `ebpf:"enable_openssl_tracking"`
 	EnablePca                      *ebpf.VariableSpec `ebpf:"enable_pca"`
@@ -473,10 +530,14 @@ type BpfMaps struct {
 	GlobalCounters               *ebpf.Map `ebpf:"global_counters"`
 	IpsecEgressMap               *ebpf.Map `ebpf:"ipsec_egress_map"`
 	IpsecIngressMap              *ebpf.Map `ebpf:"ipsec_ingress_map"`
+	KtlsStats                    *ebpf.Map `ebpf:"ktls_stats"`
 	PacketRecord                 *ebpf.Map `ebpf:"packet_record"`
 	PeerFilterMap                *ebpf.Map `ebpf:"peer_filter_map"`
 	QuicFlows                    *ebpf.Map `ebpf:"quic_flows"`
+	SockHash                     *ebpf.Map `ebpf:"sock_hash"`
 	SslDataEventMap              *ebpf.Map `ebpf:"ssl_data_event_map"`
+	SslFdMap                     *ebpf.Map `ebpf:"ssl_fd_map"`
+	SslReadActiveMap             *ebpf.Map `ebpf:"ssl_read_active_map"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -494,10 +555,14 @@ func (m *BpfMaps) Close() error {
 		m.GlobalCounters,
 		m.IpsecEgressMap,
 		m.IpsecIngressMap,
+		m.KtlsStats,
 		m.PacketRecord,
 		m.PeerFilterMap,
 		m.QuicFlows,
+		m.SockHash,
 		m.SslDataEventMap,
+		m.SslFdMap,
+		m.SslReadActiveMap,
 	)
 }
 
@@ -509,7 +574,9 @@ type BpfVariables struct {
 	EnableDirectflowsRingbuf       *ebpf.Variable `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFlowsFiltering           *ebpf.Variable `ebpf:"enable_flows_filtering"`
+	EnableGotlsTracking            *ebpf.Variable `ebpf:"enable_gotls_tracking"`
 	EnableIpsec                    *ebpf.Variable `ebpf:"enable_ipsec"`
+	EnableKtlsTracking             *ebpf.Variable `ebpf:"enable_ktls_tracking"`
 	EnableNetworkEventsMonitoring  *ebpf.Variable `ebpf:"enable_network_events_monitoring"`
 	EnableOpensslTracking          *ebpf.Variable `ebpf:"enable_openssl_tracking"`
 	EnablePca                      *ebpf.Variable `ebpf:"enable_pca"`
@@ -532,9 +599,18 @@ type BpfVariables struct {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfPrograms struct {
+	BpfKtlsRedir            *ebpf.Program `ebpf:"bpf_ktls_redir"`
+	BpfSockops              *ebpf.Program `ebpf:"bpf_sockops"`
 	KfreeSkb                *ebpf.Program `ebpf:"kfree_skb"`
 	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_read      *ebpf.Program `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd     *ebpf.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeEntryGotlsRead     *ebpf.Program `ebpf:"probe_entry_gotls_read"`
+	ProbeEntryGotlsReadRet  *ebpf.Program `ebpf:"probe_entry_gotls_read_ret"`
+	ProbeEntryGotlsWrite    *ebpf.Program `ebpf:"probe_entry_gotls_write"`
+	ProbeRetSSL_read        *ebpf.Program `ebpf:"probe_ret_SSL_read"`
+	ProbeRetGotlsRead       *ebpf.Program `ebpf:"probe_ret_gotls_read"`
 	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.Program `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
@@ -554,9 +630,18 @@ type BpfPrograms struct {
 
 func (p *BpfPrograms) Close() error {
 	return _BpfClose(
+		p.BpfKtlsRedir,
+		p.BpfSockops,
 		p.KfreeSkb,
 		p.NetworkEventsMonitoring,
+		p.ProbeEntrySSL_read,
+		p.ProbeEntrySSL_setFd,
 		p.ProbeEntrySSL_write,
+		p.ProbeEntryGotlsRead,
+		p.ProbeEntryGotlsReadRet,
+		p.ProbeEntryGotlsWrite,
+		p.ProbeRetSSL_read,
+		p.ProbeRetGotlsRead,
 		p.TcEgressFlowParse,
 		p.TcEgressPcaParse,
 		p.TcIngressFlowParse,

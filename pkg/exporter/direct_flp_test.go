@@ -29,7 +29,7 @@ parameters:
       type: stdout
       stdout:
         format: json
-`, 50)
+`, 50, 256)
 	require.NoError(t, err)
 	defer flp.Close()
 

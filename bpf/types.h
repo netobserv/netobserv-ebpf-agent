@@ -331,11 +331,29 @@ struct ssl_data_event_t {
     u64 pid_tgid;
     s32 data_len;
     u8 ssl_type;
+    u8 direction;   // 0=write/outbound, 1=read/inbound
+    u8 tls_source;  // 0=openssl, 1=gotls, 2=ktls
+    u8 tuple_valid; // 1 when src_addr/dst_addr/ports are populated (kTLS sk_msg)
+    u16 src_port;
+    u16 dst_port;
+    u8 src_addr[IP_MAX_LEN];
+    u8 dst_addr[IP_MAX_LEN];
+    u64 conn_user_ptr; // OpenSSL SSL* or Go *tls.Conn user pointer
+    s32 socket_fd;     // host fd when known, else -1
     char data[MAX_DATA_SIZE_OPENSSL];
 } ssl_data_event;
 
 // Force emitting enums/structs into the ELF
 const static struct ssl_data_event_t *unused14 __attribute__((unused));
+
+struct ssl_read_active_t {
+    u8 ssl_type;
+    u8 _pad[7];
+    u64 buf_user;
+    u64 conn_user_ptr;
+};
+
+const static struct ssl_read_active_t *unused_ssl_read_active __attribute__((unused));
 // QUIC flow metrics
 typedef struct quic_metrics_t {
     u64 start_mono_time_ts;
