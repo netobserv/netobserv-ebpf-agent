@@ -51,6 +51,11 @@ PROTOC_ARTIFACTS := pkg/pbflow
 # regular expressions for excluded file patterns
 EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
 
+# Benchmark configuration (override on the command line, e.g. make bench BENCH_COUNT=10)
+BENCH_PKGS ?= ./pkg/model/... ./pkg/flow/... ./pkg/pbflow/...
+BENCH_RUN ?= .
+BENCH_COUNT ?= 6
+
 # Container image for running linux tests from non-linux hosts (e.g. macOS).
 # Prefer matching the *host* Go toolchain version (go env GOVERSION), which tends to
 # be more reliable than GO_VERSION (used for generator tooling) and avoids "go: not found".
@@ -178,6 +183,11 @@ test: ## Test code using go test
 	else \
 		$(MAKE) test-container; \
 	fi
+
+.PHONY: bench
+bench: ## Run Go benchmarks (memory hot paths). Use BENCH_PKGS, BENCH_RUN, BENCH_COUNT to customize.
+	@echo "### Running benchmarks"
+	go test -mod vendor -run '^$$' -bench '$(BENCH_RUN)' -benchmem -count $(BENCH_COUNT) $(BENCH_PKGS)
 
 .PHONY: test-container
 test-container: ## Run linux tests in a container (useful on macOS)
