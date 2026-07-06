@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -37,36 +38,55 @@ func FlowsToPB(inputRecords []*model.Record, maxLen int) []*Records {
 // FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
 // into a protobuf-encoded message ready to be sent to the collector via kafka
 func FlowToPB(fr *model.Record) *Record {
-	var pbflowRecord = Record{
-		EthProtocol: uint32(fr.Metrics.EthProtocol),
-		Direction:   Direction(fr.Metrics.DirectionFirstSeen),
-		DataLink: &DataLink{
-			SrcMac: macToUint64(&fr.Metrics.SrcMac),
-			DstMac: macToUint64(&fr.Metrics.DstMac),
-		},
-		Network: &Network{
-			Dscp: uint32(fr.Metrics.Dscp),
-		},
-		Transport: &Transport{
-			Protocol: uint32(fr.ID.TransportProtocol),
-			SrcPort:  uint32(fr.ID.SrcPort),
-			DstPort:  uint32(fr.ID.DstPort),
-		},
-		IcmpType: uint32(fr.ID.IcmpType),
-		IcmpCode: uint32(fr.ID.IcmpCode),
-		Bytes:    fr.Metrics.Bytes,
-		TimeFlowStart: &timestamppb.Timestamp{
-			Seconds: fr.TimeFlowStart.Unix(),
-			Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
-		},
-		TimeFlowEnd: &timestamppb.Timestamp{
-			Seconds: fr.TimeFlowEnd.Unix(),
-			Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
-		},
+	// Keeping the record and its required submessages in one backing value lets
+	// them escape as a single allocation. A pointer to rec keeps the entire
+	// backing value alive.
+	var backing struct {
+		rec       Record
+		dataLink  DataLink
+		network   Network
+		transport Transport
+		tStart    timestamppb.Timestamp
+		tEnd      timestamppb.Timestamp
+		rtt       durationpb.Duration
+	}
+	backing.dataLink = DataLink{
+		SrcMac: macToUint64(&fr.Metrics.SrcMac),
+		DstMac: macToUint64(&fr.Metrics.DstMac),
+	}
+	backing.network = Network{Dscp: uint32(fr.Metrics.Dscp)}
+	backing.transport = Transport{
+		Protocol: uint32(fr.ID.TransportProtocol),
+		SrcPort:  uint32(fr.ID.SrcPort),
+		DstPort:  uint32(fr.ID.DstPort),
+	}
+	backing.tStart = timestamppb.Timestamp{
+		Seconds: fr.TimeFlowStart.Unix(),
+		Nanos:   int32(fr.TimeFlowStart.Nanosecond()),
+	}
+	backing.tEnd = timestamppb.Timestamp{
+		Seconds: fr.TimeFlowEnd.Unix(),
+		Nanos:   int32(fr.TimeFlowEnd.Nanosecond()),
+	}
+	backing.rtt = durationpb.Duration{
+		Seconds: int64(fr.TimeFlowRtt / time.Second),
+		Nanos:   int32(fr.TimeFlowRtt % time.Second),
+	}
+	backing.rec = Record{
+		EthProtocol:    uint32(fr.Metrics.EthProtocol),
+		Direction:      Direction(fr.Metrics.DirectionFirstSeen),
+		DataLink:       &backing.dataLink,
+		Network:        &backing.network,
+		Transport:      &backing.transport,
+		IcmpType:       uint32(fr.ID.IcmpType),
+		IcmpCode:       uint32(fr.ID.IcmpCode),
+		Bytes:          fr.Metrics.Bytes,
+		TimeFlowStart:  &backing.tStart,
+		TimeFlowEnd:    &backing.tEnd,
+		TimeFlowRtt:    &backing.rtt,
 		Packets:        uint64(fr.Metrics.Packets),
 		AgentIp:        agentIP(fr.AgentIP),
 		Flags:          uint32(fr.Metrics.Flags),
-		TimeFlowRtt:    durationpb.New(fr.TimeFlowRtt),
 		Sampling:       fr.Metrics.Sampling,
 		SslVersion:     uint32(fr.Metrics.SslVersion),
 		TlsTypes:       uint32(fr.Metrics.TlsTypes),
@@ -74,6 +94,7 @@ func FlowToPB(fr *model.Record) *Record {
 		TlsKeyShare:    uint32(fr.Metrics.TlsKeyShare),
 		SslMismatch:    fr.Metrics.HasSSLMismatch(),
 	}
+	pbflowRecord := &backing.rec
 	if fr.Metrics.DNSMetrics != nil {
 		pbflowRecord.DnsId = uint32(fr.Metrics.DNSMetrics.Id)
 		pbflowRecord.DnsFlags = uint32(fr.Metrics.DNSMetrics.Flags)
@@ -113,13 +134,17 @@ func FlowToPB(fr *model.Record) *Record {
 			SeenShortHdr: uint32(fr.Metrics.QuicMetrics.SeenShortHdr),
 		}
 	}
-	pbflowRecord.DupList = make([]*DupMapEntry, 0)
-	for _, intf := range fr.Interfaces {
-		pbflowRecord.DupList = append(pbflowRecord.DupList, &DupMapEntry{
+	// Allocate the entries contiguously instead of allocating each one.
+	n := len(fr.Interfaces)
+	entries := make([]DupMapEntry, n)
+	pbflowRecord.DupList = make([]*DupMapEntry, n)
+	for i, intf := range fr.Interfaces {
+		entries[i] = DupMapEntry{
 			Interface: intf.Interface,
 			Direction: Direction(intf.Direction),
 			Udn:       intf.Udn,
-		})
+		}
+		pbflowRecord.DupList[i] = &entries[i]
 	}
 	if fr.Metrics.EthProtocol == model.IPv6Type {
 		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
@@ -145,7 +170,7 @@ func FlowToPB(fr *model.Record) *Record {
 			})
 		}
 	}
-	return &pbflowRecord
+	return pbflowRecord
 }
 
 func PBToFlow(pb *Record) *model.Record {
