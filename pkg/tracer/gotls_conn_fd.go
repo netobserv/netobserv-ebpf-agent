@@ -1,7 +1,6 @@
 package tracer
 
 import (
-	"debug/elf"
 	"errors"
 	"fmt"
 )
@@ -25,12 +24,7 @@ func ResolveGoTLSFDLayout(path string, goVersion string) (*GoTLSFDLayout, error)
 		layoutCopy := layout
 		return &layoutCopy, nil
 	}
-	f, err := elf.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return nil, fmt.Errorf("no GoTLS fd layout for %s (%w)", goVersion, errors.New("unsupported Go version"))
+	return nil, fmt.Errorf("no GoTLS fd layout for %s in %q: %w", goVersion, path, errors.New("unsupported Go version"))
 }
 
 func majorMinorGoVersion(v string) string {

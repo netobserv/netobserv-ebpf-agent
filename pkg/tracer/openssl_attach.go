@@ -107,14 +107,17 @@ func discoverLibSSLAttachPaths(pidAllowed func(int) bool, scope *PlaintextScope)
 	// Only attach per-container libssl copies under /proc/<pid>/root. Attaching the
 	// host default OPENSSL_PATH hooks every process on the node that loads that library.
 	selfPID := os.Getpid()
-	_ = filepath.WalkDir(procRootDir, func(path string, d fs.DirEntry, err error) error {
-		pidStr, ok := eligibleProcPIDForLibSSL(path, d, err, selfPID, pidAllowed, scope)
+	entries, err := os.ReadDir(procRootDir)
+	if err != nil {
+		return paths
+	}
+	for _, entry := range entries {
+		pidStr, ok := eligibleProcPIDForLibSSL(filepath.Join(procRootDir, entry.Name()), entry, nil, selfPID, pidAllowed, scope)
 		if !ok {
-			return nil
+			continue
 		}
 		collectLibSSLPathsFromMaps(pidStr, addPath)
-		return nil
-	})
+	}
 
 	return paths
 }

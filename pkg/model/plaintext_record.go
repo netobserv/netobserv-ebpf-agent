@@ -102,13 +102,13 @@ func ReadPlaintextFrom(r io.Reader) (*PlaintextRecord, error) {
 	if _, err := io.ReadFull(r, dstAddr[:]); err != nil {
 		return nil, fmt.Errorf("reading dst_addr: %w", err)
 	}
-	var connPtr uint64
-	if err := binary.Read(r, binary.LittleEndian, &connPtr); err != nil {
-		return nil, fmt.Errorf("reading conn_user_ptr: %w", err)
-	}
 	var socketFd int32
 	if err := binary.Read(r, binary.LittleEndian, &socketFd); err != nil {
 		return nil, fmt.Errorf("reading socket_fd: %w", err)
+	}
+	var connPtr uint64
+	if err := binary.Read(r, binary.LittleEndian, &connPtr); err != nil {
+		return nil, fmt.Errorf("reading conn_user_ptr: %w", err)
 	}
 
 	rec := &PlaintextRecord{

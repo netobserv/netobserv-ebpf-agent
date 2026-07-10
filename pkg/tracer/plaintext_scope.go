@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"encoding/binary"
 	"hash/fnv"
 	"net"
 	"path/filepath"
@@ -137,6 +138,9 @@ func collectFilterPorts(f *FilterConfig) []uint16 {
 	}
 	addFromInstr := func(instr intstr.IntOrString) {
 		if instr.Type == intstr.Int {
+			if instr.IntVal < 0 || instr.IntVal > 65535 {
+				return
+			}
 			add(uint16(instr.IntVal))
 			return
 		}
@@ -797,6 +801,20 @@ func dedupKey(rec *model.PlaintextRecord, pid int) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(rec.Direction))
 	_, _ = h.Write([]byte(strconv.Itoa(pid)))
+	if rec.SrcAddr != "" || rec.DstAddr != "" {
+		_, _ = h.Write([]byte(rec.SrcAddr))
+		_, _ = h.Write([]byte(rec.DstAddr))
+		var ports [4]byte
+		binary.LittleEndian.PutUint16(ports[0:2], rec.SrcPort)
+		binary.LittleEndian.PutUint16(ports[2:4], rec.DstPort)
+		_, _ = h.Write(ports[:])
+	} else if rec.ConnPtr != 0 {
+		var conn [8]byte
+		binary.LittleEndian.PutUint64(conn[:], rec.ConnPtr)
+		_, _ = h.Write(conn[:])
+	} else if rec.SocketFd >= 0 {
+		_, _ = h.Write([]byte(strconv.Itoa(int(rec.SocketFd))))
+	}
 	preview := rec.Data
 	if len(preview) > 64 {
 		preview = preview[:64]

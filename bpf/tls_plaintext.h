@@ -39,8 +39,9 @@ static inline void generate_SSL_data_event(struct pt_regs *ctx, u64 pid_tgid, u8
             event->socket_fd = *fd;
         }
     }
-    event->data_len = len < MAX_DATA_SIZE_OPENSSL ? len : MAX_DATA_SIZE_OPENSSL;
-    bpf_probe_read_user(&event->data, event->data_len, buf);
+    u32 capture_len = len < MAX_DATA_SIZE_OPENSSL ? len : MAX_DATA_SIZE_OPENSSL;
+    event->data_len = (__s32)capture_len;
+    bpf_probe_read_user(&event->data, capture_len, buf);
     bpf_ringbuf_submit(event, 0);
 }
 
@@ -63,8 +64,9 @@ static inline void generate_plaintext_data_event(u64 pid_tgid, u8 direction, u8 
     event->tuple_valid = 0;
     event->conn_user_ptr = 0;
     event->socket_fd = -1;
-    event->data_len = len < MAX_DATA_SIZE_OPENSSL ? len : MAX_DATA_SIZE_OPENSSL;
-    bpf_probe_read_kernel(&event->data, event->data_len, buf);
+    u32 capture_len = len < MAX_DATA_SIZE_OPENSSL ? len : MAX_DATA_SIZE_OPENSSL;
+    event->data_len = (__s32)capture_len;
+    bpf_probe_read_kernel(&event->data, capture_len, buf);
     bpf_ringbuf_submit(event, 0);
 }
 

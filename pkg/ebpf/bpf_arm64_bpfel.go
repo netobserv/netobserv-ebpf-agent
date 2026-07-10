@@ -248,11 +248,9 @@ type BpfSslDataEventT struct {
 	DstPort     uint16
 	SrcAddr     [16]uint8
 	DstAddr     [16]uint8
-	_           [4]byte
-	ConnUserPtr uint64
 	SocketFd    int32
+	ConnUserPtr uint64
 	Data        [16384]int8
-	_           [4]byte
 }
 
 type BpfSslReadActiveT struct {

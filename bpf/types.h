@@ -338,8 +338,8 @@ struct ssl_data_event_t {
     u16 dst_port;
     u8 src_addr[IP_MAX_LEN];
     u8 dst_addr[IP_MAX_LEN];
-    u64 conn_user_ptr; // OpenSSL SSL* or Go *tls.Conn user pointer
     s32 socket_fd;     // host fd when known, else -1
+    u64 conn_user_ptr; // OpenSSL SSL* or Go *tls.Conn user pointer
     char data[MAX_DATA_SIZE_OPENSSL];
 } ssl_data_event;
 

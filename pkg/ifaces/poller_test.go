@@ -56,8 +56,8 @@ func TestPoller(t *testing.T) {
 	poller.interfaces = fakeInterfaces
 	poller.netNamespaces = defaultNetNSForTest
 
-	updates := make(chan Event, 10)
-	go poller.pollForEvents(ctx, "", updates)
+	updates, err := poller.Subscribe(ctx)
+	require.NoError(t, err)
 	// first poll: two interfaces are added
 	assert.Equal(t,
 		Event{Type: EventAdded, Interface: simpleInterface(1, "foo", macFoo)},

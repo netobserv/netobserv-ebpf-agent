@@ -90,6 +90,7 @@ func setupPacketFetcherTLS(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, 
 		}
 		attacher, err := attachOpenSSLUprobes(cfg, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd)
 		if err != nil {
+			result.Close()
 			return nil, err
 		}
 		result.opensslAttacher = attacher

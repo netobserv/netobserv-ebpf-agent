@@ -22,8 +22,8 @@ func TestReadPlaintextFromKernelTuple(t *testing.T) {
 	dst := ipv4MappedAddr(net.IPv4(10, 244, 2, 1))
 	_, _ = buf.Write(src[:])
 	_, _ = buf.Write(dst[:])
-	_ = binary.Write(&buf, binary.LittleEndian, uint64(0))
 	_ = binary.Write(&buf, binary.LittleEndian, int32(-1))
+	_ = binary.Write(&buf, binary.LittleEndian, uint64(0))
 	_, _ = buf.Write([]byte("OK\n"))
 
 	rec, err := ReadPlaintextFrom(&buf)

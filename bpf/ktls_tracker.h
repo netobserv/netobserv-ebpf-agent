@@ -183,8 +183,8 @@ static __always_inline void ktls_event_tuple_from_sk_msg(struct ssl_data_event_t
     event->tuple_valid = 1;
     event->conn_user_ptr = 0;
     event->socket_fd = -1;
-    event->src_port = (__u16)(bpf_ntohl(msg->local_port) & 0xffff);
-    event->dst_port = (__u16)msg->remote_port;
+    event->src_port = (__u16)msg->local_port;
+    event->dst_port = (__u16)(bpf_ntohl(msg->remote_port) & 0xffff);
 
     switch (msg->family) {
     case AF_INET:

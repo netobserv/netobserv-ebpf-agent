@@ -64,6 +64,8 @@ func (d *DirectFLP) ExportPackets(input <-chan []*model.PacketRecord) {
 }
 
 // ExportPlaintext accepts slices of *model.PlaintextRecord and submits them to the pipeline.
+// Payloads are not redacted and may contain credentials or other sensitive data; downstream
+// consumers must apply appropriate access controls and retention policies.
 func (d *DirectFLP) ExportPlaintext(input <-chan []*model.PlaintextRecord) {
 	for inputRecords := range input {
 		for _, rec := range inputRecords {

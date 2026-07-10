@@ -3,6 +3,7 @@ package tracer
 import (
 	"debug/buildinfo"
 	"errors"
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -21,7 +22,7 @@ func isGoExecutable(path string) bool {
 func statInode(path string) (dev, ino uint64, err error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("statInode(%q): %w", path, err)
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {

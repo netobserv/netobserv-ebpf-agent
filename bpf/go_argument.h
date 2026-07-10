@@ -60,7 +60,9 @@ static __always_inline void *go_get_argument_by_reg(struct pt_regs *ctx, int ind
 static __always_inline void *go_get_argument_by_stack(struct pt_regs *ctx, int index) {
     void *ptr = 0;
     u64 sp = (u64)GO_SP(ctx) + (u64)(index * 8);
-    bpf_probe_read(&ptr, sizeof(ptr), (void *)sp);
+    if (bpf_probe_read_user(&ptr, sizeof(ptr), (void *)sp) != 0) {
+        return NULL;
+    }
     return ptr;
 }
 

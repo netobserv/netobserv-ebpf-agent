@@ -81,17 +81,17 @@ func (m *PlaintextTracer) listenAndForward(forwardCh chan<- *model.PlaintextReco
 		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(rec.SSLType)))
 	}
 
+	if m.processor != nil && !m.processor.Process(rec) {
+		return nil
+	}
+
 	if len(rec.Data) > 0 {
 		ptlog.WithFields(logrus.Fields{
 			"pid":       rec.Pid,
 			"direction": rec.Direction,
 			"bytes":     len(rec.Data),
 			"source":    rec.TLSSource,
-		}).Info("TLS plaintext event captured")
-	}
-
-	if m.processor != nil && !m.processor.Process(rec) {
-		return nil
+		}).Debug("TLS plaintext event captured")
 	}
 
 	forwardCh <- rec

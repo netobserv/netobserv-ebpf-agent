@@ -107,6 +107,10 @@ func packetsAgent(
 		plaintextExporter: plaintextExporter,
 	}
 
+	if (cfg.EnableOpenSSLTracking || cfg.EnableGoTLSTracking || cfg.EnableKTLSTracking) && plaintextExporter == nil {
+		return nil, fmt.Errorf("TLS plaintext capture requires export=direct-flp")
+	}
+
 	if cfg.EnableOpenSSLTracking || cfg.EnableGoTLSTracking || cfg.EnableKTLSTracking {
 		p.plaintextTracer = flow.NewPlaintextTracer(fetcher, metrics.NoOp(), plaintextProcessor)
 		p.plaintextBuffer = flow.NewPlaintextBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)

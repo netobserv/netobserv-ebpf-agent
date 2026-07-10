@@ -71,7 +71,7 @@ func PacketToMap(pr *model.PacketRecord) config.GenericMap {
 	// Data is base64 encoded to avoid marshal / unmarshal issues
 	out["Data"] = base64.StdEncoding.EncodeToString(packet.Data())
 	out["Time"] = pr.Time.Unix()
-	out["TimeFlowStartMs"] = float64(pr.Time.UnixMilli())
+	out["TimeFlowStartMs"] = pr.Time.UnixMilli()
 
 	return out
 }

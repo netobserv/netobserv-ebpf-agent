@@ -1583,7 +1583,6 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			cfg.TLSPlaintextDedupWindow,
 			cfg.TLSPlaintextMinBytes,
 		)
-		cfg.PlaintextScope.Start()
 	}
 
 	// remove pinning from all maps
@@ -1722,6 +1721,9 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		pf.opensslAttacher = tlsSetup.opensslAttacher
 	}
 	pf.plaintextScope = cfg.PlaintextScope
+	if cfg.PlaintextScope != nil {
+		cfg.PlaintextScope.Start()
+	}
 
 	return pf, nil
 }
