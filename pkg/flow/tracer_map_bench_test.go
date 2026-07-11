@@ -3,6 +3,7 @@ package flow
 import (
 	"context"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -114,24 +115,8 @@ func sizeName(n int) string {
 	case n >= 1000000:
 		return "1M"
 	case n >= 1000:
-		return itoaK(n)
+		return strconv.Itoa(n/1000) + "k"
 	default:
-		return itoa(n)
+		return strconv.Itoa(n)
 	}
-}
-
-func itoaK(n int) string { return itoa(n/1000) + "k" }
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for n > 0 {
-		pos--
-		buf[pos] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[pos:])
 }

@@ -48,10 +48,9 @@ func benchFlowMetrics(i int) ebpf.BpfFlowMetrics {
 	}
 }
 
-// BenchFlowContent builds a BpfFlowContent for the given index (exported for use
-// by benchmarks in other packages via the model package's test binary is not
-// possible; kept lowercase and used within-package). See BenchRecords below for
-// cross-package needs.
+// benchFlowContent builds a BpfFlowContent for the given index. It is kept
+// unexported and used only within this package's benchmarks; other packages
+// build their own equivalent fixtures locally.
 func benchFlowContent(i int) BpfFlowContent {
 	return NewBpfFlowContent(benchFlowMetrics(i))
 }
