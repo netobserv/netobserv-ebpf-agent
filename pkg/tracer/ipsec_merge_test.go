@@ -129,6 +129,40 @@ func TestMergeIPsecOrphansSwappedDirection(t *testing.T) {
 	assert.True(t, flows[espID].AdditionalMetrics.IpsecEncrypted)
 }
 
+func TestMergeIPsecOrphansPicksDeterministicTarget(t *testing.T) {
+	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 1}
+	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 2}
+
+	espID := ebpf.BpfFlowId{SrcIp: src, DstIp: dst, TransportProtocol: protoESP}
+	nattID := ebpf.BpfFlowId{
+		SrcIp: src, DstIp: dst, SrcPort: 4500, DstPort: 4500, TransportProtocol: protoUDP,
+	}
+	orphanID := ebpf.BpfFlowId{
+		SrcIp: src, DstIp: dst, SrcPort: 1, DstPort: 6081, TransportProtocol: protoUDP,
+	}
+
+	// After cmpBpfFlowID sort, ESP precedes UDP/4500 (SrcPort 0 < 4500).
+	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
+		espID: {
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 5, Bytes: 500},
+		},
+		nattID: {
+			BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 7, Bytes: 700},
+		},
+		orphanID: {
+			BpfFlowMetrics:    &ebpf.BpfFlowMetrics{},
+			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
+		},
+	}
+
+	mergeIPsecOrphans(flows)
+
+	require.Len(t, flows, 2)
+	require.NotNil(t, flows[espID].AdditionalMetrics)
+	assert.True(t, flows[espID].AdditionalMetrics.IpsecEncrypted)
+	assert.Nil(t, flows[nattID].AdditionalMetrics)
+}
+
 func TestMergeIPsecOrphansKeepsPartialWhenNoSibling(t *testing.T) {
 	orphanID := ebpf.BpfFlowId{
 		SrcPort:           1,

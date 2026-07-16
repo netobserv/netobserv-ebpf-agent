@@ -1,6 +1,10 @@
 package tracer
 
 import (
+	"bytes"
+	"cmp"
+	"slices"
+
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
@@ -58,12 +62,36 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 			continue
 		}
 
+		// Deterministic pick when several wire flows share the same endpoints.
+		slices.SortFunc(targets, cmpBpfFlowID)
 		targetID := targets[0]
 		target := flows[targetID]
 		target.AccumulateAdditional(orphan.AdditionalMetrics)
 		flows[targetID] = target
 		delete(flows, orphanID)
 	}
+}
+
+func cmpBpfFlowID(a, b ebpf.BpfFlowId) int {
+	if c := bytes.Compare(a.SrcIp[:], b.SrcIp[:]); c != 0 {
+		return c
+	}
+	if c := bytes.Compare(a.DstIp[:], b.DstIp[:]); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.SrcPort, b.SrcPort); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.DstPort, b.DstPort); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.TransportProtocol, b.TransportProtocol); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.IcmpType, b.IcmpType); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.IcmpCode, b.IcmpCode)
 }
 
 func isIPsecOrphan(flow model.BpfFlowContent) bool {
