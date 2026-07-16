@@ -7,6 +7,29 @@
 
 #include "utils.h"
 
+#ifndef IPPROTO_ESP
+#define IPPROTO_ESP 50
+#endif
+
+// OVN-Kubernetes IPsec encrypts the inner packet (often Geneve/UDP) into ESP on the
+// wire. TC hooks on host interfaces observe the encrypted form (ESP, or UDP/4500 when
+// NAT-T encapsulation is used). Rewrite the flow_id so IPsec metadata is stored under
+// the same key as the corresponding TC flow (NETOBSERV-2343).
+static inline void ipsec_to_wire_flow_id(flow_id *id) {
+    if (id->transport_protocol == IPPROTO_ESP) {
+        return;
+    }
+    // Already matches NAT-T UDP-encapsulation on the wire.
+    if (id->transport_protocol == IPPROTO_UDP && (id->src_port == 4500 || id->dst_port == 4500)) {
+        return;
+    }
+    id->src_port = 0;
+    id->dst_port = 0;
+    id->icmp_type = 0;
+    id->icmp_code = 0;
+    id->transport_protocol = IPPROTO_ESP;
+}
+
 static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_ret,
                                                u16 eth_protocol) {
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
@@ -18,6 +41,10 @@ static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_r
             if (extra_metrics->ipsec_encrypted) {
                 extra_metrics->ipsec_encrypted = false;
             }
+        } else {
+            // Success: ensure the flag is set even when the map entry was created
+            // earlier by another feature (e.g. RTT) without IPsec info.
+            extra_metrics->ipsec_encrypted = true;
         }
         return 0;
     }
@@ -128,8 +155,11 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
         return 0;
     }
 
-    BPF_PRINTK("Enter xfrm dir: %d protocol: %d family: %d if_index: %d \n", dir, protocol, family,
-               if_index);
+    // Align with the encrypted on-wire 5-tuple observed by TC (typically ESP).
+    ipsec_to_wire_flow_id(&id);
+
+    BPF_PRINTK("Enter xfrm dir: %d protocol: %d family: %d if_index: %d \n", dir,
+               id.transport_protocol, family, if_index);
 
     if (dir == INGRESS) {
         ret = bpf_map_update_elem(&ipsec_ingress_map, &pid_tgid, &id, BPF_NOEXIST);

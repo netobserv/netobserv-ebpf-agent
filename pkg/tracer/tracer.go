@@ -1098,6 +1098,9 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+		// Correlate IPsec partials (inner xfrm 5-tuple) with on-wire ESP/NAT-T flows.
+		// No-op when no IPsec orphans are present (e.g. RTT-only).
+		mergeIPsecOrphans(flows)
 	}
 	if m.config.QUICTrackingMode != 0 {
 		var quic []ebpf.BpfQuicMetrics
