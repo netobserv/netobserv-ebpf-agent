@@ -4,16 +4,14 @@ import (
 	"bytes"
 	"cmp"
 	"slices"
+	"syscall"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
 
-const (
-	protoESP    = 50
-	protoUDP    = 17
-	udpPortNATT = 4500
-)
+// IANA UDP port for IKE NAT-Traversal (RFC 3948). Fixed by standard; not configurable.
+const udpPortNATT = 4500
 
 // mergeIPsecOrphans attaches IPsec metadata from zero-byte "partial" flows onto the
 // corresponding on-wire flows (ESP, or UDP/4500 for NAT-T).
@@ -57,9 +55,9 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 		if len(targets) == 0 {
 			// Direction may differ between xfrm and TC observation points.
 			targets = wireFlows[ipKey{src: orphanID.DstIp, dst: orphanID.SrcIp}]
-		}
-		if len(targets) == 0 {
-			continue
+			if len(targets) == 0 {
+				continue
+			}
 		}
 
 		// Deterministic pick when several wire flows share the same endpoints.
@@ -105,8 +103,8 @@ func isIPsecOrphan(flow model.BpfFlowContent) bool {
 }
 
 func isIPsecWireFlow(id ebpf.BpfFlowId) bool {
-	if id.TransportProtocol == protoESP {
+	if id.TransportProtocol == syscall.IPPROTO_ESP {
 		return true
 	}
-	return id.TransportProtocol == protoUDP && (id.SrcPort == udpPortNATT || id.DstPort == udpPortNATT)
+	return id.TransportProtocol == syscall.IPPROTO_UDP && (id.SrcPort == udpPortNATT || id.DstPort == udpPortNATT)
 }

@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"syscall"
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
@@ -16,7 +17,7 @@ func TestMergeIPsecOrphansOntoESP(t *testing.T) {
 	espID := ebpf.BpfFlowId{
 		SrcIp:             src,
 		DstIp:             dst,
-		TransportProtocol: protoESP,
+		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 	// Geneve/UDP orphan as produced before wire-id normalization
 	orphanID := ebpf.BpfFlowId{
@@ -24,7 +25,7 @@ func TestMergeIPsecOrphansOntoESP(t *testing.T) {
 		DstIp:             dst,
 		SrcPort:           12345,
 		DstPort:           6081,
-		TransportProtocol: protoUDP,
+		TransportProtocol: syscall.IPPROTO_UDP,
 	}
 
 	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
@@ -62,14 +63,14 @@ func TestMergeIPsecOrphansOntoNATT(t *testing.T) {
 	nattID := ebpf.BpfFlowId{
 		SrcIp:             src,
 		DstIp:             dst,
-		SrcPort:           4500,
-		DstPort:           4500,
-		TransportProtocol: protoUDP,
+		SrcPort:           udpPortNATT,
+		DstPort:           udpPortNATT,
+		TransportProtocol: syscall.IPPROTO_UDP,
 	}
 	orphanID := ebpf.BpfFlowId{
 		SrcIp:             src,
 		DstIp:             dst,
-		TransportProtocol: protoESP,
+		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 
 	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
@@ -101,14 +102,14 @@ func TestMergeIPsecOrphansSwappedDirection(t *testing.T) {
 	espID := ebpf.BpfFlowId{
 		SrcIp:             dst,
 		DstIp:             src,
-		TransportProtocol: protoESP,
+		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 	orphanID := ebpf.BpfFlowId{
 		SrcIp:             src,
 		DstIp:             dst,
 		SrcPort:           9999,
 		DstPort:           6081,
-		TransportProtocol: protoUDP,
+		TransportProtocol: syscall.IPPROTO_UDP,
 	}
 
 	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
@@ -133,12 +134,12 @@ func TestMergeIPsecOrphansPicksDeterministicTarget(t *testing.T) {
 	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 1}
 	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 2}
 
-	espID := ebpf.BpfFlowId{SrcIp: src, DstIp: dst, TransportProtocol: protoESP}
+	espID := ebpf.BpfFlowId{SrcIp: src, DstIp: dst, TransportProtocol: syscall.IPPROTO_ESP}
 	nattID := ebpf.BpfFlowId{
-		SrcIp: src, DstIp: dst, SrcPort: 4500, DstPort: 4500, TransportProtocol: protoUDP,
+		SrcIp: src, DstIp: dst, SrcPort: udpPortNATT, DstPort: udpPortNATT, TransportProtocol: syscall.IPPROTO_UDP,
 	}
 	orphanID := ebpf.BpfFlowId{
-		SrcIp: src, DstIp: dst, SrcPort: 1, DstPort: 6081, TransportProtocol: protoUDP,
+		SrcIp: src, DstIp: dst, SrcPort: 1, DstPort: 6081, TransportProtocol: syscall.IPPROTO_UDP,
 	}
 
 	// After cmpBpfFlowID sort, ESP precedes UDP/4500 (SrcPort 0 < 4500).
@@ -167,7 +168,7 @@ func TestMergeIPsecOrphansKeepsPartialWhenNoSibling(t *testing.T) {
 	orphanID := ebpf.BpfFlowId{
 		SrcPort:           1,
 		DstPort:           6081,
-		TransportProtocol: protoUDP,
+		TransportProtocol: syscall.IPPROTO_UDP,
 	}
 	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
 		orphanID: {

@@ -19,7 +19,7 @@ static inline void ipsec_to_wire_flow_id(flow_id *id) {
     if (id->transport_protocol == IPPROTO_ESP) {
         return;
     }
-    // Already matches NAT-T UDP-encapsulation on the wire.
+    // Already matches NAT-T UDP-encapsulation on the wire (IANA port 4500, RFC 3948).
     if (id->transport_protocol == IPPROTO_UDP && (id->src_port == 4500 || id->dst_port == 4500)) {
         return;
     }
