@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -434,6 +435,10 @@ func NewFlowFetcher(cfg *FlowFetcherConfig, m *metrics.Metrics) (*FlowFetcher, e
 }
 
 func (m *FlowFetcher) AttachTCX(iface *ifaces.Interface) error {
+	// setns is not thread-safe, so we need to lock the OS thread
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	handle, err := netlink.NewHandleAt(iface.NetNS)
 	if err != nil {
 		return NewError("Attach:CantCreateHandle", fmt.Errorf("failed to create handle for netns (%s): %w", iface.NetNS.String(), err))

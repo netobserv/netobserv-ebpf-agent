@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
@@ -271,6 +272,9 @@ func (i *interfaceListener) detachAny(event *retriableEvent) {
 // WARNING: concurrent-unsafe code while setting netns. Caller must ensure this is called sequentially.
 func runInNamespace(errPrefix string, f func(*ifaces.Interface) error) func(*ifaces.Interface) error {
 	return func(iface *ifaces.Interface) error {
+		// setns is not thread-safe, so we need to lock the OS thread
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 		if iface.NetNS == netns.None() {
 			return f(iface)
 		}
