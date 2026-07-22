@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tlsprofile"
 )
 
 func buildTLSConfig(cfg *config.Agent) (*tls.Config, error) {
@@ -13,6 +14,7 @@ func buildTLSConfig(cfg *config.Agent) (*tls.Config, error) {
 		InsecureSkipVerify: cfg.KafkaTLSInsecureSkipVerify,
 		MinVersion:         tls.VersionTLS13,
 	}
+	tlsprofile.Apply(tlsConfig)
 	if cfg.KafkaTLSCACertPath != "" {
 		caCert, err := os.ReadFile(cfg.KafkaTLSCACertPath)
 		if err != nil {
