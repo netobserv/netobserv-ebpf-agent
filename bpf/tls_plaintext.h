@@ -34,7 +34,10 @@ static inline void generate_SSL_data_event(struct pt_regs *ctx, u64 pid_tgid, u8
     event->conn_user_ptr = conn_user_ptr;
     event->socket_fd = -1;
     if (tls_source == TLS_SOURCE_OPENSSL && conn_user_ptr != 0) {
-        s32 *fd = bpf_map_lookup_elem(&ssl_fd_map, &conn_user_ptr);
+        struct ssl_fd_key_t key = {};
+        key.ssl_ptr = conn_user_ptr;
+        key.tgid = (u32)(pid_tgid >> 32);
+        s32 *fd = bpf_map_lookup_elem(&ssl_fd_map, &key);
         if (fd != NULL && *fd >= 0) {
             event->socket_fd = *fd;
         }

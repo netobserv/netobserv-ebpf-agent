@@ -44,7 +44,7 @@ func setTLSCaptureVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig)
 	}
 	for _, v := range vars {
 		if err := setVariable(spec, v.key, v.value); err != nil {
-			return err
+			return fmt.Errorf("setting TLS capture variable %s: %w", v.key, err)
 		}
 	}
 	return nil
@@ -90,7 +90,7 @@ func setupPacketFetcherTLS(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig, 
 		attacher, err := attachOpenSSLUprobes(cfg, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd)
 		if err != nil {
 			result.Close()
-			return nil, err
+			return nil, fmt.Errorf("attaching OpenSSL uprobes: %w", err)
 		}
 		result.opensslAttacher = attacher
 		plog.Infof("OpenSSL TLS plaintext capture enabled (OPENSSL_PATH=%s)", cfg.OpenSSLPath)

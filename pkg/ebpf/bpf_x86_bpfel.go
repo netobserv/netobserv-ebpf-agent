@@ -253,6 +253,13 @@ type BpfSslDataEventT struct {
 	Data        [16384]int8
 }
 
+type BpfSslFdKeyT struct {
+	_      structs.HostLayout
+	SslPtr uint64
+	Tgid   uint32
+	Pad    uint32
+}
+
 type BpfSslReadActiveT struct {
 	_           structs.HostLayout
 	SslType     uint8

@@ -354,6 +354,15 @@ struct ssl_read_active_t {
 };
 
 const static struct ssl_read_active_t *unused_ssl_read_active __attribute__((unused));
+
+// OpenSSL SSL* -> fd map key: isolate entries across processes that may share SSL* values.
+struct ssl_fd_key_t {
+    u64 ssl_ptr;
+    u32 tgid;
+    u32 _pad;
+};
+
+const static struct ssl_fd_key_t *unused_ssl_fd_key __attribute__((unused));
 // QUIC flow metrics
 typedef struct quic_metrics_t {
     u64 start_mono_time_ts;

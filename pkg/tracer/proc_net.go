@@ -34,7 +34,7 @@ func readProcTCPConns(pid int) ([]procTCPConn, error) {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, err
+			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 		out = append(out, conns...)
 	}
@@ -44,7 +44,10 @@ func readProcTCPConns(pid int) ([]procTCPConn, error) {
 func parseProcNetFile(path string, ipv6 bool) ([]procTCPConn, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -88,7 +91,10 @@ func parseProcNetFile(path string, ipv6 bool) ([]procTCPConn, error) {
 			inode:      inode,
 		})
 	}
-	return conns, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning %s: %w", path, err)
+	}
+	return conns, nil
 }
 
 func parseProcNetAddr(field string, ipv6 bool) (net.IP, uint16, error) {

@@ -28,7 +28,10 @@ int probe_entry_SSL_set_fd(struct pt_regs *ctx) {
         return 0;
     }
 
-    u64 key = (u64)ssl;
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct ssl_fd_key_t key = {};
+    key.ssl_ptr = (u64)ssl;
+    key.tgid = (u32)(pid_tgid >> 32);
     bpf_map_update_elem(&ssl_fd_map, &key, &fd, BPF_ANY);
     return 0;
 }
