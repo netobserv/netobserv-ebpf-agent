@@ -11,10 +11,11 @@ import (
 // Poller periodically looks for the network interfaces in the system and forwards Event
 // notifications when interfaces are added or deleted.
 type Poller struct {
-	period     time.Duration
-	current    map[InterfaceKey]Interface
-	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
-	bufLen     int
+	period        time.Duration
+	current       map[InterfaceKey]Interface
+	interfaces    func(handle netns.NsHandle, ns string) ([]Interface, error)
+	bufLen        int
+	netNamespaces func() ([]string, error)
 }
 
 func NewPoller(period time.Duration, bufLen int) *Poller {
@@ -29,7 +30,11 @@ func NewPoller(period time.Duration, bufLen int) *Poller {
 func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
 
 	out := make(chan Event, np.bufLen)
-	netns, err := getNetNS()
+	getNS := np.netNamespaces
+	if getNS == nil {
+		getNS = getNetNS
+	}
+	netns, err := getNS()
 	if err != nil {
 		go np.pollForEvents(ctx, "", out)
 	} else {

@@ -273,7 +273,7 @@ func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc
 }
 
 func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.Record], error) {
-	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
+	flpExporter, err := exporter.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength, cfg.TLSPlaintextPreviewBytes)
 	if err != nil {
 		return nil, err
 	}
