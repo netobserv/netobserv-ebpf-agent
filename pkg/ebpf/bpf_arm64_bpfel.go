@@ -324,7 +324,6 @@ const (
 	BpfProgProbeEntrySSL_setFd           = "probe_entry_SSL_set_fd"
 	BpfProgProbeEntrySSL_write           = "probe_entry_SSL_write"
 	BpfProgProbeEntryGotlsRead           = "probe_entry_gotls_read"
-	BpfProgProbeEntryGotlsReadRet        = "probe_entry_gotls_read_ret"
 	BpfProgProbeEntryGotlsWrite          = "probe_entry_gotls_write"
 	BpfProgProbeRetSSL_read              = "probe_ret_SSL_read"
 	BpfProgProbeRetGotlsRead             = "probe_ret_gotls_read"
@@ -418,7 +417,6 @@ type BpfProgramSpecs struct {
 	ProbeEntrySSL_setFd     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
 	ProbeEntryGotlsRead     *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_read"`
-	ProbeEntryGotlsReadRet  *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_read_ret"`
 	ProbeEntryGotlsWrite    *ebpf.ProgramSpec `ebpf:"probe_entry_gotls_write"`
 	ProbeRetSSL_read        *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_read"`
 	ProbeRetGotlsRead       *ebpf.ProgramSpec `ebpf:"probe_ret_gotls_read"`
@@ -605,7 +603,6 @@ type BpfPrograms struct {
 	ProbeEntrySSL_setFd     *ebpf.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.Program `ebpf:"probe_entry_SSL_write"`
 	ProbeEntryGotlsRead     *ebpf.Program `ebpf:"probe_entry_gotls_read"`
-	ProbeEntryGotlsReadRet  *ebpf.Program `ebpf:"probe_entry_gotls_read_ret"`
 	ProbeEntryGotlsWrite    *ebpf.Program `ebpf:"probe_entry_gotls_write"`
 	ProbeRetSSL_read        *ebpf.Program `ebpf:"probe_ret_SSL_read"`
 	ProbeRetGotlsRead       *ebpf.Program `ebpf:"probe_ret_gotls_read"`
@@ -636,7 +633,6 @@ func (p *BpfPrograms) Close() error {
 		p.ProbeEntrySSL_setFd,
 		p.ProbeEntrySSL_write,
 		p.ProbeEntryGotlsRead,
-		p.ProbeEntryGotlsReadRet,
 		p.ProbeEntryGotlsWrite,
 		p.ProbeRetSSL_read,
 		p.ProbeRetGotlsRead,

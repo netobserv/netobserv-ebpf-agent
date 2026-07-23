@@ -51,16 +51,15 @@ func setTLSCaptureVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig)
 }
 
 type tlsBpfPrograms struct {
-	ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
-	ProbeEntrySSLSetFd     *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
-	ProbeEntrySSLRead      *cilium.Program `ebpf:"probe_entry_SSL_read"`
-	ProbeRetSSLRead        *cilium.Program `ebpf:"probe_ret_SSL_read"`
-	ProbeEntryGotlsWrite   *cilium.Program `ebpf:"probe_entry_gotls_write"`
-	ProbeEntryGotlsRead    *cilium.Program `ebpf:"probe_entry_gotls_read"`
-	ProbeRetGotlsRead      *cilium.Program `ebpf:"probe_ret_gotls_read"`
-	ProbeEntryGotlsReadRet *cilium.Program `ebpf:"probe_entry_gotls_read_ret"`
-	BpfSockops             *cilium.Program `ebpf:"bpf_sockops"`
-	BpfKtlsRedir           *cilium.Program `ebpf:"bpf_ktls_redir"`
+	ProbeEntrySSLWrite   *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeEntrySSLSetFd   *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
+	ProbeEntrySSLRead    *cilium.Program `ebpf:"probe_entry_SSL_read"`
+	ProbeRetSSLRead      *cilium.Program `ebpf:"probe_ret_SSL_read"`
+	ProbeEntryGotlsWrite *cilium.Program `ebpf:"probe_entry_gotls_write"`
+	ProbeEntryGotlsRead  *cilium.Program `ebpf:"probe_entry_gotls_read"`
+	ProbeRetGotlsRead    *cilium.Program `ebpf:"probe_ret_gotls_read"`
+	BpfSockops           *cilium.Program `ebpf:"bpf_sockops"`
+	BpfKtlsRedir         *cilium.Program `ebpf:"bpf_ktls_redir"`
 }
 
 type packetFetcherTLS struct {

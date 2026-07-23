@@ -6,6 +6,8 @@
 #ifndef __GO_ARGUMENT_H__
 #define __GO_ARGUMENT_H__
 
+#include <bpf_tracing.h>
+
 #if defined(__TARGET_ARCH_x86)
 #define GO_PARAM1(x) ((void *)(long)((x)->ax))
 #define GO_PARAM2(x) ((void *)(long)((x)->bx))
@@ -23,6 +25,22 @@
 #define GO_PARAM4(x) ((void *)(long)PT_REGS_PARM4(x))
 #define GO_PARAM5(x) ((void *)(long)PT_REGS_PARM5(x))
 #define GO_SP(x) PT_REGS_SP(x)
+#elif defined(__TARGET_ARCH_s390)
+/* Go s390x ABIInternal: integer args in R2–R9 (gprs[2]–gprs[9]). */
+#define GO_PARAM1(x) ((void *)(long)PT_REGS_PARM1(x))
+#define GO_PARAM2(x) ((void *)(long)PT_REGS_PARM2(x))
+#define GO_PARAM3(x) ((void *)(long)PT_REGS_PARM3(x))
+#define GO_PARAM4(x) ((void *)(long)PT_REGS_PARM4(x))
+#define GO_PARAM5(x) ((void *)(long)PT_REGS_PARM5(x))
+#define GO_SP(x) PT_REGS_SP(x)
+#elif defined(__TARGET_ARCH_powerpc)
+/* Go ppc64le ABIInternal: integer args in R3–R10 (gpr[3]–gpr[10]). */
+#define GO_PARAM1(x) ((void *)(long)PT_REGS_PARM1(x))
+#define GO_PARAM2(x) ((void *)(long)PT_REGS_PARM2(x))
+#define GO_PARAM3(x) ((void *)(long)PT_REGS_PARM3(x))
+#define GO_PARAM4(x) ((void *)(long)PT_REGS_PARM4(x))
+#define GO_PARAM5(x) ((void *)(long)PT_REGS_PARM5(x))
+#define GO_SP(x) ((x)->gpr[1])
 #else
 #define GO_PARAM1(x) ((void *)0)
 #define GO_PARAM2(x) ((void *)0)

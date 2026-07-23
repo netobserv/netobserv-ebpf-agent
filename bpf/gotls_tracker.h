@@ -9,6 +9,9 @@
 #include "go_argument.h"
 #include "tls_plaintext.h"
 
+// TLS application data record type (RFC 5246 §6.2.1; Go: recordTypeApplicationData in
+// https://go.dev/src/crypto/tls/common.go). We hook writeRecordLocked and only emit when
+// typ == application data (plaintext HTTP, etc.): https://go.dev/src/crypto/tls/conn.go
 #define GOTLS_RECORD_TYPE_APPLICATION_DATA 23
 
 // writeRecordLocked(typ recordType, data []byte) — register ABI (Go >= 1.17)
@@ -54,11 +57,14 @@ int probe_entry_gotls_read(struct pt_regs *ctx) {
     struct ssl_read_active_t active = {};
     active.buf_user = buf_user;
     active.conn_user_ptr = conn_user;
-    bpf_map_update_elem(&ssl_read_active_map, &pid_tgid, &active, BPF_ANY);
+    if (bpf_map_update_elem(&ssl_read_active_map, &pid_tgid, &active, BPF_ANY) != 0) {
+        return 0;
+    }
     return 0;
 }
 
 // Read return — n in RC; plaintext already in user buffer saved on entry.
+// Default read path (GOTLS_CAPTURE_READ): entry uprobe above + this uretprobe.
 SEC("uretprobe/gotls_read")
 int probe_ret_gotls_read(struct pt_regs *ctx) {
     if (enable_gotls_tracking == 0) {
@@ -82,7 +88,9 @@ int probe_ret_gotls_read(struct pt_regs *ctx) {
     return 0;
 }
 
-// Legacy: uprobe at RET offsets inside Read (GOTLS_READ_RET_SITES=true only).
+#if 0
+// Legacy alternate read path (mutually exclusive with uretprobe above): uprobes at every RET
+// inside Read (eCapture-style). Enable when GOTLS_READ_RET_SITES attachment is wired in userspace.
 SEC("uprobe/gotls_read_ret")
 int probe_entry_gotls_read_ret(struct pt_regs *ctx) {
     if (enable_gotls_tracking == 0) {
@@ -103,5 +111,6 @@ int probe_entry_gotls_read_ret(struct pt_regs *ctx) {
                             (uint32_t)ret_len, 0);
     return 0;
 }
+#endif
 
 #endif /* __GOTLS_TRACKER_H__ */
