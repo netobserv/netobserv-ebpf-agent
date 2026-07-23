@@ -116,7 +116,7 @@ func StartServerAsync(conn *api.PromConnectionInfo, regName string, registry pro
 			err = httpServer.ListenAndServe()
 		}
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			maybePanic("error in http.ListenAndServe: %v", err)
+			maybePanic("Prometheus server error in ListenAndServe: %v", err)
 		}
 	}()
 

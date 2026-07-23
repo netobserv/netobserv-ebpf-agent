@@ -18,7 +18,6 @@
 package operational
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -30,19 +29,18 @@ import (
 
 func NewHealthServer(opts *config.Options, isAlive healthcheck.Check, isReady healthcheck.Check) *http.Server {
 	handler := healthcheck.NewHandler()
-	address := fmt.Sprintf("%s:%d", opts.Health.Address, opts.Health.Port)
 	handler.AddLivenessCheck("PipelineCheck", isAlive)
 	handler.AddReadinessCheck("PipelineCheck", isReady)
 
 	server := server.Default(&http.Server{
 		Handler: handler,
-		Addr:    address,
+		Addr:    opts.HealthAddr,
 	})
 
 	go func() {
 		for {
 			err := server.ListenAndServe()
-			log.Errorf("http.ListenAndServe error %v", err)
+			log.Errorf("Health server ListenAndServe error: %v", err)
 			time.Sleep(60 * time.Second)
 		}
 	}()
