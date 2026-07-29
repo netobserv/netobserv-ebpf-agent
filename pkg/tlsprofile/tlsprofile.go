@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -16,10 +18,22 @@ const (
 
 // Apply overrides fields in c using values from TLS_MIN_VERSION, TLS_CIPHER_SUITES
 // and TLS_CURVE_PREFERENCES environment variables, when those are set.
-// Values are decimal uint16 strings (e.g. "771" for TLS 1.2).
+// Values are decimal uint16 strings (e.g. "771" for TLS 1.2, "772" for TLS 1.3),
+// or, for cipher suites/curves, the corresponding IANA TLS registry IDs.
 // Env vars that are absent leave the corresponding field unchanged.
-// If any set env var holds an invalid value, c is left entirely unmodified
-// and an error describing the first invalid value is returned.
+// If any set env var holds a value that isn't a valid uint16, c is left
+// entirely unmodified and an error describing the first invalid value is
+// returned; no further validation (e.g. against known curve IDs) is
+// performed, so it is the caller's responsibility to supply correct IDs.
+// TLS_CIPHER_SUITES silently filters out the fixed TLS 1.3 suite IDs
+// (4865, 4866, 4867): crypto/tls.Config.CipherSuites only affects TLS 1.0-1.2
+// negotiation, so those IDs would never do anything there, and standard TLS
+// profiles (e.g. OpenShift's Intermediate/Modern) legitimately include them
+// alongside real TLS 1.0-1.2 suite IDs.
+// If TLS_CIPHER_SUITES is set but the effective MinVersion is TLS 1.3, a
+// warning is logged: Go's crypto/tls does not allow customizing the (fixed,
+// already secure) TLS 1.3 cipher suite list, so the override has no effect
+// unless a lower TLS version ends up being negotiated.
 func Apply(c *tls.Config) error {
 	if c == nil {
 		return nil
@@ -41,6 +55,9 @@ func Apply(c *tls.Config) error {
 		c.MinVersion = minVersion
 	}
 	if suites != nil {
+		if c.MinVersion >= tls.VersionTLS13 {
+			logrus.Warnf("tlsprofile: %s is set but has no effect because the effective minimum TLS version is 1.3 (TLS 1.3 cipher suites are not configurable)", EnvCipherSuites)
+		}
 		c.CipherSuites = suites
 	}
 	if curves != nil {
@@ -61,6 +78,18 @@ func minVersionFromEnv() (value uint16, set bool, err error) {
 	return uint16(v), true, nil
 }
 
+// tls13CipherSuiteIDs are the fixed suite IDs Go's crypto/tls negotiates
+// automatically for TLS 1.3 connections. tls.Config.CipherSuites only affects
+// TLS 1.0-1.2 negotiation, so these IDs have no effect there; they are
+// silently filtered out rather than rejected because standard TLS profile
+// definitions (e.g. OpenShift's Intermediate/Modern TLSSecurityProfile)
+// legitimately list them alongside real TLS 1.0-1.2 suite IDs.
+var tls13CipherSuiteIDs = map[uint16]struct{}{
+	4865: {}, // TLS_AES_128_GCM_SHA256
+	4866: {}, // TLS_AES_256_GCM_SHA384
+	4867: {}, // TLS_CHACHA20_POLY1305_SHA256
+}
+
 func cipherSuitesFromEnv() ([]uint16, error) {
 	s := strings.TrimSpace(os.Getenv(EnvCipherSuites))
 	if s == "" {
@@ -76,7 +105,11 @@ func cipherSuitesFromEnv() ([]uint16, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tlsprofile: invalid cipher suite %q in %s: %w", part, EnvCipherSuites, err)
 		}
-		ids = append(ids, uint16(v))
+		id := uint16(v)
+		if _, ok := tls13CipherSuiteIDs[id]; ok {
+			continue
+		}
+		ids = append(ids, id)
 	}
 	return ids, nil
 }
