@@ -30,10 +30,12 @@ const (
 // negotiation, so those IDs would never do anything there, and standard TLS
 // profiles (e.g. OpenShift's Intermediate/Modern) legitimately include them
 // alongside real TLS 1.0-1.2 suite IDs.
-// If TLS_CIPHER_SUITES is set but the effective MinVersion is TLS 1.3, a
-// warning is logged: Go's crypto/tls does not allow customizing the (fixed,
-// already secure) TLS 1.3 cipher suite list, so the override has no effect
-// unless a lower TLS version ends up being negotiated.
+// If the effective MinVersion is TLS 1.3 (regardless of whether that came
+// from TLS_MIN_VERSION or from c's own prior value), TLS_CIPHER_SUITES is not
+// applied at all: Go's crypto/tls does not allow customizing the (fixed,
+// already secure) TLS 1.3 cipher suite list, so the override could never have
+// any effect. In that case, an info line is logged if TLS_CIPHER_SUITES was
+// actually provided, since there's nothing to fix, just nothing to do.
 func Apply(c *tls.Config) error {
 	if c == nil {
 		return nil
@@ -54,10 +56,11 @@ func Apply(c *tls.Config) error {
 	if hasMinVersion {
 		c.MinVersion = minVersion
 	}
-	if suites != nil {
-		if c.MinVersion >= tls.VersionTLS13 {
-			logrus.Warnf("tlsprofile: %s is set but has no effect because the effective minimum TLS version is 1.3 (TLS 1.3 cipher suites are not configurable)", EnvCipherSuites)
+	if c.MinVersion >= tls.VersionTLS13 {
+		if strings.TrimSpace(os.Getenv(EnvCipherSuites)) != "" {
+			logrus.Infof("tlsprofile: %s is set but has no effect because the effective minimum TLS version is 1.3 (TLS 1.3 cipher suites are not configurable)", EnvCipherSuites)
 		}
+	} else if suites != nil {
 		c.CipherSuites = suites
 	}
 	if curves != nil {
