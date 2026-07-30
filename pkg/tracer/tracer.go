@@ -1024,8 +1024,21 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		return m.legacyLookupAndDeleteMap(met)
 	}
 
+	flows, ok := m.lookupAndDeleteAggregatedFlows(met)
+	if !ok {
+		return m.legacyLookupAndDeleteMap(met)
+	}
+
+	m.accumulateSecondaryMaps(flows, met)
+	m.ReadGlobalCounter(met)
+	return flows
+}
+
+// lookupAndDeleteAggregatedFlows atomically reads and deletes entries from AggregatedFlows.
+// Returns ok=false when the kernel does not support LookupAndDelete (caller should use legacy path).
+func (m *FlowFetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf.BpfFlowId]model.BpfFlowContent, bool) {
 	flowMap := m.objects.AggregatedFlows
-	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxFlows)
+	flows := make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxFlows)
 	var ids []ebpf.BpfFlowId
 	var id ebpf.BpfFlowId
 	var baseMetrics ebpf.BpfFlowMetrics
@@ -1044,7 +1057,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
 				log.WithError(err).Warnf("switching to legacy mode")
 				m.lookupAndDeleteSupported = false
-				return m.legacyLookupAndDeleteMap(met)
+				return nil, false
 			}
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete flow entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteFlows", metrics.HighSeverity).Inc()
@@ -1052,8 +1065,12 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		}
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
+	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
+	return flows, true
+}
 
-	// Reiterate on per-cpu maps
+// accumulateSecondaryMaps merges per-CPU / secondary eBPF map metrics into the main flow map.
+func (m *FlowFetcher) accumulateSecondaryMaps(flows map[ebpf.BpfFlowId]model.BpfFlowContent, met *metrics.Metrics) {
 	if m.config.EnableDNSTracking {
 		var dns []ebpf.BpfDnsMetrics
 		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
@@ -1098,6 +1115,10 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 			}
 		})
 		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+		if m.config.EnableIPsecTracking {
+			// Correlate IPsec partials (inner xfrm 5-tuple) with on-wire ESP/NAT-T flows.
+			mergeIPsecOrphans(flows)
+		}
 	}
 	if m.config.QUICTrackingMode != 0 {
 		var quic []ebpf.BpfQuicMetrics
@@ -1108,11 +1129,7 @@ func (m *FlowFetcher) LookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowI
 		})
 		met.FlowBufferSizeGauge.WithBufferName("quicmap").Set(float64(countQuic))
 	}
-	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
-
-	m.ReadGlobalCounter(met)
-	return flows
 }
 
 func lookupAndDeletePerCPUMap(

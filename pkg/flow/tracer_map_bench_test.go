@@ -94,6 +94,7 @@ func BenchmarkEvictFlows(b *testing.B) {
 			done := make(chan struct{})
 			go func() {
 				for range out {
+					continue // drain so evictFlows never blocks
 				}
 				close(done)
 			}()
