@@ -18,6 +18,7 @@ func TestRegisterer(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10, metrics.NoOp())
+	watcher.netNamespaces = defaultNetNSForTest
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -91,6 +92,7 @@ func TestRegisterer_Lookup(t *testing.T) {
 	)
 
 	watcher := NewWatcher(10, metrics.NoOp())
+	watcher.netNamespaces = defaultNetNSForTest
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -155,6 +157,7 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10, metrics.NoOp())
+	watcher.netNamespaces = defaultNetNSForTest
 	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
 	require.NoError(t, err)
 

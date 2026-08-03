@@ -68,6 +68,16 @@
 #include "openssl_tracker.h"
 
 /*
+ * Defines gotls tracker
+ */
+#include "gotls_tracker.h"
+
+/*
+ * Defines ktls tracker
+ */
+#include "ktls_tracker.h"
+
+/*
  * Defines quic tracker
  */
 #include "quic_tracker.h"

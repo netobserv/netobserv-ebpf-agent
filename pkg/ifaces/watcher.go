@@ -37,6 +37,7 @@ type Watcher struct {
 	mutex            *sync.Mutex
 	netnsWatcher     *fsnotify.Watcher
 	nsDone           sync.Map
+	netNamespaces    func() ([]string, error)
 }
 
 func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
@@ -56,7 +57,11 @@ func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 	out := make(chan Event, w.bufLen)
-	netns, err := getNetNS()
+	getNS := w.netNamespaces
+	if getNS == nil {
+		getNS = getNetNS
+	}
+	netns, err := getNS()
 	if err != nil {
 		w.nsDone.Store("", make(chan struct{}))
 		go w.sendUpdates(ctx, "", out)

@@ -17,6 +17,10 @@ var Maps = []string{
 	"ipsec_ingress_map",
 	"ipsec_egress_map",
 	"ssl_data_event_map",
+	"ssl_read_active_map",
+	"ssl_fd_map",
+	"ktls_stats",
 	"dns_name_map",
 	"quic_flows",
+	"sock_hash",
 }
