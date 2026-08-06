@@ -21,7 +21,7 @@ const (
 	TLSSourceKTLS    = "ktls"
 )
 
-// PlaintextRecord holds TLS plaintext captured via uprobes or kTLS.
+// PlaintextRecord holds TLS plaintext captured via OpenSSL uprobes.
 type PlaintextRecord struct {
 	Timestamp time.Time
 	Pid       uint32

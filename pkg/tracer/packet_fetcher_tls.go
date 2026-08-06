@@ -10,14 +10,8 @@ import (
 	agentebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 )
 
-const (
-	constEnableGoTLSTracking = "enable_gotls_tracking"
-	constEnableKTLSTracking  = "enable_ktls_tracking"
-	sockHashMap              = "sock_hash"
-)
-
 func tlsPlaintextEnabled(cfg *FlowFetcherConfig) bool {
-	return cfg.EnableOpenSSLTracking || cfg.EnableGoTLSTracking || cfg.EnableKTLSTracking
+	return opensslTrackingEnabled(cfg)
 }
 
 func opensslTrackingEnabled(cfg *FlowFetcherConfig) bool {
@@ -29,37 +23,17 @@ func setTLSCaptureVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig)
 	if opensslTrackingEnabled(cfg) {
 		enableOpenSSL = 1
 	}
-	enableGoTLS := 0
-	if cfg.EnableGoTLSTracking {
-		enableGoTLS = 1
-	}
-	enableKTLS := 0
-	if cfg.EnableKTLSTracking {
-		enableKTLS = 1
-	}
-	vars := []variablesMapping{
-		{agentebpf.BpfVarEnableOpensslTracking, uint8(enableOpenSSL)},
-		{constEnableGoTLSTracking, uint8(enableGoTLS)},
-		{constEnableKTLSTracking, uint8(enableKTLS)},
-	}
-	for _, v := range vars {
-		if err := setVariable(spec, v.key, v.value); err != nil {
-			return fmt.Errorf("setting TLS capture variable %s: %w", v.key, err)
-		}
+	if err := setVariable(spec, agentebpf.BpfVarEnableOpensslTracking, uint8(enableOpenSSL)); err != nil {
+		return fmt.Errorf("setting TLS capture variable %s: %w", agentebpf.BpfVarEnableOpensslTracking, err)
 	}
 	return nil
 }
 
 type tlsBpfPrograms struct {
-	ProbeEntrySSLWrite   *cilium.Program `ebpf:"probe_entry_SSL_write"`
-	ProbeEntrySSLSetFd   *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
-	ProbeEntrySSLRead    *cilium.Program `ebpf:"probe_entry_SSL_read"`
-	ProbeRetSSLRead      *cilium.Program `ebpf:"probe_ret_SSL_read"`
-	ProbeEntryGotlsWrite *cilium.Program `ebpf:"probe_entry_gotls_write"`
-	ProbeEntryGotlsRead  *cilium.Program `ebpf:"probe_entry_gotls_read"`
-	ProbeRetGotlsRead    *cilium.Program `ebpf:"probe_ret_gotls_read"`
-	BpfSockops           *cilium.Program `ebpf:"bpf_sockops"`
-	BpfKtlsRedir         *cilium.Program `ebpf:"bpf_ktls_redir"`
+	ProbeEntrySSLWrite *cilium.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeEntrySSLSetFd *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
+	ProbeEntrySSLRead  *cilium.Program `ebpf:"probe_entry_SSL_read"`
+	ProbeRetSSLRead    *cilium.Program `ebpf:"probe_ret_SSL_read"`
 }
 
 type packetFetcherTLS struct {
@@ -152,8 +126,5 @@ func tlsMapSizing(spec *cilium.CollectionSpec, cfg *FlowFetcherConfig) {
 	minEntries := uint32(os.Getpagesize())
 	if !tlsPlaintextEnabled(cfg) {
 		spec.Maps[agentebpf.BpfMapSslDataEventMap].MaxEntries = minEntries
-	}
-	if !cfg.EnableKTLSTracking {
-		spec.Maps[sockHashMap].MaxEntries = 1
 	}
 }

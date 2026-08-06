@@ -47,10 +47,8 @@ define MAPS
 	"ssl_data_event_map":"ringbuf",
 	"ssl_read_active_map":"hash",
 	"ssl_fd_map":"lru_hash",
-	"ktls_stats":"per_cpu_array",
 	"dns_name_map":"per_cpu_array",
-	"quic_flows":"per_cpu_hash",
-	"sock_hash":"sockhash"
+	"quic_flows":"per_cpu_hash"
 }
 endef
 

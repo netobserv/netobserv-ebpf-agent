@@ -14,7 +14,7 @@ func TestReadPlaintextFromKernelTuple(t *testing.T) {
 	_ = binary.Write(&buf, binary.LittleEndian, int32(3))
 	_ = binary.Write(&buf, binary.LittleEndian, uint8(0)) // ssl_type
 	_ = binary.Write(&buf, binary.LittleEndian, uint8(0)) // direction write
-	_ = binary.Write(&buf, binary.LittleEndian, uint8(2)) // ktls
+	_ = binary.Write(&buf, binary.LittleEndian, uint8(2)) // tls_source=ktls (forward-compat enum)
 	_ = binary.Write(&buf, binary.LittleEndian, uint8(1)) // tuple_valid
 	_ = binary.Write(&buf, binary.LittleEndian, uint16(8443))
 	_ = binary.Write(&buf, binary.LittleEndian, uint16(40494))

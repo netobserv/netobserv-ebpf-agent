@@ -332,7 +332,7 @@ struct ssl_data_event_t {
     s32 data_len;
     u8 ssl_type;
     u8 direction;   // 0=write/outbound, 1=read/inbound
-    u8 tls_source;  // 0=openssl, 1=gotls, 2=ktls
+    u8 tls_source;  // 0=openssl (1=gotls, 2=ktls reserved)
     u8 tuple_valid; // 1 when src_addr/dst_addr/ports are populated (kTLS sk_msg)
     u16 src_port;
     u16 dst_port;

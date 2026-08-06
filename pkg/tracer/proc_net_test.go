@@ -112,52 +112,10 @@ func TestPlaintextScopeMatchesProcessIDNotThreadID(t *testing.T) {
 	scope.allowedPIDs = map[int]struct{}{42: {}}
 	scope.pidScopeActive = true
 
-	// Go TLS hooks often fire on worker threads: TGID=42 in high bits, tid=99 in low bits.
-	rec := &model.PlaintextRecord{Pid: 42, Tgid: 99, Data: []byte("gotls-test-pod"), Direction: model.PlaintextDirectionWrite}
+	// Uprobe hooks often fire on worker threads: TGID=42 in high bits, tid=99 in low bits.
+	rec := &model.PlaintextRecord{Pid: 42, Tgid: 99, Data: []byte("openssl-test-pod"), Direction: model.PlaintextDirectionWrite}
 	if !scope.Process(rec) {
 		t.Fatal("expected process ID from high bits to match peer_ip PID scope")
-	}
-}
-
-func TestPlaintextScopeKTLSBypassesPIDAllowlist(t *testing.T) {
-	scope := NewPlaintextScope([]*FilterConfig{{
-		PeerIP: "10.129.0.37",
-		Port:   intstr.FromInt32(8443),
-	}}, "", false, time.Second, 0)
-	scope.pidScopeActive = true
-	// Simulate peer_ip scope refresh with no hostPID: allowed set stays empty.
-	scope.allowedPIDs = map[int]struct{}{}
-
-	rec := &model.PlaintextRecord{
-		Pid:       12345,
-		Data:      []byte("ktls-test-pod path=/"),
-		Direction: model.PlaintextDirectionWrite,
-		TLSSource: model.TLSSourceKTLS,
-	}
-	if !scope.Process(rec) {
-		t.Fatal("expected kTLS plaintext to pass without PID allowlist when peer_ip is set")
-	}
-}
-
-func TestPlaintextScopeKTLSAllowsZeroPID(t *testing.T) {
-	scope := NewPlaintextScope([]*FilterConfig{{
-		PeerIP: "10.244.0.5",
-		Port:   intstr.FromInt32(8443),
-	}}, "", false, time.Second, 0)
-	scope.pidScopeActive = true
-	scope.allowedPIDs = map[int]struct{}{}
-
-	rec := &model.PlaintextRecord{
-		Pid:       0,
-		Data:      []byte("ktls-test-pod path=/"),
-		Direction: model.PlaintextDirectionWrite,
-		TLSSource: model.TLSSourceKTLS,
-	}
-	if !scope.Process(rec) {
-		t.Fatal("expected kTLS plaintext with pid 0 to pass when peer_ip is scoped")
-	}
-	if rec.SrcAddr != "10.244.0.5" || rec.SrcPort != 8443 {
-		t.Fatalf("expected partial 5-tuple from peer_ip scope, got %s:%d -> %s:%d", rec.SrcAddr, rec.SrcPort, rec.DstAddr, rec.DstPort)
 	}
 }
 
@@ -178,18 +136,39 @@ func TestPlaintextScopeAllowsPlaintextWithoutTupleWhenPortFiltered(t *testing.T)
 }
 
 func TestPlaintextScopePeerIPOnlyPartialTuple(t *testing.T) {
+	tmp := t.TempDir()
+	proc := filepath.Join(tmp, "proc")
+	pidDir := filepath.Join(proc, "42", "net")
+	if err := os.MkdirAll(pidDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Empty TCP tables so enrichment falls back to peer_ip filter scope.
+	header := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+	if err := os.WriteFile(filepath.Join(pidDir, "tcp"), []byte(header), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pidDir, "tcp6"), []byte(header), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := procRootDir
+	procRootDir = proc
+	t.Cleanup(func() { procRootDir = orig })
+
 	scope := NewPlaintextScope([]*FilterConfig{{
 		PeerIP: "10.244.2.2",
-	}}, "", false, time.Second, 0)
+	}}, "42", false, time.Second, 0)
+	scope.allowedPIDs = map[int]struct{}{42: {}}
+	scope.pidScopeActive = true
 
 	rec := &model.PlaintextRecord{
-		Pid:       0,
+		Pid:       42,
 		Data:      []byte("GET / HTTP/1.1"),
 		Direction: model.PlaintextDirectionWrite,
-		TLSSource: model.TLSSourceKTLS,
+		TLSSource: model.TLSSourceOpenSSL,
 	}
 	if !scope.Process(rec) {
-		t.Fatal("expected kTLS plaintext with peer_ip only")
+		t.Fatal("expected OpenSSL plaintext with peer_ip scope")
 	}
 	if rec.SrcAddr != "10.244.2.2" {
 		t.Fatalf("expected partial SrcAddr from peer_ip, got %q", rec.SrcAddr)
@@ -202,13 +181,13 @@ func TestPlaintextScopePortOnlyPartialTuple(t *testing.T) {
 	}}, "", false, time.Second, 0)
 
 	rec := &model.PlaintextRecord{
-		Pid:       0,
+		Pid:       42,
 		Data:      []byte("GET / HTTP/1.1"),
 		Direction: model.PlaintextDirectionWrite,
-		TLSSource: model.TLSSourceKTLS,
+		TLSSource: model.TLSSourceOpenSSL,
 	}
 	if !scope.Process(rec) {
-		t.Fatal("expected kTLS plaintext with port only")
+		t.Fatal("expected OpenSSL plaintext with port only")
 	}
 	if rec.SrcPort != 8443 {
 		t.Fatalf("expected partial SrcPort from port filter, got %d", rec.SrcPort)
@@ -260,10 +239,10 @@ func TestPlaintextScopePortOnlyEnrichesFromProc(t *testing.T) {
 	}}, "", false, time.Second, 0)
 
 	rec := &model.PlaintextRecord{
-		Pid:       0,
+		Pid:       843,
 		Data:      []byte("GET / HTTP/1.1"),
 		Direction: model.PlaintextDirectionWrite,
-		TLSSource: model.TLSSourceKTLS,
+		TLSSource: model.TLSSourceOpenSSL,
 	}
 	if !scope.Process(rec) {
 		t.Fatal("expected port-only enrichment from /proc")

@@ -37,16 +37,10 @@ type PlaintextScope struct {
 
 	minBytes int
 
-	connAffinity   map[connAffinityKey]string
-	pidNetIPs      map[int][]net.IP
-	gotlsFDLayouts map[binaryInodeKey]*GoTLSFDLayout
+	connAffinity map[connAffinityKey]string
+	pidNetIPs    map[int][]net.IP
 
 	stopCh chan struct{}
-}
-
-type binaryInodeKey struct {
-	Dev uint64
-	Ino uint64
 }
 
 type connAffinityKey struct {
@@ -74,7 +68,6 @@ func NewPlaintextScope(
 		dedup:           map[uint64]time.Time{},
 		connAffinity:    map[connAffinityKey]string{},
 		pidNetIPs:       map[int][]net.IP{},
-		gotlsFDLayouts:  map[binaryInodeKey]*GoTLSFDLayout{},
 		minBytes:        minBytes,
 		stopCh:          make(chan struct{}),
 	}
@@ -253,24 +246,6 @@ func (s *PlaintextScope) Process(rec *model.PlaintextRecord) bool {
 
 func (s *PlaintextScope) resolveScopedPID(rec *model.PlaintextRecord) (int, bool) {
 	raw := resolvePlaintextHostPID(rec)
-	// kTLS events come from the kernel sk_msg path; PID allowlist discovery via
-	// /proc is for uprobe targets and must not gate kernel-offloaded plaintext.
-	if rec.TLSSource == model.TLSSourceKTLS {
-		if raw > 0 {
-			return raw, true
-		}
-		if host := s.scopedTargetPID(); host > 0 {
-			return host, true
-		}
-		// sk_msg can report pid 0; still export when peer_ip/peer_cidr scopes capture.
-		if s.pidScopeActive && (len(s.peerIPs) > 0 || len(s.peerNets) > 0) {
-			return 0, true
-		}
-		if !s.pidScopeActive {
-			return 0, true
-		}
-		return 0, false
-	}
 	if !s.pidScopeActive {
 		return raw, raw > 0
 	}
@@ -302,7 +277,7 @@ func (s *PlaintextScope) admitPID(pid int) {
 	s.mu.Unlock()
 }
 
-// scopedTargetPID picks the allowed process that should own GoTLS plaintext events.
+// scopedTargetPID picks the allowed process that should own plaintext events.
 // peer_ip discovery often includes the pod pause process plus the workload container.
 func (s *PlaintextScope) scopedTargetPID() int {
 	s.mu.RLock()
@@ -368,15 +343,6 @@ func (s *PlaintextScope) pidMatchesPeerScope(pid int) bool {
 	return false
 }
 
-func (s *PlaintextScope) RegisterGoTLSFDLayout(dev, ino uint64, layout *GoTLSFDLayout) {
-	if s == nil || layout == nil || ino == 0 {
-		return
-	}
-	s.mu.Lock()
-	s.gotlsFDLayouts[binaryInodeKey{Dev: dev, Ino: ino}] = layout
-	s.mu.Unlock()
-}
-
 func (s *PlaintextScope) enrichFiveTuple(rec *model.PlaintextRecord, pid int) {
 	if rec != nil && rec.SrcAddr != "" && rec.DstAddr != "" && rec.SrcPort > 0 && rec.DstPort > 0 {
 		if rec.Protocol == "" {
@@ -434,34 +400,10 @@ func (s *PlaintextScope) resolveSocketFD(rec *model.PlaintextRecord, pid int) (i
 	if rec.SocketFd >= 0 {
 		return int(rec.SocketFd), true
 	}
-	switch rec.TLSSource {
-	case model.TLSSourceOpenSSL:
-		if rec.ConnPtr != 0 {
-			return readOpenSSLFdFromSSL(pid, rec.ConnPtr)
-		}
-	case model.TLSSourceGoTLS:
-		if rec.ConnPtr != 0 {
-			layout := s.goTLSLayoutForPID(pid)
-			if layout != nil {
-				return readGoTLSFdFromConn(pid, rec.ConnPtr, layout)
-			}
-		}
+	if rec.TLSSource == model.TLSSourceOpenSSL && rec.ConnPtr != 0 {
+		return readOpenSSLFdFromSSL(pid, rec.ConnPtr)
 	}
 	return 0, false
-}
-
-func (s *PlaintextScope) goTLSLayoutForPID(pid int) *GoTLSFDLayout {
-	if pid <= 0 {
-		return nil
-	}
-	key, ok := procExeInode(pid)
-	if !ok {
-		return nil
-	}
-	s.mu.RLock()
-	layout := s.gotlsFDLayouts[binaryInodeKey{Dev: key.dev, Ino: key.ino}]
-	s.mu.RUnlock()
-	return layout
 }
 
 func (s *PlaintextScope) netnsIPs(pid int) []net.IP {
@@ -522,7 +464,7 @@ func procConnKey(c *procTCPConn) string {
 }
 
 // connectionsForEnrichment returns established TCP sockets for 5-tuple enrichment.
-// kTLS sk_msg often reports pid 0; scan all scoped workload PIDs in that case.
+// When pid is unknown, scan scoped workload PIDs (and filter-based discovery as fallback).
 func (s *PlaintextScope) connectionsForEnrichment(pid int) []procTCPConn {
 	var pids []int
 	if pid > 0 {
@@ -617,7 +559,7 @@ func applyWorkloadPartialTuple(rec *model.PlaintextRecord, peer net.IP, port uin
 }
 
 // enrichFromFilterScope fills a partial 5-tuple when /proc lookup fails but flow
-// filters identify the workload endpoint (peer_ip and/or port; common for kTLS pid 0).
+// filters identify the workload endpoint (peer_ip and/or port).
 func (s *PlaintextScope) enrichFromFilterScope(rec *model.PlaintextRecord) {
 	if rec == nil || (rec.SrcAddr != "" && rec.DstAddr != "") {
 		return

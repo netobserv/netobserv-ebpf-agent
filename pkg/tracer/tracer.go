@@ -1804,7 +1804,6 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 		ebpf.BpfMapSslDataEventMap,
 		ebpf.BpfMapDnsNameMap,
 		ebpf.BpfMapQuicFlows,
-		sockHashMap,
 	} {
 		spec.Maps[m].Pinning = 0
 	}
@@ -1852,8 +1851,6 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 	delete(spec.Programs, ebpf.BpfVarEnableIpsec)
 	delete(spec.Programs, ebpf.BpfVarEnableDirectflowsRingbuf)
 	delete(spec.Programs, ebpf.BpfVarEnableOpensslTracking)
-	delete(spec.Programs, constEnableGoTLSTracking)
-	delete(spec.Programs, constEnableKTLSTracking)
 	delete(spec.Programs, ebpf.BpfMapDnsNameMap)
 	delete(spec.Programs, ebpf.BpfVarEnableQuicTracking)
 	if err := spec.LoadAndAssign(&newObjects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
@@ -1890,18 +1887,12 @@ func NewPacketFetcher(cfg *FlowFetcherConfig) (*PacketFetcher, error) {
 			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
 			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
 			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntryGotlsWrite:    newObjects.ProbeEntryGotlsWrite,
-			ProbeEntryGotlsRead:     newObjects.ProbeEntryGotlsRead,
-			ProbeRetGotlsRead:       newObjects.ProbeRetGotlsRead,
-			BpfSockops:              newObjects.BpfSockops,
-			BpfKtlsRedir:            newObjects.BpfKtlsRedir,
 		},
 		BpfMaps: ebpf.BpfMaps{
 			PacketRecord:    newObjects.PacketRecord,
 			SslDataEventMap: newObjects.SslDataEventMap,
 			FilterMap:       newObjects.FilterMap,
 			PeerFilterMap:   newObjects.PeerFilterMap,
-			SockHash:        newObjects.SockHash,
 		},
 	}
 
@@ -2152,78 +2143,60 @@ func (p *PacketFetcher) AttachTCX(iface *ifaces.Interface) error {
 	}
 
 	if p.enableEgress {
-		egrLink, err := link.AttachTCX(link.TCXOptions{
-			Program:   p.objects.BpfPrograms.TcxEgressPcaParse,
-			Attach:    cilium.AttachTCXEgress,
-			Interface: iface.Index,
-			Anchor:    p.egressAnchor,
-		})
+		egrLink, err := p.attachTCXOnDirection(iface, "Egress", p.objects.BpfPrograms.TcxEgressPcaParse, cilium.AttachTCXEgress, p.egressAnchor)
 		if err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				// The interface already has a TCX egress hook
-				log.WithField("iface", iface.Name).Debug("interface already has a TCX PCA egress hook ignore")
-				if q, err := link.QueryPrograms(link.QueryOptions{
-					Target: iface.Index,
-					Attach: cilium.AttachTCXEgress,
-				}); err == nil {
-					for _, id := range q.Programs {
-						linkID, ok := id.LinkID()
-						if !ok {
-							return NewError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
-						}
-						if egrLink, err = link.NewFromID(linkID); err != nil {
-							return NewError("Attach:CantCreateEgressLinkID", fmt.Errorf("failed to get link for egress flow to %s: %w", iface.Name, err))
-						}
-						ilog.WithField("link", linkID).Debug("attaching egress flow to link")
-					}
-				} else {
-					return NewError("Attach:CantQueryTCXEgress", fmt.Errorf("failed to query TCX egress flow to %s: %w", iface.Name, err))
-				}
-			} else {
-				return NewError("Attach:CantAttachTCXEgress", fmt.Errorf("failed to attach PCA TCX egress: %w", err))
-			}
+			return err
 		}
 		p.egressTCXLink[iface.InterfaceKey] = egrLink
-		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA egressTCX hook")
 	}
 
 	if p.enableIngress {
-		ingLink, err := link.AttachTCX(link.TCXOptions{
-			Program:   p.objects.BpfPrograms.TcxIngressPcaParse,
-			Attach:    cilium.AttachTCXIngress,
-			Interface: iface.Index,
-			Anchor:    p.ingressAnchor,
-		})
+		ingLink, err := p.attachTCXOnDirection(iface, "Ingress", p.objects.BpfPrograms.TcxIngressPcaParse, cilium.AttachTCXIngress, p.ingressAnchor)
 		if err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				// The interface already has a TCX ingress hook
-				log.WithField("iface", iface.Name).Debug("interface already has a TCX PCA ingress hook ignore")
-				if q, err := link.QueryPrograms(link.QueryOptions{
-					Target: iface.Index,
-					Attach: cilium.AttachTCXEgress,
-				}); err == nil {
-					for _, id := range q.Programs {
-						linkID, ok := id.LinkID()
-						if !ok {
-							return NewError("Attach:CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
-						}
-						if ingLink, err = link.NewFromID(linkID); err != nil {
-							return NewError("Attach:CantCreateIngressLinkID", fmt.Errorf("failed to get link for ingress flow to %s: %w", iface.Name, err))
-						}
-						ilog.WithField("link", linkID).Debug("attaching ingress flow to link")
-					}
-				} else {
-					return NewError("Attach:CantQueryTCXIngress", fmt.Errorf("failed to query TCX ingress flow to %s: %w", iface.Name, err))
-				}
-			} else {
-				return NewError("Attach:CantAttachTCXIngress", fmt.Errorf("failed to attach PCA TCX ingress: %w", err))
-			}
+			return err
 		}
 		p.ingressTCXLink[iface.InterfaceKey] = ingLink
-		ilog.WithField("interface", iface.Name).Debug("successfully attach PCA ingressTCX hook")
 	}
 
 	return nil
+}
+
+func (p *PacketFetcher) attachTCXOnDirection(iface *ifaces.Interface, dirName string, prg *cilium.Program, attach cilium.AttachType, anchor link.Anchor) (link.Link, error) {
+	ilog := log.WithField("iface", iface)
+
+	lnk, err := link.AttachTCX(link.TCXOptions{
+		Program:   prg,
+		Attach:    attach,
+		Interface: iface.Index,
+		Anchor:    anchor,
+	})
+	if err != nil {
+		errPrefix := "Attach" + dirName
+		if errors.Is(err, fs.ErrExist) {
+			log.WithField("iface", iface.Name).Debugf("interface already has a TCX PCA %s hook ignore", dirName)
+			if q, err := link.QueryPrograms(link.QueryOptions{
+				Target: iface.Index,
+				Attach: attach,
+			}); err == nil {
+				for _, id := range q.Programs {
+					linkID, ok := id.LinkID()
+					if !ok {
+						return nil, NewError(errPrefix+":CantGetLinkID", fmt.Errorf("failed to get linkID for %s: %w", iface.Name, err))
+					}
+					if lnk, err = link.NewFromID(linkID); err != nil {
+						return nil, NewError(errPrefix+":CantCreateLinkID", fmt.Errorf("failed to get link for PCA %s to %s: %w", dirName, iface.Name, err))
+					}
+					ilog.WithField("link", linkID).Debugf("attaching PCA %s to link", dirName)
+				}
+			} else {
+				return nil, NewError(errPrefix+":CantQueryTCX", fmt.Errorf("failed to query TCX PCA %s to %s: %w", dirName, iface.Name, err))
+			}
+		} else {
+			return nil, NewError(errPrefix+":CantAttachTCX", fmt.Errorf("failed to attach PCA TCX %s: %w", dirName, err))
+		}
+	}
+	ilog.WithField("interface", iface.Name).Debugf("successfully attach PCA %s TCX hook", dirName)
+	return lnk, nil
 }
 
 func fetchEgressEvents(iface *ifaces.Interface, ipvlan netlink.Link, parser *cilium.Program, name string) (*netlink.BpfFilter, error) {
@@ -2458,8 +2431,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 	enableTLSTracking := boolUint8(cfg.EnableTLSTracking)
 	enableDirectFlowRingbuf := boolUint8(cfg.EnableFlowsRingbufFallback)
 	enableOpenSSLTracking := boolUint8(opensslTrackingEnabled(cfg))
-	enableGoTLSTracking := boolUint8(cfg.EnableGoTLSTracking)
-	enableKTLSTracking := boolUint8(cfg.EnableKTLSTracking)
 	enableQUICTracking := flowQUICSpec(cfg)
 
 	// When adding constants here, remember to delete them in NewPacketFetcher
@@ -2477,8 +2448,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *FlowFetcherCon
 		{ebpf.BpfVarEnableIpsec, enableIPsec},
 		{ebpf.BpfVarEnableDirectflowsRingbuf, enableDirectFlowRingbuf},
 		{ebpf.BpfVarEnableOpensslTracking, enableOpenSSLTracking},
-		{constEnableGoTLSTracking, enableGoTLSTracking},
-		{constEnableKTLSTracking, enableKTLSTracking},
 		{ebpf.BpfVarEnableTlsUsageTracking, enableTLSTracking},
 		{ebpf.BpfVarEnableQuicTracking, uint8(enableQUICTracking)},
 	}

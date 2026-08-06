@@ -281,22 +281,8 @@ type Agent struct {
 	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
 	// EnableOpenSSLTracking attaches uprobes to libssl SSL_read/SSL_write for plaintext capture (PCA mode).
 	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
-	// EnableGoTLSTracking enables Go crypto/tls plaintext capture
-	EnableGoTLSTracking bool `env:"ENABLE_GOTLS_TRACKING" envDefault:"false"`
-	// EnableKTLSTracking enables kernel TLS plaintext capture via sk_msg
-	EnableKTLSTracking bool `env:"ENABLE_KTLS_TRACKING" envDefault:"false"`
 	// OpenSSLPath path to the openssl binary or libssl.so
 	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/lib64/libssl.so.3"`
-	// GoTLSElfPath path to the Go binary for GoTLS uprobes
-	GoTLSElfPath string `env:"GOTLS_ELF_PATH"`
-	// GoTLSWriteOffset uprobe offset for crypto/tls.(*Conn).Write
-	GoTLSWriteOffset uint64 `env:"GOTLS_WRITE_OFFSET"`
-	// GoTLSReadOffset uprobe offset for crypto/tls.(*Conn).Read (RET site when GOTLS_READ_RET_SITES=true, else ignored)
-	GoTLSReadOffset uint64 `env:"GOTLS_READ_OFFSET"`
-	// GoTLSCaptureRead attaches a uretprobe at crypto/tls.(*Conn).Read for inbound plaintext (HTTP requests on servers).
-	GoTLSCaptureRead bool `env:"GOTLS_CAPTURE_READ" envDefault:"false"`
-	// GoTLSReadRetSites attaches at every RET in Read instead of a single uretprobe (legacy eCapture-style; can destabilize targets).
-	GoTLSReadRetSites bool `env:"GOTLS_READ_RET_SITES" envDefault:"false"`
 	// TLSPlaintextPIDAllowlist optional comma-separated PIDs to scope TLS plaintext capture
 	TLSPlaintextPIDAllowlist string `env:"TLS_PLAINTEXT_PID_ALLOWLIST"`
 	// TLSPlaintextDedupEnabled drops duplicate plaintext events within the dedup window

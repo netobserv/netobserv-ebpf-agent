@@ -1,10 +1,14 @@
 package tracer
 
 import (
+	"debug/buildinfo"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
@@ -124,13 +128,36 @@ func procComm(pid int) string {
 	return strings.TrimSpace(string(data))
 }
 
-func procExeInode(pid int) (goTLSInode, bool) {
+func procExeInode(pid int) (exeInode, bool) {
 	if pid <= 0 {
-		return goTLSInode{}, false
+		return exeInode{}, false
 	}
 	dev, ino, err := statInode(filepath.Join(procRootDir, strconv.Itoa(pid), "exe"))
 	if err != nil {
-		return goTLSInode{}, false
+		return exeInode{}, false
 	}
-	return goTLSInode{dev: dev, ino: ino}, true
+	return exeInode{dev: dev, ino: ino}, true
+}
+
+// exeInode identifies a binary by device and inode for cross-PID matching.
+type exeInode struct {
+	dev uint64
+	ino uint64
+}
+
+func isGoExecutable(path string) bool {
+	_, err := buildinfo.ReadFile(path)
+	return err == nil
+}
+
+func statInode(path string) (dev, ino uint64, err error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, 0, fmt.Errorf("statInode(%q): %w", path, err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, errors.New("stat inode unavailable")
+	}
+	return uint64(st.Dev), st.Ino, nil
 }
