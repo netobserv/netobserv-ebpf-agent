@@ -88,9 +88,9 @@ func minVersionFromEnv() (value uint16, set bool, err error) {
 // definitions (e.g. OpenShift's Intermediate/Modern TLSSecurityProfile)
 // legitimately list them alongside real TLS 1.0-1.2 suite IDs.
 var tls13CipherSuiteIDs = map[uint16]struct{}{
-	4865: {}, // TLS_AES_128_GCM_SHA256
-	4866: {}, // TLS_AES_256_GCM_SHA384
-	4867: {}, // TLS_CHACHA20_POLY1305_SHA256
+	tls.TLS_AES_128_GCM_SHA256:       {},
+	tls.TLS_AES_256_GCM_SHA384:       {},
+	tls.TLS_CHACHA20_POLY1305_SHA256: {},
 }
 
 func cipherSuitesFromEnv() ([]uint16, error) {
