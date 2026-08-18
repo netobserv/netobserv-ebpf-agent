@@ -322,10 +322,12 @@ tar-image: image-build ## Build single arch (amd64) and save as a tar
 
 .PHONY: tar-bc-image
 tar-bc-image: MULTIARCH_TARGETS=amd64
-tar-bc-image: bc-image-build ## Build single arch (amd64) bytecode and save as a tar
-	$(OCI_BIN) tag $(BC_IMAGE)-amd64 $(BC_IMAGE)
+tar-bc-image: bc-image-build ## Build single arch (amd64) flow and packet bytecode images and save as a tar
+	$(OCI_BIN) tag $(BC_FLOW_IMAGE)-amd64 $(BC_FLOW_IMAGE)
+	$(OCI_BIN) tag $(BC_PACKET_IMAGE)-amd64 $(BC_PACKET_IMAGE)
+	$(OCI_BIN) tag $(BC_FLOW_IMAGE) $(BC_IMAGE)
 	mkdir -p ./out
-	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_IMAGE)
+	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_FLOW_IMAGE) $(BC_PACKET_IMAGE)
 
 include .mk/bc.mk
 include .mk/shortcuts.mk

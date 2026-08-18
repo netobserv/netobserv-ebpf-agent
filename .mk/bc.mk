@@ -1,10 +1,17 @@
 ##@ bytecode images
 
 BC_IMAGE_TAG_BASE ?= quay.io/${IMAGE_ORG}/ebpf-bytecode
+
+# When BC_IMAGE is set (e.g. CI: quay.io/netobserv/ebpf-bytecode:tmp), derive split image names.
+# Otherwise default to -flows / -packets suffixes with VERSION.
+ifneq ($(origin BC_IMAGE),command line)
 BC_FLOW_IMAGE ?= $(BC_IMAGE_TAG_BASE)-flows:$(VERSION)
 BC_PACKET_IMAGE ?= $(BC_IMAGE_TAG_BASE)-packets:$(VERSION)
-# Backward-compatible alias: flow bytecode image
 BC_IMAGE ?= $(BC_FLOW_IMAGE)
+else
+BC_FLOW_IMAGE ?= $(subst /ebpf-bytecode:,/ebpf-bytecode-flows:,$(BC_IMAGE))
+BC_PACKET_IMAGE ?= $(subst /ebpf-bytecode:,/ebpf-bytecode-packets:,$(BC_IMAGE))
+endif
 
 # FLOW_PROGRAMS is a list of <program name>:<program type> tuples
 define FLOW_PROGRAMS
