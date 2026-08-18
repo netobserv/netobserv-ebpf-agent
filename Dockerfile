@@ -1,5 +1,11 @@
 ARG TARGETARCH
 
+# PQC crypto-policies builder
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8 AS crypto-builder
+RUN microdnf install -y crypto-policies-scripts && \
+    update-crypto-policies --set DEFAULT:PQ && \
+    microdnf clean all && rm -rf /var/cache/*
+
 # Build the manager binary
 FROM docker.io/library/golang:1.26 AS builder
 
@@ -21,8 +27,9 @@ COPY go.sum go.sum
 RUN CGO_ENABLED=0 GOARCH=$TARGETARCH go build -ldflags "$LDFLAGS" -mod vendor -a -o bin/netobserv-ebpf-agent cmd/netobserv-ebpf-agent.go
 
 # Create final image from minimal + built binary
-FROM --platform=linux/$TARGETARCH registry.redhat.io/ubi9/ubi-minimal-pqc:9.8
+FROM --platform=linux/$TARGETARCH registry.access.redhat.com/ubi9/ubi-minimal:1784092978
 WORKDIR /
+COPY --from=crypto-builder /etc/crypto-policies/ /etc/crypto-policies/
 COPY --from=builder /opt/app-root/bin/netobserv-ebpf-agent .
 USER 65532:65532
 
