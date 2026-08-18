@@ -24,7 +24,7 @@ import (
 	"time"
 
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/packet"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils/packets"
 
 	"github.com/gopacket/gopacket/layers"

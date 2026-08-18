@@ -5,7 +5,7 @@ package pbflow;
 import 'google/protobuf/timestamp.proto';
 import 'google/protobuf/duration.proto';
 
-option go_package = "./pbflow";
+option go_package = "./pb/flow;pbflow";
 
 service Collector {
   rpc Send(Records) returns (CollectorReply) {}

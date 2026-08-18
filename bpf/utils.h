@@ -4,7 +4,7 @@
 #include <bpf_core_read.h>
 #include "types.h"
 #include "maps_definition.h"
-#include "flows_filter.h"
+#include "common/filter.h"
 
 static u8 do_sampling = 0;
 
@@ -167,22 +167,18 @@ static inline int fill_ethhdr(struct ethhdr *eth, void *data_end, pkt_info *pkt,
 }
 
 static inline bool is_filter_enabled() {
-    if (enable_flows_filtering || enable_pca) {
-        return true;
-    }
-    return false;
+    return enable_filtering != 0;
 }
 
 /*
- * check if flow filter is enabled and if we need to continue processing the packet or not
+ * check if filter is enabled and if we need to continue processing the packet or not
  */
-static __always_inline bool check_and_do_flow_filtering(flow_id *id, u16 flags, u32 drop_reason,
-                                                        u16 eth_protocol, u32 *sampling,
-                                                        u8 direction) {
+static __always_inline bool check_and_apply_filter(flow_id *id, u16 flags, u32 drop_reason,
+                                                   u16 eth_protocol, u32 *sampling, u8 direction) {
     // check if this packet need to be filtered if filtering feature is enabled
     if (is_filter_enabled()) {
         filter_action action = ACCEPT;
-        if (is_flow_filtered(id, &action, flags, drop_reason, eth_protocol, sampling, direction) !=
+        if (matches_filter(id, &action, flags, drop_reason, eth_protocol, sampling, direction) !=
                 0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow

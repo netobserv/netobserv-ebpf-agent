@@ -2,7 +2,7 @@
 package pktgrpc
 
 import (
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

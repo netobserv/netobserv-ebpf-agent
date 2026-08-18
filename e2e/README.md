@@ -16,7 +16,7 @@ sudo make tests-e2e
 
 It builds an image with the current code, including pre-generated BPF bytecode, starts a KIND cluster and deploys the agent on it. It also deploys a typical NetObserv stack, that includes flowlogs-pipeline, Loki and/or Kafka.
 
-It then runs a couple of smoke tests on that cluster, such as testing sending pings between pods and verifying that the expected flows are created.
+It then runs smoke tests on that cluster, such as sending pings between pods and verifying that the expected flows are created. Test packages live under `e2e/flows/` (flow mode) and `e2e/packets/` (packet capture mode).
 
 The tests leverage Kube's [e2e-framework](https://github.com/kubernetes-sigs/e2e-framework). They are based on manifest files that you can find in [this directory](./cluster/base/).
 
@@ -49,7 +49,7 @@ When that's the case, you should see a message telling you to manually cleanup t
 ```
 ^CSIGTERM received, cluster might still be running
 To clean up, run: kind delete cluster --name basic-test-cluster20241212-125815
-FAIL	github.com/netobserv/netobserv-ebpf-agent/e2e/basic	172.852s
+FAIL	github.com/netobserv/netobserv-ebpf-agent/e2e/flows	172.852s
 ```
 
 If that's not the case, you can manually retrieve the cluster name to delete:

@@ -6,7 +6,7 @@ Best practices for AI coding agents on NetObserv eBPF Agent.
 
 ## Project Context
 
-**NetObserv eBPF Agent** - Network flow capture and aggregation using eBPF technology on Linux hosts (Kernel 5.8+)
+**NetObserv eBPF Agent** - Network flow capture and aggregation using eBPF technology on Linux hosts (Kernel 5.8+). A single binary runs in **flow mode** (default) or **packet capture mode** (`ENABLE_PCA=true`), loading a dedicated BPF object for each.
 
 **Components:**
 - **eBPF C code** (`bpf/` directory): Runs in kernel space to capture packet data via TC/TCX hooks
@@ -14,13 +14,14 @@ Best practices for AI coding agents on NetObserv eBPF Agent.
 - **Managed by**: [Network Observability Operator](https://github.com/netobserv/network-observability-operator)
 
 **Key Directories:**
-- `bpf/`: eBPF C code (flows.c, types.h, configs.h, feature-specific headers)
-- `pkg/config/`: Configuration via environment variables
-- `pkg/flow/`: Flow aggregation, accounting, and flow tracers (map/ringbuf readers)
-- `pkg/tracer/`: eBPF program loader, TC/TCX hook attachment, flow filtering
-- `pkg/exporter/`: GRPC, Kafka, direct-flp exporters
-- `pkg/ebpf/`: Generated eBPF Go bindings (bpf_*_bpfel.go/o)
-- `proto/`: Protocol buffer definitions
+- `bpf/flows/`, `bpf/packets/`: Separate eBPF objects for flow and packet capture (`flows.c`, `packets.c`, shared `common/filter.h`)
+- `pkg/config/`: Configuration via environment variables (`agent.go`, `flows/`, `packets/`)
+- `pkg/flow/`: Flow-mode userspace pipeline (map tracer, ringbuf tracer, accounter, limiter)
+- `pkg/agent/flows/`, `pkg/agent/packets/`: Mode-specific agents (`ENABLE_PCA` selects at startup)
+- `pkg/tracer/`: eBPF loader and hook attachment (`attach/`, `flows/`, `packets/`)
+- `pkg/decode/`, `pkg/exporter/`, `pkg/pb/`: FLP conversion, export, and protobuf types (split per mode)
+- `pkg/ebpf/flows/`, `pkg/ebpf/packets/`: Generated eBPF Go bindings (bpf2go)
+- `proto/`: Protocol buffer definitions (`flow.proto`, `packet.proto`)
 - `docs/`: Architecture, config reference, eBPF implementation details
 
 ## Critical Constraints
@@ -30,11 +31,11 @@ eBPF verifier requirements:
 - **Bounded loops only**: Verifier must prove loop termination
 - **Stack limit**: 512 bytes maximum
 - **No unbounded recursion**
-- Changes to `bpf/*.c` or `bpf/*.h` require `make docker-generate` or `make generate`
+- Changes to `bpf/flows/` or `bpf/packets/` require `make docker-generate` or `make generate`
 
 ### 🚨 Configuration via Environment Variables Only
 - No config files from agent's perspective
-- Source of truth: `pkg/config/config.go`
+- Source of truth: `pkg/config/agent.go`
 - All options documented in [docs/config.md](./docs/config.md)
 - Agent does NOT access Kubernetes API directly
 
@@ -46,9 +47,9 @@ eBPF verifier requirements:
 
 **Good Example:**
 ```text
-Update bpf/flows.c to add packet drop reason tracking. Store drop reason in
+Update bpf/flows/flows.c to add packet drop reason tracking. Store drop reason in
 additional_flow_metrics per-CPU map. Update pkg/tracer/tracer.go to read and
-merge drop reasons. Add DROPS_TRACKING env var in pkg/config/config.go
+merge drop reasons. Add DROPS_TRACKING env var in pkg/config/agent.go
 (default: false). Run make docker-generate and add unit tests.
 ```
 
@@ -58,7 +59,7 @@ Add drop tracking to eBPF
 ```
 
 **Key Principles:**
-1. Specify exact file paths (`bpf/flows.c`, not "eBPF code")
+1. Specify exact file paths (`bpf/flows/flows.c`, not "eBPF code")
 2. Reference existing patterns (maps, config, exporters)
 3. Mention regeneration steps (`make docker-generate` for eBPF changes)
 4. Check dependencies before adding new packages
@@ -71,7 +72,7 @@ Add PacketDrop tracking to monitor dropped packets:
 
 1. eBPF Implementation:
    - Define data structure in bpf/types.h (e.g., pkt_drop_t with state, drop_cause)
-   - Update bpf/flows.c to hook into kfree_skb tracepoint
+   - Update bpf/flows/flows.c to hook into kfree_skb tracepoint
    - Store drop metadata in flow_record_t or additional_flow_metrics per-CPU map
    - Access kernel debug filesystem (/sys/kernel/debug) for tracepoint data
 
@@ -79,7 +80,7 @@ Add PacketDrop tracking to monitor dropped packets:
    - Update pkg/tracer/tracer.go to read drop data from eBPF maps
    - Update pkg/flow/ tracers (tracer_map.go, tracer_ringbuf.go) to handle drop events
    - Add drop fields to proto/flow.proto (PktDropBytes, PktDropPackets, PktDropLatestState, etc.)
-   - Run make gen-protobuf to regenerate pkg/pbflow/
+   - Run make gen-protobuf to regenerate pkg/pb/flow/
 
 3. Build and Test:
    - Run make docker-generate to regenerate eBPF binaries
@@ -94,7 +95,7 @@ For features NOT requiring privileged mode (e.g., DNSTracking, FlowRTT), skip pr
 ### Add Configuration Parameter
 ```text
 Add cache timeout configuration:
-1. Update pkg/config/config.go:
+1. Update pkg/config/agent.go:
    - Add field to Agent struct with env: tag
    - Set default value
 2. Update docs/config.md with new parameter documentation
@@ -108,12 +109,12 @@ Add cache timeout configuration:
 Add new flow field for packet metadata:
 1. Update proto/flow.proto with new field
 2. Run make prereqs (ensures protoc is installed)
-3. Run make gen-protobuf to regenerate pkg/pbflow/
+3. Run make gen-protobuf to regenerate pkg/pb/flow/
 4. Update bpf/types.h with field in flow_record_t if captured in eBPF
-5. Update bpf/flows.c to populate field
+5. Update bpf/flows/flows.c to populate field
 6. Run make docker-generate for eBPF changes
 7. Update pkg/flow/ to handle new field in aggregation
-8. Update pkg/exporter/ if export format changes
+8. Update pkg/exporter/flows/ if export format changes
 ```
 
 ### Debug Packet Capture Issues
@@ -121,8 +122,8 @@ Add new flow field for packet metadata:
 Flows not captured for specific interface:
 Check pkg/tracer/tracer.go:
 - Verify TC/TCX hook attachment in AttachTCX() or Register()
-- Check interface filtering logic in pkg/agent/interfaces_listener.go
-- Review eBPF map access errors in bpf/flows.c
+- Check interface filtering logic in pkg/agent/common/interfaces_listener.go
+- Review eBPF map access errors in bpf/flows/flows.c
 Suggest fixes with proper error handling patterns.
 ```
 
@@ -138,14 +139,39 @@ Change flow aggregation logic in pkg/flow/account.go:
 ### Add Exporter Configuration
 ```text
 Add request timeout to GRPC exporter:
-1. Update pkg/config/config.go with timeout-related env vars
-2. Update pkg/exporter/grpc_proto.go to use timeout config
+1. Update pkg/config/agent.go with timeout-related env vars
+2. Update pkg/exporter/flows/grpc_proto.go to use timeout config
 3. Add timeout handling logic
 4. Update docs/config.md
 5. Add integration tests in e2e/
 ```
 
 ## Repository-Specific Context
+
+### Agent modes (`ENABLE_PCA`)
+| Mode | Env | BPF object | Agent entry | Userspace pipeline |
+|------|-----|------------|-------------|-------------------|
+| Flow capture (default) | `ENABLE_PCA=false` | `bpf/flows/flows.c` | `pkg/agent/flows` | `pkg/tracer/flows` → `pkg/flow` → `pkg/exporter/flows` |
+| Packet capture (PCA) | `ENABLE_PCA=true` | `bpf/packets/packets.c` | `pkg/agent/packets` | `pkg/tracer/packets` → `pkg/agent/packets` → `pkg/exporter/packets` |
+
+See [docs/architecture.md](docs/architecture.md), [docs/flows/architecture.md](docs/flows/architecture.md), and [docs/packets/architecture.md](docs/packets/architecture.md).
+
+### Import aliases (`flows` / `packets`)
+
+Several layers use the same package names (`flows`, `packets`). The import path is the namespace; use **import aliases** when a file imports more than one (idiomatic Go — no need to rename packages).
+
+| Alias | Import path | Role |
+|-------|-------------|------|
+| `ebpfflows` | `pkg/ebpf/flows` | bpf2go flow bindings |
+| `ebpfpackets` | `pkg/ebpf/packets` | bpf2go packet bindings |
+| `tracerflows` | `pkg/tracer/flows` | Flow BPF loader / attach |
+| `tracerpackets` | `pkg/tracer/packets` | Packet BPF loader / attach |
+| `agentflows` | `pkg/agent/flows` | Flow-mode agent |
+| `packetsagent` | `pkg/agent/packets` | Packet-mode agent |
+| `exporterflows` | `pkg/exporter/flows` | Flow export |
+| `exporterpackets` | `pkg/exporter/packets` | Packet export |
+
+Leaf packages that import only one `flows` or `packets` may use the default name (`flows`, `packets`). Cross-boundary files (`cmd/`, `pkg/agent/flows`, `pkg/agent/packets`, compat shims) should use the aliases above.
 
 ### Export Modes
 Export modes (check `EXPORT` env var):
@@ -165,6 +191,8 @@ Export modes (check `EXPORT` env var):
 - **additional_flow_metrics**: `BPF_MAP_TYPE_PERCPU_HASH` - RTT, IPsec metrics
 - **aggregated_flows_dns**, **aggregated_flows_pkt_drop**, **aggregated_flows_network_events**, **aggregated_flows_xlat**: per-CPU maps for DNS, drops, network events, and address translation
 - **dns_flows**: Global map for DNS request/response matching
+- **packet_record** (packet mode only): ringbuf for raw packet events
+- Map name consistency: `make verify-maps` (`pkg/ebpf/symbols_test.go`)
 - See [docs/ebpf_implementation.md](./docs/ebpf_implementation.md) for details on per-CPU vs regular maps
 
 ### Deployment Requirements
@@ -201,7 +229,7 @@ Review for:
 2. Kernel 5.8+ compatibility (no newer eBPF features)
 3. Error handling (wrap with context)
 4. Unit test coverage (go test)
-5. Configuration in pkg/config/config.go AND docs/config.md
+5. Configuration in pkg/config/agent.go AND docs/config.md
 6. License headers (GPL v2 for bpf/, Apache v2 for Go)
 7. Performance impact (eBPF overhead, memory usage)
 8. Security (input validation, no buffer overflows in eBPF)
@@ -224,7 +252,7 @@ Use standard Go testing patterns.
 Test on Kind cluster:
 1. make tests-e2e (installs prereqs, builds image, runs tests)
    - Builds localhost/ebpf-agent:test image
-   - Runs e2e test suite with Kind cluster
+   - Runs e2e test suite with Kind cluster (`e2e/flows/`, `e2e/packets/`)
 2. Verify: packet capture, flow aggregation, export to flowlogs-pipeline
 Note: tests-e2e target handles image build and Kind cluster setup automatically
 ```
@@ -239,19 +267,22 @@ make lint                       # Lint Go and C code
 make test                       # Run unit tests
 make compile                    # Compile the agent binary
 make docker-generate            # Regenerate eBPF binaries (after bpf/ changes)
+make verify-maps                # Check bpf2go map names vs bytecode manifest
 make generate                   # Regenerate eBPF + protobuf (requires local tools)
 make tests-e2e                  # E2E tests on Kind cluster
 make image-build image-push     # Build and push image
 ```
 
 **Key Files:**
-- Config: [pkg/config/config.go](pkg/config/config.go)
-- eBPF main: [bpf/flows.c](bpf/flows.c), [bpf/types.h](bpf/types.h), [bpf/maps_definition.h](bpf/maps_definition.h)
+- Config: [pkg/config/agent.go](pkg/config/agent.go)
+- eBPF flow entry: [bpf/flows/flows.c](bpf/flows/flows.c), [bpf/types.h](bpf/types.h), [bpf/maps_definition.h](bpf/maps_definition.h)
+- eBPF packet entry: [bpf/packets/packets.c](bpf/packets/packets.c), [bpf/packets/packet_capture.h](bpf/packets/packet_capture.h)
 - Flow aggregation: [pkg/flow/account.go](pkg/flow/account.go)
 - eBPF loader: [pkg/tracer/tracer.go](pkg/tracer/tracer.go)
-- Flow tracers: [pkg/flow/tracer_map.go](pkg/flow/tracer_map.go), [pkg/flow/tracer_ringbuf.go](pkg/flow/tracer_ringbuf.go)
-- Exporters: [pkg/exporter/](pkg/exporter/)
-- Docs: [docs/architecture.md](docs/architecture.md), [docs/config.md](docs/config.md)
+- Flow pipeline nodes: [pkg/flow/tracer_map.go](pkg/flow/tracer_map.go), [pkg/flow/tracer_ringbuf.go](pkg/flow/tracer_ringbuf.go)
+- Exporters: [pkg/exporter/flows/](pkg/exporter/flows/), [pkg/exporter/packets/](pkg/exporter/packets/)
+- Flow decode / FLP maps: [pkg/decode/flows/](pkg/decode/flows/), [pkg/decode/packets/packet_to_map.go](pkg/decode/packets/packet_to_map.go)
+- Docs: [docs/architecture.md](docs/architecture.md), [docs/flows/architecture.md](docs/flows/architecture.md), [docs/packets/architecture.md](docs/packets/architecture.md), [docs/config.md](docs/config.md)
 
 ## AI Workflow Example
 
@@ -270,10 +301,11 @@ Before commit:
 1. AI code review
 2. `make build`
 3. `make docker-generate` (if eBPF code changed)
-4. Update docs/config.md (if config changed)
-5. Add unit tests for new Go logic
-6. Run e2e tests for eBPF changes: `make tests-e2e`
-7. Conventional commit messages
+4. `make verify-maps` (if flow BPF maps or `.mk/bc.mk` changed)
+5. Update docs/config.md (if config changed)
+6. Add unit tests for new Go logic
+7. Run e2e tests for eBPF changes: `make tests-e2e`
+8. Conventional commit messages
 
 ## Resources
 
@@ -283,6 +315,7 @@ Before commit:
 - [docs/config.md](docs/config.md) - All environment variable options
 - [docs/ebpf_implementation.md](docs/ebpf_implementation.md) - eBPF maps, per-CPU HashMap, flow collisions
 - [docs/flow_filtering.md](docs/flow_filtering.md) - Flow filter rules configuration
+- [docs/packet-capture.md](docs/packet-capture.md) - Packet capture (PCA) deployment and config
 - [docs/profiling.md](docs/profiling.md) - Performance profiling
 - [docs/rtt_calculations.md](docs/rtt_calculations.md) - RTT tracking implementation
 - [examples/direct-flp/README.md](examples/direct-flp/README.md) - Direct-flp usage examples

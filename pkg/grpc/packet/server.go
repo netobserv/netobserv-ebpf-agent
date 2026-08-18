@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbpacket"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"

@@ -23,7 +23,7 @@ import (
 	"net"
 
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 )
 
 const ipv6 = 0x86DD
