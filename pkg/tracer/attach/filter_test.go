@@ -274,3 +274,32 @@ func TestBuildFilterKey(t *testing.T) {
 		})
 	}
 }
+
+func TestBpfKeyToPacketsKey(t *testing.T) {
+	key := ebpf.BpfFilterKeyT{PrefixLen: 24, IpData: [16]byte{10, 0, 0, 0}}
+	pk := bpfKeyToPacketsKey(key)
+	assert.Equal(t, key.PrefixLen, pk.PrefixLen)
+	assert.Equal(t, key.IpData, pk.IpData)
+}
+
+func TestBpfValToPacketsVal(t *testing.T) {
+	val := ebpf.BpfFilterValueT{
+		Protocol:          syscall.IPPROTO_TCP,
+		DstPortStart:      80,
+		Direction:         ebpf.BpfDirectionTINGRESS,
+		Action:            ebpf.BpfFilterActionTACCEPT,
+		TcpFlags:          ebpf.BpfTcpFlagsTSYN_FLAG,
+		FilterDrops:       1,
+		Sample:            5,
+		DoPeerCIDR_lookup: 1,
+	}
+	pk := bpfValToPacketsVal(val)
+	assert.Equal(t, val.Protocol, pk.Protocol)
+	assert.Equal(t, val.DstPortStart, pk.DstPortStart)
+	assert.Equal(t, uint32(val.Direction), pk.Direction)
+	assert.Equal(t, uint32(val.Action), pk.Action)
+	assert.Equal(t, val.TcpFlags, ebpf.BpfTcpFlagsT(pk.TcpFlags))
+	assert.Equal(t, val.FilterDrops, pk.FilterDrops)
+	assert.Equal(t, val.Sample, pk.Sample)
+	assert.Equal(t, val.DoPeerCIDR_lookup, pk.DoPeerCIDR_lookup)
+}
