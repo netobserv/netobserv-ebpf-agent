@@ -15,9 +15,9 @@ env:
 
 jobs:
   push-pr-image:
-    # Build workflow now pushes images and posts the PR comment directly.
-    # Keep this job disabled until main drops the inlined push from build_image_pr.yml.
-    if: false
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
     name: push PR image
     runs-on: ubuntu-latest
     outputs:
@@ -27,4 +27,71 @@ jobs:
       bc_flow_image: ${{ steps.extract.outputs.bc_flow_image }}
       bc_packet_image: ${{ steps.extract.outputs.bc_packet_image }}
     steps:
-      - run: echo "deprecated - push is handled in build_image_pr.yml"
+      - name: extract PR data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_json=$(gh api "repos/${{ github.repository }}/pulls?state=open&head=${{ github.event.workflow_run.head_repository.owner.login }}:${{ github.event.workflow_run.head_branch }}")
+          len=$(echo ${pr_json} | jq '. | length')
+          if [[ "$len" != "1" ]]; then
+            echo "::error::Could not get a unique PR, aborting"
+            exit 1
+          fi
+          has_label=$(echo ${pr_json} | jq '[.[0].labels[].name] | any(. == "ok-to-test")')
+          if [[ "$has_label" != "true" ]]; then
+            echo "::error::PR does not have the ok-to-test label, aborting"
+            exit 1
+          fi
+          echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_ENV
+          head_sha=$(echo ${pr_json} | jq -r '.[0].head.sha')
+          echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_ENV
+          echo "main_image=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${head_sha::8}" >> $GITHUB_ENV
+          echo "bc_flow_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:${head_sha::8}" >> $GITHUB_ENV
+          echo "bc_packet_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:${head_sha::8}" >> $GITHUB_ENV
+      - name: download artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pr
+          run-id: ${{github.event.workflow_run.id }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
+      - name: load images
+        run: |
+          docker load --input ./ebpf-agent.tar
+          docker load --input ./ebpf-agent-bc.tar
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:tmp ${{ env.main_image }}
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:tmp ${{ env.bc_flow_image }}
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:tmp ${{ env.bc_packet_image }}
+      - name: docker login to quay.io
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ env.WF_REGISTRY_USER }}
+          password: ${{ secrets.QUAY_SECRET }}
+          registry: quay.io
+      - name: push images
+        run: |
+          DOCKER_BUILDKIT=1 docker push ${{ env.main_image }}
+          DOCKER_BUILDKIT=1 docker push ${{ env.bc_flow_image }}
+          DOCKER_BUILDKIT=1 docker push ${{ env.bc_packet_image }}
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: ${{ env.pr_id }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `New images:
+            \`\`\`bash
+            ${{ env.main_image }}
+            ${{ env.bc_flow_image }}
+            ${{ env.bc_packet_image }}
+            \`\`\`
+
+            They will expire in two weeks.
+
+            To deploy this build, run from the operator repo, assuming the operator is running:
+            \`\`\`bash
+            USER=netobserv VERSION=${{ env.short_sha }} make set-agent-image
+            \`\`\`
+            `
+            })

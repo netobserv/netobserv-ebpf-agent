@@ -4,14 +4,12 @@ on:
     types: [labeled]
 
 env:
-  WF_REGISTRY_USER: netobserv+github_ci
   WF_REGISTRY: quay.io/netobserv
   WF_IMAGE: netobserv-ebpf-agent
   WF_BC_IMAGE: ebpf-bytecode
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build-pr-image:
@@ -24,13 +22,6 @@ jobs:
           persist-credentials: false
       - name: Install make
         run: sudo apt -y install make
-      - name: set image tags
-        run: |
-          head_sha="${{ github.event.pull_request.head.sha }}"
-          echo "short_sha=${head_sha::8}" >> $GITHUB_ENV
-          echo "main_image=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${head_sha::8}" >> $GITHUB_ENV
-          echo "bc_flow_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:${head_sha::8}" >> $GITHUB_ENV
-          echo "bc_packet_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:${head_sha::8}" >> $GITHUB_ENV
       - name: build and save bytecode image
         run: OCI_BUILD_OPTS="--label quay.expires-after=2w" BC_IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:tmp CLEAN_BUILD=1 make tar-bc-image
       - name: build and save image
@@ -40,44 +31,3 @@ jobs:
         with:
           name: pr
           path: out/
-      - name: load images
-        run: |
-          docker load --input ./out/ebpf-agent.tar
-          docker load --input ./out/ebpf-agent-bc.tar
-          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:tmp ${{ env.main_image }}
-          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:tmp ${{ env.bc_flow_image }}
-          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:tmp ${{ env.bc_packet_image }}
-      - name: docker login to quay.io
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        with:
-          username: ${{ env.WF_REGISTRY_USER }}
-          password: ${{ secrets.QUAY_SECRET }}
-          registry: quay.io
-      - name: push images
-        run: |
-          DOCKER_BUILDKIT=1 docker push ${{ env.main_image }}
-          DOCKER_BUILDKIT=1 docker push ${{ env.bc_flow_image }}
-          DOCKER_BUILDKIT=1 docker push ${{ env.bc_packet_image }}
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            github.rest.issues.createComment({
-              issue_number: ${{ github.event.pull_request.number }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `New images:
-            \`\`\`bash
-            ${{ env.main_image }}
-            ${{ env.bc_flow_image }}
-            ${{ env.bc_packet_image }}
-            \`\`\`
-
-            They will expire in two weeks.
-
-            To deploy this build, run from the operator repo, assuming the operator is running:
-            \`\`\`bash
-            USER=netobserv VERSION=${{ env.short_sha }} make set-agent-image
-            \`\`\`
-            `
-            })
