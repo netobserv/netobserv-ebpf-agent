@@ -14,13 +14,11 @@ env:
   WF_BC_IMAGE: ebpf-bytecode
 
 jobs:
-  extract-data:
-    permissions:
-      pull-requests: read
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
-    name: extract and validate PR data
+  push-pr-image:
+    # Build workflow now pushes images and posts the PR comment directly.
+    # Keep this job disabled until main drops the inlined push from build_image_pr.yml.
+    if: false
+    name: push PR image
     runs-on: ubuntu-latest
     outputs:
       pr_id: ${{ steps.extract.outputs.pr_id }}
@@ -29,104 +27,4 @@ jobs:
       bc_flow_image: ${{ steps.extract.outputs.bc_flow_image }}
       bc_packet_image: ${{ steps.extract.outputs.bc_packet_image }}
     steps:
-      - name: extract PR data
-        id: extract
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUTHOR: ${{ github.event.workflow_run.head_repository.owner.login }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          pr_json=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$AUTHOR:$BRANCH")
-          len=$(echo ${pr_json} | jq '. | length')
-          if [[ "$len" != "1" ]]; then
-            echo "::error::Could not get a unique PR, aborting"
-            exit 1
-          fi
-          has_label=$(echo ${pr_json} | jq '[.[0].labels[].name] | any(. == "ok-to-test")')
-          if [[ "$has_label" != "true" ]]; then
-            echo "::error::PR does not have the ok-to-test label, aborting"
-            exit 1
-          fi
-          head_sha=$(echo ${pr_json} | jq -r '.[0].head.sha')
-          echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_OUTPUT
-          echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_OUTPUT
-          echo "main_image=${WF_REGISTRY}/${WF_IMAGE}:${head_sha::8}" >> $GITHUB_OUTPUT
-          echo "bc_flow_image=${WF_REGISTRY}/${WF_BC_IMAGE}-flows:${head_sha::8}" >> $GITHUB_OUTPUT
-          echo "bc_packet_image=${WF_REGISTRY}/${WF_BC_IMAGE}-packets:${head_sha::8}" >> $GITHUB_OUTPUT
-  push:
-    needs: extract-data
-    name: push PR image
-    runs-on: ubuntu-latest
-    steps:
-      - name: download artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: pr
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: load images
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_FLOW_IMAGE: ${{ needs.extract-data.outputs.bc_flow_image }}
-          BC_PACKET_IMAGE: ${{ needs.extract-data.outputs.bc_packet_image }}
-        run: |
-          docker load --input ./ebpf-agent.tar
-          docker load --input ./ebpf-agent-bc.tar
-          docker image tag ${WF_REGISTRY}/${WF_IMAGE}:tmp $MAIN_IMAGE
-          docker image tag ${WF_REGISTRY}/${WF_BC_IMAGE}-flows:tmp $BC_FLOW_IMAGE
-          docker image tag ${WF_REGISTRY}/${WF_BC_IMAGE}-packets:tmp $BC_PACKET_IMAGE
-      - name: docker login to quay.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ env.WF_REGISTRY_USER }}
-          password: ${{ secrets.QUAY_SECRET }}
-          registry: quay.io
-      - name: push images
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_FLOW_IMAGE: ${{ needs.extract-data.outputs.bc_flow_image }}
-          BC_PACKET_IMAGE: ${{ needs.extract-data.outputs.bc_packet_image }}
-        run: |
-          DOCKER_BUILDKIT=1 docker push "$MAIN_IMAGE"
-          DOCKER_BUILDKIT=1 docker push "$BC_FLOW_IMAGE"
-          DOCKER_BUILDKIT=1 docker push "$BC_PACKET_IMAGE"
-  comment:
-    permissions:
-      pull-requests: write
-    needs: [extract-data, push]
-    name: comment on PR
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_FLOW_IMAGE: ${{ needs.extract-data.outputs.bc_flow_image }}
-          BC_PACKET_IMAGE: ${{ needs.extract-data.outputs.bc_packet_image }}
-          SHORT_SHA: ${{ needs.extract-data.outputs.short_sha }}
-          PR_ID: ${{ needs.extract-data.outputs.pr_id }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const mainImage = process.env.MAIN_IMAGE;
-            const bcFlowImage = process.env.BC_FLOW_IMAGE;
-            const bcPacketImage = process.env.BC_PACKET_IMAGE;
-            const shortSHA = process.env.SHORT_SHA;
-            github.rest.issues.createComment({
-              issue_number: parseInt(process.env.PR_ID, 10),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `New images:
-            \`\`\`bash
-            ${mainImage}
-            ${bcFlowImage}
-            ${bcPacketImage}
-            \`\`\`
-
-            They will expire in two weeks.
-
-            To deploy this build, run from the operator repo, assuming the operator is running:
-            \`\`\`bash
-            USER=netobserv VERSION=${shortSHA} make set-agent-image
-            \`\`\`
-            `
-            })
+      - run: echo "deprecated - push is handled in build_image_pr.yml"
