@@ -19,7 +19,6 @@ package prometheus
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -97,10 +96,6 @@ func StartServerAsync(conn *api.PromConnectionInfo, regName string, registry pro
 
 	httpServer := http.Server{
 		Addr: addr,
-		// TLS clients must use TLS 1.2 or higher
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
 	}
 	// The Handler function provides a default handler to expose metrics
 	// via an HTTP server. "/metrics" is the usual endpoint for that.

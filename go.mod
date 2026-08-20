@@ -170,3 +170,5 @@ require (
 )
 
 replace github.com/vmware/go-ipfix => github.com/jotak/go-ipfix v0.0.0-20250708115123-407c539ea101
+
+replace github.com/netobserv/flowlogs-pipeline => github.com/leandroberetta/flowlogs-pipeline v0.0.0-20260810170916-6c5c94ab0294

@@ -3,8 +3,9 @@ package api
 import "errors"
 
 type WriteGRPC struct {
-	TargetHost string `yaml:"targetHost,omitempty" json:"targetHost,omitempty" doc:"the host name or IP of the target Flow collector"`
-	TargetPort int    `yaml:"targetPort,omitempty" json:"targetPort,omitempty" doc:"the port of the target Flow collector"`
+	TargetHost string     `yaml:"targetHost,omitempty" json:"targetHost,omitempty" doc:"the host name or IP of the target Flow collector"`
+	TargetPort int        `yaml:"targetPort,omitempty" json:"targetPort,omitempty" doc:"the port of the target Flow collector"`
+	TLS        *ClientTLS `yaml:"tls,omitempty" json:"tls,omitempty" doc:"TLS client configuration"`
 }
 
 func (w *WriteGRPC) Validate() error {
