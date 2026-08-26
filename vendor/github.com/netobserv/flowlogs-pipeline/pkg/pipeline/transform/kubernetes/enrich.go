@@ -14,6 +14,7 @@ import (
 
 var ds *datasource.Datasource
 var infConfig informers.Config
+var k8scacheEnabled bool
 
 const (
 	truncateSuffix = "..."
@@ -25,13 +26,34 @@ func MockInformers() {
 	ds = &datasource.Datasource{Informers: informers.NewInformersMock()}
 }
 
+// SetK8sCacheEnabled sets whether k8scache mode is enabled.
+// When enabled, local informers are disabled to save resources.
+// This must be called before InitInformerDatasource.
+func SetK8sCacheEnabled(enabled bool) {
+	k8scacheEnabled = enabled
+}
+
 func InitInformerDatasource(config *api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
 	var err error
 	infConfig = informers.NewConfig(config)
 	if ds == nil {
-		ds, err = datasource.NewInformerDatasource(config.ConfigPath, &infConfig, opMetrics)
+		if k8scacheEnabled {
+			// K8scache mode: create datasource without local informers to save resources
+			// The KubernetesStore will be set later by the k8scache server
+			logrus.Info("k8scache mode enabled: local informers disabled, using centralized cache")
+			ds = datasource.NewDatasourceK8sCache()
+		} else {
+			// Standard mode: create datasource with local informers
+			ds, err = datasource.NewInformerDatasource(config.ConfigPath, &infConfig, opMetrics)
+		}
 	}
 	return err
+}
+
+// GetDatasource returns the initialized datasource
+// Returns nil if datasource has not been initialized via InitInformerDatasource
+func GetDatasource() *datasource.Datasource {
+	return ds
 }
 
 func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {

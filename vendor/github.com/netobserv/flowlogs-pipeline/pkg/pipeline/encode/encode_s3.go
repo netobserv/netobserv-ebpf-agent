@@ -32,7 +32,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/prometheus/client_golang/prometheus"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -42,6 +42,7 @@ const (
 
 var (
 	defaultTimeOut = api.Duration{Duration: 60 * time.Second}
+	s3log          = logrus.WithField("component", "encode.S3")
 )
 
 type encodeS3 struct {
@@ -80,8 +81,8 @@ func (s *encodeS3) writeObject() error {
 	hour := fmt.Sprintf("%02d", now.Hour())
 	seq := fmt.Sprintf("%08d", s.sequenceNumber)
 	objectName := s.s3Params.Account + "/year=" + year + "/month=" + month + "/day=" + day + "/hour=" + hour + "/stream-id=" + s.streamID + "/" + seq
-	log.Debugf("S3 writeObject: objectName = %s", objectName)
-	log.Debugf("S3 writeObject: object = %v", object)
+	s3log.Tracef("S3 writeObject: objectName = %s", objectName)
+	s3log.Tracef("S3 writeObject: object = %v", object)
 	s.pendingEntries = s.pendingEntries[nLogs:]
 	s.intervalStartTime = now
 	s.expiryTime = now.Add(s.s3Params.WriteTimeout.Duration)
@@ -89,7 +90,7 @@ func (s *encodeS3) writeObject() error {
 	// send object to object store
 	err := s.s3Writer.putObject(s.s3Params.Bucket, objectName, object)
 	if err != nil {
-		log.Errorf("error in writing object: %v", err)
+		s3log.Errorf("error in writing object: %v", err)
 	}
 	return err
 }
@@ -110,20 +111,19 @@ func (s *encodeS3) GenerateStoreHeader(flows []config.GenericMap, startTime time
 }
 
 func (s *encodeS3) Update(_ config.StageParam) {
-	log.Warn("Encode S3 Writer, update not supported")
+	s3log.Warn("Encode S3 Writer, update not supported")
 }
 
 func (s *encodeS3) createObjectTimeoutLoop() {
-	log.Debugf("entering createObjectTimeoutLoop")
 	ticker := time.NewTicker(s.s3Params.WriteTimeout.Duration)
 	for {
 		select {
 		case <-s.exitChan:
-			log.Debugf("exiting createObjectTimeoutLoop because of signal")
+			s3log.Debugf("exiting createObjectTimeoutLoop because of signal")
 			return
 		case <-ticker.C:
 			now := time.Now()
-			log.Debugf("time now = %v, expiryTime = %v", now, s.expiryTime)
+			s3log.Debugf("time now = %v, expiryTime = %v", now, s.expiryTime)
 			s.mutex.Lock()
 			_ = s.writeObject()
 			s.mutex.Unlock()
@@ -133,7 +133,6 @@ func (s *encodeS3) createObjectTimeoutLoop() {
 
 // Encode queues entries to be sent to object store
 func (s *encodeS3) Encode(entry config.GenericMap) {
-	log.Debugf("Encode S3, entry = %v", entry)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.pendingEntries = append(s.pendingEntries, entry)
@@ -149,7 +148,7 @@ func NewEncodeS3(opMetrics *operational.Metrics, params config.StageParam) (Enco
 	if params.Encode != nil && params.Encode.S3 != nil {
 		configParams = *params.Encode.S3
 	}
-	log.Debugf("NewEncodeS3, config = %v", configParams)
+	s3log.Debugf("NewEncodeS3, config = %v", configParams)
 	s3Writer := &encodeS3Writer{
 		s3Params: &configParams,
 	}
@@ -178,24 +177,23 @@ func NewEncodeS3(opMetrics *operational.Metrics, params config.StageParam) (Enco
 func (e *encodeS3Writer) connectS3(config *api.EncodeS3) (*minio.Client, error) {
 	// Initialize s3 client object.
 	minioOptions := minio.Options{
-		Creds:  credentials.NewStaticV4(config.AccessKeyID, config.SecretAccessKey, ""),
+		Creds:  credentials.NewStaticV4(config.AccessKeyID, string(config.SecretAccessKey), ""),
 		Secure: config.Secure,
 	}
 	s3Client, err := minio.New(config.Endpoint, &minioOptions)
 	if err != nil {
-		log.Errorf("Error when creating S3 client: %v", err)
+		s3log.Errorf("Error when creating S3 client: %v", err)
 		return nil, err
 	}
 
 	found, err := s3Client.BucketExists(context.Background(), config.Bucket)
 	if err != nil {
-		log.Errorf("Error accessing S3 bucket: %v", err)
+		s3log.Errorf("Error accessing S3 bucket: %v", err)
 		return nil, err
 	}
 	if found {
-		log.Infof("S3 Bucket %s found", config.Bucket)
+		s3log.Infof("S3 Bucket %s found", config.Bucket)
 	}
-	log.Debugf("s3Client = %#v", s3Client) // s3Client is now setup
 	return s3Client, nil
 }
 
@@ -210,16 +208,14 @@ func (e *encodeS3Writer) putObject(bucket string, objectName string, object map[
 	b := new(bytes.Buffer)
 	err := json.NewEncoder(b).Encode(object)
 	if err != nil {
-		log.Errorf("error encoding object: %v", err)
+		s3log.Errorf("error encoding object: %v", err)
 		return err
 	}
-	log.Debugf("encoded object = %v", b)
 	// TBD: add necessary headers such as authorization (token), gzip, md5, etc
-	uploadInfo, err := e.s3Client.PutObject(context.Background(), bucket, objectName, b, int64(b.Len()), minio.PutObjectOptions{ContentType: "application/octet-stream"})
-	log.Debugf("uploadInfo = %v", uploadInfo)
+	_, err = e.s3Client.PutObject(context.Background(), bucket, objectName, b, int64(b.Len()), minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	return err
 }
 
 func (e *encodeS3Writer) Update(_ config.StageParam) {
-	log.Warn("Encode S3 Writer, update not supported")
+	s3log.Warn("Encode S3 Writer, update not supported")
 }

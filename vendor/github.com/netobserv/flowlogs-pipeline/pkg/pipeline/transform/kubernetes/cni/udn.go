@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/flowlogs-pipeline/pkg/metrics"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -99,6 +101,17 @@ func (m *UDNHandler) GetPodUniqueKeys(ctx context.Context, dynClient *dynamic.Dy
 }
 
 func disambiguateClusterUDN(ctx context.Context, dynClient *dynamic.DynamicClient, name string) string {
+	// Update metrics
+	if metrics.InformersMetrics != nil {
+		metrics.InformersMetrics.UdnDisambiguateTotal.Inc()
+	}
+	start := time.Now()
+	defer func() {
+		if metrics.InformersMetrics != nil {
+			metrics.InformersMetrics.UdnDisambiguateDuration.Observe(time.Since(start).Seconds())
+		}
+	}()
+
 	// "name" can look like this: "my-namespace/my-udn"; namespace included even for Cluster UDN
 	parts := strings.SplitN(name, "/", 2)
 	if len(parts) < 2 {
@@ -121,6 +134,9 @@ func disambiguateClusterUDN(ctx context.Context, dynClient *dynamic.DynamicClien
 		return name
 	} else if !errors.IsNotFound(err) {
 		log.Errorf("could not fetch UDN %s: %v", name, err)
+		if metrics.InformersMetrics != nil {
+			metrics.InformersMetrics.ErrorsTotal.WithLabelValues("udn_disambiguation").Inc()
+		}
 	}
 	// Does it exist as a cluster-udn?
 	_, err = dynClient.
@@ -135,6 +151,9 @@ func disambiguateClusterUDN(ctx context.Context, dynClient *dynamic.DynamicClien
 		return udnName
 	} else if !errors.IsNotFound(err) {
 		log.Errorf("could not fetch CUDN %s: %v", udnName, err)
+		if metrics.InformersMetrics != nil {
+			metrics.InformersMetrics.ErrorsTotal.WithLabelValues("udn_disambiguation").Inc()
+		}
 	}
 	return name
 }
