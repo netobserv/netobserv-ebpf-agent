@@ -75,7 +75,7 @@ jobs:
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 
       - name: Attest Provenance attestations
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ${{ env.WF_IMAGE_NAME }}
           subject-digest: ${{ env.digest }}
@@ -89,7 +89,7 @@ jobs:
           output-file: './release-assets/sbom.spdx.json'
 
       - name: Attest SBOM
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ${{ env.WF_IMAGE_NAME }}
           subject-digest: ${{ env.digest }}
