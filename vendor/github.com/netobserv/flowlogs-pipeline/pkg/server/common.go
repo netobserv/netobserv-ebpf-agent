@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/netobserv/flowlogs-pipeline/pkg/tlsprofile"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,6 +39,9 @@ func Default(srv *http.Server) *http.Server {
 	}
 	if srv.TLSConfig.MinVersion == 0 {
 		srv.TLSConfig.MinVersion = tls.VersionTLS13
+	}
+	if _, err := tlsprofile.Apply(srv.TLSConfig); err != nil {
+		slog.Errorf("invalid TLS profile override, keeping secure defaults: %v", err)
 	}
 	// Disable http/2
 	srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0)

@@ -95,6 +95,9 @@ The following environment variables are available to configure the NetObserv eBP
   * `METRICS_TLS_CERT_PATH` (default: unset). Path to the certificate file for the TLS connection.
   * `METRICS_TLS_KEY_PATH` (default: unset). Path to the private key file for the TLS connection.
   * `METRICS_PREFIX` (default: `ebpf-agent`). Prefix for the exported metrics.
+* `TLS_MIN_VERSION` (default: unset). Overrides the minimum TLS version for the metrics server. Value is the decimal uint16 TLS version number (e.g. `771` for TLS 1.2, `772` for TLS 1.3). When unset, the agent defaults to TLS 1.3.
+* `TLS_CIPHER_SUITES` (default: unset). Comma-separated list of TLS cipher suite IDs (decimal uint16, IANA registry values) to use for TLS 1.0-1.2 negotiation. TLS 1.3 suite IDs (4865, 4866, 4867) are silently filtered out since Go's crypto/tls does not allow customizing TLS 1.3 suites. Has no effect when the effective minimum TLS version is 1.3.
+* `TLS_CURVE_PREFERENCES` (default: unset). Comma-separated list of TLS curve IDs (decimal uint16) for key exchange (e.g. `23` for P-256, `24` for P-384, `29` for X25519).
 * `FLOW_FILTER_RULES` (default: unset). Filtering rules, in JSON format. See [docs](./flow_filtering.md) for details.
 * `PREFERRED_INTERFACE_FOR_MAC_PREFIX` (default: unset). It is a comma-separated list of key=value pairs, allowing to specify a preference when retrieving interface names per flow in case of index collision, when using multiple network namespaces are used. This setting is only used when the interface name could not be found for a given index and MAC. E.g. "0a:58=eth0" (used for ovn-kubernetes).
 

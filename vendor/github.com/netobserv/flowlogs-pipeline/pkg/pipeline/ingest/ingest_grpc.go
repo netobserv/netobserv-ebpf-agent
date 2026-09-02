@@ -12,6 +12,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	pUtils "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
+	"github.com/netobserv/flowlogs-pipeline/pkg/tlsprofile"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/decode"
 	grpc "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
@@ -73,6 +74,9 @@ func NewGRPCProtobuf(opMetrics *operational.Metrics, params config.StageParam) (
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.NoClientCert,
 			MinVersion:   tls.VersionTLS13,
+		}
+		if _, err := tlsprofile.Apply(tlsCfg); err != nil {
+			return nil, fmt.Errorf("invalid TLS profile override: %w", err)
 		}
 		if cfg.ClientCAPath != "" {
 			// mTLS
