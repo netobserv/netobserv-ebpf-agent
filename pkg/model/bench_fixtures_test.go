@@ -3,7 +3,7 @@ package model
 import (
 	"net"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 )
 
 // This file provides shared fixtures for the memory hot-path benchmarks.

@@ -31,11 +31,11 @@ Packets are filtered using the same `FLOW_FILTER_RULES` JSON syntax as flow mode
 
 ```mermaid
 flowchart TD
-    F(tracer/packets.Fetcher) --> |ReadPerf| RB(packet.RingbufTracer)
-    style F fill:#7CA
+    fetcher[tracer packets Fetcher] -->|ReadPerf| ringbuf[packet RingbufTracer]
+    style fetcher fill:#7CA
 
-    RB --> |chan *model.PacketRecord| BUF(packet.Buffer)
-    BUF --> |chan []*model.PacketRecord| EX("exporter.GRPC packets<br/>or direct-flp")
+    ringbuf -->|chan PacketRecord| buffer[packet Buffer]
+    buffer -->|chan PacketRecords| exporter[exporter gRPC or direct-flp]
 ```
 
 Unlike flow mode, there is no kernel-side aggregation: each ringbuf event carries one packet (or payload chunk). Userspace batches records before export using `CACHE_MAX_FLOWS` and `CACHE_ACTIVE_TIMEOUT`.
@@ -67,7 +67,3 @@ Programs: `tc_ingress_packet_parse`, `tc_egress_packet_parse`, `tcx_*_packet_par
 The following environment variables are rejected at startup when `ENABLE_PCA=true` (see `ValidateForPackets()` in [`pkg/config/validation.go`](../../pkg/config/validation.go)):
 
 `ENABLE_DNS_TRACKING`, `ENABLE_RTT`, `ENABLE_PKT_DROPS`, `ENABLE_NETWORK_EVENTS_MONITORING`, `ENABLE_PKT_TRANSLATION`, `ENABLE_UDN_MAPPING`, `ENABLE_IPSEC_TRACKING`, `ENABLE_OPENSSL_TRACKING`, `ENABLE_TLS_TRACKING`, `QUIC_TRACKING_MODE`, `ENABLE_FLOWS_RINGBUF_FALLBACK`.
-
-## Future work
-
-OpenSSL plaintext capture (NETOBSERV-2857) will extend only the packet BPF object (`bpf/packets/`) and `pkg/agent/packets/` processing path — no changes to the flow object.

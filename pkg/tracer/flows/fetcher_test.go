@@ -5,8 +5,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
-	bpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
 	"github.com/stretchr/testify/assert"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestConfigureFlowSpecVariables(t *testing.T) {
-	spec, err := bpfflows.LoadBpf()
+	spec, err := ebpf.LoadBpf()
 	require.NoError(t, err)
 
 	cfg := &tracer.FetcherConfig{
@@ -40,7 +39,7 @@ func TestConfigureFlowSpecVariables(t *testing.T) {
 }
 
 func TestConfigureFlowSpecVariablesNoFilterShrinksMaps(t *testing.T) {
-	spec, err := bpfflows.LoadBpf()
+	spec, err := ebpf.LoadBpf()
 	require.NoError(t, err)
 
 	cfg := &tracer.FetcherConfig{Agent: config.Agent{}}
@@ -51,7 +50,7 @@ func TestConfigureFlowSpecVariablesNoFilterShrinksMaps(t *testing.T) {
 }
 
 func TestSizeMapForFeature(t *testing.T) {
-	spec, err := bpfflows.LoadBpf()
+	spec, err := ebpf.LoadBpf()
 	require.NoError(t, err)
 
 	sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, true, 5000)

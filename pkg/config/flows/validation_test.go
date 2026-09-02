@@ -18,17 +18,17 @@ func TestValidate(t *testing.T) {
 
 func TestValidateListsAllIncompatibleFlags(t *testing.T) {
 	f := &Features{
-		EnableDNSTracking:              true,
-		EnableRTT:                      true,
-		EnablePktDrops:                 true,
-		EnableNetworkEventsMonitoring:  true,
-		EnablePktTranslationTracking:   true,
-		EnableUDNMapping:               true,
-		EnableIPsecTracking:            true,
-		EnableOpenSSLTracking:          true,
-		EnableTLSTracking:              true,
-		QUICTrackingMode:                 1,
-		EnableFlowsRingbufFallback:     true,
+		EnableDNSTracking:             true,
+		EnableRTT:                     true,
+		EnablePktDrops:                true,
+		EnableNetworkEventsMonitoring: true,
+		EnablePktTranslationTracking:  true,
+		EnableUDNMapping:              true,
+		EnableIPsecTracking:           true,
+		EnableOpenSSLTracking:         true,
+		EnableTLSTracking:             true,
+		QUICTrackingMode:              1,
+		EnableFlowsRingbufFallback:    true,
 	}
 	err := Validate(f)
 	require.Error(t, err)

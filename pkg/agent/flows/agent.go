@@ -12,7 +12,7 @@ import (
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent/common"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	exporterflows "github.com/netobserv/netobserv-ebpf-agent/pkg/exporter/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"

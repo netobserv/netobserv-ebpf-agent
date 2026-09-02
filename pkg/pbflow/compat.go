@@ -3,6 +3,9 @@ package pbflow
 
 import flowpb "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 
+// Deprecated: import github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow instead.
+// Kept for flowlogs-pipeline v1.11.5-community compatibility until FLP is updated.
+
 type (
 	CollectorClient              = flowpb.CollectorClient
 	CollectorReply               = flowpb.CollectorReply

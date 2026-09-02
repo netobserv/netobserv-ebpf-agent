@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/kernel"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
@@ -1618,7 +1618,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		{Key: ebpf.BpfVarEnableRtt, Value: uint8(enableRtt)},
 		{Key: ebpf.BpfVarEnableDnsTracking, Value: uint8(enableDNSTracking)},
 		{Key: ebpf.BpfVarDnsPort, Value: dnsTrackerPort},
-		{Key: ebpf.BpfVarEnableFlowsFiltering, Value: uint8(enableFlowFiltering)},
+		{Key: ebpf.BpfVarEnableFiltering, Value: uint8(enableFlowFiltering)},
 		{Key: ebpf.BpfVarEnableNetworkEventsMonitoring, Value: uint8(enableNetworkEventsMonitoring)},
 		{Key: ebpf.BpfVarNetworkEventsMonitoringGroupid, Value: uint8(networkEventsMonitoringGroupID)},
 		{Key: ebpf.BpfVarEnablePktTranslationTracking, Value: uint8(enablePktTranslation)},

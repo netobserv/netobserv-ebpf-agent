@@ -1,5 +1,6 @@
-// Package ebpf holds shared BPF name constants and backward-compatible re-exports
-// of flow bindings. Mode-specific bpf2go artifacts live in subpackages:
+// Package ebpf holds shared BPF name constants.
+//
+// Mode-specific bpf2go artifacts live in subpackages:
 //
 //   - pkg/ebpf/flows   — flow capture object (bpf/flows/flows.c)
 //   - pkg/ebpf/packets — packet capture object (bpf/packets/packets.c)

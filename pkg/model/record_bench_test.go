@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 )
 
 // BenchmarkNewRecord measures the per-flow cost of NewRecord, which runs once

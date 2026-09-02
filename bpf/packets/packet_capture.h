@@ -1,7 +1,9 @@
 #ifndef __PACKET_CAPTURE_H__
 #define __PACKET_CAPTURE_H__
 
-#include "packet_utils.h"
+#include "configs.h"
+#include "maps.h"
+#include "../common/packet_utils.h"
 
 static inline void attach_packet_payload(struct __sk_buff *skb) {
     payload_meta *event;

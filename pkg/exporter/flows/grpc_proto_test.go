@@ -16,7 +16,7 @@ import (
 	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/peer"

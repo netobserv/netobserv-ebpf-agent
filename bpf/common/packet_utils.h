@@ -1,11 +1,11 @@
-#ifndef __PACKET_UTILS_H__
-#define __PACKET_UTILS_H__
+#ifndef __COMMON_PACKET_UTILS_H__
+#define __COMMON_PACKET_UTILS_H__
 
 #include <bpf_core_read.h>
 #include "../types.h"
-#include "configs.h"
-#include "maps.h"
-#include "../common/filter.h"
+#include "filter.h"
+
+// Requires global_counters map and enable_filtering const in scope.
 
 // Update global counter for hashmap update errors
 static inline void increase_counter(u32 key) {
@@ -218,4 +218,4 @@ static __always_inline bool check_and_apply_filter(flow_id *id, u16 flags, u32 d
     return false;
 }
 
-#endif
+#endif // __COMMON_PACKET_UTILS_H__

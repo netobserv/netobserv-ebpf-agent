@@ -347,7 +347,7 @@ func (p *Fetcher) AttachTCX(iface *ifaces.Interface) error { //nolint:cyclop // 
 				plog.WithField("iface", iface.Name).Debug("interface already has a TCX PCA ingress hook ignore")
 				if q, err := link.QueryPrograms(link.QueryOptions{
 					Target: iface.Index,
-					Attach: cilium.AttachTCXEgress,
+					Attach: cilium.AttachTCXIngress,
 				}); err == nil {
 					for _, id := range q.Programs {
 						linkID, ok := id.LinkID()

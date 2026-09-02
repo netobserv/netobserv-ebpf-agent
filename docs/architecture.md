@@ -12,20 +12,22 @@ Both modes share the same binary ([`cmd/netobserv-ebpf-agent.go`](../cmd/netobse
 ## Mode overview
 
 ```mermaid
-flowchart TB
-    subgraph flowMode [Flow mode ENABLE_PCA=false]
-        TC1[TC/TCX hooks] --> flowParse["*_flow_parse"]
-        flowParse --> aggMap[aggregated_flows map]
-        aggMap --> flowTracer[pkg/tracer/flows]
-        flowTracer --> flowPkg[pkg/flow]
+flowchart TD
+    subgraph flowMode ["Flow mode (ENABLE_PCA=false)"]
+        direction TD
+        flowTC[TC/TCX hooks] --> flowParse[flow parse programs]
+        flowParse --> flowAgg[aggregated_flows map]
+        flowAgg --> flowTracer[tracer flows]
+        flowTracer --> flowPkg[pkg flow]
         flowPkg --> flowExport[gRPC / Kafka / direct-flp]
     end
 
-    subgraph packetMode [Packet mode ENABLE_PCA=true]
-        TC2[TC/TCX hooks] --> pktParse["*_packet_parse"]
-        pktParse --> ringbuf[packet_record ringbuf]
-        ringbuf --> pktTracer[pkg/tracer/packets]
-        pktTracer --> pktPkg[pkg/agent/packets]
+    subgraph packetMode ["Packet mode (ENABLE_PCA=true)"]
+        direction TD
+        pktTC[TC/TCX hooks] --> pktParse[packet parse programs]
+        pktParse --> pktRing[packet_record ringbuf]
+        pktRing --> pktTracer[tracer packets]
+        pktTracer --> pktPkg[agent packets]
         pktPkg --> pktExport[gRPC / direct-flp]
     end
 ```
@@ -46,7 +48,7 @@ flowchart TB
 
 ```text
 pkg/
-  ebpf/              # shared BPF name constants + backward-compat re-exports
+  ebpf/              # shared BPF name constants
   ebpf/flows/        # flow BPF bindings (bpf2go)
   ebpf/packets/      # packet BPF bindings (bpf2go)
   tracer/

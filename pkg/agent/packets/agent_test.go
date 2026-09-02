@@ -17,13 +17,15 @@ import (
 
 type mockPacketFetcher struct{}
 
-func (mockPacketFetcher) Close() error                                         { return nil }
-func (mockPacketFetcher) Register(*ifaces.Interface) error                     { return nil }
-func (mockPacketFetcher) UnRegister(*ifaces.Interface) error                   { return nil }
-func (mockPacketFetcher) AttachTCX(*ifaces.Interface) error                    { return nil }
-func (mockPacketFetcher) DetachTCX(*ifaces.Interface) error                    { return nil }
-func (mockPacketFetcher) LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte  { return nil }
-func (mockPacketFetcher) ReadPerf() (ringbuf.Record, error) { return ringbuf.Record{}, ringbuf.ErrClosed }
+func (mockPacketFetcher) Close() error                                        { return nil }
+func (mockPacketFetcher) Register(*ifaces.Interface) error                    { return nil }
+func (mockPacketFetcher) UnRegister(*ifaces.Interface) error                  { return nil }
+func (mockPacketFetcher) AttachTCX(*ifaces.Interface) error                   { return nil }
+func (mockPacketFetcher) DetachTCX(*ifaces.Interface) error                   { return nil }
+func (mockPacketFetcher) LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte { return nil }
+func (mockPacketFetcher) ReadPerf() (ringbuf.Record, error) {
+	return ringbuf.Record{}, ringbuf.ErrClosed
+}
 
 func TestNew_InvalidExporterConfig(t *testing.T) {
 	for _, tc := range []struct {

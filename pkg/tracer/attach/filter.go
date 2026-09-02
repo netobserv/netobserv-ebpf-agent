@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	cilium "github.com/cilium/ebpf"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -45,7 +45,7 @@ func NewFilter(cfg []*FilterConfig) *Filter {
 }
 
 // ProgramFilter programs filter maps on the flow BPF object.
-func (f *Filter) ProgramFilter(objects *ebpf.BpfObjects) error {
+func (f *Filter) ProgramFilter(objects *ebpfflows.BpfObjects) error {
 	for _, config := range f.config {
 		filterLog.Infof("Filter config: %v", f.config)
 		key, err := f.getFilterKey(config)
@@ -112,11 +112,11 @@ func (f *Filter) ProgramPacketsFilter(objects *packets.PacketsObjects) error {
 	return nil
 }
 
-func bpfKeyToPacketsKey(k ebpf.BpfFilterKeyT) packets.PacketsFilterKeyT {
+func bpfKeyToPacketsKey(k ebpfflows.BpfFilterKeyT) packets.PacketsFilterKeyT {
 	return packets.PacketsFilterKeyT{PrefixLen: k.PrefixLen, IpData: k.IpData}
 }
 
-func bpfValToPacketsVal(v ebpf.BpfFilterValueT) packets.PacketsFilterValueT {
+func bpfValToPacketsVal(v ebpfflows.BpfFilterValueT) packets.PacketsFilterValueT {
 	return packets.PacketsFilterValueT{
 		Protocol:          v.Protocol,
 		DstPortStart:      v.DstPortStart,
@@ -142,8 +142,8 @@ func bpfValToPacketsVal(v ebpf.BpfFilterValueT) packets.PacketsFilterValueT {
 	}
 }
 
-func (f *Filter) buildFilterKey(cidr, ipStr string) (ebpf.BpfFilterKeyT, error) {
-	key := ebpf.BpfFilterKeyT{}
+func (f *Filter) buildFilterKey(cidr, ipStr string) (ebpfflows.BpfFilterKeyT, error) {
+	key := ebpfflows.BpfFilterKeyT{}
 	if cidr != "" {
 		ip, ipNet, err := net.ParseCIDR(cidr)
 		if err != nil {
@@ -169,37 +169,37 @@ func (f *Filter) buildFilterKey(cidr, ipStr string) (ebpf.BpfFilterKeyT, error) 
 	return key, nil
 }
 
-func (f *Filter) getFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
+func (f *Filter) getFilterKey(config *FilterConfig) (ebpfflows.BpfFilterKeyT, error) {
 	if config.IPCIDR == "" {
 		config.IPCIDR = "0.0.0.0/0"
 	}
 	return f.buildFilterKey(config.IPCIDR, "")
 }
 
-func (f *Filter) getPeerFilterKey(config *FilterConfig) (ebpf.BpfFilterKeyT, error) {
+func (f *Filter) getPeerFilterKey(config *FilterConfig) (ebpfflows.BpfFilterKeyT, error) {
 	return f.buildFilterKey(config.PeerCIDR, config.PeerIP)
 }
 
 // nolint:cyclop
-func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, error) {
-	val := ebpf.BpfFilterValueT{}
+func (f *Filter) getFilterValue(config *FilterConfig) (ebpfflows.BpfFilterValueT, error) {
+	val := ebpfflows.BpfFilterValueT{}
 
 	switch config.Direction {
 	case "Ingress":
-		val.Direction = ebpf.BpfDirectionTINGRESS
+		val.Direction = ebpfflows.BpfDirectionTINGRESS
 	case "Egress":
-		val.Direction = ebpf.BpfDirectionTEGRESS
+		val.Direction = ebpfflows.BpfDirectionTEGRESS
 	default:
-		val.Direction = ebpf.BpfDirectionTMAX_DIRECTION
+		val.Direction = ebpfflows.BpfDirectionTMAX_DIRECTION
 	}
 
 	switch config.Action {
 	case "Reject":
-		val.Action = ebpf.BpfFilterActionTREJECT
+		val.Action = ebpfflows.BpfFilterActionTREJECT
 	case "Accept":
-		val.Action = ebpf.BpfFilterActionTACCEPT
+		val.Action = ebpfflows.BpfFilterActionTACCEPT
 	default:
-		val.Action = ebpf.BpfFilterActionTMAX_FILTER_ACTIONS
+		val.Action = ebpfflows.BpfFilterActionTMAX_FILTER_ACTIONS
 	}
 
 	switch config.Protocol {
@@ -226,27 +226,27 @@ func (f *Filter) getFilterValue(config *FilterConfig) (ebpf.BpfFilterValueT, err
 
 	switch config.TCPFlags {
 	case "SYN":
-		val.TcpFlags = ebpf.BpfTcpFlagsTSYN_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTSYN_FLAG
 	case "SYN-ACK":
-		val.TcpFlags = ebpf.BpfTcpFlagsTSYN_ACK_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTSYN_ACK_FLAG
 	case "ACK":
-		val.TcpFlags = ebpf.BpfTcpFlagsTACK_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTACK_FLAG
 	case "FIN":
-		val.TcpFlags = ebpf.BpfTcpFlagsTFIN_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTFIN_FLAG
 	case "RST":
-		val.TcpFlags = ebpf.BpfTcpFlagsTRST_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTRST_FLAG
 	case "PUSH":
-		val.TcpFlags = ebpf.BpfTcpFlagsTPSH_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTPSH_FLAG
 	case "URG":
-		val.TcpFlags = ebpf.BpfTcpFlagsTURG_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTURG_FLAG
 	case "ECE":
-		val.TcpFlags = ebpf.BpfTcpFlagsTECE_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTECE_FLAG
 	case "CWR":
-		val.TcpFlags = ebpf.BpfTcpFlagsTCWR_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTCWR_FLAG
 	case "FIN-ACK":
-		val.TcpFlags = ebpf.BpfTcpFlagsTFIN_ACK_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTFIN_ACK_FLAG
 	case "RST-ACK":
-		val.TcpFlags = ebpf.BpfTcpFlagsTRST_ACK_FLAG
+		val.TcpFlags = ebpfflows.BpfTcpFlagsTRST_ACK_FLAG
 	}
 
 	if config.Drops {

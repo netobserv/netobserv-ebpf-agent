@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -86,7 +86,7 @@ func TestFilter_getFilterValue(t *testing.T) {
 	value, err := f.getFilterValue(config)
 
 	assert.Nil(t, err)
-	assert.Equal(t, ebpf.BpfDirectionTINGRESS, value.Direction)
+	assert.Equal(t, ebpfflows.BpfDirectionTINGRESS, value.Direction)
 	assert.Equal(t, uint8(syscall.IPPROTO_TCP), value.Protocol)
 	assert.Equal(t, uint16(8080), value.SrcPortStart)
 	assert.Equal(t, uint16(0), value.SrcPortEnd)
@@ -181,14 +181,14 @@ func TestBuildFilterKey(t *testing.T) {
 		name      string
 		cidr      string
 		ipStr     string
-		wantKey   ebpf.BpfFilterKeyT
+		wantKey   ebpfflows.BpfFilterKeyT
 		wantError bool
 	}{
 		{
 			name:  "Valid CIDR IPv4",
 			cidr:  "192.168.1.0/24",
 			ipStr: "",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{192, 168, 1, 0},
 				PrefixLen: 24,
 			},
@@ -198,7 +198,7 @@ func TestBuildFilterKey(t *testing.T) {
 			name:  "Valid default IPv4 CIDR",
 			cidr:  "0.0.0.0/0",
 			ipStr: "",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{0},
 				PrefixLen: 0,
 			},
@@ -208,7 +208,7 @@ func TestBuildFilterKey(t *testing.T) {
 			name:  "Valid CIDR IPv6",
 			cidr:  "2001:db8::/48",
 			ipStr: "",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{0x20, 0x01, 0x0d, 0xb8},
 				PrefixLen: 48,
 			},
@@ -218,7 +218,7 @@ func TestBuildFilterKey(t *testing.T) {
 			name:  "Valid default IPv6 CIDR",
 			cidr:  "0::0/0",
 			ipStr: "",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{0},
 				PrefixLen: 0,
 			},
@@ -228,7 +228,7 @@ func TestBuildFilterKey(t *testing.T) {
 			name:  "Valid IP string IPv4",
 			cidr:  "",
 			ipStr: "192.168.1.1",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{192, 168, 1, 1},
 				PrefixLen: 32,
 			},
@@ -238,7 +238,7 @@ func TestBuildFilterKey(t *testing.T) {
 			name:  "Valid IP string IPv6",
 			cidr:  "",
 			ipStr: "2001:db8::1",
-			wantKey: ebpf.BpfFilterKeyT{
+			wantKey: ebpfflows.BpfFilterKeyT{
 				IpData:    [16]byte{0x20, 0x01, 0x0d, 0xb8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
 				PrefixLen: 128,
 			},
@@ -248,14 +248,14 @@ func TestBuildFilterKey(t *testing.T) {
 			name:      "Invalid CIDR",
 			cidr:      "invalidCIDR",
 			ipStr:     "",
-			wantKey:   ebpf.BpfFilterKeyT{},
+			wantKey:   ebpfflows.BpfFilterKeyT{},
 			wantError: true,
 		},
 		{
 			name:      "Empty input",
 			cidr:      "",
 			ipStr:     "",
-			wantKey:   ebpf.BpfFilterKeyT{},
+			wantKey:   ebpfflows.BpfFilterKeyT{},
 			wantError: false,
 		},
 	}
@@ -276,19 +276,19 @@ func TestBuildFilterKey(t *testing.T) {
 }
 
 func TestBpfKeyToPacketsKey(t *testing.T) {
-	key := ebpf.BpfFilterKeyT{PrefixLen: 24, IpData: [16]byte{10, 0, 0, 0}}
+	key := ebpfflows.BpfFilterKeyT{PrefixLen: 24, IpData: [16]byte{10, 0, 0, 0}}
 	pk := bpfKeyToPacketsKey(key)
 	assert.Equal(t, key.PrefixLen, pk.PrefixLen)
 	assert.Equal(t, key.IpData, pk.IpData)
 }
 
 func TestBpfValToPacketsVal(t *testing.T) {
-	val := ebpf.BpfFilterValueT{
+	val := ebpfflows.BpfFilterValueT{
 		Protocol:          syscall.IPPROTO_TCP,
 		DstPortStart:      80,
-		Direction:         ebpf.BpfDirectionTINGRESS,
-		Action:            ebpf.BpfFilterActionTACCEPT,
-		TcpFlags:          ebpf.BpfTcpFlagsTSYN_FLAG,
+		Direction:         ebpfflows.BpfDirectionTINGRESS,
+		Action:            ebpfflows.BpfFilterActionTACCEPT,
+		TcpFlags:          ebpfflows.BpfTcpFlagsTSYN_FLAG,
 		FilterDrops:       1,
 		Sample:            5,
 		DoPeerCIDR_lookup: 1,
@@ -298,7 +298,7 @@ func TestBpfValToPacketsVal(t *testing.T) {
 	assert.Equal(t, val.DstPortStart, pk.DstPortStart)
 	assert.Equal(t, uint32(val.Direction), pk.Direction)
 	assert.Equal(t, uint32(val.Action), pk.Action)
-	assert.Equal(t, val.TcpFlags, ebpf.BpfTcpFlagsT(pk.TcpFlags))
+	assert.Equal(t, val.TcpFlags, ebpfflows.BpfTcpFlagsT(pk.TcpFlags))
 	assert.Equal(t, val.FilterDrops, pk.FilterDrops)
 	assert.Equal(t, val.Sample, pk.Sample)
 	assert.Equal(t, val.DoPeerCIDR_lookup, pk.DoPeerCIDR_lookup)

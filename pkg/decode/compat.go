@@ -5,8 +5,8 @@ import (
 	decodepackets "github.com/netobserv/netobserv-ebpf-agent/pkg/decode/packets"
 )
 
-// Flow decode types and helpers — re-exported from pkg/decode/flows for backward compatibility.
-// New code should import github.com/netobserv/netobserv-ebpf-agent/pkg/decode/flows directly.
+// Deprecated: import pkg/decode/flows or pkg/decode/packets directly.
+// Kept for flowlogs-pipeline v1.11.5-community compatibility until FLP is updated.
 
 type Protobuf = decodeflows.Protobuf
 
@@ -19,6 +19,5 @@ var (
 	PktDropCauseToStr = decodeflows.PktDropCauseToStr
 	DNSRcodeToStr     = decodeflows.DNSRcodeToStr
 
-	// Packet decode helpers — re-exported from pkg/decode/packets.
 	PacketToMap = decodepackets.PacketToMap
 )
