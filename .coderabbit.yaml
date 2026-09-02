@@ -30,7 +30,7 @@ reviews:
   path_filters:
     # generated deepcopy
     - "!**/zz_generated.deepcopy.go"
-    - "!vendor/"
+    - "!vendor/**"
     # Generated eBPF bytecode and bindings
     - "!**/*_bpfel.go"
     - "!**/*_bpfeb.go"
