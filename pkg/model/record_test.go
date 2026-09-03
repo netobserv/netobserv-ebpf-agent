@@ -190,6 +190,33 @@ func TestParallelNewRecord(t *testing.T) {
 	wg.Wait()
 }
 
+func TestNewRecordIntoReusesInterfaceCapacity(t *testing.T) {
+	interfaceBacking := make([]IntfDirUdn, 2)
+	records := make([]Record, 2)
+
+	// Build the second record first so an extra interface added to the first
+	// record would expose overlap between their backing slices.
+	records[1].Interfaces = interfaceBacking[1:1:2]
+	NewRecordInto(&records[1], ebpf.BpfFlowId{}, &BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{IfIndexFirstSeen: 20},
+	}, time.Time{}, 0, nil, nil)
+	secondInterface := records[1].Interfaces[0]
+	require.True(t, &records[1].Interfaces[0] == &interfaceBacking[1])
+
+	records[0].Interfaces = interfaceBacking[0:0:1]
+	NewRecordInto(&records[0], ebpf.BpfFlowId{}, &BpfFlowContent{
+		BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			IfIndexFirstSeen: 10,
+			NbObservedIntf:   1,
+			ObservedIntf:     [MaxObservedInterfaces]uint32{11},
+		},
+	}, time.Time{}, 0, nil, nil)
+
+	assert.Len(t, records[0].Interfaces, 2)
+	assert.Equal(t, secondInterface, records[1].Interfaces[0])
+	require.True(t, &records[1].Interfaces[0] == &interfaceBacking[1])
+}
+
 func TestDNSMetricsBinaryEncoding(t *testing.T) {
 	// Makes sure that we read the C *not packed* additional metrics structure according
 	// to the order defined in bpf/flow.h
