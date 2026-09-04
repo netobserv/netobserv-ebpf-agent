@@ -26,16 +26,16 @@ func PacketToMap(pr *model.PacketRecord) config.GenericMap {
 
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		tcp, _ := tcpLayer.(*layers.TCP)
-		out["SrcPort"] = tcp.SrcPort.String()
-		out["DstPort"] = tcp.DstPort.String()
+		out["SrcPort"] = uint16(tcp.SrcPort)
+		out["DstPort"] = uint16(tcp.DstPort)
 	} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 		udp, _ := udpLayer.(*layers.UDP)
-		out["SrcPort"] = udp.SrcPort.String()
-		out["DstPort"] = udp.DstPort.String()
+		out["SrcPort"] = uint16(udp.SrcPort)
+		out["DstPort"] = uint16(udp.DstPort)
 	} else if sctpLayer := packet.Layer(layers.LayerTypeSCTP); sctpLayer != nil {
 		sctp, _ := sctpLayer.(*layers.SCTP)
-		out["SrcPort"] = sctp.SrcPort.String()
-		out["DstPort"] = sctp.DstPort.String()
+		out["SrcPort"] = uint16(sctp.SrcPort)
+		out["DstPort"] = uint16(sctp.DstPort)
 	}
 
 	if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
@@ -71,6 +71,7 @@ func PacketToMap(pr *model.PacketRecord) config.GenericMap {
 	// Data is base64 encoded to avoid marshal / unmarshal issues
 	out["Data"] = base64.StdEncoding.EncodeToString(packet.Data())
 	out["Time"] = pr.Time.Unix()
+	out["TimeFlowStartMs"] = pr.Time.UnixMilli()
 
 	return out
 }

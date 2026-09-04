@@ -279,10 +279,20 @@ type Agent struct {
 	// This setting is only used when the interface name could not be found for a given index and MAC.
 	// E.g. "0a:58=eth0" (used for ovn-kubernetes)
 	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
-	// EnableOpenSSLTracking enable tracking OpenSSL flows encryption
+	// EnableOpenSSLTracking attaches uprobes to libssl SSL_read/SSL_write for plaintext capture (PCA mode).
 	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
-	// OpenSSLPath path to the openssl binary
-	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/bin/openssl"`
+	// OpenSSLPath path to the openssl binary or libssl.so
+	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/lib64/libssl.so.3"`
+	// TLSPlaintextPIDAllowlist optional comma-separated PIDs to scope TLS plaintext capture
+	TLSPlaintextPIDAllowlist string `env:"TLS_PLAINTEXT_PID_ALLOWLIST"`
+	// TLSPlaintextDedupEnabled drops duplicate plaintext events within the dedup window
+	TLSPlaintextDedupEnabled bool `env:"TLS_PLAINTEXT_DEDUP_ENABLED" envDefault:"true"`
+	// TLSPlaintextDedupWindow time window for plaintext deduplication
+	TLSPlaintextDedupWindow time.Duration `env:"TLS_PLAINTEXT_DEDUP_WINDOW" envDefault:"500ms"`
+	// TLSPlaintextMinBytes drops plaintext events shorter than this length (0 = disabled)
+	TLSPlaintextMinBytes int `env:"TLS_PLAINTEXT_MIN_BYTES" envDefault:"0"`
+	// TLSPlaintextPreviewBytes limits PlaintextPreview length (0 = full captured payload, default 256)
+	TLSPlaintextPreviewBytes int `env:"TLS_PLAINTEXT_PREVIEW_BYTES" envDefault:"256"`
 	// EnableFlowsRingbufFallback enable the "direct_flows" ring buffer, which is a fallback method to get flows from the kernel space, used when the main map is full or busy.
 	// See also: https://github.com/netobserv/netobserv-ebpf-agent/blob/main/docs/architecture.md
 	EnableFlowsRingbufFallback bool `env:"ENABLE_FLOWS_RINGBUF_FALLBACK" envDefault:"false"`

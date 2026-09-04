@@ -232,8 +232,31 @@ type BpfSslDataEventT struct {
 	PidTgid     uint64
 	DataLen     int32
 	SslType     uint8
+	Direction   uint8
+	TlsSource   uint8
+	TupleValid  uint8
+	SrcPort     uint16
+	DstPort     uint16
+	SrcAddr     [16]uint8
+	DstAddr     [16]uint8
+	SocketFd    int32
+	ConnUserPtr uint64
 	Data        [16384]int8
-	_           [3]byte
+}
+
+type BpfSslFdKeyT struct {
+	_      structs.HostLayout
+	SslPtr uint64
+	Tgid   uint32
+	Pad    uint32
+}
+
+type BpfSslReadActiveT struct {
+	_           structs.HostLayout
+	SslType     uint8
+	Pad         [7]uint8
+	BufUser     uint64
+	ConnUserPtr uint64
 }
 
 type BpfTcpFlagsT uint32
@@ -287,13 +310,18 @@ const (
 	BpfMapPeerFilterMap                  = "peer_filter_map"
 	BpfMapQuicFlows                      = "quic_flows"
 	BpfMapSslDataEventMap                = "ssl_data_event_map"
+	BpfMapSslFdMap                       = "ssl_fd_map"
+	BpfMapSslReadActiveMap               = "ssl_read_active_map"
 	BpfProgKfreeSkb                      = "kfree_skb"
 	BpfProgNetkitPeerFlowParse           = "netkit_peer_flow_parse"
 	BpfProgNetkitPeerPcaParse            = "netkit_peer_pca_parse"
 	BpfProgNetkitPrimaryFlowParse        = "netkit_primary_flow_parse"
 	BpfProgNetkitPrimaryPcaParse         = "netkit_primary_pca_parse"
 	BpfProgNetworkEventsMonitoring       = "network_events_monitoring"
+	BpfProgProbeEntrySSL_read            = "probe_entry_SSL_read"
+	BpfProgProbeEntrySSL_setFd           = "probe_entry_SSL_set_fd"
 	BpfProgProbeEntrySSL_write           = "probe_entry_SSL_write"
+	BpfProgProbeRetSSL_read              = "probe_ret_SSL_read"
 	BpfProgTcEgressFlowParse             = "tc_egress_flow_parse"
 	BpfProgTcEgressPcaParse              = "tc_egress_pca_parse"
 	BpfProgTcIngressFlowParse            = "tc_ingress_flow_parse"
@@ -380,7 +408,10 @@ type BpfProgramSpecs struct {
 	NetkitPrimaryFlowParse  *ebpf.ProgramSpec `ebpf:"netkit_primary_flow_parse"`
 	NetkitPrimaryPcaParse   *ebpf.ProgramSpec `ebpf:"netkit_primary_pca_parse"`
 	NetworkEventsMonitoring *ebpf.ProgramSpec `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_read      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
+	ProbeRetSSL_read        *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_read"`
 	TcEgressFlowParse       *ebpf.ProgramSpec `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.ProgramSpec `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.ProgramSpec `ebpf:"tc_ingress_flow_parse"`
@@ -419,6 +450,8 @@ type BpfMapSpecs struct {
 	PeerFilterMap                *ebpf.MapSpec `ebpf:"peer_filter_map"`
 	QuicFlows                    *ebpf.MapSpec `ebpf:"quic_flows"`
 	SslDataEventMap              *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
+	SslFdMap                     *ebpf.MapSpec `ebpf:"ssl_fd_map"`
+	SslReadActiveMap             *ebpf.MapSpec `ebpf:"ssl_read_active_map"`
 }
 
 // BpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -485,6 +518,8 @@ type BpfMaps struct {
 	PeerFilterMap                *ebpf.Map `ebpf:"peer_filter_map"`
 	QuicFlows                    *ebpf.Map `ebpf:"quic_flows"`
 	SslDataEventMap              *ebpf.Map `ebpf:"ssl_data_event_map"`
+	SslFdMap                     *ebpf.Map `ebpf:"ssl_fd_map"`
+	SslReadActiveMap             *ebpf.Map `ebpf:"ssl_read_active_map"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -506,6 +541,8 @@ func (m *BpfMaps) Close() error {
 		m.PeerFilterMap,
 		m.QuicFlows,
 		m.SslDataEventMap,
+		m.SslFdMap,
+		m.SslReadActiveMap,
 	)
 }
 
@@ -546,7 +583,10 @@ type BpfPrograms struct {
 	NetkitPrimaryFlowParse  *ebpf.Program `ebpf:"netkit_primary_flow_parse"`
 	NetkitPrimaryPcaParse   *ebpf.Program `ebpf:"netkit_primary_pca_parse"`
 	NetworkEventsMonitoring *ebpf.Program `ebpf:"network_events_monitoring"`
+	ProbeEntrySSL_read      *ebpf.Program `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd     *ebpf.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write     *ebpf.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeRetSSL_read        *ebpf.Program `ebpf:"probe_ret_SSL_read"`
 	TcEgressFlowParse       *ebpf.Program `ebpf:"tc_egress_flow_parse"`
 	TcEgressPcaParse        *ebpf.Program `ebpf:"tc_egress_pca_parse"`
 	TcIngressFlowParse      *ebpf.Program `ebpf:"tc_ingress_flow_parse"`
@@ -572,7 +612,10 @@ func (p *BpfPrograms) Close() error {
 		p.NetkitPrimaryFlowParse,
 		p.NetkitPrimaryPcaParse,
 		p.NetworkEventsMonitoring,
+		p.ProbeEntrySSL_read,
+		p.ProbeEntrySSL_setFd,
 		p.ProbeEntrySSL_write,
+		p.ProbeRetSSL_read,
 		p.TcEgressFlowParse,
 		p.TcEgressPcaParse,
 		p.TcIngressFlowParse,
