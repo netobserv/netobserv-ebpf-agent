@@ -1,0 +1,15 @@
+services:
+  prometheus:
+    image: docker.io/prom/prometheus:v2.53.3
+    ports:
+      # Host UI/API; agent + embedded FLP keep 9090 and 9102 on the host.
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./netobserv-rules.yml:/etc/prometheus/netobserv-rules.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2h
+      - --web.enable-lifecycle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

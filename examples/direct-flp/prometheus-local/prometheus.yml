@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+rule_files:
+  - /etc/prometheus/netobserv-rules.yml
+
+scrape_configs:
+  - job_name: netobserv-flowlogs-pipeline
+    metrics_path: /metrics
+    static_configs:
+      # From inside the Prometheus container, reach the host where the agent listens (9102).
+      - targets: ["host.docker.internal:9102"]
