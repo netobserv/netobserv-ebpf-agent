@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/e2e/basic"
 	"github.com/netobserv/netobserv-ebpf-agent/e2e/cluster"
+	"github.com/netobserv/netobserv-ebpf-agent/e2e/flows"
 
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 		}),
 		cluster.Deploy(cluster.Deployment{
 			Order:        cluster.AfterAgent,
-			ManifestFile: path.Join("..", "basic", "manifests", "pods.yml"),
+			ManifestFile: path.Join("..", "flows", "manifests", "pods.yml"),
 		}),
 	)
 	testCluster.Run(m)
@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 // TestBasicFlowCapture checks that the agent is correctly capturing the request/response flows
 // between the pods/service deployed from the manifests/pods.yml file
 func TestBasicFlowCapture(t *testing.T) {
-	bt := basic.FlowCaptureTester{
+	bt := flows.FlowCaptureTester{
 		Cluster:   testCluster,
 		Namespace: namespace,
 		Timeout:   testTimeout,

@@ -1,6 +1,6 @@
 # eBPF Agent configuration environment variables
 
-_Please also refer to the file [config.go](../pkg/config/config.go) which is the primary source of truth._
+_Please also refer to [pkg/config/agent.go](../pkg/config/agent.go) and the `pkg/config/flows` / `pkg/config/packets` subpackages, which are the primary source of truth._
 
 The following environment variables are available to configure the NetObserv eBPF Agent:
 

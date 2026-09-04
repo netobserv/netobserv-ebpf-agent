@@ -3,7 +3,7 @@ package model
 import (
 	"math"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 )
 
 type BpfFlowContent struct {

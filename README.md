@@ -141,7 +141,7 @@ make destroy-kind-cluster
 
 ### How to regenerate the eBPF Kernel binaries
 
-The eBPF program is embedded into the `pkg/ebpf/bpf_*` generated files.
+The eBPF programs are embedded into `pkg/ebpf/flows/bpf_*` and `pkg/ebpf/packets/packets_*` generated files.
 This step is generally not needed unless you change the C code in the `bpf` folder.
 
 If you have Docker installed, you just need to run:

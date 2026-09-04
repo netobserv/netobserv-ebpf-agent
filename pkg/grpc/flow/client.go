@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"

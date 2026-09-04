@@ -26,7 +26,7 @@ data from old flows.
 To deal with it, we need to discard old flow entries (whose endTime is previous to the last
 flow eviction time) when we aggregate them at the userspace.
 
-#### User-space program Logic: (Refer [tracer.go](../pkg/ebpf/tracer.go))
+#### User-space program Logic: (Refer [pkg/tracer/tracer.go](../pkg/tracer/tracer.go) and [pkg/flow/](../pkg/flow/))
 
 The userspace program has two active threads:  
 

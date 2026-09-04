@@ -150,7 +150,7 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_do_flow_filtering(&id, flags, 0, eth_protocol, NULL, dir);
+    bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, dir);
     if (skip) {
         return 0;
     }

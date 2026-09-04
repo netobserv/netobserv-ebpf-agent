@@ -53,12 +53,12 @@ PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
 CLANG ?= clang
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 GOOS ?= linux
-PROTOC_ARTIFACTS := pkg/pbflow
+PROTOC_ARTIFACTS := pkg/pb/flow pkg/pb/packet
 # regular expressions for excluded file patterns
-EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)"
+EXCLUDE_COVERAGE_FILES="(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pb/)"
 
 # Benchmark configuration (override on the command line, e.g. make bench BENCH_COUNT=10)
-BENCH_PKGS ?= ./pkg/model/... ./pkg/flow/... ./pkg/pbflow/...
+BENCH_PKGS ?= ./pkg/model/... ./pkg/flow/... ./pkg/pb/flow/...
 BENCH_RUN ?= .
 BENCH_COUNT ?= 6
 
@@ -211,12 +211,12 @@ test-container: ## Run linux tests in a container (useful on macOS)
 		-e GOCACHE=/tmp/go-build \
 		-e CGO_ENABLED=0 \
 		$(TEST_CONTAINER_IMAGE) \
-		sh -lc 'mkdir -p "$$GOPATH" "$$GOCACHE"; export PATH="/usr/local/go/bin:/go/bin:$$PATH"; command -v go >/dev/null || (echo "ERROR: go not found; PATH=$$PATH" && exit 127); go version && go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out && go test -v ./pkg/maps'
+		sh -lc 'mkdir -p "$$GOPATH" "$$GOCACHE"; export PATH="/usr/local/go/bin:/go/bin:$$PATH"; command -v go >/dev/null || (echo "ERROR: go not found; PATH=$$PATH" && exit 127); go version && go test -mod vendor ./pkg/... ./cmd/... -coverpkg=./... -coverprofile cover.all.out'
 
 .PHONY: verify-maps
-verify-maps: ## Verify map names consistency across all sources
-	@echo "### Verifying map names consistency"
-	go test -v ./pkg/maps
+verify-maps: ## Verify BPF map names consistency (bpf2go specs vs bytecode manifest)
+	@echo "### Verifying BPF map names consistency"
+	go test -v ./pkg/ebpf -run 'Test(Flow|Packet)(Map|Object)'
 
 .PHONY: test-race
 test-race: ## Test code using go test -race
@@ -247,7 +247,7 @@ test-race-container: ## Run go test -race in a linux container (useful on macOS)
 
 .PHONY: cov-exclude-generated
 cov-exclude-generated:
-	grep -vE "(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pbflow/)" cover.all.out > cover.out
+	grep -vE "(/cmd/)|(bpf_bpfe)|(/examples/)|(/pkg/pb/)" cover.all.out > cover.out
 
 .PHONY: coverage-report
 coverage-report: cov-exclude-generated ## Generate coverage report
@@ -322,10 +322,12 @@ tar-image: image-build ## Build single arch (amd64) and save as a tar
 
 .PHONY: tar-bc-image
 tar-bc-image: MULTIARCH_TARGETS=amd64
-tar-bc-image: bc-image-build ## Build single arch (amd64) bytecode and save as a tar
-	$(OCI_BIN) tag $(BC_IMAGE)-amd64 $(BC_IMAGE)
+tar-bc-image: bc-image-build ## Build single arch (amd64) flow and packet bytecode images and save as a tar
+	$(OCI_BIN) tag $(BC_FLOW_IMAGE)-amd64 $(BC_FLOW_IMAGE)
+	$(OCI_BIN) tag $(BC_PACKET_IMAGE)-amd64 $(BC_PACKET_IMAGE)
+	$(OCI_BIN) tag $(BC_FLOW_IMAGE) $(BC_IMAGE)
 	mkdir -p ./out
-	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_IMAGE)
+	$(OCI_BIN) save -o out/ebpf-agent-bc.tar $(BC_FLOW_IMAGE) $(BC_PACKET_IMAGE)
 
 include .mk/bc.mk
 include .mk/shortcuts.mk

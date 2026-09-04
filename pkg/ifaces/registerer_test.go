@@ -18,7 +18,7 @@ func TestRegisterer(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10, metrics.NoOp())
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
+	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
@@ -91,7 +91,7 @@ func TestRegisterer_Lookup(t *testing.T) {
 	)
 
 	watcher := NewWatcher(10, metrics.NoOp())
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}, metrics.NoOp())
+	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Set conflicting interfaces on ifindex 2 (they would have different netns, but that's not important for this test)
@@ -155,7 +155,7 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	defer cancel()
 
 	watcher := NewWatcher(10, metrics.NoOp())
-	registry, err := NewRegisterer(watcher, &config.Agent{BuffersLength: 10}, metrics.NoOp())
+	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 
 	// Start with empty interfaces

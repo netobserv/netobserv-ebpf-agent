@@ -1,47 +1,75 @@
 # NetObserv eBPF agent architecture
 
-The eBPF agent is built as an a Extract-Transform-Load pipeline on top of the [Gopipes library](https://github.com/netobserv/gopipes).
+The agent runs in one of two modes, selected at startup via `ENABLE_PCA`. Each mode loads a **dedicated BPF object**; programs and maps from the other mode are not compiled into that object and are never stripped at runtime.
 
-The following graph provides a birds' eye view on how the different components are connected and which data they share.
+| Mode | `ENABLE_PCA` | BPF entry | Go bindings |
+|------|--------------|-----------|-------------|
+| Flow capture (default) | `false` | [`bpf/flows/flows.c`](../bpf/flows/flows.c) | [`pkg/ebpf/flows`](../pkg/ebpf/flows) |
+| Packet capture (PCA) | `true` | [`bpf/packets/packets.c`](../bpf/packets/packets.c) | [`pkg/ebpf/packets`](../pkg/ebpf/packets) |
 
-For more info on each component, please check their corresponding Go docs.
+Both modes share the same binary ([`cmd/netobserv-ebpf-agent.go`](../cmd/netobserv-ebpf-agent.go)) and filter implementation ([`bpf/common/filter.h`](../bpf/common/filter.h)). Userspace processing is built as an Extract-Transform-Load pipeline on top of the [Gopipes library](https://github.com/netobserv/gopipes).
 
-<!-- When editing, you can use an online editor for a live preview, e.g. https://mermaid.live/ -->
-
-### Kernel space
+## Mode overview
 
 ```mermaid
 flowchart TD
-    A[TC/X Hooks] -->|Accumulate packet data| M1(Global map: aggregated_flows)
-    D{If DNS} -->|Req: store req info| MD(Global map: dns_flows)
-    D -->|Resp: compute latency| MD
-    A -->D
-    D -->|Store DNS info| M2(PerCPU map: additional_flow_metrics)
-    B[Drops Hook: kfree_skb] -->|Accumulate drop data| M2(PerCPU map: additional_flow_metrics)
-    C[RTT Hook: tcp_rcv_established] -->|Extract & store sRTT| M2(PerCPU map: additional_flow_metrics)
-    E[Events Hook: psample_sample_packet] -->|Accumulate net events| M2(PerCPU map: additional_flow_metrics)
-    A -->F{If busy map / error}
-    F -->|Single-packet flow| RB(RingBuffer)
-    M1 --> |Polling|U[User space]
-    M2 --> |Polling|U
-    RB --> |Push|U
-    style A fill:#FBB
-    style B fill:#FBB
-    style C fill:#FBB
-    style E fill:#FBB
+    subgraph flowMode ["Flow mode (ENABLE_PCA=false)"]
+        direction TD
+        flowTC[TC/TCX hooks] --> flowParse[flow parse programs]
+        flowParse --> flowAgg[aggregated_flows map]
+        flowAgg --> flowTracer[tracer flows]
+        flowTracer --> flowPkg[pkg flow]
+        flowPkg --> flowExport[gRPC / Kafka / direct-flp]
+    end
+
+    subgraph packetMode ["Packet mode (ENABLE_PCA=true)"]
+        direction TD
+        pktTC[TC/TCX hooks] --> pktParse[packet parse programs]
+        pktParse --> pktRing[packet_record ringbuf]
+        pktRing --> pktTracer[tracer packets]
+        pktTracer --> pktPkg[agent packets]
+        pktPkg --> pktExport[gRPC / direct-flp]
+    end
 ```
 
-### User space
-```mermaid
-flowchart TD
-    E(ebpf.FlowFetcher) --> |"pushes via<br/>RingBuffer"| RB(flow.RingBufTracer)
-    style E fill:#7CA
+## Documentation map
 
-    E --> |"polls<br/>HashMap"| M(flow.MapTracer)
-    RB --> |chan *model.Record| ACC(flow.Accounter)
-    RB -.-> |flushes| M
-    ACC --> |"chan []*model.Record"| CL(flow.CapacityLimiter)
-    M --> |"chan []*model.Record"| CL
+| Topic | Document |
+|-------|----------|
+| Flow capture — kernel hooks, maps, userspace pipeline, optional features | [flows/architecture.md](./flows/architecture.md) |
+| Packet capture — kernel hooks, ringbuf, userspace pipeline | [packets/architecture.md](./packets/architecture.md) |
+| PCA deployment, configuration, CLI integration | [packet-capture.md](./packet-capture.md) |
+| Environment variables | [config.md](./config.md) |
+| Flow filter rules (`FLOW_FILTER_RULES`) | [flow_filtering.md](./flow_filtering.md) |
+| eBPF maps, per-CPU behaviour, collisions | [ebpf_implementation.md](./ebpf_implementation.md) |
+| BPF map name consistency checks | `make verify-maps` (`pkg/ebpf/symbols_test.go`) |
 
-    CL --> |"chan []*model.Record"| EX("export.GRPCProto<br/>or<br/>export.KafkaProto<br/>or<br/>export.DirectFLP")
+## Package layout (userspace)
+
+```text
+pkg/
+  ebpf/              # shared BPF name constants
+  ebpf/flows/        # flow BPF bindings (bpf2go)
+  ebpf/packets/      # packet BPF bindings (bpf2go)
+  tracer/
+    attach/          # shared TC/TCX/netkit attachment
+    flows/           # flow-mode fetcher
+    packets/         # packet-mode fetcher
+  agent/
+    flows/           # flow agent entry point
+    packets/         # packet agent entry point (ringbuf reader + batching)
+    common/          # shared status, interface listener, filter parsing
+  config/            # env-based agent config (agent.go + flows/ + packets/)
+  flow/              # flow aggregation, accounting, export batching (flow mode only)
+  decode/
+    flows/           # flow protobuf decode + FLP GenericMap conversion
+    packets/         # packet frame parsing + FLP GenericMap conversion
+  exporter/
+    flows/           # gRPC, Kafka, IPFIX, direct-flp for flows
+    packets/         # gRPC, direct-flp for packet capture
+  pb/
+    flow/            # flow protobuf types + conversion (proto/flow.proto)
+    packet/          # packet protobuf types (proto/packet.proto)
 ```
+
+For component-level API details, see the Go package documentation.

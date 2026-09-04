@@ -14,28 +14,24 @@ env:
   WF_BC_IMAGE: ebpf-bytecode
 
 jobs:
-  extract-data:
-    permissions:
-      pull-requests: read
+  push-pr-image:
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
-    name: extract and validate PR data
+    name: push PR image
     runs-on: ubuntu-latest
     outputs:
       pr_id: ${{ steps.extract.outputs.pr_id }}
       short_sha: ${{ steps.extract.outputs.short_sha }}
       main_image: ${{ steps.extract.outputs.main_image }}
-      bc_image: ${{ steps.extract.outputs.bc_image }}
+      bc_flow_image: ${{ steps.extract.outputs.bc_flow_image }}
+      bc_packet_image: ${{ steps.extract.outputs.bc_packet_image }}
     steps:
       - name: extract PR data
-        id: extract
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUTHOR: ${{ github.event.workflow_run.head_repository.owner.login }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          pr_json=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$AUTHOR:$BRANCH")
+          pr_json=$(gh api "repos/${{ github.repository }}/pulls?state=open&head=${{ github.event.workflow_run.head_repository.owner.login }}:${{ github.event.workflow_run.head_branch }}")
           len=$(echo ${pr_json} | jq '. | length')
           if [[ "$len" != "1" ]]; then
             echo "::error::Could not get a unique PR, aborting"
@@ -46,78 +42,56 @@ jobs:
             echo "::error::PR does not have the ok-to-test label, aborting"
             exit 1
           fi
+          echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_ENV
           head_sha=$(echo ${pr_json} | jq -r '.[0].head.sha')
-          echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_OUTPUT
-          echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_OUTPUT
-          echo "main_image=${WF_REGISTRY}/${WF_IMAGE}:${head_sha::8}" >> $GITHUB_OUTPUT
-          echo "bc_image=${WF_REGISTRY}/${WF_BC_IMAGE}:${head_sha::8}" >> $GITHUB_OUTPUT
-  push:
-    needs: extract-data
-    name: push PR image
-    runs-on: ubuntu-latest
-    steps:
+          echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_ENV
+          echo "main_image=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:${head_sha::8}" >> $GITHUB_ENV
+          echo "bc_flow_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:${head_sha::8}" >> $GITHUB_ENV
+          echo "bc_packet_image=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:${head_sha::8}" >> $GITHUB_ENV
       - name: download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: pr
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{github.event.workflow_run.id }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
       - name: load images
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_IMAGE: ${{ needs.extract-data.outputs.bc_image }}
         run: |
           docker load --input ./ebpf-agent.tar
           docker load --input ./ebpf-agent-bc.tar
-          docker image tag ${WF_REGISTRY}/${WF_IMAGE}:tmp $MAIN_IMAGE
-          docker image tag ${WF_REGISTRY}/${WF_BC_IMAGE}:tmp $BC_IMAGE
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:tmp ${{ env.main_image }}
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-flows:tmp ${{ env.bc_flow_image }}
+          docker image tag ${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}-packets:tmp ${{ env.bc_packet_image }}
       - name: docker login to quay.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           username: ${{ env.WF_REGISTRY_USER }}
           password: ${{ secrets.QUAY_SECRET }}
           registry: quay.io
       - name: push images
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_IMAGE: ${{ needs.extract-data.outputs.bc_image }}
         run: |
-          DOCKER_BUILDKIT=1 docker push "$MAIN_IMAGE"
-          DOCKER_BUILDKIT=1 docker push "$BC_IMAGE"
-  comment:
-    permissions:
-      pull-requests: write
-    needs: [extract-data, push]
-    name: comment on PR
-    runs-on: ubuntu-latest
-    steps:
+          DOCKER_BUILDKIT=1 docker push ${{ env.main_image }}
+          DOCKER_BUILDKIT=1 docker push ${{ env.bc_flow_image }}
+          DOCKER_BUILDKIT=1 docker push ${{ env.bc_packet_image }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          MAIN_IMAGE: ${{ needs.extract-data.outputs.main_image }}
-          BC_IMAGE: ${{ needs.extract-data.outputs.bc_image }}
-          SHORT_SHA: ${{ needs.extract-data.outputs.short_sha }}
-          PR_ID: ${{ needs.extract-data.outputs.pr_id }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            const mainImage = process.env.MAIN_IMAGE;
-            const bcImage = process.env.BC_IMAGE;
-            const shortSHA = process.env.SHORT_SHA;
             github.rest.issues.createComment({
-              issue_number: parseInt(process.env.PR_ID, 10),
+              issue_number: ${{ env.pr_id }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `New images:
             \`\`\`bash
-            ${mainImage}
-            ${bcImage}
+            ${{ env.main_image }}
+            ${{ env.bc_flow_image }}
+            ${{ env.bc_packet_image }}
             \`\`\`
 
             They will expire in two weeks.
 
             To deploy this build, run from the operator repo, assuming the operator is running:
             \`\`\`bash
-            USER=netobserv VERSION=${shortSHA} make set-agent-image
+            USER=netobserv VERSION=${{ env.short_sha }} make set-agent-image
             \`\`\`
             `
             })
