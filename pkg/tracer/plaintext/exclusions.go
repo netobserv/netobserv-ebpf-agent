@@ -145,11 +145,6 @@ func isPlaintextCaptureSoftExcluded(resolvedPath, comm string) bool {
 	return basenameMatches(resolvedPath, plaintextSoftExcludedBasenames)
 }
 
-func isPlaintextCaptureExcluded(resolvedPath, comm string) bool {
-	return isPlaintextCaptureHardDenied(resolvedPath, comm) ||
-		isPlaintextCaptureSoftExcluded(resolvedPath, comm)
-}
-
 func isPlaintextCaptureExcludedPID(pidStr string, scope *Scope) bool {
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
@@ -158,9 +153,19 @@ func isPlaintextCaptureExcludedPID(pidStr string, scope *Scope) bool {
 	exePath := filepath.Join(procRootDir, pidStr, "exe")
 	resolved, comm := resolveProcExe(pidStr, exePath)
 
+	// Hard-denied infrastructure processes are always excluded, regardless of any allowlist.
+	if isPlaintextCaptureHardDenied(resolved, comm) {
+		return true
+	}
+
+	// When a process allowlist is configured, only allow matching process names.
+	if scope != nil && scope.HasProcessAllowlist() {
+		return !scope.ProcessAllowlisted(comm)
+	}
+
 	if scope != nil && scope.PIDScoped(pid) {
 		// peer_ip / peer_cidr scoped this PID; allow soft-excluded workloads (console, …).
-		return isPlaintextCaptureHardDenied(resolved, comm)
+		return false
 	}
-	return isPlaintextCaptureExcluded(resolved, comm)
+	return isPlaintextCaptureSoftExcluded(resolved, comm)
 }

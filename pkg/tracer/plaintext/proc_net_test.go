@@ -89,7 +89,7 @@ func TestPidsWithIP(t *testing.T) {
 }
 
 func TestScopePIDFilterAndDedup(t *testing.T) {
-	scope := NewScope(nil, "42", true, time.Second, 0)
+	scope := NewScope(nil, "42", "", true, time.Second, 0)
 	scope.allowedPIDs = map[int]struct{}{42: {}}
 	scope.pidScopeActive = true
 
@@ -108,7 +108,7 @@ func TestScopePIDFilterAndDedup(t *testing.T) {
 }
 
 func TestScopeMatchesProcessIDNotThreadID(t *testing.T) {
-	scope := NewScope(nil, "42", false, time.Second, 0)
+	scope := NewScope(nil, "42", "", false, time.Second, 0)
 	scope.allowedPIDs = map[int]struct{}{42: {}}
 	scope.pidScopeActive = true
 
@@ -122,7 +122,7 @@ func TestScopeMatchesProcessIDNotThreadID(t *testing.T) {
 func TestScopeAllowsPlaintextWithoutTupleWhenPortFiltered(t *testing.T) {
 	scope := NewScope([]*FilterConfig{{
 		Port: intstr.FromInt32(8443),
-	}}, "", false, time.Second, 0)
+	}}, "", "", false, time.Second, 0)
 
 	rec := &model.PlaintextRecord{
 		Pid:       12345,
@@ -157,7 +157,7 @@ func TestScopePeerIPOnlyPartialTuple(t *testing.T) {
 
 	scope := NewScope([]*FilterConfig{{
 		PeerIP: "10.244.2.2",
-	}}, "42", false, time.Second, 0)
+	}}, "42", "", false, time.Second, 0)
 	scope.allowedPIDs = map[int]struct{}{42: {}}
 	scope.pidScopeActive = true
 
@@ -178,7 +178,7 @@ func TestScopePeerIPOnlyPartialTuple(t *testing.T) {
 func TestScopePortOnlyPartialTuple(t *testing.T) {
 	scope := NewScope([]*FilterConfig{{
 		Port: intstr.FromInt32(8443),
-	}}, "", false, time.Second, 0)
+	}}, "", "", false, time.Second, 0)
 
 	rec := &model.PlaintextRecord{
 		Pid:       42,
@@ -236,7 +236,7 @@ func TestScopePortOnlyEnrichesFromProc(t *testing.T) {
 
 	scope := NewScope([]*FilterConfig{{
 		Port: intstr.FromInt32(8443),
-	}}, "", false, time.Second, 0)
+	}}, "", "", false, time.Second, 0)
 
 	rec := &model.PlaintextRecord{
 		Pid:       843,
@@ -253,7 +253,7 @@ func TestScopePortOnlyEnrichesFromProc(t *testing.T) {
 }
 
 func TestScopeMinBytes(t *testing.T) {
-	scope := NewScope(nil, "", false, time.Second, 4)
+	scope := NewScope(nil, "", "", false, time.Second, 4)
 
 	short := &model.PlaintextRecord{Pid: 1, Data: []byte{0x89, 0x00}, Direction: model.PlaintextDirectionRead}
 	if scope.Process(short) {
@@ -265,7 +265,7 @@ func TestScopeMinBytes(t *testing.T) {
 		t.Fatal("expected payload at or above min bytes to pass")
 	}
 
-	disabled := NewScope(nil, "", false, time.Second, 0)
+	disabled := NewScope(nil, "", "", false, time.Second, 0)
 	tiny := &model.PlaintextRecord{Pid: 1, Data: []byte{0x89}, Direction: model.PlaintextDirectionRead}
 	if !disabled.Process(tiny) {
 		t.Fatal("expected min bytes 0 to allow tiny payloads")

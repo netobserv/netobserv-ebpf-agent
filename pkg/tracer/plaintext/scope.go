@@ -34,7 +34,8 @@ type Scope struct {
 	peerIPs  []net.IP
 	peerNets []*net.IPNet
 
-	explicitPIDs map[int]struct{}
+	explicitPIDs     map[int]struct{}
+	processAllowlist map[string]struct{}
 
 	dedupEnabled bool
 	dedupWindow  time.Duration
@@ -56,6 +57,7 @@ type connAffinityKey struct {
 func NewScope(
 	filters []*FilterConfig,
 	explicitPIDList string,
+	processAllowlist string,
 	dedupEnabled bool,
 	dedupWindow time.Duration,
 	minBytes int,
@@ -64,17 +66,18 @@ func NewScope(
 		dedupWindow = 500 * time.Millisecond
 	}
 	s := &Scope{
-		filters:         filters,
-		allowedPIDs:     map[int]struct{}{},
-		flowFilterPorts: map[uint16]struct{}{},
-		explicitPIDs:    parsePIDAllowlist(explicitPIDList),
-		dedupEnabled:    dedupEnabled,
-		dedupWindow:     dedupWindow,
-		dedup:           map[uint64]time.Time{},
-		connAffinity:    map[connAffinityKey]string{},
-		pidNetIPs:       map[int][]net.IP{},
-		minBytes:        minBytes,
-		stopCh:          make(chan struct{}),
+		filters:          filters,
+		allowedPIDs:      map[int]struct{}{},
+		flowFilterPorts:  map[uint16]struct{}{},
+		explicitPIDs:     parsePIDAllowlist(explicitPIDList),
+		processAllowlist: parseProcessAllowlist(processAllowlist),
+		dedupEnabled:     dedupEnabled,
+		dedupWindow:      dedupWindow,
+		dedup:            map[uint64]time.Time{},
+		connAffinity:     map[connAffinityKey]string{},
+		pidNetIPs:        map[int][]net.IP{},
+		minBytes:         minBytes,
+		stopCh:           make(chan struct{}),
 	}
 	s.parseFilters()
 	return s
@@ -768,6 +771,29 @@ func dedupKey(rec *model.PlaintextRecord, pid int) uint64 {
 	}
 	_, _ = h.Write(preview)
 	return h.Sum64()
+}
+
+func parseProcessAllowlist(raw string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out[part] = struct{}{}
+		}
+	}
+	return out
+}
+
+func (s *Scope) HasProcessAllowlist() bool {
+	return len(s.processAllowlist) > 0
+}
+
+func (s *Scope) ProcessAllowlisted(comm string) bool {
+	if len(s.processAllowlist) == 0 {
+		return true
+	}
+	_, ok := s.processAllowlist[comm]
+	return ok
 }
 
 func parsePIDAllowlist(raw string) map[int]struct{} {

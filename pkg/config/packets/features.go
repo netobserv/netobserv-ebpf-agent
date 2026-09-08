@@ -8,6 +8,10 @@ type Features struct {
 	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
 	// TLSPlaintextPIDAllowlist optional comma-separated PIDs to scope TLS plaintext capture
 	TLSPlaintextPIDAllowlist string `env:"TLS_PLAINTEXT_PID_ALLOWLIST"`
+	// TLSPlaintextProcessAllowlist optional comma-separated process names to scope TLS plaintext capture.
+	// When set, only processes whose comm matches an entry in this list will be hooked.
+	// Infrastructure processes (kubelet, crio, etc.) are always excluded regardless of this setting.
+	TLSPlaintextProcessAllowlist string `env:"TLS_PLAINTEXT_PROCESS_ALLOWLIST"`
 	// TLSPlaintextDedupEnabled drops duplicate plaintext events within the dedup window
 	TLSPlaintextDedupEnabled bool `env:"TLS_PLAINTEXT_DEDUP_ENABLED" envDefault:"true"`
 	// TLSPlaintextDedupWindow time window for plaintext deduplication

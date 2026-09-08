@@ -120,7 +120,7 @@ func TestScopeProcessAdmitsScopedHostPID(t *testing.T) {
 	scope := NewScope([]*FilterConfig{{
 		PeerIP: "10.244.1.9",
 		Port:   intstr.FromInt32(8443),
-	}}, "", false, 0, 0)
+	}}, "", "", false, 0, 0)
 	scope.admitPID(13574)
 	scope.admitPID(10651)
 

@@ -29,7 +29,7 @@ func TestPickConnectionPrefersNetNSInterfaceIP(t *testing.T) {
 		t.Fatalf("expected pod netns IP to score higher: pod=%d other=%d", scorePod, scoreOther)
 	}
 
-	s := NewScope(nil, "", false, 0, 0)
+	s := NewScope(nil, "", "", false, 0, 0)
 	s.pidNetIPs[12345] = []net.IP{podIP}
 	best := s.pickConnection(conns, model.PlaintextDirectionWrite, 12345)
 	if best == nil || !best.localIP.Equal(podIP) {
@@ -38,7 +38,7 @@ func TestPickConnectionPrefersNetNSInterfaceIP(t *testing.T) {
 }
 
 func TestScopeSkipsEnrichWhenKernelTuplePresent(t *testing.T) {
-	s := NewScope(nil, "", false, 0, 0)
+	s := NewScope(nil, "", "", false, 0, 0)
 	rec := &model.PlaintextRecord{
 		SrcAddr:   "10.244.2.7",
 		DstAddr:   "10.244.2.1",

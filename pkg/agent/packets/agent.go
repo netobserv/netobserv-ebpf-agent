@@ -79,10 +79,15 @@ func New(cfg *config.Agent) (*Agent, error) {
 		scope = plaintext.NewScope(
 			filterRules,
 			cfg.Packets.TLSPlaintextPIDAllowlist,
+			cfg.Packets.TLSPlaintextProcessAllowlist,
 			cfg.Packets.TLSPlaintextDedupEnabled,
 			cfg.Packets.TLSPlaintextDedupWindow,
 			cfg.Packets.TLSPlaintextMinBytes,
 		)
+		if cfg.Packets.TLSPlaintextPIDAllowlist == "" && cfg.Packets.TLSPlaintextProcessAllowlist == "" {
+			plog.Warn("ENABLE_OPENSSL_TRACKING is enabled without TLS_PLAINTEXT_PID_ALLOWLIST or TLS_PLAINTEXT_PROCESS_ALLOWLIST; " +
+				"uprobes will attach to all non-infrastructure processes. Set an allowlist to restrict scope.")
+		}
 		scope.Start()
 	}
 
