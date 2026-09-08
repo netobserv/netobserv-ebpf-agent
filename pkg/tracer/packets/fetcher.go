@@ -13,6 +13,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/plaintext"
 
 	cilium "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -32,6 +33,7 @@ type Fetcher struct {
 	egressFilters            map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ingressFilters           map[ifaces.InterfaceKey]*netlink.BpfFilter
 	perfReader               *ringbuf.Reader
+	sslDataEventsReader      *ringbuf.Reader
 	cacheMaxSize             int
 	enableIngress            bool
 	enableEgress             bool
@@ -41,7 +43,9 @@ type Fetcher struct {
 	ingressTCXLink           map[ifaces.InterfaceKey]link.Link
 	netkitPrimaryLink        map[ifaces.InterfaceKey]link.Link
 	netkitPeerLink           map[ifaces.InterfaceKey]link.Link
+	opensslAttacher          *plaintext.OpenSSLAttacher
 	lookupAndDeleteSupported bool
+	config                   *tracer.FetcherConfig
 }
 
 func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
@@ -59,9 +63,14 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 	if len(cfg.FilterConfig) > 0 {
 		enableFiltering = 1
 	}
+	enableOpenSSLTracking := uint8(0)
+	if cfg.EnableOpenSSLTracking {
+		enableOpenSSLTracking = 1
+	}
 	variables := []netattach.VariableMapping{
 		{Key: ebpf.BpfVarSampling, Value: uint32(cfg.Sampling)},
 		{Key: ebpf.BpfVarEnableFiltering, Value: enableFiltering},
+		{Key: ebpf.BpfVarEnableOpensslTracking, Value: enableOpenSSLTracking},
 	}
 	for _, mapping := range variables {
 		if err := netattach.SetVariable(spec, mapping.Key, mapping.Value); err != nil {
@@ -74,8 +83,16 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		"peer_filter_map",
 		"global_counters",
 		"packet_record",
+		"ssl_data_event_map",
+		"ssl_read_active_map",
+		"ssl_fd_map",
 	} {
 		spec.Maps[m].Pinning = 0
+	}
+
+	if !cfg.EnableOpenSSLTracking {
+		const ringbufMinSize = 1 << 12
+		spec.Maps["ssl_data_event_map"].MaxEntries = ringbufMinSize
 	}
 
 	objects := &packets.PacketsObjects{}
@@ -97,9 +114,30 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		return nil, fmt.Errorf("accessing packet ringbuf: %w", err)
 	}
 
+	var sslReader *ringbuf.Reader
+	var opensslAtt *plaintext.OpenSSLAttacher
+	if cfg.EnableOpenSSLTracking {
+		sslReader, err = ringbuf.NewReader(objects.SslDataEventMap)
+		if err != nil {
+			return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
+		}
+
+		opensslAtt, err = plaintext.AttachOpenSSLUprobes(
+			cfg.PlaintextScope, cfg.OpenSSLPath,
+			objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read,
+			objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
+		}
+		plog.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.OpenSSLPath)
+	}
+
 	return &Fetcher{
 		objects:                  objects,
 		perfReader:               reader,
+		sslDataEventsReader:      sslReader,
+		opensslAttacher:          opensslAtt,
 		egressFilters:            map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		ingressFilters:           map[ifaces.InterfaceKey]*netlink.BpfFilter{},
 		qdiscs:                   map[ifaces.InterfaceKey]*netlink.GenericQdisc{},
@@ -111,6 +149,7 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		netkitPrimaryLink:        map[ifaces.InterfaceKey]link.Link{},
 		netkitPeerLink:           map[ifaces.InterfaceKey]link.Link{},
 		lookupAndDeleteSupported: true,
+		config:                   cfg,
 	}, nil
 }
 func (p *Fetcher) UnRegister(iface *ifaces.Interface) error {
@@ -375,10 +414,19 @@ func (p *Fetcher) AttachTCX(iface *ifaces.Interface) error { //nolint:cyclop // 
 
 // We don't need an "Close(iface)" method because the filters and qdiscs
 // are automatically removed when the interface is down
+// nolint:cyclop
 func (p *Fetcher) Close() error {
 	plog.Debug("unregistering eBPF objects")
 
 	var errs []error
+	if p.opensslAttacher != nil {
+		p.opensslAttacher.Close()
+	}
+	if p.sslDataEventsReader != nil {
+		if err := p.sslDataEventsReader.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if p.perfReader != nil {
 		if err := p.perfReader.Close(); err != nil {
 			errs = append(errs, err)
@@ -423,15 +471,11 @@ func (p *Fetcher) Close() error {
 		}
 	}
 	p.qdiscs = map[ifaces.InterfaceKey]*netlink.GenericQdisc{}
-	if len(errs) == 0 {
-		return nil
-	}
 
 	for iface, l := range p.egressTCXLink {
 		log := plog.WithField("interface", iface)
 		log.Debug("detach egress TCX hook")
 		l.Close()
-
 	}
 	p.egressTCXLink = map[ifaces.InterfaceKey]link.Link{}
 	for iface, l := range p.ingressTCXLink {
@@ -440,6 +484,10 @@ func (p *Fetcher) Close() error {
 		l.Close()
 	}
 	p.ingressTCXLink = map[ifaces.InterfaceKey]link.Link{}
+
+	if len(errs) == 0 {
+		return nil
+	}
 
 	var errStrings []string
 	for _, err := range errs {
@@ -450,6 +498,13 @@ func (p *Fetcher) Close() error {
 
 func (p *Fetcher) ReadPerf() (ringbuf.Record, error) {
 	return p.perfReader.Read()
+}
+
+func (p *Fetcher) ReadSSLRingBuf() (ringbuf.Record, error) {
+	if p.sslDataEventsReader == nil {
+		return ringbuf.Record{}, fmt.Errorf("SSL ring buffer not initialized")
+	}
+	return p.sslDataEventsReader.Read()
 }
 
 func (p *Fetcher) LookupAndDeleteMap(met *metrics.Metrics) map[int][]*byte {

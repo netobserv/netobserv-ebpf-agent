@@ -224,7 +224,10 @@ type Common struct {
 	// This setting is only used when the interface name could not be found for a given index and MAC.
 	// E.g. "0a:58=eth0" (used for ovn-kubernetes)
 	PreferredInterfaceForMACPrefix string `env:"PREFERRED_INTERFACE_FOR_MAC_PREFIX"`
-
+	// EnableOpenSSLTracking enables OpenSSL uprobe-based tracking (used by both flow and packet modes).
+	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
+	// OpenSSLPath is the default path to the libssl shared library for uprobe attachment.
+	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/lib64/libssl.so.3"`
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

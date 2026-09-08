@@ -6,6 +6,6 @@ import exporterflows "github.com/netobserv/netobserv-ebpf-agent/pkg/exporter/flo
 type DirectFLP = exporterflows.DirectFLP
 
 // StartDirectFLP starts an in-process flowlogs-pipeline configured for packet export.
-func StartDirectFLP(jsonConfig string, bufLen int) (*DirectFLP, error) {
-	return exporterflows.StartDirectFLP(jsonConfig, bufLen)
+func StartDirectFLP(jsonConfig string, bufLen int, plaintextPreviewBytes int) (*DirectFLP, error) {
+	return exporterflows.StartDirectFLP(jsonConfig, bufLen, plaintextPreviewBytes)
 }
