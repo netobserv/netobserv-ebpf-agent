@@ -43,6 +43,14 @@ reviews:
     - "!**/*_grpc.pb.go"
 
   path_instructions:
+    - path: "**"
+      instructions: |
+        Scope every comment to what materially changed in the diff. If a hunk is only
+        moved, renamed, reindented, reformatted, or has reordered imports with no
+        behavioral change, do not raise findings on it — even if the surrounding code
+        could theoretically be improved. Do not treat relocated existing code as newly
+        introduced. Only flag pre-existing issues when the diff meaningfully changes
+        that code's behavior. Be pragmatic: prefer fewer, high-confidence comments.
     - path: "bpf/**/*.c"
       instructions: |
         When reviewing eBPF C code:
