@@ -113,13 +113,14 @@ func NewRecordInto(
 		Metrics:       *metrics,
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
+		Interfaces:    interfaces,
 		AgentIP:       agentIP,
 	}
 	lMAC := metrics.SrcMac
 	if metrics.DirectionFirstSeen == 0 {
 		lMAC = metrics.DstMac
 	}
-	dst.Interfaces = append(interfaces, NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
+	dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
 		int(metrics.DirectionFirstSeen),
 		udnsCache))
 
