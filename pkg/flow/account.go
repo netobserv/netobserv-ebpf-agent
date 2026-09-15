@@ -102,6 +102,10 @@ func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Reco
 func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*model.Record, reason string) {
 	now := c.clock()
 	monotonicNow := uint64(c.monoClock())
+	// Records are forwarded and released as a batch, so allocate their values and
+	// common first-interface storage as contiguous blocks.
+	recordsBacking := make([]model.Record, len(entries))
+	interfacesBacking := make([]model.IntfDirUdn, len(entries))
 	records := make([]*model.Record, 0, len(entries))
 	udnCache := make(map[string]string)
 	if c.s != nil && c.udnEnabled {
@@ -113,9 +117,13 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 			alog.Tracef("GetInterfaceUDNS map: %v", udnCache)
 		}
 	}
+	i := 0
 	for key, metrics := range entries {
 		flowContent := model.NewBpfFlowContent(*metrics)
-		records = append(records, model.NewRecord(key, &flowContent, now, monotonicNow, c.s, udnCache))
+		recordsBacking[i].Interfaces = interfacesBacking[i : i : i+1]
+		model.NewRecordInto(&recordsBacking[i], key, &flowContent, now, monotonicNow, c.s, udnCache)
+		records = append(records, &recordsBacking[i])
+		i++
 	}
 	c.metrics.EvictionCounter.WithSourceAndReason("accounter", reason).Inc()
 	c.metrics.EvictedFlowsCounter.WithSourceAndReason("accounter", reason).Add(float64(len(records)))

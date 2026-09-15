@@ -105,7 +105,6 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	monotonicTimeNow := monotime.Now()
 	currentTime := time.Now()
 
-	var forwardingFlows []*model.Record
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
 	udnCache := make(map[string]string)
@@ -118,15 +117,25 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 			mtlog.Tracef("GetInterfaceUDNS map: %v", udnCache)
 		}
 	}
+	// Records are forwarded and released as a batch, so allocate their values and
+	// common first-interface storage as contiguous blocks.
+	recordsBacking := make([]model.Record, len(flows))
+	interfacesBacking := make([]model.IntfDirUdn, len(flows))
+	forwardingFlows := make([]*model.Record, 0, len(flows))
+	i := 0
 	for flowKey, flowMetrics := range flows {
-		forwardingFlows = append(forwardingFlows, model.NewRecord(
+		recordsBacking[i].Interfaces = interfacesBacking[i : i : i+1]
+		model.NewRecordInto(
+			&recordsBacking[i],
 			flowKey,
 			&flowMetrics,
 			currentTime,
 			uint64(monotonicTimeNow),
 			m.s,
 			udnCache,
-		))
+		)
+		forwardingFlows = append(forwardingFlows, &recordsBacking[i])
+		i++
 	}
 	m.mapFetcher.DeleteMapsStaleEntries(m.staleEntriesEvictTimeout)
 	select {

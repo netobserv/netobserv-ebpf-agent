@@ -87,26 +87,45 @@ func NewRecord(
 	s SampleDecoder,
 	udnsCache map[string]string,
 ) *Record {
+	record := &Record{}
+	NewRecordInto(record, key, metrics, currentTime, monotonicCurrentTime, s, udnsCache)
+	return record
+}
+
+// NewRecordInto replaces dst with a new record. It reuses the capacity of
+// dst.Interfaces, allowing batch callers to provide shared backing storage.
+// Shared subslices must have their capacity limited to their assigned region.
+func NewRecordInto(
+	dst *Record,
+	key ebpf.BpfFlowId,
+	metrics *BpfFlowContent,
+	currentTime time.Time,
+	monotonicCurrentTime uint64,
+	s SampleDecoder,
+	udnsCache map[string]string,
+) {
+	interfaces := dst.Interfaces[:0]
 	startDelta := time.Duration(monotonicCurrentTime - metrics.StartMonoTimeTs)
 	endDelta := time.Duration(monotonicCurrentTime - metrics.EndMonoTimeTs)
 
-	var record = Record{
+	*dst = Record{
 		ID:            key,
 		Metrics:       *metrics,
 		TimeFlowStart: currentTime.Add(-startDelta),
 		TimeFlowEnd:   currentTime.Add(-endDelta),
+		Interfaces:    interfaces,
 		AgentIP:       agentIP,
 	}
 	lMAC := metrics.SrcMac
 	if metrics.DirectionFirstSeen == 0 {
 		lMAC = metrics.DstMac
 	}
-	record.Interfaces = []IntfDirUdn{NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
+	dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
 		int(metrics.DirectionFirstSeen),
-		udnsCache)}
+		udnsCache))
 
-	for i := uint8(0); i < record.Metrics.NbObservedIntf; i++ {
-		record.Interfaces = append(record.Interfaces, NewIntfDirUdn(
+	for i := uint8(0); i < dst.Metrics.NbObservedIntf; i++ {
+		dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(
 			interfaceNamer(int(metrics.ObservedIntf[i]), lMAC),
 			int(metrics.ObservedDirection[i]),
 			udnsCache,
@@ -115,30 +134,30 @@ func NewRecord(
 
 	if metrics.DNSMetrics != nil {
 		if metrics.DNSMetrics.Latency != 0 {
-			record.DNSLatency = time.Duration(metrics.DNSMetrics.Latency)
+			dst.DNSLatency = time.Duration(metrics.DNSMetrics.Latency)
 		}
 	}
 	if metrics.AdditionalMetrics != nil {
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
-			record.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
+			dst.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}
 	}
 	if s != nil && metrics.NetworkEventsMetrics != nil {
 		seen := make(map[string]bool)
-		record.NetworkMonitorEventsMD = make([]map[string]string, 0)
+		dst.NetworkMonitorEventsMD = make([]map[string]string, 0)
 		for i, metadata := range metrics.NetworkEventsMetrics.NetworkEvents {
 			if metrics.NetworkEventsMetrics.Packets[i] != 0 {
 				if md, err := s.DecodeCookie8Bytes(metadata); err == nil {
 					mdStr := md.String()
 					if !seen[mdStr] {
 						asMap := networkevents.ToMap(md)
-						record.NetworkMonitorEventsMD = append(record.NetworkMonitorEventsMD, asMap)
+						dst.NetworkMonitorEventsMD = append(dst.NetworkMonitorEventsMD, asMap)
 						seen[mdStr] = true
 					}
 					if cause, isDrop := networkevents.ToDropReasonCode(md); isDrop {
 						// Inject as a packet drop
-						if record.Metrics.PktDropMetrics == nil {
-							record.Metrics.PktDropMetrics = &ebpf.BpfPktDropMetrics{
+						if dst.Metrics.PktDropMetrics == nil {
+							dst.Metrics.PktDropMetrics = &ebpf.BpfPktDropMetrics{
 								StartMonoTimeTs: metrics.NetworkEventsMetrics.StartMonoTimeTs,
 								EndMonoTimeTs:   metrics.NetworkEventsMetrics.EndMonoTimeTs,
 								LatestDropCause: cause,
@@ -146,16 +165,15 @@ func NewRecord(
 								Packets:         metrics.NetworkEventsMetrics.Packets[i],
 							}
 						} else {
-							record.Metrics.PktDropMetrics.LatestDropCause = cause
-							record.Metrics.PktDropMetrics.Bytes = addUint16(record.Metrics.PktDropMetrics.Bytes, metrics.NetworkEventsMetrics.Bytes[i])
-							record.Metrics.PktDropMetrics.Packets = addUint16(record.Metrics.PktDropMetrics.Packets, metrics.NetworkEventsMetrics.Packets[i])
+							dst.Metrics.PktDropMetrics.LatestDropCause = cause
+							dst.Metrics.PktDropMetrics.Bytes = addUint16(dst.Metrics.PktDropMetrics.Bytes, metrics.NetworkEventsMetrics.Bytes[i])
+							dst.Metrics.PktDropMetrics.Packets = addUint16(dst.Metrics.PktDropMetrics.Packets, metrics.NetworkEventsMetrics.Packets[i])
 						}
 					}
 				}
 			}
 		}
 	}
-	return &record
 }
 
 type IntfDirUdn struct {
