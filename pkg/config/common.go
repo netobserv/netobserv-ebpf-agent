@@ -179,6 +179,24 @@ type Common struct {
 	// The "ingest" stage must be omitted from this configuration, since it is handled internally by the agent. The first stage should follow "preset-ingester".
 	// E.g: {"pipeline":[{"name": "writer","follows": "preset-ingester"}],"parameters":[{"name": "writer","write": {"type": "stdout"}}]}.
 	FLPConfig string `env:"FLP_CONFIG"`
+	// Enable RTT calculations for the flows, default is false (disabled), set to true to enable.
+	// This feature requires the flows agent to attach at both Ingress and Egress hookpoints.
+	// If both Ingress and Egress are not enabled then this feature will not be enabled even if set to true via env.
+	EnableRTT bool `env:"ENABLE_RTT" envDefault:"false"`
+	// ForceGC enables forcing golang garbage collection run at the end of every map eviction, default is true
+	ForceGC bool `env:"FORCE_GARBAGE_COLLECTION" envDefault:"true"`
+	// EnablePktDrops enable Packet drops eBPF hook to account for dropped flows
+	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
+	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
+	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
+	// DNSTrackingPorts used to define which ports the DNS service is mapped to at the pod level,
+	// so we can track DNS at the pod level. Comma-separated list of ports (e.g., "53,5353,8053")
+	DNSTrackingPorts []uint16 `env:"DNS_TRACKING_PORT" envSeparator:"," envDefault:"53"`
+	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
+	// before being deleted, default is 5 seconds.
+	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`
+	// EnablePCA enables Packet Capture Agent (PCA). By default, PCA is off.
+	EnablePCA bool `env:"ENABLE_PCA" envDefault:"false"`
 	// MetricsEnable enables http server to collect ebpf agent metrics, default is false.
 	MetricsEnable bool `env:"METRICS_ENABLE" envDefault:"false"`
 	// Metrics verbosity level. From more to less verbose: trace!, debug, info (default).

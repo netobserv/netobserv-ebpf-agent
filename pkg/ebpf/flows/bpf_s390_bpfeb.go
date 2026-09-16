@@ -302,7 +302,8 @@ const (
 	BpfProgXfrmInputKretprobe            = "xfrm_input_kretprobe"
 	BpfProgXfrmOutputKprobe              = "xfrm_output_kprobe"
 	BpfProgXfrmOutputKretprobe           = "xfrm_output_kretprobe"
-	BpfVarDnsPort                        = "dns_port"
+	BpfVarDnsPorts                       = "dns_ports"
+	BpfVarDnsPortsCount                  = "dns_ports_count"
 	BpfVarEnableDirectflowsRingbuf       = "enable_directflows_ringbuf"
 	BpfVarEnableDnsTracking              = "enable_dns_tracking"
 	BpfVarEnableFiltering                = "enable_filtering"
@@ -410,7 +411,8 @@ type BpfMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type BpfVariableSpecs struct {
-	DnsPort                        *ebpf.VariableSpec `ebpf:"dns_port"`
+	DnsPorts                       *ebpf.VariableSpec `ebpf:"dns_ports"`
+	DnsPortsCount                  *ebpf.VariableSpec `ebpf:"dns_ports_count"`
 	EnableDirectflowsRingbuf       *ebpf.VariableSpec `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.VariableSpec `ebpf:"enable_filtering"`
@@ -495,7 +497,8 @@ func (m *BpfMaps) Close() error {
 //
 // It can be passed to LoadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type BpfVariables struct {
-	DnsPort                        *ebpf.Variable `ebpf:"dns_port"`
+	DnsPorts                       *ebpf.Variable `ebpf:"dns_ports"`
+	DnsPortsCount                  *ebpf.Variable `ebpf:"dns_ports_count"`
 	EnableDirectflowsRingbuf       *ebpf.Variable `ebpf:"enable_directflows_ringbuf"`
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.Variable `ebpf:"enable_filtering"`
