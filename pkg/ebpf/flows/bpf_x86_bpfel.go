@@ -34,10 +34,10 @@ const (
 
 type BpfDnsFlowId struct {
 	_        structs.HostLayout
+	SrcId    uint32
+	DstId    uint32
 	SrcPort  uint16
 	DstPort  uint16
-	SrcIp    [16]uint8
-	DstIp    [16]uint8
 	Id       uint16
 	Protocol uint8
 	_        [1]byte
@@ -61,6 +61,18 @@ type BpfDnsMetricsT struct {
 type BpfDnsNameBuffer struct {
 	_    structs.HostLayout
 	Name [32]int8
+}
+
+type BpfEndpointAddr BpfEndpointAddrT
+
+type BpfEndpointAddrT struct {
+	_  structs.HostLayout
+	Ip [16]uint8
+}
+
+type BpfEndpointIdState struct {
+	_    structs.HostLayout
+	Next uint32
 }
 
 type BpfFilterActionT uint32
@@ -109,8 +121,8 @@ type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
 	_                 structs.HostLayout
-	SrcIp             [16]uint8
-	DstIp             [16]uint8
+	SrcId             uint32
+	DstId             uint32
 	SrcPort           uint16
 	DstPort           uint16
 	TransportProtocol uint8
@@ -174,7 +186,8 @@ const (
 	BpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW             BpfGlobalCountersKeyT = 10
 	BpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       BpfGlobalCountersKeyT = 11
 	BpfGlobalCountersKeyTOBSERVED_INTF_MISSED                BpfGlobalCountersKeyT = 12
-	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 13
+	BpfGlobalCountersKeyTENDPOINT_INTERN_FAIL                BpfGlobalCountersKeyT = 13
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 14
 )
 
 type BpfNetworkEventsMetrics BpfNetworkEventsMetricsT
@@ -279,6 +292,9 @@ const (
 	BpfMapDirectFlows                    = "direct_flows"
 	BpfMapDnsFlows                       = "dns_flows"
 	BpfMapDnsNameMap                     = "dns_name_map"
+	BpfMapEndpointIdCounter              = "endpoint_id_counter"
+	BpfMapEndpointIds                    = "endpoint_ids"
+	BpfMapEndpointIps                    = "endpoint_ips"
 	BpfMapFilterMap                      = "filter_map"
 	BpfMapGlobalCounters                 = "global_counters"
 	BpfMapIpsecEgressMap                 = "ipsec_egress_map"
@@ -398,6 +414,9 @@ type BpfMapSpecs struct {
 	DirectFlows                  *ebpf.MapSpec `ebpf:"direct_flows"`
 	DnsFlows                     *ebpf.MapSpec `ebpf:"dns_flows"`
 	DnsNameMap                   *ebpf.MapSpec `ebpf:"dns_name_map"`
+	EndpointIdCounter            *ebpf.MapSpec `ebpf:"endpoint_id_counter"`
+	EndpointIds                  *ebpf.MapSpec `ebpf:"endpoint_ids"`
+	EndpointIps                  *ebpf.MapSpec `ebpf:"endpoint_ips"`
 	FilterMap                    *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters               *ebpf.MapSpec `ebpf:"global_counters"`
 	IpsecEgressMap               *ebpf.MapSpec `ebpf:"ipsec_egress_map"`
@@ -463,6 +482,9 @@ type BpfMaps struct {
 	DirectFlows                  *ebpf.Map `ebpf:"direct_flows"`
 	DnsFlows                     *ebpf.Map `ebpf:"dns_flows"`
 	DnsNameMap                   *ebpf.Map `ebpf:"dns_name_map"`
+	EndpointIdCounter            *ebpf.Map `ebpf:"endpoint_id_counter"`
+	EndpointIds                  *ebpf.Map `ebpf:"endpoint_ids"`
+	EndpointIps                  *ebpf.Map `ebpf:"endpoint_ips"`
 	FilterMap                    *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters               *ebpf.Map `ebpf:"global_counters"`
 	IpsecEgressMap               *ebpf.Map `ebpf:"ipsec_egress_map"`
@@ -483,6 +505,9 @@ func (m *BpfMaps) Close() error {
 		m.DirectFlows,
 		m.DnsFlows,
 		m.DnsNameMap,
+		m.EndpointIdCounter,
+		m.EndpointIds,
+		m.EndpointIps,
 		m.FilterMap,
 		m.GlobalCounters,
 		m.IpsecEgressMap,

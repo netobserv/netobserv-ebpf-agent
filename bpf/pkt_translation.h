@@ -77,9 +77,14 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
 
     parse_tuple(orig_t, &orig, zone_id, family, id->transport_protocol, false);
 
-    // update id with original flow info
-    __builtin_memcpy(id->src_ip, orig.saddr, IP_MAX_LEN);
-    __builtin_memcpy(id->dst_ip, orig.daddr, IP_MAX_LEN);
+    // Intern the original (pre-NAT) addresses into the flow key.
+    packet_addrs orig_addrs;
+    __builtin_memset(&orig_addrs, 0, sizeof(orig_addrs));
+    __builtin_memcpy(orig_addrs.src_ip, orig.saddr, IP_MAX_LEN);
+    __builtin_memcpy(orig_addrs.dst_ip, orig.daddr, IP_MAX_LEN);
+    if (!intern_flow_endpoints(id, &orig_addrs)) {
+        return -1;
+    }
     id->src_port = orig.sport;
     id->dst_port = orig.dport;
     u64 current_time = bpf_ktime_get_ns();
@@ -123,11 +128,13 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     u8 dscp = 0, protocol = 0;
     long ret = 0;
     flow_id id;
+    packet_addrs addrs;
 
     if (enable_pkt_translation_tracking == 0 || do_sampling == 0) {
         return 0;
     }
     __builtin_memset(&id, 0, sizeof(id));
+    __builtin_memset(&addrs, 0, sizeof(addrs));
 
     bpf_probe_read_kernel(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
 
@@ -141,7 +148,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
-    core_fill_in_l3(skb, &id, family, &protocol, &dscp);
+    core_fill_in_l3(skb, &addrs, family, &protocol, &dscp);
 
     // read L4 info
     switch (protocol) {
@@ -165,7 +172,7 @@ static inline int trace_nat_manip_pkt(struct nf_conn *ct, struct sk_buff *skb) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
+    bool skip = check_and_apply_filter(&id, &addrs, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
         return 0;
     }

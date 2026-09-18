@@ -107,26 +107,10 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		if !cfg.Flows.EnableOpenSSLTracking {
 			spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = ringbufMinSize
 		}
-		// remove pinning from all maps
-		for _, m := range []string{
-			ebpf.BpfMapAggregatedFlows,
-			ebpf.BpfMapAggregatedFlowsDns,
-			ebpf.BpfMapAggregatedFlowsNetworkEvents,
-			ebpf.BpfMapAggregatedFlowsPktDrop,
-			ebpf.BpfMapAggregatedFlowsXlat,
-			ebpf.BpfMapAdditionalFlowMetrics,
-			ebpf.BpfMapDirectFlows,
-			ebpf.BpfMapDnsFlows,
-			ebpf.BpfMapFilterMap,
-			ebpf.BpfMapPeerFilterMap,
-			ebpf.BpfMapGlobalCounters,
-			ebpf.BpfMapIpsecIngressMap,
-			ebpf.BpfMapIpsecEgressMap,
-			ebpf.BpfMapSslDataEventMap,
-			ebpf.BpfMapDnsNameMap,
-			ebpf.BpfMapQuicFlows,
-		} {
-			spec.Maps[m].Pinning = 0
+		// Standalone load uses an empty PinPath. Clear LIBBPF_PIN_BY_NAME on every
+		// map so cilium/ebpf does not require MapOptions.PinPath.
+		for _, m := range spec.Maps {
+			m.Pinning = 0
 		}
 
 		if err := configureFlowSpecVariables(spec, cfg, filter); err != nil {
@@ -341,6 +325,16 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			if err := loadPinnedMapInto("QUIC flows", ebpf.BpfMapQuicFlows, &objects.BpfMaps.QuicFlows); err != nil {
 				return nil, err
 			}
+		}
+
+		if err := loadPinnedMapInto("endpoint IDs", ebpf.BpfMapEndpointIds, &objects.BpfMaps.EndpointIds); err != nil {
+			return nil, err
+		}
+		if err := loadPinnedMapInto("endpoint IPs", ebpf.BpfMapEndpointIps, &objects.BpfMaps.EndpointIps); err != nil {
+			return nil, err
+		}
+		if err := loadPinnedMapInto("endpoint ID counter", ebpf.BpfMapEndpointIdCounter, &objects.BpfMaps.EndpointIdCounter); err != nil {
+			return nil, err
 		}
 	}
 
@@ -917,6 +911,24 @@ func (m *Fetcher) Close() error {
 		if err := m.objects.QuicFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
+		if err := m.objects.EndpointIds.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.EndpointIds.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.EndpointIps.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.EndpointIps.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.EndpointIdCounter.Unpin(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := m.objects.EndpointIdCounter.Close(); err != nil {
+			errs = append(errs, err)
+		}
 		if len(errs) == 0 {
 			m.objects = nil
 		}
@@ -1067,6 +1079,24 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 	return flows, true
 }
 
+// SnapshotEndpoints copies the ID→IP dictionary. Entries are not deleted.
+func (m *Fetcher) SnapshotEndpoints() model.EndpointTable {
+	table := make(model.EndpointTable)
+	if m.objects == nil || m.objects.EndpointIps == nil {
+		return table
+	}
+	var id uint32
+	var addr ebpf.BpfEndpointAddr
+	iterator := m.objects.EndpointIps.Iterate()
+	for iterator.Next(&id, &addr) {
+		table[id] = model.IPAddr(addr.Ip)
+	}
+	if err := iterator.Err(); err != nil {
+		log.WithError(err).Warn("couldn't iterate endpoint dictionary")
+	}
+	return table
+}
+
 // accumulateSecondaryMaps merges per-CPU / secondary eBPF map metrics into the main flow map.
 func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.BpfFlowId]model.BpfFlowContent, met *metrics.Metrics) {
 	if m.config.Flows.EnableDNSTracking {
@@ -1177,6 +1207,9 @@ func (m *Fetcher) ReadGlobalCounter(met *metrics.Metrics) {
 		ebpf.BpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW:             met.Errors.WithErrorName("network-events", "EventsOverflow", metrics.MediumSeverity),
 		ebpf.BpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG:       met.Errors.WithErrorName("network-events", "CookieTooBig", metrics.MediumSeverity),
+		// Packet skipped: IP could not be mapped to an endpoint ID (dictionary
+		// full, per-CPU sequence overflow, missing counter, or lost insert race).
+		ebpf.BpfGlobalCountersKeyTENDPOINT_INTERN_FAIL: met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotAssignEndpointID"),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
 	for key := ebpf.BpfGlobalCountersKeyT(0); key < ebpf.BpfGlobalCountersKeyTMAX_COUNTERS; key++ {
