@@ -80,6 +80,8 @@ func TestFlowMapNameConstantsMatchBPF2GoSpec(t *testing.T) {
 		flows.BpfMapPeerFilterMap,
 		flows.BpfMapQuicFlows,
 		flows.BpfMapSslDataEventMap,
+		flows.BpfMapSslFdMap,
+		flows.BpfMapSslReadActiveMap,
 	}
 	sort.Strings(constants)
 
@@ -101,6 +103,9 @@ func TestPacketMapNameConstantsMatchBPF2GoSpec(t *testing.T) {
 		packets.PacketsMapGlobalCounters,
 		packets.PacketsMapPacketRecord,
 		packets.PacketsMapPeerFilterMap,
+		packets.PacketsMapSslDataEventMap,
+		packets.PacketsMapSslFdMap,
+		packets.PacketsMapSslReadActiveMap,
 	}
 	sort.Strings(constants)
 

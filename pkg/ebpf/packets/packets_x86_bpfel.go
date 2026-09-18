@@ -53,8 +53,31 @@ type PacketsSslDataEventT struct {
 	PidTgid     uint64
 	DataLen     int32
 	SslType     uint8
+	Direction   uint8
+	TlsSource   uint8
+	TupleValid  uint8
+	SrcPort     uint16
+	DstPort     uint16
+	SrcAddr     [16]uint8
+	DstAddr     [16]uint8
+	SocketFd    int32
+	ConnUserPtr uint64
 	Data        [16384]int8
-	_           [3]byte
+}
+
+type PacketsSslFdKeyT struct {
+	_      structs.HostLayout
+	SslPtr uint64
+	Tgid   uint32
+	Pad    uint32
+}
+
+type PacketsSslReadActiveT struct {
+	_           structs.HostLayout
+	SslType     uint8
+	Pad         [7]uint8
+	BufUser     uint64
+	ConnUserPtr uint64
 }
 
 // Names of all BPF objects in the ELF.
@@ -65,13 +88,21 @@ const (
 	PacketsMapGlobalCounters            = "global_counters"
 	PacketsMapPacketRecord              = "packet_record"
 	PacketsMapPeerFilterMap             = "peer_filter_map"
+	PacketsMapSslDataEventMap           = "ssl_data_event_map"
+	PacketsMapSslFdMap                  = "ssl_fd_map"
+	PacketsMapSslReadActiveMap          = "ssl_read_active_map"
 	PacketsProgNetkitPeerPacketParse    = "netkit_peer_packet_parse"
 	PacketsProgNetkitPrimaryPacketParse = "netkit_primary_packet_parse"
+	PacketsProgProbeEntrySSL_read       = "probe_entry_SSL_read"
+	PacketsProgProbeEntrySSL_setFd      = "probe_entry_SSL_set_fd"
+	PacketsProgProbeEntrySSL_write      = "probe_entry_SSL_write"
+	PacketsProgProbeRetSSL_read         = "probe_ret_SSL_read"
 	PacketsProgTcEgressPacketParse      = "tc_egress_packet_parse"
 	PacketsProgTcIngressPacketParse     = "tc_ingress_packet_parse"
 	PacketsProgTcxEgressPacketParse     = "tcx_egress_packet_parse"
 	PacketsProgTcxIngressPacketParse    = "tcx_ingress_packet_parse"
 	PacketsVarEnableFiltering           = "enable_filtering"
+	PacketsVarEnableOpensslTracking     = "enable_openssl_tracking"
 	PacketsVarFilterKey                 = "filter_key"
 	PacketsVarFilterValue               = "filter_value"
 	PacketsVarSampling                  = "sampling"
@@ -125,6 +156,10 @@ type PacketsSpecs struct {
 type PacketsProgramSpecs struct {
 	NetkitPeerPacketParse    *ebpf.ProgramSpec `ebpf:"netkit_peer_packet_parse"`
 	NetkitPrimaryPacketParse *ebpf.ProgramSpec `ebpf:"netkit_primary_packet_parse"`
+	ProbeEntrySSL_read       *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_set_fd"`
+	ProbeEntrySSL_write      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
+	ProbeRetSSL_read         *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_read"`
 	TcEgressPacketParse      *ebpf.ProgramSpec `ebpf:"tc_egress_packet_parse"`
 	TcIngressPacketParse     *ebpf.ProgramSpec `ebpf:"tc_ingress_packet_parse"`
 	TcxEgressPacketParse     *ebpf.ProgramSpec `ebpf:"tcx_egress_packet_parse"`
@@ -135,24 +170,28 @@ type PacketsProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type PacketsMapSpecs struct {
-	FilterMap      *ebpf.MapSpec `ebpf:"filter_map"`
-	GlobalCounters *ebpf.MapSpec `ebpf:"global_counters"`
-	PacketRecord   *ebpf.MapSpec `ebpf:"packet_record"`
-	PeerFilterMap  *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	FilterMap        *ebpf.MapSpec `ebpf:"filter_map"`
+	GlobalCounters   *ebpf.MapSpec `ebpf:"global_counters"`
+	PacketRecord     *ebpf.MapSpec `ebpf:"packet_record"`
+	PeerFilterMap    *ebpf.MapSpec `ebpf:"peer_filter_map"`
+	SslDataEventMap  *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
+	SslFdMap         *ebpf.MapSpec `ebpf:"ssl_fd_map"`
+	SslReadActiveMap *ebpf.MapSpec `ebpf:"ssl_read_active_map"`
 }
 
 // PacketsVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type PacketsVariableSpecs struct {
-	EnableFiltering *ebpf.VariableSpec `ebpf:"enable_filtering"`
-	FilterKey       *ebpf.VariableSpec `ebpf:"filter_key"`
-	FilterValue     *ebpf.VariableSpec `ebpf:"filter_value"`
-	Sampling        *ebpf.VariableSpec `ebpf:"sampling"`
-	SslDataEvent    *ebpf.VariableSpec `ebpf:"ssl_data_event"`
-	TraceMessages   *ebpf.VariableSpec `ebpf:"trace_messages"`
-	Unused8         *ebpf.VariableSpec `ebpf:"unused8"`
-	Unused9         *ebpf.VariableSpec `ebpf:"unused9"`
+	EnableFiltering       *ebpf.VariableSpec `ebpf:"enable_filtering"`
+	EnableOpensslTracking *ebpf.VariableSpec `ebpf:"enable_openssl_tracking"`
+	FilterKey             *ebpf.VariableSpec `ebpf:"filter_key"`
+	FilterValue           *ebpf.VariableSpec `ebpf:"filter_value"`
+	Sampling              *ebpf.VariableSpec `ebpf:"sampling"`
+	SslDataEvent          *ebpf.VariableSpec `ebpf:"ssl_data_event"`
+	TraceMessages         *ebpf.VariableSpec `ebpf:"trace_messages"`
+	Unused8               *ebpf.VariableSpec `ebpf:"unused8"`
+	Unused9               *ebpf.VariableSpec `ebpf:"unused9"`
 }
 
 // PacketsObjects contains all objects after they have been loaded into the kernel.
@@ -175,10 +214,13 @@ func (o *PacketsObjects) Close() error {
 //
 // It can be passed to LoadPacketsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type PacketsMaps struct {
-	FilterMap      *ebpf.Map `ebpf:"filter_map"`
-	GlobalCounters *ebpf.Map `ebpf:"global_counters"`
-	PacketRecord   *ebpf.Map `ebpf:"packet_record"`
-	PeerFilterMap  *ebpf.Map `ebpf:"peer_filter_map"`
+	FilterMap        *ebpf.Map `ebpf:"filter_map"`
+	GlobalCounters   *ebpf.Map `ebpf:"global_counters"`
+	PacketRecord     *ebpf.Map `ebpf:"packet_record"`
+	PeerFilterMap    *ebpf.Map `ebpf:"peer_filter_map"`
+	SslDataEventMap  *ebpf.Map `ebpf:"ssl_data_event_map"`
+	SslFdMap         *ebpf.Map `ebpf:"ssl_fd_map"`
+	SslReadActiveMap *ebpf.Map `ebpf:"ssl_read_active_map"`
 }
 
 func (m *PacketsMaps) Close() error {
@@ -187,6 +229,9 @@ func (m *PacketsMaps) Close() error {
 		m.GlobalCounters,
 		m.PacketRecord,
 		m.PeerFilterMap,
+		m.SslDataEventMap,
+		m.SslFdMap,
+		m.SslReadActiveMap,
 	)
 }
 
@@ -194,14 +239,15 @@ func (m *PacketsMaps) Close() error {
 //
 // It can be passed to LoadPacketsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type PacketsVariables struct {
-	EnableFiltering *ebpf.Variable `ebpf:"enable_filtering"`
-	FilterKey       *ebpf.Variable `ebpf:"filter_key"`
-	FilterValue     *ebpf.Variable `ebpf:"filter_value"`
-	Sampling        *ebpf.Variable `ebpf:"sampling"`
-	SslDataEvent    *ebpf.Variable `ebpf:"ssl_data_event"`
-	TraceMessages   *ebpf.Variable `ebpf:"trace_messages"`
-	Unused8         *ebpf.Variable `ebpf:"unused8"`
-	Unused9         *ebpf.Variable `ebpf:"unused9"`
+	EnableFiltering       *ebpf.Variable `ebpf:"enable_filtering"`
+	EnableOpensslTracking *ebpf.Variable `ebpf:"enable_openssl_tracking"`
+	FilterKey             *ebpf.Variable `ebpf:"filter_key"`
+	FilterValue           *ebpf.Variable `ebpf:"filter_value"`
+	Sampling              *ebpf.Variable `ebpf:"sampling"`
+	SslDataEvent          *ebpf.Variable `ebpf:"ssl_data_event"`
+	TraceMessages         *ebpf.Variable `ebpf:"trace_messages"`
+	Unused8               *ebpf.Variable `ebpf:"unused8"`
+	Unused9               *ebpf.Variable `ebpf:"unused9"`
 }
 
 // PacketsPrograms contains all programs after they have been loaded into the kernel.
@@ -210,6 +256,10 @@ type PacketsVariables struct {
 type PacketsPrograms struct {
 	NetkitPeerPacketParse    *ebpf.Program `ebpf:"netkit_peer_packet_parse"`
 	NetkitPrimaryPacketParse *ebpf.Program `ebpf:"netkit_primary_packet_parse"`
+	ProbeEntrySSL_read       *ebpf.Program `ebpf:"probe_entry_SSL_read"`
+	ProbeEntrySSL_setFd      *ebpf.Program `ebpf:"probe_entry_SSL_set_fd"`
+	ProbeEntrySSL_write      *ebpf.Program `ebpf:"probe_entry_SSL_write"`
+	ProbeRetSSL_read         *ebpf.Program `ebpf:"probe_ret_SSL_read"`
 	TcEgressPacketParse      *ebpf.Program `ebpf:"tc_egress_packet_parse"`
 	TcIngressPacketParse     *ebpf.Program `ebpf:"tc_ingress_packet_parse"`
 	TcxEgressPacketParse     *ebpf.Program `ebpf:"tcx_egress_packet_parse"`
@@ -220,6 +270,10 @@ func (p *PacketsPrograms) Close() error {
 	return _PacketsClose(
 		p.NetkitPeerPacketParse,
 		p.NetkitPrimaryPacketParse,
+		p.ProbeEntrySSL_read,
+		p.ProbeEntrySSL_setFd,
+		p.ProbeEntrySSL_write,
+		p.ProbeRetSSL_read,
 		p.TcEgressPacketParse,
 		p.TcIngressPacketParse,
 		p.TcxEgressPacketParse,

@@ -29,9 +29,6 @@ func Validate(f *Features) error {
 	if f.EnableIPsecTracking {
 		incompatible = append(incompatible, "ENABLE_IPSEC_TRACKING")
 	}
-	if f.EnableOpenSSLTracking {
-		incompatible = append(incompatible, "ENABLE_OPENSSL_TRACKING")
-	}
 	if f.EnableTLSTracking {
 		incompatible = append(incompatible, "ENABLE_TLS_TRACKING")
 	}

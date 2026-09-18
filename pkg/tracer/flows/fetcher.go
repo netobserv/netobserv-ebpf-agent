@@ -18,6 +18,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/plaintext"
 	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
@@ -57,7 +58,7 @@ type Fetcher struct {
 	xfrmOutputKretProbeLink     link.Link
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
-	sslUprobe                   link.Link
+	opensslAttacher             *plaintext.OpenSSLAttacher
 	sslDataEventsReader         *ringbuf.Reader
 	lookupAndDeleteSupported    bool
 	pinDir                      string
@@ -69,7 +70,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link
 	var xfrmInputKProbeLink, xfrmOutputKProbeLink link.Link
-	var sslUprobe link.Link
+	var opensslAtt *plaintext.OpenSSLAttacher
 	var sslDataEvents *ringbuf.Reader
 	var err error
 	objects := ebpf.BpfObjects{}
@@ -103,8 +104,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		if !cfg.Flows.EnableFlowsRingbufFallback {
 			spec.Maps[ebpf.BpfMapDirectFlows].MaxEntries = ringbufMinSize
 		}
-		// Minimize SSL maps if SSL is disabled
-		if !cfg.Flows.EnableOpenSSLTracking {
+		if !cfg.EnableOpenSSLTracking {
 			spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = ringbufMinSize
 		}
 		// remove pinning from all maps
@@ -219,24 +219,20 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
-		// Setup SSL tracking if enabled
-		if cfg.Flows.EnableOpenSSLTracking {
-			// Read SSL data events from ringbuf
+		// Attach SSL uprobes for flow-level TLS metadata
+		if cfg.EnableOpenSSLTracking {
 			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
 			if err != nil {
 				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
 			}
 
-			// Attach SSL uprobes
-			sslWriteLink, err := link.OpenExecutable(cfg.Flows.OpenSSLPath)
+			opensslAtt, err = plaintext.AttachOpenSSLUprobes(cfg.PlaintextScope, cfg.OpenSSLPath,
+				objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read,
+				objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd)
 			if err != nil {
-				return nil, fmt.Errorf("failed to open executable %s: %w", cfg.Flows.OpenSSLPath, err)
+				return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
 			}
-			sslUprobe, err = sslWriteLink.Uprobe("SSL_write", objects.ProbeEntrySSL_write, nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to attach SSL_write uprobe: %w", err)
-			}
-			log.Infof("SSL tracking enabled with library: %s", cfg.Flows.OpenSSLPath)
+			log.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.OpenSSLPath)
 		}
 
 	} else {
@@ -324,13 +320,10 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
-		// Only load SSL map if OpenSSL tracking is enabled
-		if cfg.Flows.EnableOpenSSLTracking {
+		if cfg.EnableOpenSSLTracking {
 			if err := loadPinnedMapInto("SSL data event", ebpf.BpfMapSslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
 				return nil, err
 			}
-
-			// Initialize the ringbuffer reader for SSL events
 			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
 			if err != nil {
 				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
@@ -376,7 +369,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
-		sslUprobe:                   sslUprobe,
+		opensslAttacher:             opensslAtt,
 		sslDataEventsReader:         sslDataEvents,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
@@ -788,12 +781,9 @@ func (m *Fetcher) Close() error {
 		}
 	}
 
-	if m.sslUprobe != nil {
-		if err := m.sslUprobe.Close(); err != nil {
-			errs = append(errs, err)
-		}
+	if m.opensslAttacher != nil {
+		m.opensslAttacher.Close()
 	}
-
 	if m.sslDataEventsReader != nil {
 		if err := m.sslDataEventsReader.Close(); err != nil {
 			errs = append(errs, err)
@@ -1597,7 +1587,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		enableDirectFlowRingbuf = 1
 	}
 	enableOpenSSLTracking := 0
-	if cfg.Flows.EnableOpenSSLTracking {
+	if cfg.EnableOpenSSLTracking {
 		enableOpenSSLTracking = 1
 	}
 

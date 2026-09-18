@@ -171,11 +171,10 @@ func newAgent(
 		rbTracer = flow.NewRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
 	}
 	var rbSSLTracer *flow.RingBufTracer
-	if cfg.Flows.EnableOpenSSLTracking {
+	if cfg.EnableOpenSSLTracking {
 		rbSSLTracer = flow.NewSSLRingBufTracer(fetcher, mapTracer, cfg.CacheActiveTimeout, m)
 	}
 
-	// Accounter is used alongside with either rbTracer or rbSSLTracer
 	var accounter *flow.Accounter
 	if rbTracer != nil || rbSSLTracer != nil {
 		accounter = flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.Flows.EnableUDNMapping)
@@ -230,7 +229,7 @@ func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc
 }
 
 func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.Record], error) {
-	flpExporter, err := exporterflows.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength)
+	flpExporter, err := exporterflows.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength, 0)
 	if err != nil {
 		return nil, err
 	}

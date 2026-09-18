@@ -3,6 +3,7 @@
 package packets
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
@@ -16,7 +17,10 @@ func TestPacketBPFSymbols(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, spec.Programs)
 	for name := range spec.Programs {
-		assert.Contains(t, name, "packet_parse")
+		isPacketProg := strings.Contains(name, "packet_parse")
+		isSSLProg := strings.HasPrefix(name, "probe_")
+		assert.True(t, isPacketProg || isSSLProg,
+			"unexpected program %q: expected packet_parse or SSL uprobe", name)
 	}
 	require.NotNil(t, spec.Maps["packet_record"])
 }
