@@ -51,7 +51,10 @@ define FLOW_MAPS
 	"ipsec_egress_map":"hash",
 	"ssl_data_event_map":"ringbuf",
 	"dns_name_map":"per_cpu_array",
-	"quic_flows":"per_cpu_hash"
+	"quic_flows":"per_cpu_hash",
+	"endpoint_ids":"hash",
+	"endpoint_ips":"hash",
+	"endpoint_id_counter":"per_cpu_array"
 }
 endef
 

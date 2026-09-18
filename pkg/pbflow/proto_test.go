@@ -15,15 +15,17 @@ import (
 
 func TestFlowToPBMarshalRoundTrip(t *testing.T) {
 	var id ebpf.BpfFlowId
-	copy(id.SrcIp[:], net.IPv4(10, 1, 2, 3).To16())
-	copy(id.DstIp[:], net.IPv4(10, 1, 2, 4).To16())
+	id.SrcId = 1
+	id.DstId = 2
 	id.SrcPort = 45678
 	id.DstPort = 443
 	id.TransportProtocol = 6
 
 	now := time.Now()
 	rec := &model.Record{
-		ID: id,
+		ID:      id,
+		SrcAddr: model.IPAddrFromNetIP(net.IPv4(10, 1, 2, 3).To16()),
+		DstAddr: model.IPAddrFromNetIP(net.IPv4(10, 1, 2, 4).To16()),
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				Bytes:       12345,
