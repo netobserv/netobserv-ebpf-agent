@@ -145,6 +145,34 @@ type exeInode struct {
 	ino uint64
 }
 
+// netnsID identifies a network namespace by the device and inode of /proc/<pid>/ns/net.
+type netnsID struct {
+	dev uint64
+	ino uint64
+}
+
+func procNetNSID(pid int) (netnsID, bool) {
+	if pid <= 0 {
+		return netnsID{}, false
+	}
+	dev, ino, err := statInode(filepath.Join(procRootDir, strconv.Itoa(pid), "ns", "net"))
+	if err != nil {
+		return netnsID{}, false
+	}
+	return netnsID{dev: dev, ino: ino}, true
+}
+
+// sameNetNS reports whether two PIDs share a network namespace (same pod). known is
+// false when either namespace cannot be determined, in which case same is meaningless.
+func sameNetNS(a, b int) (same, known bool) {
+	nsA, okA := procNetNSID(a)
+	nsB, okB := procNetNSID(b)
+	if !okA || !okB {
+		return false, false
+	}
+	return nsA == nsB, true
+}
+
 func isGoExecutable(path string) bool {
 	_, err := buildinfo.ReadFile(path)
 	return err == nil

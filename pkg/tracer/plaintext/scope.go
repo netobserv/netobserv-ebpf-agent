@@ -270,6 +270,18 @@ func (s *Scope) resolveScopedPID(rec *model.PlaintextRecord) (int, bool) {
 	if host := s.allowedPIDSharingExecutable(raw); host > 0 {
 		return host, true
 	}
+	// Before the best-effort remap, only attribute the event to a scoped PID sharing the
+	// event's network namespace (i.e. the same pod). Replicas of one deployment scheduled
+	// on a node share the libssl inode, so their uprobe fires for every replica; without
+	// this guard a sibling replica's plaintext gets misattributed to the scoped pod. Only
+	// decide here when we have positive netns evidence; otherwise fall through so
+	// single-pod captures with unresolved namespaces keep working.
+	if host, decided := s.scopedTargetPIDForEventNetNS(raw); decided {
+		if host > 0 {
+			return host, true
+		}
+		return 0, false
+	}
 	if host := s.scopedTargetPID(); host > 0 {
 		return host, true
 	}
@@ -288,12 +300,55 @@ func (s *Scope) admitPID(pid int) {
 // scopedTargetPID picks the allowed process that should own plaintext events.
 // peer_ip discovery often includes the pod pause process plus the workload container.
 func (s *Scope) scopedTargetPID() int {
+	return s.pickTargetPID(s.allowedPIDsSnapshot())
+}
+
+// scopedTargetPIDForEventNetNS picks the scoped process owning the event, restricted to
+// PIDs sharing rawPID's network namespace so events are never attributed across pods.
+// decided is false when there is no netns evidence (rawPID or every scoped PID has an
+// undeterminable namespace); the caller then falls back to the best-effort target.
+// When decided is true and pid is 0, the event belongs to a different pod and is dropped.
+func (s *Scope) scopedTargetPIDForEventNetNS(rawPID int) (pid int, decided bool) {
+	if rawPID <= 0 {
+		return 0, false
+	}
+	if _, known := procNetNSID(rawPID); !known {
+		return 0, false
+	}
+	sameNS := make([]int, 0)
+	sawKnownNS := false
+	for _, candidate := range s.allowedPIDsSnapshot() {
+		same, known := sameNetNS(rawPID, candidate)
+		if !known {
+			continue
+		}
+		sawKnownNS = true
+		if same {
+			sameNS = append(sameNS, candidate)
+		}
+	}
+	if len(sameNS) > 0 {
+		return s.pickTargetPID(sameNS), true
+	}
+	// Positive evidence: scoped PIDs exist with resolvable namespaces and none match the
+	// event's namespace, so this plaintext belongs to a different pod. Drop it.
+	if sawKnownNS {
+		return 0, true
+	}
+	return 0, false
+}
+
+func (s *Scope) allowedPIDsSnapshot() []int {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	pids := make([]int, 0, len(s.allowedPIDs))
 	for pid := range s.allowedPIDs {
 		pids = append(pids, pid)
 	}
-	s.mu.RUnlock()
+	return pids
+}
+
+func (s *Scope) pickTargetPID(pids []int) int {
 	if len(pids) == 0 {
 		return 0
 	}
@@ -330,9 +385,16 @@ func (s *Scope) allowedPIDSharingExecutable(pid int) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for allowedPID := range s.allowedPIDs {
-		if allowed, ok := procExeInode(allowedPID); ok && allowed == exeInode {
-			return allowedPID
+		if allowed, ok := procExeInode(allowedPID); !ok || allowed != exeInode {
+			continue
 		}
+		// Replicas of one deployment share the executable inode but run in separate
+		// network namespaces. Only remap within the same netns (same pod) so a hooked
+		// sibling replica's plaintext is not misattributed to the scoped pod.
+		if same, known := sameNetNS(pid, allowedPID); known && !same {
+			continue
+		}
+		return allowedPID
 	}
 	return 0
 }
