@@ -61,9 +61,6 @@ type Features struct {
 	EnablePktDrops bool `env:"ENABLE_PKT_DROPS" envDefault:"false"`
 	// EnableDNSTracking enable DNS tracking eBPF hook to track dns query/response flows
 	EnableDNSTracking bool `env:"ENABLE_DNS_TRACKING" envDefault:"false"`
-	// DNSTrackingPort used to define which port the DNS service is mapped to at the pod level,
-	// so we can track DNS at the pod level
-	DNSTrackingPort uint16 `env:"DNS_TRACKING_PORT" envDefault:"53"`
 	// StaleEntriesEvictTimeout specifies the maximum duration that stale entries are kept
 	// before being deleted, default is 5 seconds.
 	StaleEntriesEvictTimeout time.Duration `env:"STALE_ENTRIES_EVICT_TIMEOUT" envDefault:"5s"`

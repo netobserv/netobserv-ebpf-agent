@@ -18,10 +18,12 @@ func TestConfigureFlowSpecVariables(t *testing.T) {
 
 	cfg := &tracer.FetcherConfig{
 		Agent: config.Agent{
-			Common: config.Common{Sampling: 25},
+			Common: config.Common{
+				Sampling:         25,
+				DNSTrackingPorts: []uint16{5353},
+			},
 			Flows: configflows.Features{
 				EnableDNSTracking: true,
-				DNSTrackingPort:   5353,
 				EnableRTT:         true,
 				QUICTrackingMode:  2,
 			},
