@@ -36,12 +36,16 @@ jobs:
         run: echo "short_sha=$(git rev-parse --short=8 HEAD)" >> $GITHUB_ENV
       - name: build and push bytecode image
         run: |
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} CLEAN_BUILD=1 make bc-images
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} CLEAN_BUILD=1 OCI_BUILD_OPTS="--label quay.expires-after=2w" make bc-images
+          # Optimization: preset LDFLAGS rather than letting it recomputed each time in Makefile, for better cache reuse.
+          LDFLAGS="-X 'main.buildVersion=${{ env.WF_VERSION }}-${{ env.short_sha }}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
+          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} LDFLAGS="$LDFLAGS" make bc-images
+          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make bc-images
       - name: build and push manifest with images
         run: |
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} CLEAN_BUILD=1 make images
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} CLEAN_BUILD=1 OCI_BUILD_OPTS="--label quay.expires-after=2w" make images
+          # Optimization: preset LDFLAGS rather than letting it recomputed each time in Makefile, for better cache reuse.
+          LDFLAGS="-X 'main.buildVersion=${{ env.WF_VERSION }}-${{ env.short_sha }}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
+          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} LDFLAGS="$LDFLAGS" make images
+          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make images
 
   codecov:
     name: Codecov upload
