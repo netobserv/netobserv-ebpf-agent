@@ -54,8 +54,8 @@ func TestPacketToMap_TCPIPv4(t *testing.T) {
 
 	assert.Equal(t, "00:11:22:33:44:55", out["SrcMac"])
 	assert.Equal(t, "aa:bb:cc:dd:ee:ff", out["DstMac"])
-	assert.Equal(t, layers.TCPPort(23000).String(), out["SrcPort"])
-	assert.Equal(t, layers.TCPPort(443).String(), out["DstPort"])
+	assert.Equal(t, uint16(23000), out["SrcPort"])
+	assert.Equal(t, uint16(443), out["DstPort"])
 	assert.Equal(t, "1.2.3.4", out["SrcAddr"])
 	assert.Equal(t, "5.6.7.8", out["DstAddr"])
 	assert.Equal(t, layers.IPProtocolTCP, out["Proto"])
@@ -89,8 +89,8 @@ func TestPacketToMap_UDPIPv4(t *testing.T) {
 	out := PacketToMap(model.NewPacketRecord(stream, uint32(len(stream)), testTime))
 	parsed := gopacket.NewPacket(stream, layers.LayerTypeEthernet, gopacket.Lazy)
 
-	assert.Equal(t, layers.UDPPort(5353).String(), out["SrcPort"])
-	assert.Equal(t, layers.UDPPort(53).String(), out["DstPort"])
+	assert.Equal(t, uint16(5353), out["SrcPort"])
+	assert.Equal(t, uint16(53), out["DstPort"])
 	assert.Equal(t, "10.0.0.1", out["SrcAddr"])
 	assert.Equal(t, "10.0.0.2", out["DstAddr"])
 	assert.Equal(t, layers.IPProtocolUDP, out["Proto"])
@@ -167,8 +167,8 @@ func TestPacketToMap_DNSOverUDP(t *testing.T) {
 
 	assert.Equal(t, uint16(0x1234), out["DnsId"])
 	assert.Equal(t, layers.DNSResponseCodeNoErr.String(), out["DnsFlagsResponseCode"])
-	assert.Equal(t, layers.UDPPort(12345).String(), out["SrcPort"])
-	assert.Equal(t, layers.UDPPort(53).String(), out["DstPort"])
+	assert.Equal(t, uint16(12345), out["SrcPort"])
+	assert.Equal(t, uint16(53), out["DstPort"])
 }
 
 func mustSerialize(t *testing.T, layersToSerialize ...gopacket.SerializableLayer) []byte {

@@ -1,6 +1,7 @@
 package packets
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -23,6 +24,9 @@ func (mockPacketFetcher) UnRegister(*ifaces.Interface) error                  { 
 func (mockPacketFetcher) AttachTCX(*ifaces.Interface) error                   { return nil }
 func (mockPacketFetcher) DetachTCX(*ifaces.Interface) error                   { return nil }
 func (mockPacketFetcher) LookupAndDeleteMap(*metrics.Metrics) map[int][]*byte { return nil }
+func (mockPacketFetcher) ReadSSLRingBuf() (ringbuf.Record, error) {
+	return ringbuf.Record{}, fmt.Errorf("not implemented")
+}
 func (mockPacketFetcher) ReadPerf() (ringbuf.Record, error) {
 	return ringbuf.Record{}, ringbuf.ErrClosed
 }
@@ -47,7 +51,7 @@ func TestNewAgentWithMockFetcher(t *testing.T) {
 	cfg := &config.Agent{Common: config.Common{Export: "grpc", TargetHost: "127.0.0.1", TargetPort: 1}}
 	exporter := node.TerminalFunc[[]*model.PacketRecord](func(_ <-chan []*model.PacketRecord) {})
 
-	agent, err := newAgent(cfg, mockPacketFetcher{}, exporter, net.ParseIP("10.0.0.1"))
+	agent, err := newAgent(cfg, mockPacketFetcher{}, exporter, nil, net.ParseIP("10.0.0.1"), nil)
 	require.NoError(t, err)
 	require.NotNil(t, agent)
 	assert.Equal(t, cfg, agent.cfg)

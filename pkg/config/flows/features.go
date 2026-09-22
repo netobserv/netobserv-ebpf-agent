@@ -77,10 +77,6 @@ type Features struct {
 	EnableUDNMapping bool `env:"ENABLE_UDN_MAPPING" envDefault:"false"`
 	// EnableIPsecTracking enable tracking IPsec flows encryption
 	EnableIPsecTracking bool `env:"ENABLE_IPSEC_TRACKING" envDefault:"false"`
-	// EnableOpenSSLTracking enable tracking OpenSSL flows encryption
-	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
-	// OpenSSLPath path to the openssl binary
-	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/bin/openssl"`
 	// EnableFlowsRingbufFallback enable the "direct_flows" ring buffer, which is a fallback method to get flows from the kernel space, used when the main map is full or busy.
 	// See also: https://github.com/netobserv/netobserv-ebpf-agent/blob/main/docs/architecture.md
 	EnableFlowsRingbufFallback bool `env:"ENABLE_FLOWS_RINGBUF_FALLBACK" envDefault:"false"`

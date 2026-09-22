@@ -7,11 +7,12 @@ const (
 	BpfMapGlobalCounters = "global_counters"
 	BpfMapPeerFilterMap  = "peer_filter_map"
 
-	BpfVarEnableFiltering      = "enable_filtering"
-	BpfVarEnableFlowsFiltering = "enable_filtering" // deprecated alias
-	BpfVarFilterKey            = "filter_key"
-	BpfVarFilterValue          = "filter_value"
-	BpfVarHasFilterSampling    = "has_filter_sampling"
-	BpfVarSampling             = "sampling"
-	BpfVarTraceMessages        = "trace_messages"
+	BpfVarEnableFiltering       = "enable_filtering"
+	BpfVarEnableFlowsFiltering  = "enable_filtering" // deprecated alias
+	BpfVarFilterKey             = "filter_key"
+	BpfVarFilterValue           = "filter_value"
+	BpfVarHasFilterSampling     = "has_filter_sampling"
+	BpfVarSampling              = "sampling"
+	BpfVarTraceMessages         = "trace_messages"
+	BpfVarEnableOpensslTracking = "enable_openssl_tracking"
 )

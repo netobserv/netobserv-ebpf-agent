@@ -134,16 +134,12 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 }
 
 func (m *RingBufTracer) listenAndForwardRingBufferSSL(_ chan<- *model.RawRecord) error {
-	rtlog.Debug("listenAndForwardRingBufferSSL: waiting for SSL event...")
 	event, err := m.ringBufferSSL.ReadSSLRingBuf()
 	if err != nil {
 		m.metrics.Errors.WithErrorName("ringbuffer", "CannotReadSSLRingbuffer", metrics.HighSeverity).Inc()
 		return fmt.Errorf("reading from SSL ring buffer: %w", err)
 	}
 
-	rtlog.Infof("SSL ringbuffer event received! Size: %d bytes", len(event.RawSample))
-
-	// Parse SSL event structure: timestamp(8) + pid_tgid(8) + data_len(4) + ssl_type(1) + data[16KB]
 	buf := bytes.NewReader(event.RawSample)
 
 	var timestamp uint64
@@ -152,38 +148,22 @@ func (m *RingBufTracer) listenAndForwardRingBufferSSL(_ chan<- *model.RawRecord)
 	var sslType uint8
 
 	if err := binary.Read(buf, binary.LittleEndian, &timestamp); err != nil {
-		rtlog.Warnf("Failed to read timestamp: %v", err)
 		return nil
 	}
 	if err := binary.Read(buf, binary.LittleEndian, &pidTgid); err != nil {
-		rtlog.Warnf("Failed to read pid_tgid: %v", err)
 		return nil
 	}
 	if err := binary.Read(buf, binary.LittleEndian, &dataLen); err != nil {
-		rtlog.Warnf("Failed to read data_len: %v", err)
 		return nil
 	}
 	if err := binary.Read(buf, binary.LittleEndian, &sslType); err != nil {
-		rtlog.Warnf("Failed to read ssl_type: %v", err)
 		return nil
 	}
 
-	// Read the actual SSL data (up to dataLen bytes)
 	if dataLen > 0 && dataLen <= maxSSLDataSize {
-		data := make([]byte, dataLen)
-		n, err := buf.Read(data)
-		if err != nil && n < int(dataLen) {
-			rtlog.Warnf("Failed to read SSL data: read %d/%d bytes, err=%v", n, dataLen, err)
-		}
-
 		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d, ssl_type=%d",
 			pidTgid, timestamp, dataLen, sslType)
-		printLen := min(256, len(data))
-		rtlog.Debugf("SSL data as string: %s", string(data[:printLen]))
 		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(sslType)))
-	} else {
-		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d (invalid), ssl_type=%d",
-			pidTgid, timestamp, dataLen, sslType)
 	}
 
 	return nil
