@@ -37,15 +37,15 @@ jobs:
       - name: build and push bytecode image
         run: |
           # Optimization: preset LDFLAGS rather than letting it recomputed each time in Makefile, for better cache reuse.
-          LDFLAGS="-X 'main.buildVersion=${{ env.WF_VERSION }}-${{ env.short_sha }}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} LDFLAGS="$LDFLAGS" make bc-images
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make bc-images
+          LDFLAGS="-X 'main.buildVersion=${WF_VERSION}-${short_sha}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
+          MULTIARCH_TARGETS="${WF_MULTIARCH_TARGETS}" IMAGE_ORG=${WF_ORG} VERSION=${WF_VERSION} LDFLAGS="$LDFLAGS" make bc-images
+          MULTIARCH_TARGETS="${WF_MULTIARCH_TARGETS}" IMAGE_ORG=${WF_ORG} VERSION=${short_sha} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make bc-images
       - name: build and push manifest with images
         run: |
           # Optimization: preset LDFLAGS rather than letting it recomputed each time in Makefile, for better cache reuse.
-          LDFLAGS="-X 'main.buildVersion=${{ env.WF_VERSION }}-${{ env.short_sha }}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.WF_VERSION }} LDFLAGS="$LDFLAGS" make images
-          MULTIARCH_TARGETS="${{ env.WF_MULTIARCH_TARGETS }}" IMAGE_ORG=${{ env.WF_ORG }} VERSION=${{ env.short_sha }} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make images
+          LDFLAGS="-X 'main.buildVersion=${WF_VERSION}-${short_sha}' -X 'main.buildDate=$(date +%Y-%m-%d\ %H:%M)'"
+          MULTIARCH_TARGETS="${WF_MULTIARCH_TARGETS}" IMAGE_ORG=${WF_ORG} VERSION=${WF_VERSION} LDFLAGS="$LDFLAGS" make images
+          MULTIARCH_TARGETS="${WF_MULTIARCH_TARGETS}" IMAGE_ORG=${WF_ORG} VERSION=${short_sha} LDFLAGS="$LDFLAGS" OCI_BUILD_OPTS="--label quay.expires-after=2w" make images
 
   codecov:
     name: Codecov upload
