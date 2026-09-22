@@ -13,25 +13,26 @@
     if (trace_messages)                                                                            \
     bpf_printk(fmt, ##args)
 
-static __always_inline int filter_setup_lookup_key(flow_id *id, struct filter_key_t *key, u8 *len,
-                                                   u8 *offset, bool use_src_ip, u16 eth_protocol) {
+static __always_inline int filter_setup_lookup_key(packet_addrs *addrs, struct filter_key_t *key,
+                                                   u8 *len, u8 *offset, bool use_src_ip,
+                                                   u16 eth_protocol) {
 
     if (eth_protocol == ETH_P_IP) {
         *len = sizeof(u32);
         *offset = sizeof(ip4in6);
         if (use_src_ip) {
-            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
+            __builtin_memcpy(key->ip_data, addrs->src_ip + *offset, *len);
         } else {
-            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
+            __builtin_memcpy(key->ip_data, addrs->dst_ip + *offset, *len);
         }
         key->prefix_len = 32;
     } else if (eth_protocol == ETH_P_IPV6) {
         *len = IP_MAX_LEN;
         *offset = 0;
         if (use_src_ip) {
-            __builtin_memcpy(key->ip_data, id->src_ip + *offset, *len);
+            __builtin_memcpy(key->ip_data, addrs->src_ip + *offset, *len);
         } else {
-            __builtin_memcpy(key->ip_data, id->dst_ip + *offset, *len);
+            __builtin_memcpy(key->ip_data, addrs->dst_ip + *offset, *len);
         }
         key->prefix_len = 128;
     } else {
@@ -40,10 +41,10 @@ static __always_inline int filter_setup_lookup_key(flow_id *id, struct filter_ke
     return 0;
 }
 
-static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *key,
-                                            filter_action *action, u8 len, u8 offset, u16 flags,
-                                            u32 drop_reason, u32 *sampling, u8 direction,
-                                            bool use_src_ip, u16 eth_protocol) {
+static __always_inline int do_filter_lookup(flow_id *id, packet_addrs *addrs,
+                                            struct filter_key_t *key, filter_action *action, u8 len,
+                                            u8 offset, u16 flags, u32 drop_reason, u32 *sampling,
+                                            u8 direction, bool use_src_ip, u16 eth_protocol) {
     int result = 0;
 
     struct filter_value_t *rule = (struct filter_value_t *)bpf_map_lookup_elem(&filter_map, key);
@@ -63,7 +64,7 @@ static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *ke
             __builtin_memset(&peerKey, 0, sizeof(peerKey));
             // PeerCIDR lookup will will target the opposite IP compared to original CIDR lookup
             // In other words if cidr is using srcIP then peerCIDR will be the dstIP
-            if (filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip, eth_protocol) <
+            if (filter_setup_lookup_key(addrs, &peerKey, &len, &offset, use_src_ip, eth_protocol) <
                 0) {
                 BPF_PRINTK("peerCIDR failed to setup lookup key\n");
                 // Reset the action for default behaviour
@@ -226,9 +227,9 @@ end:
 /*
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
-static __always_inline int matches_filter(flow_id *id, filter_action *action, u16 flags,
-                                          u32 drop_reason, u16 eth_protocol, u32 *sampling,
-                                          u8 direction) {
+static __always_inline int matches_filter(flow_id *id, packet_addrs *addrs, filter_action *action,
+                                          u16 flags, u32 drop_reason, u16 eth_protocol,
+                                          u32 *sampling, u8 direction) {
     struct filter_key_t key;
     u8 len, offset;
     int result = 0;
@@ -237,12 +238,12 @@ static __always_inline int matches_filter(flow_id *id, filter_action *action, u1
     *action = MAX_FILTER_ACTIONS;
 
     // Lets do first CIDR match using srcIP.
-    result = filter_setup_lookup_key(id, &key, &len, &offset, true, eth_protocol);
+    result = filter_setup_lookup_key(addrs, &key, &len, &offset, true, eth_protocol);
     if (result < 0) {
         return result;
     }
 
-    result = do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling,
+    result = do_filter_lookup(id, addrs, &key, action, len, offset, flags, drop_reason, sampling,
                               direction, false, eth_protocol);
     // we have a match so return
     if (result > 0) {
@@ -250,13 +251,13 @@ static __always_inline int matches_filter(flow_id *id, filter_action *action, u1
     }
 
     // if we can't find a match then Lets do second CIDR match using dstIP.
-    result = filter_setup_lookup_key(id, &key, &len, &offset, false, eth_protocol);
+    result = filter_setup_lookup_key(addrs, &key, &len, &offset, false, eth_protocol);
     if (result < 0) {
         return result;
     }
 
-    return do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling, direction,
-                            true, eth_protocol);
+    return do_filter_lookup(id, addrs, &key, action, len, offset, flags, drop_reason, sampling,
+                            direction, true, eth_protocol);
 }
 
 #endif //__FILTER_H__

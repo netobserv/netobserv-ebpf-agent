@@ -170,4 +170,33 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } quic_flows SEC(".maps");
 
+// IP → canonical endpoint ID. Entries are not evicted for the life of the process.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, endpoint_addr);
+    __type(value, u32);
+    __uint(max_entries, MAX_ENDPOINT_ENTRIES);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} endpoint_ids SEC(".maps");
+
+// Canonical endpoint ID → IP. Used by userspace to recover addresses at export.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u32);
+    __type(value, endpoint_addr);
+    __uint(max_entries, MAX_ENDPOINT_ENTRIES);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} endpoint_ips SEC(".maps");
+
+// Next endpoint ID. ID 0 is reserved. Written only from TC intern.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, u32);
+    __type(value, u32);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} endpoint_id_counter SEC(".maps");
+
 #endif //__MAPS_DEFINITION_H__

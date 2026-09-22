@@ -1,7 +1,6 @@
 package flows
 
 import (
-	"bytes"
 	"cmp"
 	"slices"
 	"syscall"
@@ -25,10 +24,10 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 		return
 	}
 
-	type ipKey struct {
-		src, dst [16]uint8
+	type endpointKey struct {
+		src, dst uint32
 	}
-	wireFlows := make(map[ipKey][]ebpf.BpfFlowId, len(flows))
+	wireFlows := make(map[endpointKey][]ebpf.BpfFlowId, len(flows))
 	var orphans []ebpf.BpfFlowId
 
 	for id, flow := range flows {
@@ -42,7 +41,7 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 		if !isIPsecWireFlow(id) {
 			continue
 		}
-		k := ipKey{src: id.SrcIp, dst: id.DstIp}
+		k := endpointKey{src: id.SrcId, dst: id.DstId}
 		wireFlows[k] = append(wireFlows[k], id)
 	}
 
@@ -51,10 +50,10 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 		if !ok || orphan.AdditionalMetrics == nil {
 			continue
 		}
-		targets := wireFlows[ipKey{src: orphanID.SrcIp, dst: orphanID.DstIp}]
+		targets := wireFlows[endpointKey{src: orphanID.SrcId, dst: orphanID.DstId}]
 		if len(targets) == 0 {
 			// Direction may differ between xfrm and TC observation points.
-			targets = wireFlows[ipKey{src: orphanID.DstIp, dst: orphanID.SrcIp}]
+			targets = wireFlows[endpointKey{src: orphanID.DstId, dst: orphanID.SrcId}]
 			if len(targets) == 0 {
 				continue
 			}
@@ -71,10 +70,10 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 }
 
 func cmpBpfFlowID(a, b ebpf.BpfFlowId) int {
-	if c := bytes.Compare(a.SrcIp[:], b.SrcIp[:]); c != 0 {
+	if c := cmp.Compare(a.SrcId, b.SrcId); c != 0 {
 		return c
 	}
-	if c := bytes.Compare(a.DstIp[:], b.DstIp[:]); c != 0 {
+	if c := cmp.Compare(a.DstId, b.DstId); c != 0 {
 		return c
 	}
 	if c := cmp.Compare(a.SrcPort, b.SrcPort); c != 0 {
