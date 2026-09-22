@@ -56,7 +56,10 @@ define FLOW_MAPS
 	"ssl_read_active_map":"hash",
 	"ssl_fd_map":"lru_hash",
 	"dns_name_map":"per_cpu_array",
-	"quic_flows":"per_cpu_hash"
+	"quic_flows":"per_cpu_hash",
+	"endpoint_ids":"hash",
+	"endpoint_ips":"hash",
+	"endpoint_id_counter":"array"
 }
 endef
 

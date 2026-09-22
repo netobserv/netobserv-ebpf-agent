@@ -67,6 +67,7 @@ type ebpfFlowFetcher interface {
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
+	SnapshotEndpoints() model.EndpointTable
 	ReadRingBuf() (ringbuf.Record, error)
 	ReadSSLRingBuf() (ringbuf.Record, error)
 }
@@ -177,7 +178,7 @@ func newAgent(
 
 	var accounter *flow.Accounter
 	if rbTracer != nil || rbSSLTracer != nil {
-		accounter = flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.Flows.EnableUDNMapping)
+		accounter = flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.Flows.EnableUDNMapping, fetcher)
 	}
 	limiter := flow.NewCapacityLimiter(m)
 

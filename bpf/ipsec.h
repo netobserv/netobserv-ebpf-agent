@@ -68,9 +68,10 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
         return 0;
     }
 
-    if (is_ipv4(id->src_ip)) {
+    endpoint_addr *src = bpf_map_lookup_elem(&endpoint_ips, &id->src_id);
+    if (src && is_ipv4(src->ip)) {
         eth_protocol = ETH_P_IP;
-    } else {
+    } else if (src) {
         eth_protocol = ETH_P_IPV6;
     }
 
@@ -116,9 +117,11 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     u16 family = 0, flags = 0, eth_protocol = 0;
     u8 dscp = 0, protocol = 0;
     flow_id id;
+    packet_addrs addrs;
     int ret = 0;
 
     __builtin_memset(&id, 0, sizeof(id));
+    __builtin_memset(&addrs, 0, sizeof(addrs));
 
     u32 if_index = BPF_CORE_READ(skb, skb_iif);
 
@@ -126,7 +129,7 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
-    core_fill_in_l3(skb, &id, family, &protocol, &dscp);
+    core_fill_in_l3(skb, &addrs, family, &protocol, &dscp);
 
     // read L4 info
     switch (protocol) {
@@ -150,8 +153,12 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, dir);
+    bool skip = check_and_apply_filter(&id, &addrs, flags, 0, eth_protocol, NULL, dir);
     if (skip) {
+        return 0;
+    }
+
+    if (!lookup_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

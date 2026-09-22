@@ -14,34 +14,23 @@ import (
 
 const timeout = 5 * time.Second
 
-var (
-	srcAddr1 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
-		0x12, 0x34, 0x56, 0x78}
-	srcAddr2 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
-		0xaa, 0xbb, 0xcc, 0xdd}
-	dstAddr1 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
-		0x43, 0x21, 0x00, 0xff}
-	dstAddr2 = model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
-		0x11, 0x22, 0x33, 0x44}
-)
-
 var k1 = ebpf.BpfFlowId{
 	SrcPort: 333,
 	DstPort: 8080,
-	SrcIp:   srcAddr1,
-	DstIp:   dstAddr1,
+	SrcId:   1,
+	DstId:   10,
 }
 var k2 = ebpf.BpfFlowId{
 	SrcPort: 12,
 	DstPort: 8080,
-	SrcIp:   srcAddr2,
-	DstIp:   dstAddr1,
+	SrcId:   2,
+	DstId:   10,
 }
 var k3 = ebpf.BpfFlowId{
 	SrcPort: 333,
 	DstPort: 443,
-	SrcIp:   srcAddr1,
-	DstIp:   dstAddr2,
+	SrcId:   1,
+	DstId:   11,
 }
 
 func TestEvict_MaxEntries(t *testing.T) {
@@ -51,7 +40,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NoOp(), nil, false)
+	}, metrics.NoOp(), nil, false, nil)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -134,7 +123,7 @@ func TestEvict_Period(t *testing.T) {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NoOp(), nil, false)
+	}, metrics.NoOp(), nil, false, nil)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)

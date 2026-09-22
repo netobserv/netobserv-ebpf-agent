@@ -16,15 +16,17 @@ func benchRecord(i int) *model.Record {
 	var id ebpf.BpfFlowId
 	src := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)).To16()
 	dst := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i+1)).To16()
-	copy(id.SrcIp[:], src)
-	copy(id.DstIp[:], dst)
+	id.SrcId = uint32(i + 1)
+	id.DstId = uint32(i + 1001)
 	id.SrcPort = uint16(1024 + (i % 60000))
 	id.DstPort = 443
 	id.TransportProtocol = 6
 
 	now := time.Now()
 	return &model.Record{
-		ID: id,
+		ID:      id,
+		SrcAddr: model.IPAddrFromNetIP(src),
+		DstAddr: model.IPAddrFromNetIP(dst),
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				StartMonoTimeTs: uint64(1_000_000 + i),
