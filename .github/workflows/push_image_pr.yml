@@ -50,6 +50,7 @@ jobs:
           head_sha=$(echo ${pr_json} | jq -r '.[0].head.sha')
           echo "short_sha=$(echo ${head_sha::8})" >> $GITHUB_OUTPUT
           echo "pr_id=$(echo ${pr_json} | jq '.[0].number')" >> $GITHUB_OUTPUT
+          echo "main_image=${WF_REGISTRY}/${WF_IMAGE}:${head_sha::8}" >> $GITHUB_OUTPUT
           echo "bc_flow_image=${WF_REGISTRY}/${WF_BC_IMAGE}-flows:${head_sha::8}" >> $GITHUB_OUTPUT
           echo "bc_packet_image=${WF_REGISTRY}/${WF_BC_IMAGE}-packets:${head_sha::8}" >> $GITHUB_OUTPUT
   push:
