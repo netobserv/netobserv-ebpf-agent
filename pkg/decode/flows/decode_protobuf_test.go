@@ -179,12 +179,14 @@ func TestRecordToMap_OptionalMetrics(t *testing.T) {
 	makeFlow := func(withQuic bool) *model.Record {
 		f := &model.Record{
 			ID: ebpf.BpfFlowId{
-				SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
-				DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
+				SrcId:             1,
+				DstId:             2,
 				SrcPort:           23000,
 				DstPort:           443,
 				TransportProtocol: 17,
 			},
+			SrcAddr: model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
+			DstAddr: model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 			Metrics: model.BpfFlowContent{
 				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 					EthProtocol: 2048,
@@ -246,12 +248,14 @@ func TestPBFlowRoundTrip_OptionalFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			in := &model.Record{
 				ID: ebpf.BpfFlowId{
+					SrcId:             1,
+					DstId:             2,
 					TransportProtocol: 17,
-					SrcIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 1, 2, 3, 4},
-					DstIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 5, 6, 7, 8},
 					SrcPort:           12345,
 					DstPort:           443,
 				},
+				SrcAddr: model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 1, 2, 3, 4},
+				DstAddr: model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 5, 6, 7, 8},
 				Metrics: model.BpfFlowContent{
 					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 						EthProtocol:        2048,

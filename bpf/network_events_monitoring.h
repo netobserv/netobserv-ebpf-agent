@@ -57,8 +57,10 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     u64 len = 0;
     long ret = 0;
     flow_id id;
+    packet_addrs addrs;
 
     __builtin_memset(&id, 0, sizeof(id));
+    __builtin_memset(&addrs, 0, sizeof(addrs));
 
     md_len = BPF_CORE_READ(md, user_cookie_len);
     user_cookie = (u8 *)BPF_CORE_READ(md, user_cookie);
@@ -70,7 +72,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
-    core_fill_in_l3(skb, &id, family, &protocol, &dscp);
+    core_fill_in_l3(skb, &addrs, family, &protocol, &dscp);
 
     // read L4 info
     switch (protocol) {
@@ -94,8 +96,11 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
+    bool skip = check_and_apply_filter(&id, &addrs, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
+        return 0;
+    }
+    if (!lookup_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

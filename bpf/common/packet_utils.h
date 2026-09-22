@@ -116,12 +116,11 @@ static inline int fill_iphdr(struct iphdr *ip, void *data_end, pkt_info *pkt) {
     if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-    flow_id *id = pkt->id;
-    /* Save the IP Address to id directly. copy once. */
-    __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
-    __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
-    __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
+    /* Save raw IPs at the packet boundary. Intern happens after filtering. */
+    __builtin_memcpy(pkt->addrs.src_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(pkt->addrs.dst_ip, ip4in6, sizeof(ip4in6));
+    __builtin_memcpy(pkt->addrs.src_ip + sizeof(ip4in6), &ip->saddr, sizeof(ip->saddr));
+    __builtin_memcpy(pkt->addrs.dst_ip + sizeof(ip4in6), &ip->daddr, sizeof(ip->daddr));
     pkt->dscp = ipv4_get_dscp(ip);
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->protocol, pkt);
@@ -136,10 +135,9 @@ static inline int fill_ip6hdr(struct ipv6hdr *ip, void *data_end, pkt_info *pkt)
     if (l4_hdr_start > data_end) {
         return DISCARD;
     }
-    flow_id *id = pkt->id;
-    /* Save the IP Address to id directly. copy once. */
-    __builtin_memcpy(id->src_ip, ip->saddr.in6_u.u6_addr8, IP_MAX_LEN);
-    __builtin_memcpy(id->dst_ip, ip->daddr.in6_u.u6_addr8, IP_MAX_LEN);
+    /* Save raw IPs at the packet boundary. Intern happens after filtering. */
+    __builtin_memcpy(pkt->addrs.src_ip, ip->saddr.in6_u.u6_addr8, IP_MAX_LEN);
+    __builtin_memcpy(pkt->addrs.dst_ip, ip->daddr.in6_u.u6_addr8, IP_MAX_LEN);
     pkt->dscp = ipv6_get_dscp(ip);
     /* fill l4 header which will be added to id in flow_monitor function.*/
     fill_l4info(l4_hdr_start, data_end, ip->nexthdr, pkt);
@@ -172,13 +170,14 @@ static inline bool is_filter_enabled() {
 /*
  * check if filter is enabled and if we need to continue processing the packet or not
  */
-static __always_inline bool check_and_apply_filter(flow_id *id, u16 flags, u32 drop_reason,
-                                                   u16 eth_protocol, u32 *sampling, u8 direction) {
+static __always_inline bool check_and_apply_filter(flow_id *id, packet_addrs *addrs, u16 flags,
+                                                   u32 drop_reason, u16 eth_protocol, u32 *sampling,
+                                                   u8 direction) {
     // check if this packet need to be filtered if filtering feature is enabled
     if (is_filter_enabled()) {
         filter_action action = ACCEPT;
-        if (matches_filter(id, &action, flags, drop_reason, eth_protocol, sampling, direction) !=
-                0 &&
+        if (matches_filter(id, addrs, &action, flags, drop_reason, eth_protocol, sampling,
+                           direction) != 0 &&
             action != MAX_FILTER_ACTIONS) {
             // we have matching rules follow through the actions to decide if we should accept or reject the flow
             // and update global counter for both cases

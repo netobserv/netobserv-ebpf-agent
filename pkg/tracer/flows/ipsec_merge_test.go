@@ -11,18 +11,17 @@ import (
 )
 
 func TestMergeIPsecOrphansOntoESP(t *testing.T) {
-	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 9, 56}
-	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 62, 177}
+	const srcID, dstID = uint32(1), uint32(2)
 
 	espID := ebpf.BpfFlowId{
-		SrcIp:             src,
-		DstIp:             dst,
+		SrcId:             srcID,
+		DstId:             dstID,
 		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 	// Geneve/UDP orphan as produced before wire-id normalization
 	orphanID := ebpf.BpfFlowId{
-		SrcIp:             src,
-		DstIp:             dst,
+		SrcId:             srcID,
+		DstId:             dstID,
 		SrcPort:           12345,
 		DstPort:           6081,
 		TransportProtocol: syscall.IPPROTO_UDP,
@@ -57,19 +56,18 @@ func TestMergeIPsecOrphansOntoESP(t *testing.T) {
 }
 
 func TestMergeIPsecOrphansOntoNATT(t *testing.T) {
-	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 1, 1}
-	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 1, 2}
+	const srcID, dstID = uint32(3), uint32(4)
 
 	nattID := ebpf.BpfFlowId{
-		SrcIp:             src,
-		DstIp:             dst,
+		SrcId:             srcID,
+		DstId:             dstID,
 		SrcPort:           udpPortNATT,
 		DstPort:           udpPortNATT,
 		TransportProtocol: syscall.IPPROTO_UDP,
 	}
 	orphanID := ebpf.BpfFlowId{
-		SrcIp:             src,
-		DstIp:             dst,
+		SrcId:             srcID,
+		DstId:             dstID,
 		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 
@@ -96,17 +94,16 @@ func TestMergeIPsecOrphansOntoNATT(t *testing.T) {
 }
 
 func TestMergeIPsecOrphansSwappedDirection(t *testing.T) {
-	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 2, 1}
-	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 2, 2}
+	const srcID, dstID = uint32(5), uint32(6)
 
 	espID := ebpf.BpfFlowId{
-		SrcIp:             dst,
-		DstIp:             src,
+		SrcId:             dstID,
+		DstId:             srcID,
 		TransportProtocol: syscall.IPPROTO_ESP,
 	}
 	orphanID := ebpf.BpfFlowId{
-		SrcIp:             src,
-		DstIp:             dst,
+		SrcId:             srcID,
+		DstId:             dstID,
 		SrcPort:           9999,
 		DstPort:           6081,
 		TransportProtocol: syscall.IPPROTO_UDP,
@@ -131,15 +128,14 @@ func TestMergeIPsecOrphansSwappedDirection(t *testing.T) {
 }
 
 func TestMergeIPsecOrphansPicksDeterministicTarget(t *testing.T) {
-	src := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 1}
-	dst := [16]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 10, 0, 3, 2}
+	const srcID, dstID = uint32(7), uint32(8)
 
-	espID := ebpf.BpfFlowId{SrcIp: src, DstIp: dst, TransportProtocol: syscall.IPPROTO_ESP}
+	espID := ebpf.BpfFlowId{SrcId: srcID, DstId: dstID, TransportProtocol: syscall.IPPROTO_ESP}
 	nattID := ebpf.BpfFlowId{
-		SrcIp: src, DstIp: dst, SrcPort: udpPortNATT, DstPort: udpPortNATT, TransportProtocol: syscall.IPPROTO_UDP,
+		SrcId: srcID, DstId: dstID, SrcPort: udpPortNATT, DstPort: udpPortNATT, TransportProtocol: syscall.IPPROTO_UDP,
 	}
 	orphanID := ebpf.BpfFlowId{
-		SrcIp: src, DstIp: dst, SrcPort: 1, DstPort: 6081, TransportProtocol: syscall.IPPROTO_UDP,
+		SrcId: srcID, DstId: dstID, SrcPort: 1, DstPort: 6081, TransportProtocol: syscall.IPPROTO_UDP,
 	}
 
 	// After cmpBpfFlowID sort, ESP precedes UDP/4500 (SrcPort 0 < 4500).

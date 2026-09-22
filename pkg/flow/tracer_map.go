@@ -37,6 +37,7 @@ type MapTracer struct {
 type mapFetcher interface {
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
+	SnapshotEndpoints() model.EndpointTable
 }
 
 func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout time.Duration, m *metrics.Metrics,
@@ -107,6 +108,7 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
 	elapsed := time.Since(currentTime)
+	endpoints := m.mapFetcher.SnapshotEndpoints()
 	udnCache := make(map[string]string)
 	if m.s != nil && m.udnEnabled {
 		udnsMap, err := m.s.GetInterfaceUDNs()
@@ -134,6 +136,13 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 			m.s,
 			udnCache,
 		)
+		src, dst, ok := endpoints.Addrs(flowKey)
+		if !ok {
+			mtlog.WithField("flowId", flowKey).Warn("missing endpoint ID at export; leaving addresses empty")
+			m.metrics.Errors.WithErrorName("flow-fetcher", "CannotResolveEndpoint", metrics.HighSeverity).Inc()
+		}
+		recordsBacking[i].SrcAddr = src
+		recordsBacking[i].DstAddr = dst
 		forwardingFlows = append(forwardingFlows, &recordsBacking[i])
 		i++
 	}

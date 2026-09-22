@@ -110,8 +110,8 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 	}
 
 	if fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv4) || fr.Metrics.EthProtocol == uint16(ethernet.EtherTypeIPv6) {
-		out["SrcAddr"] = model.IP(fr.ID.SrcIp).String()
-		out["DstAddr"] = model.IP(fr.ID.DstIp).String()
+		out["SrcAddr"] = model.IP(fr.SrcAddr).String()
+		out["DstAddr"] = model.IP(fr.DstAddr).String()
 		out["Proto"] = fr.ID.TransportProtocol
 		out["Dscp"] = fr.Metrics.Dscp
 

@@ -2,7 +2,6 @@ package flow
 
 import (
 	"context"
-	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -31,14 +30,16 @@ func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFl
 
 func (f *benchFakeFetcher) DeleteMapsStaleEntries(_ time.Duration) {}
 
+func (f *benchFakeFetcher) SnapshotEndpoints() model.EndpointTable {
+	return model.EndpointTable{}
+}
+
 func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.BpfFlowId]model.BpfFlowContent {
 	m := make(map[ebpf.BpfFlowId]model.BpfFlowContent, n)
 	for i := 0; i < n; i++ {
 		var id ebpf.BpfFlowId
-		src := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)).To16()
-		dst := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i+1)).To16()
-		copy(id.SrcIp[:], src)
-		copy(id.DstIp[:], dst)
+		id.SrcId = uint32(i + 1)
+		id.DstId = uint32(i + 1001)
 		id.SrcPort = uint16(1024 + (i % 60000))
 		id.DstPort = 443
 		id.TransportProtocol = 6

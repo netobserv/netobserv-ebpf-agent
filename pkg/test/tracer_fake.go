@@ -61,6 +61,10 @@ func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId]m
 func (m *TracerFake) DeleteMapsStaleEntries(_ time.Duration) {
 }
 
+func (m *TracerFake) SnapshotEndpoints() model.EndpointTable {
+	return nil
+}
+
 func (m *TracerFake) ReadRingBuf() (ringbuf.Record, error) {
 	return <-m.ringBuf, nil
 }

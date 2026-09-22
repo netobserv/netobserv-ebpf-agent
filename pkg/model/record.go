@@ -62,10 +62,28 @@ func SetInterfaceNamer(ifaceNamer InterfaceNamer) {
 // record structure as parsed from eBPF
 type RawRecord ebpf.BpfFlowRecordT
 
+// EndpointTable maps interned endpoint IDs to packet-boundary IP addresses.
+// It is a snapshot of the eBPF endpoint_ips map; entries are not evicted in v1.
+type EndpointTable map[uint32]IPAddr
+
+// Addrs resolves the source and destination IPs for an interned flow key.
+// ok is false if either ID is missing (including ID 0).
+func (t EndpointTable) Addrs(id ebpf.BpfFlowId) (src, dst IPAddr, ok bool) {
+	if t == nil || id.SrcId == 0 || id.DstId == 0 {
+		return IPAddr{}, IPAddr{}, false
+	}
+	src, srcOK := t[id.SrcId]
+	dst, dstOK := t[id.DstId]
+	return src, dst, srcOK && dstOK
+}
+
 // Record contains accumulated metrics from a flow
 type Record struct {
 	ID      ebpf.BpfFlowId
 	Metrics BpfFlowContent
+	// SrcAddr / DstAddr are resolved from endpoint IDs at the export boundary.
+	SrcAddr IPAddr
+	DstAddr IPAddr
 
 	// TODO: redundant field from RecordMetrics. Reorganize structs
 	TimeFlowStart time.Time
