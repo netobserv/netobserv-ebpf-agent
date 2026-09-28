@@ -242,7 +242,7 @@ func (s *Scope) Process(rec *model.PlaintextRecord) bool {
 	if s.minBytes > 0 && len(rec.Data) < s.minBytes {
 		return false
 	}
-	s.enrichFiveTuple(rec, pid)
+	s.enrichFiveTuple(rec)
 	if !s.matchesFlowFilters(rec, pid) {
 		return false
 	}
@@ -413,67 +413,16 @@ func (s *Scope) pidMatchesPeerScope(pid int) bool {
 	return false
 }
 
-func (s *Scope) enrichFiveTuple(rec *model.PlaintextRecord, pid int) {
+func (s *Scope) enrichFiveTuple(rec *model.PlaintextRecord) {
 	if rec != nil && rec.SrcAddr != "" && rec.DstAddr != "" && rec.SrcPort > 0 && rec.DstPort > 0 {
 		if rec.Protocol == "" {
 			rec.Protocol = "TCP"
 		}
 		return
 	}
-	if s.enrichFromSocketFD(rec, pid) {
-		return
-	}
-	conns := s.connectionsForEnrichment(pid)
-	if len(conns) == 0 {
-		s.enrichFromFilterScope(rec)
-		return
-	}
-	best := s.pickConnection(conns, rec.Direction, pid)
-	if best == nil {
-		s.enrichFromFilterScope(rec)
-		return
-	}
-	rec.SrcAddr = best.localIP.String()
-	rec.DstAddr = best.remoteIP.String()
-	rec.SrcPort = best.localPort
-	rec.DstPort = best.remotePort
-	rec.Protocol = "TCP"
-}
-
-func (s *Scope) enrichFromSocketFD(rec *model.PlaintextRecord, pid int) bool {
-	if rec == nil {
-		return false
-	}
-	fd, ok := s.resolveSocketFD(rec, pid)
-	if !ok || fd < 0 {
-		return false
-	}
-	rec.SocketFd = int32(fd)
-	inode, ok := socketInodeFromFD(pid, fd)
-	if !ok {
-		return false
-	}
-	conns := s.connectionsForEnrichment(pid)
-	c := connectionByInode(conns, inode)
-	if c == nil {
-		return false
-	}
-	rec.SrcAddr = c.localIP.String()
-	rec.DstAddr = c.remoteIP.String()
-	rec.SrcPort = c.localPort
-	rec.DstPort = c.remotePort
-	rec.Protocol = "TCP"
-	return true
-}
-
-func (s *Scope) resolveSocketFD(rec *model.PlaintextRecord, pid int) (int, bool) {
-	if rec.SocketFd >= 0 {
-		return int(rec.SocketFd), true
-	}
-	if rec.TLSSource == model.TLSSourceOpenSSL && rec.ConnPtr != 0 {
-		return readOpenSSLFdFromSSL(pid, rec.ConnPtr)
-	}
-	return 0, false
+	// A queued event's SSL pointer, fd and /proc socket table may already
+	// belong to another connection. Never turn that snapshot into identity.
+	s.enrichFromFilterScope(rec)
 }
 
 func (s *Scope) netnsIPs(pid int) []net.IP {
@@ -531,72 +480,6 @@ func procConnKey(c *procTCPConn) string {
 	}
 	return c.localIP.String() + ":" + strconv.Itoa(int(c.localPort)) + "-" +
 		c.remoteIP.String() + ":" + strconv.Itoa(int(c.remotePort))
-}
-
-// connectionsForEnrichment returns established TCP sockets for 5-tuple enrichment.
-// When pid is unknown, scan scoped workload PIDs (and filter-based discovery as fallback).
-func (s *Scope) connectionsForEnrichment(pid int) []procTCPConn {
-	var pids []int
-	if pid > 0 {
-		pids = []int{pid}
-	} else if target := s.scopedTargetPID(); target > 0 {
-		pids = []int{target}
-	} else {
-		s.mu.RLock()
-		pids = make([]int, 0, len(s.allowedPIDs))
-		for scopedPID := range s.allowedPIDs {
-			pids = append(pids, scopedPID)
-		}
-		s.mu.RUnlock()
-		if len(pids) == 0 {
-			pids = s.discoveryPIDsForFilters()
-		}
-	}
-	if len(pids) == 0 {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	var all []procTCPConn
-	for _, scopedPID := range pids {
-		conns, err := readProcTCPConns(scopedPID)
-		if err != nil {
-			continue
-		}
-		for _, c := range filterUsableProcTCPConns(conns) {
-			key := c.localIP.String() + ":" + strconv.Itoa(int(c.localPort)) + "-" +
-				c.remoteIP.String() + ":" + strconv.Itoa(int(c.remotePort))
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			all = append(all, c)
-		}
-	}
-	return all
-}
-
-func (s *Scope) discoveryPIDsForFilters() []int {
-	seen := map[int]struct{}{}
-	var pids []int
-	add := func(set map[int]struct{}) {
-		for pid := range set {
-			if _, ok := seen[pid]; ok {
-				continue
-			}
-			seen[pid] = struct{}{}
-			pids = append(pids, pid)
-		}
-	}
-	for _, ip := range s.peerIPs {
-		add(pidsWithIP(ip))
-	}
-	for _, n := range s.peerNets {
-		add(pidsWithIPInNet(n))
-	}
-	if len(s.flowFilterPorts) > 0 {
-		add(pidsWithFilterPorts(s.flowFilterPorts))
-	}
-	return pids
 }
 
 func singleFilterPort(ports map[uint16]struct{}) uint16 {

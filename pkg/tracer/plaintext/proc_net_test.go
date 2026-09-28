@@ -217,7 +217,7 @@ func TestPidsWithFilterPorts(t *testing.T) {
 	}
 }
 
-func TestScopePortOnlyEnrichesFromProc(t *testing.T) {
+func TestScopeDoesNotGuessConnectionFromProc(t *testing.T) {
 	tmp := t.TempDir()
 	proc := filepath.Join(tmp, "proc")
 	pidDir := filepath.Join(proc, "843", "net")
@@ -225,11 +225,19 @@ func TestScopePortOnlyEnrichesFromProc(t *testing.T) {
 		t.Fatal(err)
 	}
 	tcp6 := "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n" +
-		"   1: 0000000000000000FFFF00000202F40A:20FB 0000000000000000FFFF00000502F40A:89D0 01 00000000:00000000 00:00000000 00000000     0        0 0 1 00000000\n"
+		"   1: 0000000000000000FFFF00000202F40A:20FB 0000000000000000FFFF00000502F40A:89D0 01 00000000:00000000 00:00000000 00000000     0        0 42 1 00000000\n"
 	if err := os.WriteFile(filepath.Join(pidDir, "tcp6"), []byte(tcp6), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
+	fdDir := filepath.Join(proc, "843", "fd")
+	if err := os.MkdirAll(fdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("socket:[42]", filepath.Join(fdDir, "7")); err != nil {
+		t.Fatal(err)
+	}
+	// FD 7 now points at a different connection than the queued event.
 	orig := procRootDir
 	procRootDir = proc
 	t.Cleanup(func() { procRootDir = orig })
@@ -240,14 +248,16 @@ func TestScopePortOnlyEnrichesFromProc(t *testing.T) {
 
 	rec := &model.PlaintextRecord{
 		Pid:       843,
+		SocketFd:  7,
+		ConnPtr:   0x1234,
 		Data:      []byte("GET / HTTP/1.1"),
 		Direction: model.PlaintextDirectionWrite,
 		TLSSource: model.TLSSourceOpenSSL,
 	}
 	if !scope.Process(rec) {
-		t.Fatal("expected port-only enrichment from /proc")
+		t.Fatal("expected plaintext to remain available without a verified tuple")
 	}
-	if rec.SrcAddr != "10.244.2.2" || rec.DstAddr != "10.244.2.5" || rec.SrcPort != 8443 {
+	if rec.SrcAddr != "" || rec.DstAddr != "" || rec.DstPort != 0 || rec.TupleSource != "" {
 		t.Fatalf("unexpected tuple: %s:%d -> %s:%d", rec.SrcAddr, rec.SrcPort, rec.DstAddr, rec.DstPort)
 	}
 }

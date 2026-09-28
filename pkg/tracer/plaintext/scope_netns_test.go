@@ -47,7 +47,7 @@ func TestScopeSkipsEnrichWhenKernelTuplePresent(t *testing.T) {
 		Protocol:  "TCP",
 		Direction: model.PlaintextDirectionWrite,
 	}
-	s.enrichFiveTuple(rec, 12345)
+	s.enrichFiveTuple(rec)
 	if rec.SrcAddr != "10.244.2.7" || rec.DstPort != 40494 {
 		t.Fatalf("kernel tuple should be preserved, got %#v", rec)
 	}

@@ -160,6 +160,14 @@ struct {
     __type(key, struct ssl_fd_key_t);
     __type(value, s32);
 } ssl_fd_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 4096);
+    __type(key, u64);
+    __type(value, struct ssl_fd_pending_t);
+} ssl_fd_pending_map SEC(".maps");
+
 // QUIC flow tracking map - keyed by flow_id (like other flow maps)
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);

@@ -30,6 +30,8 @@ func SetTLSCaptureVariables(spec *cilium.CollectionSpec, enableOpenSSL bool) err
 }
 
 type TLSBpfPrograms struct {
+	ProbeRetSSLSetFd   *cilium.Program `ebpf:"probe_ret_SSL_set_fd"`
+	ProbeEntrySSLFree  *cilium.Program `ebpf:"probe_entry_SSL_free"`
 	ProbeEntrySSLWrite *cilium.Program `ebpf:"probe_entry_SSL_write"`
 	ProbeEntrySSLSetFd *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSLRead  *cilium.Program `ebpf:"probe_entry_SSL_read"`
@@ -61,7 +63,7 @@ func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scop
 		if scope == nil || !scope.IsPIDScopeActive() {
 			olog.Warn("OpenSSL libssl discovery is not peer-scoped; attaches per-container libssl on this node — set peer_ip/peer_cidr in FLOW_FILTER_RULES to narrow")
 		}
-		attacher, err := AttachOpenSSLUprobes(scope, opensslPath, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd)
+		attacher, err := AttachOpenSSLUprobes(scope, opensslPath, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd, progs.ProbeRetSSLSetFd, progs.ProbeEntrySSLFree)
 		if err != nil {
 			result.Close()
 			return nil, fmt.Errorf("attaching OpenSSL uprobes: %w", err)

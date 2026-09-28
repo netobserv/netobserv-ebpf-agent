@@ -32,7 +32,9 @@ define FLOW_PROGRAMS
 	"probe_entry_SSL_write": "uprobe",
 	"probe_entry_SSL_read": "uprobe",
 	"probe_ret_SSL_read": "uretprobe",
-	"probe_entry_SSL_set_fd": "uprobe"
+	"probe_entry_SSL_set_fd": "uprobe",
+	"probe_ret_SSL_set_fd": "uretprobe",
+	"probe_entry_SSL_free": "uprobe"
 }
 endef
 
@@ -54,6 +56,7 @@ define FLOW_MAPS
 	"ipsec_egress_map":"hash",
 	"ssl_data_event_map":"ringbuf",
 	"ssl_read_active_map":"hash",
+	"ssl_fd_pending_map":"lru_hash",
 	"ssl_fd_map":"lru_hash",
 	"dns_name_map":"per_cpu_array",
 	"quic_flows":"per_cpu_hash"
@@ -71,7 +74,9 @@ define PACKET_PROGRAMS
 	"probe_entry_SSL_write": "uprobe",
 	"probe_entry_SSL_read": "uprobe",
 	"probe_ret_SSL_read": "uretprobe",
-	"probe_entry_SSL_set_fd": "uprobe"
+	"probe_entry_SSL_set_fd": "uprobe",
+	"probe_ret_SSL_set_fd": "uretprobe",
+	"probe_entry_SSL_free": "uprobe"
 }
 endef
 
@@ -83,6 +88,7 @@ define PACKET_MAPS
 	"global_counters":"per_cpu_array",
 	"ssl_data_event_map":"ringbuf",
 	"ssl_read_active_map":"hash",
+	"ssl_fd_pending_map":"lru_hash",
 	"ssl_fd_map":"lru_hash"
 }
 endef

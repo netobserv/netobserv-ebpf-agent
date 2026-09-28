@@ -228,7 +228,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 
 			opensslAtt, err = plaintext.AttachOpenSSLUprobes(cfg.PlaintextScope, cfg.OpenSSLPath,
 				objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read,
-				objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd)
+				objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd, objects.ProbeRetSSL_setFd, objects.ProbeEntrySSL_free)
 			if err != nil {
 				return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
 			}
