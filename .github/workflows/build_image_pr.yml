@@ -23,9 +23,9 @@ jobs:
       - name: Install make
         run: sudo apt -y install make
       - name: build and save bytecode image
-        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" BC_IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_BC_IMAGE }}:tmp CLEAN_BUILD=1 make tar-bc-image
+        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" BC_IMAGE=${WF_REGISTRY}/${WF_BC_IMAGE}:tmp CLEAN_BUILD=1 make tar-bc-image
       - name: build and save image
-        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE=${{ env.WF_REGISTRY }}/${{ env.WF_IMAGE }}:tmp CLEAN_BUILD=1 make tar-image
+        run: OCI_BUILD_OPTS="--label quay.expires-after=2w" IMAGE=${WF_REGISTRY}/${WF_IMAGE}:tmp CLEAN_BUILD=1 make tar-image
       - name: upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
