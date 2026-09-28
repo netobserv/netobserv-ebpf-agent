@@ -70,7 +70,7 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb,
     if (skip) {
         return 0;
     }
-    if (!lookup_flow_endpoints(&id, &addrs)) {
+    if (!intern_flow_endpoints(&id, &addrs)) {
         return 0;
     }
     u64 len = BPF_CORE_READ(skb, len);

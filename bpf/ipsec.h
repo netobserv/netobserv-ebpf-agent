@@ -158,7 +158,7 @@ static inline int enter_xfrm_func(struct sk_buff *skb, direction dir) {
         return 0;
     }
 
-    if (!lookup_flow_endpoints(&id, &addrs)) {
+    if (!intern_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

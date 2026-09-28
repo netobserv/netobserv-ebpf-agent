@@ -1069,24 +1069,6 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 	return flows, true
 }
 
-// SnapshotEndpoints copies the ID→IP dictionary. Entries are not deleted.
-func (m *Fetcher) SnapshotEndpoints() model.EndpointTable {
-	table := make(model.EndpointTable)
-	if m.objects == nil || m.objects.EndpointIps == nil {
-		return table
-	}
-	var id uint32
-	var addr ebpf.BpfEndpointAddr
-	iterator := m.objects.EndpointIps.Iterate()
-	for iterator.Next(&id, &addr) {
-		table[id] = model.IPAddr(addr.Ip)
-	}
-	if err := iterator.Err(); err != nil {
-		log.WithError(err).Warn("couldn't iterate endpoint dictionary")
-	}
-	return table
-}
-
 // accumulateSecondaryMaps merges per-CPU / secondary eBPF map metrics into the main flow map.
 func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.BpfFlowId]model.BpfFlowContent, met *metrics.Metrics) {
 	if m.config.Flows.EnableDNSTracking {
@@ -1563,6 +1545,12 @@ func kernelSpecificLoadAndAssign(oldKernel, rtKernel, supportNetworkEvents bool,
 }
 
 func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig, filter *attach.Filter) error {
+	if cfg.Flows.EndpointMapMaxEntries == 0 {
+		return fmt.Errorf("ENDPOINT_MAP_MAX_ENTRIES must be greater than zero")
+	}
+	spec.Maps[ebpf.BpfMapEndpointIds].MaxEntries = cfg.Flows.EndpointMapMaxEntries
+	spec.Maps[ebpf.BpfMapEndpointIps].MaxEntries = cfg.Flows.EndpointMapMaxEntries
+
 	traceMsgs := 0
 	if cfg.Debug {
 		traceMsgs = 1

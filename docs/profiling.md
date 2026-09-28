@@ -55,3 +55,39 @@ curl "http://localhost:6060/debug/pprof/goroutine" -o goroutine
 ```
 
 4. Use `go tool pprof` to dig into the profiles (`go tool trace` for the `trace` profile)
+
+## Endpoint indexing experiment
+
+Compare a build using full IP addresses in flow keys with the indexed build under
+the same workload, sampling, flow-map capacity, timeout, feature set, and CPU count.
+Record `ENDPOINT_MAP_MAX_ENTRIES` explicitly. Run both with the default dictionary
+capacity and a smaller capacity sized for the experiment's **cumulative** distinct
+addresses. Do not infer production memory savings from an artificially small map.
+
+Include these workloads:
+
+| Workload | Purpose |
+| --- | --- |
+| Idle, then default 5,000-flow capacity | Measure fixed dictionary overhead against small flow maps |
+| Many flows sharing few addresses | Measure the intended benefit from address reuse |
+| Many distinct addresses and sustained churn | Measure dictionary growth, insertion cost, and saturation |
+| Multiple sending CPUs | Exercise contention on endpoint allocation |
+| Drops-only filtering and optional tracing features | Check telemetry correctness independently of accepted TC packets |
+
+Measure throughput, agent CPU, export duration, allocations/GC, peak process and
+cgroup memory, and kernel map memory. Account for both dictionaries, their counter,
+all enabled flow maps, and userspace records; Go heap profiles alone exclude BPF
+map memory. Verify exported IPs and packet/byte counts, and check the
+`CannotAssignEndpointID` dropped-flow and `CannotResolveEndpoint` error metrics alongside resource
+usage. A lower resource count caused by missing flows is not an improvement.
+
+The eviction microbenchmark uses valid endpoint mappings but an in-memory fetcher:
+
+```bash
+go test -mod vendor -run '^$' -bench BenchmarkEvictFlows -benchmem ./pkg/flow
+```
+
+It measures userspace batch conversion, not BPF insertion, map syscalls, or packet
+throughput. Kernel regression test instructions are in [e2e/README.md](../e2e/README.md#endpoint-dictionary-kernel-tests).
+Endpoint reclamation remains unresolved; a successful performance experiment alone
+does not make the current dictionary lifecycle safe for production.

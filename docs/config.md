@@ -44,6 +44,16 @@ The following environment variables are available to configure the NetObserv eBP
   cache. If the accounter reaches the max number of flows, it flushes them to the collector.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
+* `ENDPOINT_MAP_MAX_ENTRIES` (default: `1048576`, flow mode only). Positive integer capacity
+  of each of the IP-to-ID and ID-to-IP dictionaries, shared by TC and tracing hooks.
+  This is a limit on distinct addresses retained over the lifetime of the maps, not on
+  active flows. Flow eviction does **not** reclaim endpoints. When the dictionaries fill,
+  telemetry for unseen addresses is lost until the maps are recreated; safe reclamation
+  remains a requirement before the indexing experiment is ready for production.
+  Larger capacities also increase empty-map memory overhead. Performance comparisons must
+  include dictionary memory and address churn, and report the chosen capacity.
+  In eBPF program manager mode, map capacities are provisioned externally; this setting
+  cannot resize the pinned dictionaries.
 * `DEDUPER` (default: `none`, disabled). Accepted values are `none` (disabled) and `firstCome`.
   When enabled, it will detect duplicate flows (flows that have been detected e.g. through
   both the physical and a virtual interface).
