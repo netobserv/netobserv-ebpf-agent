@@ -82,7 +82,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags,
     __builtin_memset(&orig_addrs, 0, sizeof(orig_addrs));
     __builtin_memcpy(orig_addrs.src_ip, orig.saddr, IP_MAX_LEN);
     __builtin_memcpy(orig_addrs.dst_ip, orig.daddr, IP_MAX_LEN);
-    if (!lookup_flow_endpoints(id, &orig_addrs)) {
+    if (!intern_flow_endpoints(id, &orig_addrs)) {
         return -1;
     }
     id->src_port = orig.sport;

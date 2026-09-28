@@ -100,7 +100,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     if (skip) {
         return 0;
     }
-    if (!lookup_flow_endpoints(&id, &addrs)) {
+    if (!intern_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

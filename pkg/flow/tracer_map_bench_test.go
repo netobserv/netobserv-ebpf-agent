@@ -2,6 +2,8 @@ package flow
 
 import (
 	"context"
+	"encoding/binary"
+	"iter"
 	"strconv"
 	"testing"
 	"time"
@@ -15,7 +17,8 @@ import (
 // pre-built flow map on each LookupAndDeleteMap call, so we can benchmark the
 // userspace eviction/record-building cost in isolation from the kernel.
 type benchFakeFetcher struct {
-	flows map[ebpf.BpfFlowId]model.BpfFlowContent
+	flows     map[ebpf.BpfFlowId]model.BpfFlowContent
+	endpoints model.EndpointTable
 }
 
 func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
@@ -30,8 +33,16 @@ func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFl
 
 func (f *benchFakeFetcher) DeleteMapsStaleEntries(_ time.Duration) {}
 
-func (f *benchFakeFetcher) SnapshotEndpoints() model.EndpointTable {
-	return model.EndpointTable{}
+func (f *benchFakeFetcher) ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable {
+	table := make(model.EndpointTable)
+	for id := range ids {
+		for _, endpoint := range []uint32{id.SrcId, id.DstId} {
+			if addr, ok := f.endpoints[endpoint]; ok {
+				table[endpoint] = addr
+			}
+		}
+	}
+	return table
 }
 
 func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.BpfFlowId]model.BpfFlowContent {
@@ -96,6 +107,14 @@ func BenchmarkEvictFlows(b *testing.B) {
 			for _, n := range []int{1000, 10000, 100000} {
 				b.Run(sizeName(n), func(b *testing.B) {
 					fetcher.flows = benchBuildFlowMap(n, interfacesPerFlow)
+					fetcher.endpoints = make(model.EndpointTable)
+					for id := range fetcher.flows {
+						for _, endpoint := range []uint32{id.SrcId, id.DstId} {
+							addr := model.IPAddr{10: 0xff, 11: 0xff}
+							binary.BigEndian.PutUint32(addr[12:], endpoint)
+							fetcher.endpoints[endpoint] = addr
+						}
+					}
 					out := make(chan []*model.Record, 1)
 					ctx := context.Background()
 

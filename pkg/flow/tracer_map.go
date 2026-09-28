@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"iter"
 	"maps"
 	"runtime"
 	"sync"
@@ -37,7 +38,7 @@ type MapTracer struct {
 type mapFetcher interface {
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
-	SnapshotEndpoints() model.EndpointTable
+	ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable
 }
 
 func NewMapTracer(fetcher mapFetcher, evictionTimeout, staleEntriesEvictTimeout time.Duration, m *metrics.Metrics,
@@ -107,8 +108,12 @@ func (m *MapTracer) evictFlows(ctx context.Context, forceGC bool, forwardFlows c
 	currentTime := time.Now()
 
 	flows := m.mapFetcher.LookupAndDeleteMap(m.metrics)
+	var endpoints model.EndpointTable
+	if len(flows) > 0 {
+		endpoints = m.mapFetcher.ResolveEndpoints(maps.Keys(flows))
+	}
+	// Include endpoint lookups in the cost of reading a complete flow batch.
 	elapsed := time.Since(currentTime)
-	endpoints := m.mapFetcher.SnapshotEndpoints()
 	udnCache := make(map[string]string)
 	if m.s != nil && m.udnEnabled {
 		udnsMap, err := m.s.GetInterfaceUDNs()

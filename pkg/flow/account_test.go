@@ -7,6 +7,7 @@ import (
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,14 +34,24 @@ var k3 = ebpf.BpfFlowId{
 	DstId:   11,
 }
 
+func accounterEndpoints() *test.TracerFake {
+	f := test.NewTracerFake()
+	f.Endpoints = make(model.EndpointTable)
+	for _, id := range []uint32{1, 2, 10, 11} {
+		f.Endpoints[id] = model.IPAddr{10: 0xff, 11: 0xff, 12: 192, 14: 2, 15: byte(id)}
+	}
+	return f
+}
+
 func TestEvict_MaxEntries(t *testing.T) {
 	// GIVEN an accounter
 	now := time.Date(2022, 8, 23, 16, 33, 22, 0, time.UTC)
+	endpoints := accounterEndpoints()
 	acc := NewAccounter(2, time.Hour, func() time.Time {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NoOp(), nil, false, nil)
+	}, metrics.NoOp(), nil, false, endpoints)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -92,7 +103,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 	// of each flow
 	assert.Equal(t, map[ebpf.BpfFlowId]model.Record{
 		k1: {
-			ID: k1,
+			ID:      k1,
+			SrcAddr: endpoints.Endpoints[k1.SrcId],
+			DstAddr: endpoints.Endpoints[k1.DstId],
 			Metrics: model.BpfFlowContent{
 				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
@@ -103,7 +116,9 @@ func TestEvict_MaxEntries(t *testing.T) {
 			Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("[namer unset] 0", 0, nil)},
 		},
 		k2: {
-			ID: k2,
+			ID:      k2,
+			SrcAddr: endpoints.Endpoints[k2.SrcId],
+			DstAddr: endpoints.Endpoints[k2.DstId],
 			Metrics: model.BpfFlowContent{
 				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
@@ -119,11 +134,12 @@ func TestEvict_MaxEntries(t *testing.T) {
 func TestEvict_Period(t *testing.T) {
 	// GIVEN an accounter
 	now := time.Date(2022, 8, 23, 16, 33, 22, 0, time.UTC)
+	endpoints := accounterEndpoints()
 	acc := NewAccounter(200, 20*time.Millisecond, func() time.Time {
 		return now
 	}, func() time.Duration {
 		return 1000
-	}, metrics.NoOp(), nil, false, nil)
+	}, metrics.NoOp(), nil, false, endpoints)
 
 	// WHEN it starts accounting new records
 	inputs := make(chan *model.RawRecord, 20)
@@ -168,7 +184,9 @@ func TestEvict_Period(t *testing.T) {
 	records := receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
 	assert.Equal(t, model.Record{
-		ID: k1,
+		ID:      k1,
+		SrcAddr: endpoints.Endpoints[k1.SrcId],
+		DstAddr: endpoints.Endpoints[k1.DstId],
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				Bytes:           30,
@@ -185,7 +203,9 @@ func TestEvict_Period(t *testing.T) {
 	records = receiveTimeout(t, evictor)
 	require.Len(t, records, 1)
 	assert.Equal(t, model.Record{
-		ID: k1,
+		ID:      k1,
+		SrcAddr: endpoints.Endpoints[k1.SrcId],
+		DstAddr: endpoints.Endpoints[k1.DstId],
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				Bytes:           20,

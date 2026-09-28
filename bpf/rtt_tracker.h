@@ -65,7 +65,7 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     if (skip) {
         return 0;
     }
-    if (!lookup_flow_endpoints(&id, &addrs)) {
+    if (!intern_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

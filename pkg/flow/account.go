@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"iter"
 	"maps"
 	"time"
 
@@ -12,14 +13,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type endpointResolver interface {
+	ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable
+}
+
 // Accounter accumulates flows metrics in memory and eventually evicts them via an evictor channel.
 // The accounting process is usually done at kernel-space. This type reimplements it at userspace
 // for the edge case where packets are submitted directly via ring-buffer because the kernel-side
 // accounting map is full.
-type endpointSnapshotter interface {
-	SnapshotEndpoints() model.EndpointTable
-}
-
 type Accounter struct {
 	maxEntries   int
 	evictTimeout time.Duration
@@ -29,7 +30,7 @@ type Accounter struct {
 	metrics      *metrics.Metrics
 	s            *ovnobserv.SampleDecoder
 	udnEnabled   bool
-	endpoints    endpointSnapshotter
+	endpoints    endpointResolver
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -43,7 +44,7 @@ func NewAccounter(
 	m *metrics.Metrics,
 	s *ovnobserv.SampleDecoder,
 	udnEnabled bool,
-	endpoints endpointSnapshotter,
+	endpoints endpointResolver,
 ) *Accounter {
 	acc := Accounter{
 		maxEntries:   maxEntries,
@@ -125,8 +126,8 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 		}
 	}
 	var endpoints model.EndpointTable
-	if c.endpoints != nil {
-		endpoints = c.endpoints.SnapshotEndpoints()
+	if c.endpoints != nil && len(entries) > 0 {
+		endpoints = c.endpoints.ResolveEndpoints(maps.Keys(entries))
 	}
 	i := 0
 	for key, entryMetrics := range entries {
