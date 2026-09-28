@@ -9,15 +9,14 @@
  * Map a 16-byte IPv4-mapped / IPv6 address to a stable u32 ID.
  * ID 0 is reserved (lookup/intern failure).
  *
- * TC (intern_flow_endpoints): lookup or assign the next global ID.
- * Tracing hooks only look up (lookup_flow_endpoints). An IP that TC
- * has not interned yet is skipped.
+ * TC and tracing hooks look up or assign the next global ID.
+ * Tracing-only flows must not depend on an earlier accepted TC packet.
  *
  *   packet_addrs          flow_id              endpoint_ids / endpoint_ips
  *   src_ip[16] --intern--> src_id u32          IP -> ID   (hot path)
  *   dst_ip[16] --intern--> dst_id u32          ID -> IP   (export / IPsec)
  *
- *                    intern_endpoint (TC only)
+ *                    intern_endpoint (TC and tracing)
  *                           |
  *                 lookup endpoint_ids[ip]
  *                      /            \
@@ -38,17 +37,8 @@ static __always_inline void endpoint_key_from_ip(endpoint_addr *key, const u8 ip
     __builtin_memcpy(key->ip, ip, IP_MAX_LEN);
 }
 
-static __always_inline u32 lookup_endpoint(const u8 ip[IP_MAX_LEN]) {
-    endpoint_addr key;
-    endpoint_key_from_ip(&key, ip);
-    u32 *existing = bpf_map_lookup_elem(&endpoint_ids, &key);
-    if (existing && *existing != 0) {
-        return *existing;
-    }
-    return 0;
-}
-
-// Assign an ID if missing. Call only from TC/TCX/netkit.
+// Assign an ID if missing. Uses no spinlocks or fetching atomics so it can
+// also run from tracing hooks on kernels predating BPF atomic fetch support.
 static __always_inline u32 intern_endpoint(const u8 ip[IP_MAX_LEN]) {
     endpoint_addr key;
     endpoint_key_from_ip(&key, ip);
@@ -96,12 +86,6 @@ static __always_inline u32 intern_endpoint(const u8 ip[IP_MAX_LEN]) {
 
     increase_counter(ENDPOINT_INTERN_FAIL);
     return 0;
-}
-
-static __always_inline bool lookup_flow_endpoints(flow_id *id, const packet_addrs *addrs) {
-    id->src_id = lookup_endpoint(addrs->src_ip);
-    id->dst_id = lookup_endpoint(addrs->dst_ip);
-    return id->src_id != 0 && id->dst_id != 0;
 }
 
 static __always_inline bool intern_flow_endpoints(flow_id *id, const packet_addrs *addrs) {

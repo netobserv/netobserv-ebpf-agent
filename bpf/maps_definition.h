@@ -198,7 +198,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } endpoint_ips SEC(".maps");
 
-// Next endpoint ID. ID 0 is reserved. Written only from TC intern.
+// Next endpoint ID. ID 0 is reserved. Shared by TC and tracing hooks.
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, u32);

@@ -63,7 +63,7 @@ func SetInterfaceNamer(ifaceNamer InterfaceNamer) {
 type RawRecord ebpf.BpfFlowRecordT
 
 // EndpointTable maps interned endpoint IDs to packet-boundary IP addresses.
-// It is a snapshot of the eBPF endpoint_ips map; entries are not evicted in v1.
+// It contains only the addresses needed by one export batch.
 type EndpointTable map[uint32]IPAddr
 
 // Addrs resolves the source and destination IPs for an interned flow key.

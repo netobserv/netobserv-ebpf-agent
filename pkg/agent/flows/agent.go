@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"net"
 	"net/http"
 	"time"
@@ -67,7 +68,7 @@ type ebpfFlowFetcher interface {
 
 	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
-	SnapshotEndpoints() model.EndpointTable
+	ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable
 	ReadRingBuf() (ringbuf.Record, error)
 	ReadSSLRingBuf() (ringbuf.Record, error)
 }

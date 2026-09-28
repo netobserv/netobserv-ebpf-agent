@@ -86,9 +86,10 @@ func TestConfigureFlowSpecVariables(t *testing.T) {
 				DNSTrackingPorts: []uint16{5353},
 			},
 			Flows: configflows.Features{
-				EnableDNSTracking: true,
-				EnableRTT:         true,
-				QUICTrackingMode:  2,
+				EndpointMapMaxEntries: 1048576,
+				EnableDNSTracking:     true,
+				EnableRTT:             true,
+				QUICTrackingMode:      2,
 			},
 		},
 		Debug: true,
@@ -107,7 +108,7 @@ func TestConfigureFlowSpecVariablesNoFilterShrinksMaps(t *testing.T) {
 	spec, err := ebpf.LoadBpf()
 	require.NoError(t, err)
 
-	cfg := &tracer.FetcherConfig{Agent: config.Agent{}}
+	cfg := &tracer.FetcherConfig{Agent: config.Agent{Flows: configflows.Features{EndpointMapMaxEntries: 1048576}}}
 	require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
 	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapFilterMap].MaxEntries)
 	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries)
@@ -123,4 +124,20 @@ func TestSizeMapForFeature(t *testing.T) {
 
 	sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, false, 5000)
 	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapAggregatedFlowsDns].MaxEntries)
+}
+
+func TestConfigureEndpointCapacity(t *testing.T) {
+	for _, capacity := range []uint32{2, 4096, 1048576} {
+		spec, err := ebpf.LoadBpf()
+		require.NoError(t, err)
+		cfg := &tracer.FetcherConfig{Agent: config.Agent{
+			Flows: configflows.Features{EndpointMapMaxEntries: capacity},
+		}}
+		require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
+		assert.Equal(t, capacity, spec.Maps[ebpf.BpfMapEndpointIds].MaxEntries)
+		assert.Equal(t, capacity, spec.Maps[ebpf.BpfMapEndpointIps].MaxEntries)
+	}
+	spec, err := ebpf.LoadBpf()
+	require.NoError(t, err)
+	require.ErrorContains(t, configureFlowSpecVariables(spec, &tracer.FetcherConfig{}, nil), "ENDPOINT_MAP_MAX_ENTRIES")
 }

@@ -4,6 +4,9 @@ import "time"
 
 // Features holds flow-only configuration options.
 type Features struct {
+	// EndpointMapMaxEntries bounds each IP/ID dictionary. Entries currently live
+	// for the lifetime of the map, independently of flow eviction.
+	EndpointMapMaxEntries uint32 `env:"ENDPOINT_MAP_MAX_ENTRIES" envDefault:"1048576"`
 	// GRPCMessageMaxFlows specifies the limit, in number of flows, of each GRPC message. Messages
 	// larger than that number will be split and submitted sequentially.
 	GRPCMessageMaxFlows int `env:"GRPC_MESSAGE_MAX_FLOWS" envDefault:"10000"`

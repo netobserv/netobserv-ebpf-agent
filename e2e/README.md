@@ -20,6 +20,30 @@ It then runs smoke tests on that cluster, such as sending pings between pods and
 
 The tests leverage Kube's [e2e-framework](https://github.com/kubernetes-sigs/e2e-framework). They are based on manifest files that you can find in [this directory](./cluster/base/).
 
+### Endpoint dictionary kernel tests
+
+The `integration` tests in `pkg/tracer/flows` exercise drops-only interning,
+dictionary saturation, and verifier loading of the tracing programs. They require
+a kernel supporting those hooks and the drop-reason field in `kfree_skb`, BPF and
+network administration privileges, and tracefs. Load the host's `psample` module
+before testing network-event tracking (for example, `sudo modprobe psample`).
+
+Run them in an isolated privileged container: the drops test creates temporary
+veth links and a network namespace. After `make docker-generate` has built the
+generator image and refreshed the bytecode:
+
+```bash
+go test -mod vendor -tags integration -c -o /tmp/netobserv-endpoints.test ./pkg/tracer/flows
+docker run --rm --privileged \
+  -v /tmp/netobserv-endpoints.test:/endpoints.test:ro \
+  --entrypoint bash ebpf-generator:latest -c \
+  'mount -t tracefs tracefs /sys/kernel/tracing && /endpoints.test -test.v -test.run "Test(EndpointDictionarySaturation|EndpointTracingProgramsLoad|DropsOnlyInternsUnseenEndpoints)$"'
+```
+
+The saturation test records a **remaining limitation**: evicting flows does not
+reclaim dictionary entries, so new addresses stop producing flows at capacity.
+A passing test does not mean that endpoint reclamation has been implemented.
+
 ### How to troubleshoot
 
 During the tests, you can run any `kubectl` command to the KIND cluster.
