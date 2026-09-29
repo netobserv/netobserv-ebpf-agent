@@ -22,12 +22,18 @@ var (
 	macOverlapped = [6]uint8{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
 )
 
-func defaultNetNSForTest() ([]string, error) {
+type fakeNetnsResolver struct{}
+
+func (f *fakeNetnsResolver) getNetNS() ([]string, error) {
 	return []string{""}, nil
 }
 
+func (f *fakeNetnsResolver) getCookie(_ netns.NsHandle) uint64 {
+	return 0
+}
+
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
-	return NewInterface(index, name, mac, netns.None(), "")
+	return NewInterface(index, name, mac, netns.None(), "", 0)
 }
 
 func TestPoller(t *testing.T) {
@@ -37,7 +43,7 @@ func TestPoller(t *testing.T) {
 	// fake net.Interfaces implementation that returns two different sets of
 	// interfaces on successive invocations, with overlapping Index
 	firstInvocation := true
-	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+	var fakeInterfaces = func(_ netns.NsHandle, _ string, _ uint64) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
 			return []Interface{
@@ -52,9 +58,8 @@ func TestPoller(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	poller := NewPoller(5*time.Millisecond, 10)
+	poller := NewPoller(5*time.Millisecond, 10, &fakeNetnsResolver{})
 	poller.interfaces = fakeInterfaces
-	poller.netNamespaces = defaultNetNSForTest
 
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)

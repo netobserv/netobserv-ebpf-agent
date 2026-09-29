@@ -12,6 +12,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netns"
 )
 
 var rlog = logrus.WithField("component", "ifaces.Registerer")
@@ -21,14 +22,24 @@ var rlog = logrus.WithField("component", "ifaces.Registerer")
 type Registerer struct {
 	m                   sync.RWMutex
 	inner               Informer
-	ifaces              map[int]map[[6]uint8]string
+	ifaces              map[ifaceKey]map[[6]uint8]string
 	mapSize             int
 	bufLen              int
+	hostCookie          uint64
 	preferredInterfaces []preferredInterface
 	metrics             *metrics.Metrics
 }
 
-func NewRegisterer(inner Informer, cfg *config.Agent, m *metrics.Metrics) (*Registerer, error) {
+// ifaceKey identifies an interface by its network namespace cookie and OS index. The cookie is
+// 0 when netns-cookie tracking is disabled, in which case lookups degrade to index-only (the
+// historical behavior). Including the cookie disambiguates indexes that collide across namespaces.
+type ifaceKey struct {
+	cookie uint64
+	index  int
+}
+
+func NewRegisterer(inner Informer, cfg *config.Agent, netnsResolver NetnsResolver, m *metrics.Metrics) (*Registerer, error) {
+	hostCookie := netnsResolver.getCookie(netns.None())
 	pref, err := newPreferredInterfaces(cfg.PreferredInterfaceForMACPrefix)
 	if err != nil {
 		return nil, err
@@ -36,7 +47,8 @@ func NewRegisterer(inner Informer, cfg *config.Agent, m *metrics.Metrics) (*Regi
 	r := &Registerer{
 		inner:               inner,
 		bufLen:              cfg.BuffersLength,
-		ifaces:              map[int]map[[6]uint8]string{},
+		ifaces:              map[ifaceKey]map[[6]uint8]string{},
+		hostCookie:          hostCookie,
 		preferredInterfaces: pref,
 		metrics:             m,
 	}
@@ -56,18 +68,20 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 			case EventAdded:
 				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
 				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
+				key := ifaceKey{cookie: ev.Interface.NetNSCookie, index: ev.Interface.Index}
 				r.m.Lock()
-				if _, ok := r.ifaces[ev.Interface.Index]; ok {
-					r.ifaces[ev.Interface.Index][ev.Interface.MAC] = ev.Interface.Name
+				if _, ok := r.ifaces[key]; ok {
+					r.ifaces[key][ev.Interface.MAC] = ev.Interface.Name
 				} else {
-					r.ifaces[ev.Interface.Index] = map[[6]uint8]string{ev.Interface.MAC: ev.Interface.Name}
+					r.ifaces[key] = map[[6]uint8]string{ev.Interface.MAC: ev.Interface.Name}
 				}
 				r.mapSize = len(r.ifaces)
 				r.m.Unlock()
 			case EventDeleted:
 				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
+				key := ifaceKey{cookie: ev.Interface.NetNSCookie, index: ev.Interface.Index}
 				r.m.Lock()
-				if macs, ok := r.ifaces[ev.Interface.Index]; ok {
+				if macs, ok := r.ifaces[key]; ok {
 					name, ok := macs[ev.Interface.MAC]
 					// prevent removing an interface with the same index but different name
 					// e.g. due to an out-of-order add/delete signaling
@@ -75,7 +89,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 						delete(macs, ev.Interface.MAC)
 					}
 					if len(macs) == 0 {
-						delete(r.ifaces, ev.Interface.Index)
+						delete(r.ifaces, key)
 					}
 				}
 				r.mapSize = len(r.ifaces)
@@ -118,11 +132,15 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 // This results in a lost update. To prevent this, the function uses
 // double-checked locking: it re-checks under Lock before inserting,
 // ensuring that only one goroutine updates the cache.
-func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, bool) {
-	if name, found := r.ifaceCacheLookup(idx, mac); found {
+func (r *Registerer) IfaceNameForIndexAndMAC(idx int, cookie uint64, mac [6]uint8) (string, bool) {
+	if name, found := r.ifaceCacheLookup(idx, cookie, mac); found {
 		return name, found
 	}
-	// Fallback if not found, interfaces lookup
+	// Fallback if not found, interfaces lookup. Note this syscall resolves the index in the
+	// agent's own (host) namespace, so it is only meaningful for host interfaces.
+	if r.hostCookie != 0 && cookie != r.hostCookie {
+		return "", false
+	}
 	iface, err := net.InterfaceByIndex(idx)
 	if err != nil {
 		return "", false
@@ -132,10 +150,11 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 		return "", false
 	}
 
+	key := ifaceKey{cookie: cookie, index: idx}
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	if current, ok := r.ifaces[idx]; ok {
+	if current, ok := r.ifaces[key]; ok {
 		if existing, exists := current[foundMAC]; exists {
 			// The entry was populated concurrently during
 			// our fallback path. Respect the existing
@@ -144,17 +163,17 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, mac [6]uint8) (string, boo
 		}
 		current[foundMAC] = iface.Name
 	} else {
-		r.ifaces[idx] = map[[6]uint8]string{foundMAC: iface.Name}
+		r.ifaces[key] = map[[6]uint8]string{foundMAC: iface.Name}
 		r.mapSize = len(r.ifaces)
 	}
 	return iface.Name, true
 }
 
-func (r *Registerer) ifaceCacheLookup(idx int, mac [6]uint8) (string, bool) {
+func (r *Registerer) ifaceCacheLookup(idx int, cookie uint64, mac [6]uint8) (string, bool) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
-	macsMap, ok := r.ifaces[idx]
+	macsMap, ok := r.ifaces[ifaceKey{cookie: cookie, index: idx}]
 	if ok {
 		if len(macsMap) == 1 {
 			// No risk of collision, just return entry without checking for MAC
