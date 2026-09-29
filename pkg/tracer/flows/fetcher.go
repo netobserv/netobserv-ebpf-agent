@@ -105,7 +105,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			spec.Maps[ebpf.BpfMapDirectFlows].MaxEntries = ringbufMinSize
 		}
 		if !cfg.EnableOpenSSLTracking {
-			spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = ringbufMinSize
+			netattach.MinimizeOpenSSLMaps(spec)
 		}
 		// remove pinning from all maps
 		for _, m := range []string{
@@ -1624,6 +1624,9 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ANY_UDP_PORT
 	case 1:
 		enableQUICTracking = ebpf.BpfQuicConfigTQUIC_CONFIG_ENABLED
+	}
+	if enableQUICTracking == ebpf.BpfQuicConfigTQUIC_CONFIG_DISABLED {
+		spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries = 1
 	}
 	// Flow-only BPF variables; packet fetcher uses pkg/ebpf/packets.
 	variables := []netattach.VariableMapping{

@@ -55,3 +55,15 @@ curl "http://localhost:6060/debug/pprof/goroutine" -o goroutine
 ```
 
 4. Use `go tool pprof` to dig into the profiles (`go tool trace` for the `trace` profile)
+
+## Disabled feature map memory
+
+The standalone loader retains one-entry QUIC and OpenSSL state maps when their
+features are disabled, so the existing BPF objects can still load without
+allocating full-size unused maps. QUIC modes 1 and 2 and enabled OpenSSL tracking
+keep their normal capacities. This sizing happens in the agent loader; it does
+not resize maps provisioned externally by bpfman.
+
+Use the [empty-map memory diagnostic](../tools/map-memory/README.md) to compare
+actual kernel allocations in isolated cgroups. It measures flow and packet
+objects independently and does not attach BPF programs to the host.

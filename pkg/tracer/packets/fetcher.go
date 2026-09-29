@@ -91,8 +91,7 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 	}
 
 	if !cfg.EnableOpenSSLTracking {
-		const ringbufMinSize = 1 << 12
-		spec.Maps["ssl_data_event_map"].MaxEntries = ringbufMinSize
+		netattach.MinimizeOpenSSLMaps(spec)
 	}
 
 	objects := &packets.PacketsObjects{}

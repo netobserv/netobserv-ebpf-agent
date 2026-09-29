@@ -1,6 +1,7 @@
 package flows
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -123,4 +124,24 @@ func TestSizeMapForFeature(t *testing.T) {
 
 	sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, false, 5000)
 	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapAggregatedFlowsDns].MaxEntries)
+}
+
+func TestConfigureQUICMapCapacity(t *testing.T) {
+	for _, mode := range []int{0, 1, 2} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			spec, err := ebpf.LoadBpf()
+			require.NoError(t, err)
+			original := spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries
+			cfg := &tracer.FetcherConfig{Agent: config.Agent{Flows: configflows.Features{QUICTrackingMode: mode, EnableTLSTracking: true}}}
+			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
+			if mode == 0 {
+				assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries)
+			} else {
+				assert.Equal(t, original, spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries)
+			}
+			var configured uint8
+			require.NoError(t, spec.Variables[ebpf.BpfVarEnableQuicTracking].Get(&configured))
+			assert.Equal(t, uint8(mode), configured)
+		})
+	}
 }
