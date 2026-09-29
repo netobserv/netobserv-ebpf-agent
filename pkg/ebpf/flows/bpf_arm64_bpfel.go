@@ -122,17 +122,19 @@ type BpfFlowIdT struct {
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
-	_                structs.HostLayout
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	Bytes            uint64
-	Packets          uint32
-	EthProtocol      uint16
-	Flags            uint16
-	SrcMac           [6]uint8
-	DstMac           [6]uint8
-	IfIndexFirstSeen uint32
-	Lock             struct {
+	_                    structs.HostLayout
+	StartMonoTimeTs      uint64
+	EndMonoTimeTs        uint64
+	Bytes                uint64
+	Packets              uint32
+	EthProtocol          uint16
+	Flags                uint16
+	SrcMac               [6]uint8
+	DstMac               [6]uint8
+	IfIndexFirstSeen     uint32
+	NetnsCookieFirstSeen uint64
+	ObservedNetnsCookie  [6]uint64
+	Lock                 struct {
 		_   structs.HostLayout
 		Val uint32
 	}
@@ -346,6 +348,7 @@ const (
 	BpfVarEnableDnsTracking              = "enable_dns_tracking"
 	BpfVarEnableFiltering                = "enable_filtering"
 	BpfVarEnableIpsec                    = "enable_ipsec"
+	BpfVarEnableNetnsCookie              = "enable_netns_cookie"
 	BpfVarEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	BpfVarEnableOpensslTracking          = "enable_openssl_tracking"
 	BpfVarEnablePktTranslationTracking   = "enable_pkt_translation_tracking"
@@ -463,6 +466,7 @@ type BpfVariableSpecs struct {
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.VariableSpec `ebpf:"enable_filtering"`
 	EnableIpsec                    *ebpf.VariableSpec `ebpf:"enable_ipsec"`
+	EnableNetnsCookie              *ebpf.VariableSpec `ebpf:"enable_netns_cookie"`
 	EnableNetworkEventsMonitoring  *ebpf.VariableSpec `ebpf:"enable_network_events_monitoring"`
 	EnableOpensslTracking          *ebpf.VariableSpec `ebpf:"enable_openssl_tracking"`
 	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
@@ -555,6 +559,7 @@ type BpfVariables struct {
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.Variable `ebpf:"enable_filtering"`
 	EnableIpsec                    *ebpf.Variable `ebpf:"enable_ipsec"`
+	EnableNetnsCookie              *ebpf.Variable `ebpf:"enable_netns_cookie"`
 	EnableNetworkEventsMonitoring  *ebpf.Variable `ebpf:"enable_network_events_monitoring"`
 	EnableOpensslTracking          *ebpf.Variable `ebpf:"enable_openssl_tracking"`
 	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`

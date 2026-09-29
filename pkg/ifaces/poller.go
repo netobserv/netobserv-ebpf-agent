@@ -13,28 +13,24 @@ import (
 type Poller struct {
 	period        time.Duration
 	current       map[InterfaceKey]Interface
-	interfaces    func(handle netns.NsHandle, ns string) ([]Interface, error)
+	interfaces    func(handle netns.NsHandle, ns string, netnsCookie uint64) ([]Interface, error)
 	bufLen        int
-	netNamespaces func() ([]string, error)
+	netnsResolver NetnsResolver
 }
 
-func NewPoller(period time.Duration, bufLen int) *Poller {
+func NewPoller(period time.Duration, bufLen int, netnsResolver NetnsResolver) *Poller {
 	return &Poller{
-		period:     period,
-		bufLen:     bufLen,
-		interfaces: netInterfaces,
-		current:    map[InterfaceKey]Interface{},
+		period:        period,
+		bufLen:        bufLen,
+		interfaces:    netInterfaces,
+		current:       map[InterfaceKey]Interface{},
+		netnsResolver: netnsResolver,
 	}
 }
 
 func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
-
 	out := make(chan Event, np.bufLen)
-	getNS := np.netNamespaces
-	if getNS == nil {
-		getNS = getNetNS
-	}
-	netns, err := getNS()
+	netns, err := np.netnsResolver.getNetNS()
 	if err != nil {
 		go np.pollForEvents(ctx, "", out)
 	} else {
@@ -61,9 +57,10 @@ func (np *Poller) pollForEvents(ctx context.Context, ns string, out chan Event) 
 		}
 	}
 
+	cookie := np.netnsResolver.getCookie(netnsHandle)
 	defer ticker.Stop()
 	for {
-		if ifaces, err := np.interfaces(netnsHandle, ns); err != nil {
+		if ifaces, err := np.interfaces(netnsHandle, ns, cookie); err != nil {
 			log.WithError(err).Warn("fetching interface names")
 		} else {
 			log.WithField("names", ifaces).Debug("fetched interface names")
