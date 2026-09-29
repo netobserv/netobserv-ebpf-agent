@@ -12,7 +12,7 @@ import (
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent/common"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
-	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	ebpfFlows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	exporterflows "github.com/netobserv/netobserv-ebpf-agent/pkg/exporter/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -22,6 +22,9 @@ import (
 	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
 	tracerflows "github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/flows"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
@@ -42,8 +45,9 @@ type Agent struct {
 	cfg *config.Agent
 
 	// input data providers
-	informer ifaces.Informer
-	ebpf     ebpfFlowFetcher
+	informer      ifaces.Informer
+	netnsResolver ifaces.NetnsResolver
+	ebpf          ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
@@ -65,7 +69,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	common.TCAttacher
 
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpfFlows.BpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 	ReadSSLRingBuf() (ringbuf.Record, error)
@@ -131,11 +135,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 	}
 
 	ebpfConfig := &tracerflows.FetcherConfig{
-		Agent:         *cfg,
-		EnableIngress: ingress,
-		EnableEgress:  egress,
-		Debug:         debug,
-		FilterConfig:  filterRules,
+		Agent:                  *cfg,
+		EnableIngress:          ingress,
+		EnableEgress:           egress,
+		Debug:                  debug,
+		FilterConfig:           filterRules,
+		IsNetNSCookieSupported: isNetNSCookieSupported(),
 	}
 
 	fetcher, err := tracerflows.NewFetcher(ebpfConfig, m)
@@ -143,12 +148,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 		return nil, err
 	}
 
-	return newAgent(cfg, m, fetcher, exportFunc, agentIP, s)
+	return newAgent(ebpfConfig, m, fetcher, exportFunc, agentIP, s)
 }
 
 // newAgent is a private constructor with injectable dependencies, usable for tests.
 func newAgent(
-	cfg *config.Agent,
+	cfg *tracerflows.FetcherConfig,
 	m *metrics.Metrics,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
@@ -181,17 +186,19 @@ func newAgent(
 	}
 	limiter := flow.NewCapacityLimiter(m)
 
-	informer := common.CreateInformer(cfg, m)
+	netnsResolver := ifaces.NewNetnsResolver(cfg.IsNetNSCookieSupported)
+	informer := common.CreateInformer(&cfg.Agent, netnsResolver, m)
 
 	return &Agent{
 		ebpf:          fetcher,
 		exporter:      exporter,
-		cfg:           cfg,
+		cfg:           &cfg.Agent,
 		mapTracer:     mapTracer,
 		rbTracer:      rbTracer,
 		accounter:     accounter,
 		limiter:       limiter,
 		informer:      informer,
+		netnsResolver: netnsResolver,
 		promoServer:   promoServer,
 		metrics:       m,
 		rbSSLTracer:   rbSSLTracer,
@@ -344,7 +351,7 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 
 	if !a.cfg.EbpfProgramManagerMode {
 		alog.Debug("registering interfaces listener in background")
-		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.metrics, a.informer)
+		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, a.netnsResolver, a.metrics)
 		if err != nil {
 			return nil, err
 		}
@@ -395,4 +402,17 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 		rbSSLTracer.Start()
 	}
 	return export, nil
+}
+
+// isNetNSCookieSupported resolves whether netns-cookie interface attribution should be enabled.
+// bpf_get_netns_cookie was enabled for TC programs upstream in 6.13. Using cilium's feature checker
+// first to probe the running kernel rather than strict versions, because distros can backport it.
+func isNetNSCookieSupported() bool {
+	err := features.HaveProgramHelper(ebpf.SchedCLS, asm.FnGetNetnsCookie)
+	if err != nil && !errors.Is(err, ebpf.ErrNotSupported) {
+		// Inconclusive probe (e.g. missing capabilities): fall back to the version check.
+		alog.WithError(err).Debug("netns cookie helper probe inconclusive, falling back to kernel version check")
+		return !kernel.IsKernelOlderThan("6.13.0")
+	}
+	return err == nil
 }

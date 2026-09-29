@@ -1590,6 +1590,10 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 	if cfg.EnableOpenSSLTracking {
 		enableOpenSSLTracking = 1
 	}
+	enableNetnsCookie := uint8(0)
+	if cfg.IsNetNSCookieSupported {
+		enableNetnsCookie = 1
+	}
 
 	// enable_quic_tracking mode:
 	// QUIC_CONFIG_DISABLED = 0, QUIC_CONFIG_ENABLED = 1, QUIC_CONFIG_ANY_UDP_PORT = 2.
@@ -1618,6 +1622,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		{Key: ebpf.BpfVarEnableOpensslTracking, Value: uint8(enableOpenSSLTracking)},
 		{Key: ebpf.BpfVarEnableTlsUsageTracking, Value: uint8(enableTLSTracking)},
 		{Key: ebpf.BpfVarEnableQuicTracking, Value: uint8(enableQUICTracking)},
+		{Key: ebpf.BpfVarEnableNetnsCookie, Value: enableNetnsCookie},
 	}
 
 	for _, mapping := range variables {
