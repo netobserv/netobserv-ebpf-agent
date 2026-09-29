@@ -23,14 +23,14 @@ var (
 	macOverlapped = [6]uint8{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
 )
 
-func setupEmptyNetNS(t *testing.T) (string, func()) {
+func setupEmptyNetNS(t *testing.T) (NetnsResolver, func()) {
 	dname, err := os.MkdirTemp("", "netns")
 	require.NoError(t, err)
-	return dname, func() { os.RemoveAll(dname) }
+	return &netnsResolverImpl{netnsPath: dname}, func() { os.RemoveAll(dname) }
 }
 
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
-	return NewInterface(index, name, mac, netns.None(), "")
+	return NewInterface(index, name, mac, netns.None(), "", 0)
 }
 
 func TestPoller(t *testing.T) {
@@ -40,7 +40,7 @@ func TestPoller(t *testing.T) {
 	// fake net.Interfaces implementation that returns two different sets of
 	// interfaces on successive invocations, with overlapping Index
 	firstInvocation := true
-	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+	var fakeInterfaces = func(_ netns.NsHandle, _ string, _ uint64) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
 			return []Interface{
@@ -55,9 +55,9 @@ func TestPoller(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	netnsPath, cleanup := setupEmptyNetNS(t)
+	netnsResolver, cleanup := setupEmptyNetNS(t)
 	defer cleanup()
-	poller := NewPoller(netnsPath, 5*time.Millisecond, 10)
+	poller := NewPoller(5*time.Millisecond, 10, netnsResolver)
 	poller.interfaces = fakeInterfaces
 
 	updates, err := poller.Subscribe(ctx)
@@ -110,7 +110,7 @@ func TestPollerNoNetNs(t *testing.T) {
 	// fake net.Interfaces implementation that returns two different sets of
 	// interfaces on successive invocations, with overlapping Index
 	firstInvocation := true
-	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+	var fakeInterfaces = func(_ netns.NsHandle, _ string, _ uint64) ([]Interface, error) {
 		if firstInvocation {
 			firstInvocation = false
 			return []Interface{
@@ -125,7 +125,7 @@ func TestPollerNoNetNs(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	poller := NewPoller("", 5*time.Millisecond, 10)
+	poller := NewPoller(5*time.Millisecond, 10, NewDisabledResolver())
 	poller.interfaces = fakeInterfaces
 
 	updates, err := poller.Subscribe(ctx)

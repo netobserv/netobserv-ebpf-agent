@@ -122,17 +122,19 @@ type FlowsBpfFlowIdT struct {
 type FlowsBpfFlowMetrics FlowsBpfFlowMetricsT
 
 type FlowsBpfFlowMetricsT struct {
-	_                structs.HostLayout
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
-	Bytes            uint64
-	Packets          uint32
-	EthProtocol      uint16
-	Flags            uint16
-	SrcMac           [6]uint8
-	DstMac           [6]uint8
-	IfIndexFirstSeen uint32
-	Lock             struct {
+	_                    structs.HostLayout
+	StartMonoTimeTs      uint64
+	EndMonoTimeTs        uint64
+	Bytes                uint64
+	Packets              uint32
+	EthProtocol          uint16
+	Flags                uint16
+	SrcMac               [6]uint8
+	DstMac               [6]uint8
+	IfIndexFirstSeen     uint32
+	NetnsCookieFirstSeen uint64
+	ObservedNetnsCookie  [6]uint64
+	Lock                 struct {
 		_   structs.HostLayout
 		Val uint32
 	}
@@ -296,6 +298,7 @@ const (
 	FlowsBpfVarEnableDnsTracking              = "enable_dns_tracking"
 	FlowsBpfVarEnableFiltering                = "enable_filtering"
 	FlowsBpfVarEnableIpsec                    = "enable_ipsec"
+	FlowsBpfVarEnableNetnsCookie              = "enable_netns_cookie"
 	FlowsBpfVarEnableNetworkEventsMonitoring  = "enable_network_events_monitoring"
 	FlowsBpfVarEnablePktTranslationTracking   = "enable_pkt_translation_tracking"
 	FlowsBpfVarEnableQuicTracking             = "enable_quic_tracking"
@@ -401,6 +404,7 @@ type FlowsBpfVariableSpecs struct {
 	EnableDnsTracking              *ebpf.VariableSpec `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.VariableSpec `ebpf:"enable_filtering"`
 	EnableIpsec                    *ebpf.VariableSpec `ebpf:"enable_ipsec"`
+	EnableNetnsCookie              *ebpf.VariableSpec `ebpf:"enable_netns_cookie"`
 	EnableNetworkEventsMonitoring  *ebpf.VariableSpec `ebpf:"enable_network_events_monitoring"`
 	EnablePktTranslationTracking   *ebpf.VariableSpec `ebpf:"enable_pkt_translation_tracking"`
 	EnableQuicTracking             *ebpf.VariableSpec `ebpf:"enable_quic_tracking"`
@@ -483,6 +487,7 @@ type FlowsBpfVariables struct {
 	EnableDnsTracking              *ebpf.Variable `ebpf:"enable_dns_tracking"`
 	EnableFiltering                *ebpf.Variable `ebpf:"enable_filtering"`
 	EnableIpsec                    *ebpf.Variable `ebpf:"enable_ipsec"`
+	EnableNetnsCookie              *ebpf.Variable `ebpf:"enable_netns_cookie"`
 	EnableNetworkEventsMonitoring  *ebpf.Variable `ebpf:"enable_network_events_monitoring"`
 	EnablePktTranslationTracking   *ebpf.Variable `ebpf:"enable_pkt_translation_tracking"`
 	EnableQuicTracking             *ebpf.Variable `ebpf:"enable_quic_tracking"`
