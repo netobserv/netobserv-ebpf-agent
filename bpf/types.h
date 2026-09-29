@@ -10,8 +10,11 @@
 #define SUBMIT 0
 
 #define ENOENT 2
+#define E2BIG 7
 #define EEXIST 17
 #define EINVAL 22
+
+#define MAX_ENDPOINT_ENTRIES (1 << 20)
 
 // Flags according to RFC 9293 & https://www.iana.org/assignments/ipfix/ipfix.xhtml
 typedef enum tcp_flags_t {
@@ -90,6 +93,22 @@ typedef enum direction_t {
 const static enum direction_t *unused1 __attribute__((unused));
 
 const static u8 ip4in6[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+
+// Canonical handle for a unique L3 address is a u32. 0 is reserved (intern failure).
+
+// Packet-boundary IPv4-mapped / IPv6 addresses (RFC 4038 §4.2).
+typedef struct packet_addrs_t {
+    u8 src_ip[IP_MAX_LEN];
+    u8 dst_ip[IP_MAX_LEN];
+} packet_addrs;
+
+// Dictionary key / reverse-map value for interned addresses.
+typedef struct endpoint_addr_t {
+    u8 ip[IP_MAX_LEN];
+} endpoint_addr;
+
+const static struct packet_addrs_t *unused17 __attribute__((unused));
+const static struct endpoint_addr_t *unused18 __attribute__((unused));
 
 typedef struct flow_metrics_t {
     // Flow start and end times as monotomic timestamps in nanoseconds
@@ -187,13 +206,12 @@ const static struct network_events_metrics_t *unused6 __attribute__((unused));
 const static struct xlat_metrics_t *unused13 __attribute__((unused));
 const static struct additional_metrics_t *unused3 __attribute__((unused));
 
-// Attributes that uniquely identify a flow
+// Attributes that uniquely identify a flow.
+// L3 addresses are interned to endpoint IDs; raw IPs stay on the packet
+// boundary (packet_addrs) and are recovered at export via the endpoint_ips map.
 typedef struct flow_id_t {
-    // L3 network layer
-    // IPv4 addresses are encoded as IPv6 addresses with prefix ::ffff/96
-    // as described in https://datatracker.ietf.org/doc/html/rfc4038#section-4.2
-    u8 src_ip[IP_MAX_LEN];
-    u8 dst_ip[IP_MAX_LEN];
+    u32 src_id;
+    u32 dst_id;
     // L4 transport layer
     u16 src_port;
     u16 dst_port;
@@ -220,10 +238,11 @@ const struct flow_record_t *unused8 __attribute__((unused));
 // Internal structure: Packet info structure passed around functions.
 typedef struct pkt_info_t {
     flow_id *id;
-    u64 current_ts; // ts recorded when pkt came.
-    u16 flags;      // TCP specific
-    void *l4_hdr;   // Stores the actual l4 header
-    u8 dscp;        // IPv4/6 DSCP value
+    packet_addrs addrs; // raw IPs at the packet boundary (filters, intern)
+    u64 current_ts;     // ts recorded when pkt came.
+    u16 flags;          // TCP specific
+    void *l4_hdr;       // Stores the actual l4 header
+    u8 dscp;            // IPv4/6 DSCP value
     u16 dns_id;
     u16 dns_flags;
     u64 dns_latency;
@@ -248,10 +267,10 @@ typedef struct payload_meta_t {
 
 // DNS Flow record used as key to correlate DNS query and response
 typedef struct dns_flow_id_t {
+    u32 src_id;
+    u32 dst_id;
     u16 src_port;
     u16 dst_port;
-    u8 src_ip[IP_MAX_LEN];
-    u8 dst_ip[IP_MAX_LEN];
     u16 id;
     u8 protocol;
 } dns_flow_id;
@@ -271,6 +290,7 @@ typedef enum global_counters_key_t {
     NETWORK_EVENTS_OVERFLOW,
     NETWORK_EVENTS_COOKIE_TOO_BIG,
     OBSERVED_INTF_MISSED,
+    ENDPOINT_INTERN_FAIL,
     MAX_COUNTERS,
 } global_counters_key;
 

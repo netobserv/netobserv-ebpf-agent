@@ -147,15 +147,15 @@ func FlowToPB(fr *model.Record) *Record {
 		pbflowRecord.DupList[i] = &entries[i]
 	}
 	if fr.Metrics.EthProtocol == model.IPv6Type {
-		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.SrcIp[:]}}
-		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.ID.DstIp[:]}}
+		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.SrcAddr[:]}}
+		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.DstAddr[:]}}
 		if fr.Metrics.XlatMetrics != nil {
 			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.XlatMetrics.Saddr[:]}}
 			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv6{Ipv6: fr.Metrics.XlatMetrics.Daddr[:]}}
 		}
 	} else {
-		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.SrcIp)}}
-		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.ID.DstIp)}}
+		pbflowRecord.Network.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.SrcAddr)}}
+		pbflowRecord.Network.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.DstAddr)}}
 		if fr.Metrics.XlatMetrics != nil {
 			pbflowRecord.Xlat.SrcAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.XlatMetrics.Saddr)}}
 			pbflowRecord.Xlat.DstAddr = &IP{IpFamily: &IP_Ipv4{Ipv4: model.IntEncodeV4(fr.Metrics.XlatMetrics.Daddr)}}
@@ -180,13 +180,13 @@ func PBToFlow(pb *Record) *model.Record {
 	out := model.Record{
 		ID: ebpf.BpfFlowId{
 			TransportProtocol: uint8(pb.Transport.Protocol),
-			SrcIp:             ipToIPAddr(pb.Network.GetSrcAddr()),
-			DstIp:             ipToIPAddr(pb.Network.GetDstAddr()),
 			SrcPort:           uint16(pb.Transport.SrcPort),
 			DstPort:           uint16(pb.Transport.DstPort),
 			IcmpType:          uint8(pb.IcmpType),
 			IcmpCode:          uint8(pb.IcmpCode),
 		},
+		SrcAddr: ipToIPAddr(pb.Network.GetSrcAddr()),
+		DstAddr: ipToIPAddr(pb.Network.GetDstAddr()),
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				EthProtocol:    uint16(pb.EthProtocol),

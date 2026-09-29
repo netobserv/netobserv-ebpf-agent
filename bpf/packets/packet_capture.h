@@ -50,7 +50,7 @@ static inline bool validate_packet_filter(struct __sk_buff *skb, direction dir) 
         return false;
     }
 
-    bool skip = check_and_apply_filter(&id, pkt.flags, 0, eth_protocol, NULL, dir);
+    bool skip = check_and_apply_filter(&id, &pkt.addrs, pkt.flags, 0, eth_protocol, NULL, dir);
     if (skip) {
         return false;
     }

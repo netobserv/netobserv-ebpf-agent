@@ -184,7 +184,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_apply_filter(&id, pkt.flags, 0, eth_protocol, &flow_sampling, direction);
+    bool skip = check_and_apply_filter(&id, &pkt.addrs, pkt.flags, 0, eth_protocol, &flow_sampling,
+                                       direction);
     if (has_filter_sampling) {
         if (flow_sampling == 0) {
             flow_sampling = sampling;
@@ -197,6 +198,10 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         do_sampling = 1;
     }
     if (skip) {
+        return TC_ACT_OK;
+    }
+
+    if (!intern_flow_endpoints(&id, &pkt.addrs)) {
         return TC_ACT_OK;
     }
 
