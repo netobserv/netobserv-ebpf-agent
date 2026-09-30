@@ -1257,7 +1257,7 @@ func loadObjectsOldKernelRtKernel(spec *cilium.CollectionSpec, pinDir string) (e
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1289,6 +1289,11 @@ func loadObjectsOldKernelRtKernel(spec *cilium.CollectionSpec, pinDir string) (e
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
 			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
+			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
+			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
+			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1308,7 +1313,7 @@ func loadObjectsOldKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfO
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1340,6 +1345,11 @@ func loadObjectsOldKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfO
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
 			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
+			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
+			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
+			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1359,7 +1369,7 @@ func loadObjectsRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfOb
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1391,6 +1401,11 @@ func loadObjectsRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfOb
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
 			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
+			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
+			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
+			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1412,7 +1427,7 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		ProbeEntrySSLWrite     *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1442,6 +1457,11 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
 			NetworkEventsMonitoring: nil,
 			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
+			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
+			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
+			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1449,21 +1469,21 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 
 func loadObjectsWithNetkit(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
 	type newBpfPrograms struct {
-		TcEgressFlowParse       *cilium.Program `ebpf:"tc_egress_flow_parse"`
-		TcIngressFlowParse      *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-		NetkitPrimaryFlowParse  *cilium.Program `ebpf:"netkit_primary_flow_parse"`
-		NetkitPeerFlowParse     *cilium.Program `ebpf:"netkit_peer_flow_parse"`
-		TcxEgressFlowParse      *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-		TcxIngressFlowParse     *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-		TCPRcvFentry            *cilium.Program `ebpf:"tcp_rcv_fentry"`
-		TCPRcvKprobe            *cilium.Program `ebpf:"tcp_rcv_kprobe"`
-		KfreeSkb                *cilium.Program `ebpf:"kfree_skb"`
-		TrackNatManipPkt        *cilium.Program `ebpf:"track_nat_manip_pkt"`
-		XfrmInputKretprobe      *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-		XfrmOutputKretprobe     *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-		XfrmInputKprobe         *cilium.Program `ebpf:"xfrm_input_kprobe"`
-		XfrmOutputKprobe        *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		ProbeEntrySSLWrite      *cilium.Program `ebpf:"probe_entry_SSL_write"`
+		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TCPRcvFentry           *cilium.Program `ebpf:"tcp_rcv_fentry"`
+		TCPRcvKprobe           *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+		KfreeSkb               *cilium.Program `ebpf:"kfree_skb"`
+		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
+		plaintext.TLSBpfPrograms
 		NetworkEventsMonitoring *cilium.Program `ebpf:"network_events_monitoring"`
 	}
 	type newBpfObjects struct {
@@ -1494,6 +1514,11 @@ func loadObjectsWithNetkit(spec *cilium.CollectionSpec, pinDir string) (ebpf.Bpf
 			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
 			NetworkEventsMonitoring: newObjects.NetworkEventsMonitoring,
 			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
+			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
+			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
+			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
+			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
+			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
