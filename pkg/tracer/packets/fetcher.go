@@ -90,9 +90,7 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		spec.Maps[m].Pinning = 0
 	}
 
-	if !cfg.EnableOpenSSLTracking {
-		netattach.MinimizeOpenSSLMaps(spec)
-	}
+	configurePacketMaps(spec, cfg)
 
 	objects := &packets.PacketsObjects{}
 	if err := spec.LoadAndAssign(objects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {

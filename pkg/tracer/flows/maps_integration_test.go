@@ -32,9 +32,9 @@ func TestFeatureMapsKernel(t *testing.T) {
 				var flag uint8
 				if enabled {
 					flag = 1
-				} else {
-					netattach.MinimizeOpenSSLMaps(spec)
 				}
+				netattach.MinimizeMapsIfDisabled(spec, enabled, os.Getpagesize(), "ssl_data_event_map")
+				netattach.MinimizeMapsIfDisabled(spec, enabled, 1, "ssl_read_active_map", "ssl_fd_map")
 				require.NoError(t, spec.Variables["enable_openssl_tracking"].Set(flag))
 				collection, err := cilium.NewCollection(spec)
 				require.NoError(t, err, "%+v", err)
@@ -56,8 +56,8 @@ func TestQUICMapKernel(t *testing.T) {
 			spec, err := ebpfflows.LoadBpf()
 			require.NoError(t, err)
 			prepareFeatureMapTest(spec)
-			netattach.MinimizeOpenSSLMaps(spec)
-			cfg := &tracer.FetcherConfig{Agent: config.Agent{Flows: configflows.Features{QUICTrackingMode: mode}}}
+			cfg := &tracer.FetcherConfig{Agent: config.Agent{Common: config.Common{CacheMaxFlows: 32}, Flows: configflows.Features{QUICTrackingMode: mode}}}
+			configureFlowMaps(spec, cfg, nil)
 			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
 			collection, err := cilium.NewCollection(spec)
 			require.NoError(t, err, "%+v", err)

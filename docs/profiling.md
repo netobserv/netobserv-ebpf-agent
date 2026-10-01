@@ -56,14 +56,16 @@ curl "http://localhost:6060/debug/pprof/goroutine" -o goroutine
 
 4. Use `go tool pprof` to dig into the profiles (`go tool trace` for the `trace` profile)
 
-## Disabled feature map memory
+## BPF map memory
 
-The standalone loader retains one-entry QUIC and OpenSSL state maps when their
-features are disabled, so the existing BPF objects can still load without
-allocating full-size unused maps. QUIC modes 1 and 2 and enabled OpenSSL tracking
-keep their normal capacities. This sizing happens in the agent loader; it does
-not resize maps provisioned externally by bpfman.
+BPF maps allocate kernel memory that is not included in Go heap profiles. Inspect
+map capacities and kernel/cgroup memory alongside userspace profiles when
+investigating the agent's memory usage.
 
-Use the [empty-map memory diagnostic](../tools/map-memory/README.md) to compare
-actual kernel allocations in isolated cgroups. It measures flow and packet
-objects independently and does not attach BPF programs to the host.
+The standalone loaders size feature-dependent maps before loading the BPF
+objects. Maps for disabled features retain a minimum capacity so programs that
+reference them can still load: one entry for state maps, or one page for ring
+buffers. Enabled maps retain their BPF-defined capacity or use the configured
+cache capacity, depending on the map. Maps shared by several features remain
+sized for use while any of those features needs them. The flow loader does not
+resize maps provisioned externally by bpfman.

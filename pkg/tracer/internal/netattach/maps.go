@@ -1,16 +1,24 @@
 package netattach
 
-import (
-	"os"
+import cilium "github.com/cilium/ebpf"
 
-	cilium "github.com/cilium/ebpf"
-)
+// MinimizeMapsIfDisabled sets disabled maps to floor, leaving enabled maps at
+// their existing capacities. Ring buffers need a floor of at least one page.
+func MinimizeMapsIfDisabled(spec *cilium.CollectionSpec, enabled bool, floor int, maps ...string) {
+	if !enabled {
+		for _, name := range maps {
+			spec.Maps[name].MaxEntries = uint32(floor)
+		}
+	}
+}
 
-// MinimizeOpenSSLMaps keeps verifier-visible maps when OpenSSL probes are disabled,
-// without allocating their normal event buffer and preallocated tracking state.
-// Both flow and packet objects use these map names.
-func MinimizeOpenSSLMaps(spec *cilium.CollectionSpec) {
-	spec.Maps["ssl_data_event_map"].MaxEntries = uint32(os.Getpagesize())
-	spec.Maps["ssl_read_active_map"].MaxEntries = 1
-	spec.Maps["ssl_fd_map"].MaxEntries = 1
+// ResizeMaps sets maps to capacity when enabled, or one entry when disabled.
+// Use MinimizeMapsIfDisabled for maps whose enabled capacity comes from the BPF object.
+func ResizeMaps(spec *cilium.CollectionSpec, enabled bool, capacity int, maps ...string) {
+	if !enabled {
+		capacity = 1
+	}
+	for _, name := range maps {
+		spec.Maps[name].MaxEntries = uint32(capacity)
+	}
 }
