@@ -72,6 +72,13 @@ type PacketsSslFdKeyT struct {
 	Pad    uint32
 }
 
+type PacketsSslFdPendingT struct {
+	_   structs.HostLayout
+	Key PacketsSslFdKeyT
+	Fd  int32
+	_   [4]byte
+}
+
 type PacketsSslReadActiveT struct {
 	_           structs.HostLayout
 	SslType     uint8
@@ -90,13 +97,16 @@ const (
 	PacketsMapPeerFilterMap             = "peer_filter_map"
 	PacketsMapSslDataEventMap           = "ssl_data_event_map"
 	PacketsMapSslFdMap                  = "ssl_fd_map"
+	PacketsMapSslFdPendingMap           = "ssl_fd_pending_map"
 	PacketsMapSslReadActiveMap          = "ssl_read_active_map"
 	PacketsProgNetkitPeerPacketParse    = "netkit_peer_packet_parse"
 	PacketsProgNetkitPrimaryPacketParse = "netkit_primary_packet_parse"
+	PacketsProgProbeEntrySSL_free       = "probe_entry_SSL_free"
 	PacketsProgProbeEntrySSL_read       = "probe_entry_SSL_read"
 	PacketsProgProbeEntrySSL_setFd      = "probe_entry_SSL_set_fd"
 	PacketsProgProbeEntrySSL_write      = "probe_entry_SSL_write"
 	PacketsProgProbeRetSSL_read         = "probe_ret_SSL_read"
+	PacketsProgProbeRetSSL_setFd        = "probe_ret_SSL_set_fd"
 	PacketsProgTcEgressPacketParse      = "tc_egress_packet_parse"
 	PacketsProgTcIngressPacketParse     = "tc_ingress_packet_parse"
 	PacketsProgTcxEgressPacketParse     = "tcx_egress_packet_parse"
@@ -156,10 +166,12 @@ type PacketsSpecs struct {
 type PacketsProgramSpecs struct {
 	NetkitPeerPacketParse    *ebpf.ProgramSpec `ebpf:"netkit_peer_packet_parse"`
 	NetkitPrimaryPacketParse *ebpf.ProgramSpec `ebpf:"netkit_primary_packet_parse"`
+	ProbeEntrySSL_free       *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_free"`
 	ProbeEntrySSL_read       *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_read"`
 	ProbeEntrySSL_setFd      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write      *ebpf.ProgramSpec `ebpf:"probe_entry_SSL_write"`
 	ProbeRetSSL_read         *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_read"`
+	ProbeRetSSL_setFd        *ebpf.ProgramSpec `ebpf:"probe_ret_SSL_set_fd"`
 	TcEgressPacketParse      *ebpf.ProgramSpec `ebpf:"tc_egress_packet_parse"`
 	TcIngressPacketParse     *ebpf.ProgramSpec `ebpf:"tc_ingress_packet_parse"`
 	TcxEgressPacketParse     *ebpf.ProgramSpec `ebpf:"tcx_egress_packet_parse"`
@@ -176,6 +188,7 @@ type PacketsMapSpecs struct {
 	PeerFilterMap    *ebpf.MapSpec `ebpf:"peer_filter_map"`
 	SslDataEventMap  *ebpf.MapSpec `ebpf:"ssl_data_event_map"`
 	SslFdMap         *ebpf.MapSpec `ebpf:"ssl_fd_map"`
+	SslFdPendingMap  *ebpf.MapSpec `ebpf:"ssl_fd_pending_map"`
 	SslReadActiveMap *ebpf.MapSpec `ebpf:"ssl_read_active_map"`
 }
 
@@ -220,6 +233,7 @@ type PacketsMaps struct {
 	PeerFilterMap    *ebpf.Map `ebpf:"peer_filter_map"`
 	SslDataEventMap  *ebpf.Map `ebpf:"ssl_data_event_map"`
 	SslFdMap         *ebpf.Map `ebpf:"ssl_fd_map"`
+	SslFdPendingMap  *ebpf.Map `ebpf:"ssl_fd_pending_map"`
 	SslReadActiveMap *ebpf.Map `ebpf:"ssl_read_active_map"`
 }
 
@@ -231,6 +245,7 @@ func (m *PacketsMaps) Close() error {
 		m.PeerFilterMap,
 		m.SslDataEventMap,
 		m.SslFdMap,
+		m.SslFdPendingMap,
 		m.SslReadActiveMap,
 	)
 }
@@ -256,10 +271,12 @@ type PacketsVariables struct {
 type PacketsPrograms struct {
 	NetkitPeerPacketParse    *ebpf.Program `ebpf:"netkit_peer_packet_parse"`
 	NetkitPrimaryPacketParse *ebpf.Program `ebpf:"netkit_primary_packet_parse"`
+	ProbeEntrySSL_free       *ebpf.Program `ebpf:"probe_entry_SSL_free"`
 	ProbeEntrySSL_read       *ebpf.Program `ebpf:"probe_entry_SSL_read"`
 	ProbeEntrySSL_setFd      *ebpf.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSL_write      *ebpf.Program `ebpf:"probe_entry_SSL_write"`
 	ProbeRetSSL_read         *ebpf.Program `ebpf:"probe_ret_SSL_read"`
+	ProbeRetSSL_setFd        *ebpf.Program `ebpf:"probe_ret_SSL_set_fd"`
 	TcEgressPacketParse      *ebpf.Program `ebpf:"tc_egress_packet_parse"`
 	TcIngressPacketParse     *ebpf.Program `ebpf:"tc_ingress_packet_parse"`
 	TcxEgressPacketParse     *ebpf.Program `ebpf:"tcx_egress_packet_parse"`
@@ -270,10 +287,12 @@ func (p *PacketsPrograms) Close() error {
 	return _PacketsClose(
 		p.NetkitPeerPacketParse,
 		p.NetkitPrimaryPacketParse,
+		p.ProbeEntrySSL_free,
 		p.ProbeEntrySSL_read,
 		p.ProbeEntrySSL_setFd,
 		p.ProbeEntrySSL_write,
 		p.ProbeRetSSL_read,
+		p.ProbeRetSSL_setFd,
 		p.TcEgressPacketParse,
 		p.TcIngressPacketParse,
 		p.TcxEgressPacketParse,

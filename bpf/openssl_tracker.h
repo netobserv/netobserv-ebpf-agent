@@ -33,7 +33,35 @@ int probe_entry_SSL_set_fd(struct pt_regs *ctx) {
     struct ssl_fd_key_t key = {};
     key.ssl_ptr = (u64)ssl;
     key.tgid = (u32)(pid_tgid >> 32);
-    bpf_map_update_elem(&ssl_fd_map, &key, &fd, BPF_ANY);
+    bpf_map_delete_elem(&ssl_fd_map, &key);
+    struct ssl_fd_pending_t pending = {.key = key, .fd = fd};
+    bpf_map_update_elem(&ssl_fd_pending_map, &pid_tgid, &pending, BPF_ANY);
+    return 0;
+}
+
+// Commit the binding only after SSL_set_fd succeeds (it calls SSL_set_bio).
+SEC("uretprobe/SSL_set_fd")
+int probe_ret_SSL_set_fd(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct ssl_fd_pending_t *pending = bpf_map_lookup_elem(&ssl_fd_pending_map, &pid_tgid);
+    if (!pending) {
+        return 0;
+    }
+    struct ssl_fd_pending_t binding = *pending;
+    bpf_map_delete_elem(&ssl_fd_pending_map, &pid_tgid);
+    if (PT_REGS_RC(ctx) == 1) {
+        bpf_map_update_elem(&ssl_fd_map, &binding.key, &binding.fd, BPF_ANY);
+    }
+    return 0;
+}
+
+// Also attached to BIO setters: changing the BIO invalidates the fd binding.
+SEC("uprobe/SSL_free")
+int probe_entry_SSL_free(struct pt_regs *ctx) {
+    struct ssl_fd_key_t key = {};
+    key.ssl_ptr = (u64)PT_REGS_PARM1(ctx);
+    key.tgid = (u32)(bpf_get_current_pid_tgid() >> 32);
+    bpf_map_delete_elem(&ssl_fd_map, &key);
     return 0;
 }
 
@@ -89,13 +117,15 @@ int probe_ret_SSL_read(struct pt_regs *ctx) {
     }
 
     int ret = PT_REGS_RC(ctx);
+    struct ssl_read_active_t captured = *active;
     bpf_map_delete_elem(&ssl_read_active_map, &pid_tgid);
-    if (ret <= 0 || active->buf_user == 0) {
+    if (ret <= 0 || captured.buf_user == 0) {
         return 0;
     }
 
-    generate_SSL_data_event(ctx, pid_tgid, active->ssl_type, SSL_DIRECTION_READ, TLS_SOURCE_OPENSSL,
-                            (const char *)active->buf_user, (uint32_t)ret, active->conn_user_ptr);
+    generate_SSL_data_event(ctx, pid_tgid, captured.ssl_type, SSL_DIRECTION_READ,
+                            TLS_SOURCE_OPENSSL, (const char *)captured.buf_user, (uint32_t)ret,
+                            captured.conn_user_ptr);
     return 0;
 }
 
