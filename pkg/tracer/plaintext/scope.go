@@ -43,15 +43,7 @@ type Scope struct {
 
 	minBytes int
 
-	connAffinity map[connAffinityKey]string
-	pidNetIPs    map[int][]net.IP
-
 	stopCh chan struct{}
-}
-
-type connAffinityKey struct {
-	pid       int
-	direction string
 }
 
 func NewScope(
@@ -74,8 +66,6 @@ func NewScope(
 		dedupEnabled:     dedupEnabled,
 		dedupWindow:      dedupWindow,
 		dedup:            map[uint64]time.Time{},
-		connAffinity:     map[connAffinityKey]string{},
-		pidNetIPs:        map[int][]net.IP{},
 		minBytes:         minBytes,
 		stopCh:           make(chan struct{}),
 	}
@@ -425,63 +415,6 @@ func (s *Scope) enrichFiveTuple(rec *model.PlaintextRecord) {
 	s.enrichFromFilterScope(rec)
 }
 
-func (s *Scope) netnsIPs(pid int) []net.IP {
-	if pid <= 0 {
-		return nil
-	}
-	s.mu.RLock()
-	if ips, ok := s.pidNetIPs[pid]; ok {
-		s.mu.RUnlock()
-		return ips
-	}
-	s.mu.RUnlock()
-	ips := listInterfaceIPsInNetNS(pid)
-	s.mu.Lock()
-	s.pidNetIPs[pid] = ips
-	s.mu.Unlock()
-	return ips
-}
-
-func (s *Scope) pickConnection(conns []procTCPConn, direction string, pid int) *procTCPConn {
-	netnsIPs := s.netnsIPs(pid)
-	affinityKey := connAffinityKey{pid: pid, direction: direction}
-	s.mu.RLock()
-	preferred := s.connAffinity[affinityKey]
-	s.mu.RUnlock()
-
-	var best *procTCPConn
-	bestScore := -1
-	for i := range conns {
-		c := &conns[i]
-		if !isUsableProcTCPConn(c) {
-			continue
-		}
-		score := scoreConnection(c, direction, s.flowFilterPorts, s.peerIPs, s.peerNets, netnsIPs)
-		if preferred != "" && procConnKey(c) == preferred {
-			score += 20
-		}
-		if score > bestScore {
-			bestScore = score
-			best = c
-		}
-	}
-	if bestScore < 0 {
-		return nil
-	}
-	s.mu.Lock()
-	s.connAffinity[affinityKey] = procConnKey(best)
-	s.mu.Unlock()
-	return best
-}
-
-func procConnKey(c *procTCPConn) string {
-	if c == nil {
-		return ""
-	}
-	return c.localIP.String() + ":" + strconv.Itoa(int(c.localPort)) + "-" +
-		c.remoteIP.String() + ":" + strconv.Itoa(int(c.remotePort))
-}
-
 func singleFilterPort(ports map[uint16]struct{}) uint16 {
 	if len(ports) != 1 {
 		return 0
@@ -532,94 +465,6 @@ func (s *Scope) enrichFromFilterScope(rec *model.PlaintextRecord) {
 		}
 		rec.Protocol = "TCP"
 	}
-}
-
-func pickConnection(
-	conns []procTCPConn,
-	direction string,
-	ports map[uint16]struct{},
-	peerIPs []net.IP,
-	peerNets []*net.IPNet,
-) *procTCPConn {
-	var best *procTCPConn
-	bestScore := -1
-	for i := range conns {
-		c := &conns[i]
-		if !isUsableProcTCPConn(c) {
-			continue
-		}
-		score := scoreConnection(c, direction, ports, peerIPs, peerNets, nil)
-		if score > bestScore {
-			bestScore = score
-			best = c
-		}
-	}
-	if bestScore < 0 {
-		return nil
-	}
-	return best
-}
-
-func scoreConnection(
-	c *procTCPConn,
-	direction string,
-	ports map[uint16]struct{},
-	peerIPs []net.IP,
-	peerNets []*net.IPNet,
-	netnsIPs []net.IP,
-) int {
-	if !isUsableProcTCPConn(c) {
-		return -1
-	}
-	if len(ports) > 0 && !connectionMatchesFilterPorts(c, ports) {
-		return -1
-	}
-	score := connectionPeerScore(c, peerIPs, peerNets)
-	if len(ports) > 0 {
-		score += 2
-	}
-	if len(netnsIPs) > 0 && connectionUsesNetNSIPs(c, netnsIPs) {
-		score += 8
-	}
-	score += connectionDirectionScore(direction, c)
-	if score == 0 && len(ports) == 0 && len(peerIPs) == 0 && len(peerNets) == 0 {
-		return 0
-	}
-	return score
-}
-
-func connectionMatchesFilterPorts(c *procTCPConn, ports map[uint16]struct{}) bool {
-	for port := range ports {
-		if c.localPort == port || c.remotePort == port {
-			return true
-		}
-	}
-	return false
-}
-
-func connectionPeerScore(c *procTCPConn, peerIPs []net.IP, peerNets []*net.IPNet) int {
-	score := 0
-	for _, ip := range peerIPs {
-		if ipMatches(ip, c.localIP) || ipMatches(ip, c.remoteIP) {
-			score += 4
-		}
-	}
-	for _, n := range peerNets {
-		if ipInNet(c.localIP, n) || ipInNet(c.remoteIP, n) {
-			score += 4
-		}
-	}
-	return score
-}
-
-func connectionDirectionScore(direction string, c *procTCPConn) int {
-	if direction == model.PlaintextDirectionWrite && c.remotePort > 0 {
-		return 1
-	}
-	if direction == model.PlaintextDirectionRead && c.localPort > 0 {
-		return 1
-	}
-	return 0
 }
 
 func (s *Scope) matchesFlowFilters(rec *model.PlaintextRecord, pid int) bool {
