@@ -1,6 +1,7 @@
 package flows
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -100,27 +101,34 @@ func TestConfigureFlowSpecVariables(t *testing.T) {
 		Sample:    10,
 	}})
 
+	original := spec.Copy()
 	require.NoError(t, configureFlowSpecVariables(spec, cfg, filter))
+	for name, m := range original.Maps {
+		assert.Equal(t, m.MaxEntries, spec.Maps[name].MaxEntries, name)
+	}
 }
 
-func TestConfigureFlowSpecVariablesNoFilterShrinksMaps(t *testing.T) {
-	spec, err := ebpf.LoadBpf()
-	require.NoError(t, err)
-
-	cfg := &tracer.FetcherConfig{Agent: config.Agent{}}
-	require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
-	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapFilterMap].MaxEntries)
-	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries)
-	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapIpsecIngressMap].MaxEntries)
-}
-
-func TestSizeMapForFeature(t *testing.T) {
-	spec, err := ebpf.LoadBpf()
-	require.NoError(t, err)
-
-	sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, true, 5000)
-	assert.Equal(t, uint32(5000), spec.Maps[ebpf.BpfMapAggregatedFlowsDns].MaxEntries)
-
-	sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, false, 5000)
-	assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapAggregatedFlowsDns].MaxEntries)
+func TestConfigureQUICMapCapacity(t *testing.T) {
+	for _, mode := range []int{0, 1, 2, 3} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			spec, err := ebpf.LoadBpf()
+			require.NoError(t, err)
+			original := spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries
+			cfg := &tracer.FetcherConfig{Agent: config.Agent{Flows: configflows.Features{QUICTrackingMode: mode, EnableTLSTracking: true}}}
+			configureFlowMaps(spec, cfg, nil)
+			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
+			if mode != 1 && mode != 2 {
+				assert.Equal(t, uint32(1), spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries)
+			} else {
+				assert.Equal(t, original, spec.Maps[ebpf.BpfMapQuicFlows].MaxEntries)
+			}
+			var configured uint8
+			require.NoError(t, spec.Variables[ebpf.BpfVarEnableQuicTracking].Get(&configured))
+			expected := uint8(0)
+			if mode == 1 || mode == 2 {
+				expected = uint8(mode)
+			}
+			assert.Equal(t, expected, configured)
+		})
+	}
 }

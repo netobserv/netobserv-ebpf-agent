@@ -90,23 +90,8 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			return nil, fmt.Errorf("loading BPF data: %w", err)
 		}
 
-		// Resize maps according to user-provided configuration
-		spec.Maps[ebpf.BpfMapAggregatedFlows].MaxEntries = uint32(cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, cfg.Flows.EnableDNSTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsNetworkEvents, cfg.Flows.EnableNetworkEventsMonitoring, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsPktDrop, cfg.Flows.EnablePktDrops, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsXlat, cfg.Flows.EnablePktTranslationTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAdditionalFlowMetrics, cfg.Flows.EnableRTT || cfg.Flows.EnableIPsecTracking, cfg.CacheMaxFlows)
+		configureFlowMaps(spec, cfg, filter)
 
-		ringbufMinSize := uint32(os.Getpagesize())
-
-		// Minimize direct-flows ringbuf if unused
-		if !cfg.Flows.EnableFlowsRingbufFallback {
-			spec.Maps[ebpf.BpfMapDirectFlows].MaxEntries = ringbufMinSize
-		}
-		if !cfg.EnableOpenSSLTracking {
-			spec.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = ringbufMinSize
-		}
 		// remove pinning from all maps
 		for _, m := range []string{
 			ebpf.BpfMapAggregatedFlows,
@@ -1570,17 +1555,11 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		enableDNSTracking = 1
 		dnsPorts, dnsPortsCount = parseDNSTrackingPorts(cfg.DNSTrackingPorts)
 	}
-	if enableDNSTracking == 0 {
-		spec.Maps[ebpf.BpfMapDnsFlows].MaxEntries = 1
-	}
 	enableFlowFiltering := 0
 	hasFilterSampling := uint8(0)
 	if filter != nil {
 		enableFlowFiltering = 1
 		hasFilterSampling = filter.HasSampling()
-	} else {
-		spec.Maps[ebpf.BpfMapFilterMap].MaxEntries = 1
-		spec.Maps[ebpf.BpfMapPeerFilterMap].MaxEntries = 1
 	}
 	enableNetworkEventsMonitoring := 0
 	if cfg.Flows.EnableNetworkEventsMonitoring {
@@ -1597,10 +1576,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 	enableIPsec := 0
 	if cfg.Flows.EnableIPsecTracking {
 		enableIPsec = 1
-	}
-	if enableIPsec == 0 {
-		spec.Maps[ebpf.BpfMapIpsecIngressMap].MaxEntries = 1
-		spec.Maps[ebpf.BpfMapIpsecEgressMap].MaxEntries = 1
 	}
 	enableTLSTracking := 0
 	if cfg.Flows.EnableTLSTracking {
@@ -1673,12 +1648,4 @@ func parseDNSTrackingPorts(ports []uint16) ([8]uint16, uint8) {
 	}
 
 	return dnsPorts, dnsPortsCount
-}
-
-func sizeMapForFeature(spec *cilium.CollectionSpec, name string, enabled bool, size int) {
-	if enabled {
-		spec.Maps[name].MaxEntries = uint32(size)
-	} else {
-		spec.Maps[name].MaxEntries = 1
-	}
 }

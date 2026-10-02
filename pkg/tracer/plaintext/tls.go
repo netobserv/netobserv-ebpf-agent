@@ -88,8 +88,5 @@ func (t *PacketFetcherTLS) Close() {
 }
 
 func TLSMapSizing(spec *cilium.CollectionSpec, enableOpenSSL bool) {
-	minEntries := uint32(os.Getpagesize())
-	if !TLSPlaintextEnabled(enableOpenSSL) {
-		spec.Maps[ebpfflows.BpfMapSslDataEventMap].MaxEntries = minEntries
-	}
+	netattach.MinimizeMapsIfDisabled(spec, TLSPlaintextEnabled(enableOpenSSL), os.Getpagesize(), ebpfflows.BpfMapSslDataEventMap)
 }
