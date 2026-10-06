@@ -351,7 +351,7 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 
 	if !a.cfg.EbpfProgramManagerMode {
 		alog.Debug("registering interfaces listener in background")
-		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, a.netnsResolver, a.metrics)
+		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, a.metrics)
 		if err != nil {
 			return nil, err
 		}

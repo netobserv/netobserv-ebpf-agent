@@ -219,7 +219,7 @@ func (a *Agent) Status() common.Status {
 func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
 	if !a.cfg.EbpfProgramManagerMode {
 		plog.Debug("registering interfaces' listener in background")
-		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, ifaces.NewDisabledResolver(), metrics.NoOp())
+		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, metrics.NoOp())
 		if err != nil {
 			return nil, err
 		}
