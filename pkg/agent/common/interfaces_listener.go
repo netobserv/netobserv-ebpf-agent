@@ -61,13 +61,13 @@ func CreateInformer(cfg *config.Agent, netnsResolver ifaces.NetnsResolver, m *me
 
 // startInterfaceListener uses an informer to check new/deleted network interfaces. For each running
 // interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
-func StartInterfaceListener(ctx context.Context, attacher TCAttacher, cfg *config.Agent, informer ifaces.Informer, netnsResolver ifaces.NetnsResolver, m *metrics.Metrics) error {
+func StartInterfaceListener(ctx context.Context, attacher TCAttacher, cfg *config.Agent, informer ifaces.Informer, m *metrics.Metrics) error {
 	filter, err := ifaces.FromConfig(cfg)
 	if err != nil {
 		return err
 	}
 
-	registerer, err := ifaces.NewRegisterer(informer, cfg, netnsResolver, m)
+	registerer, err := ifaces.NewRegisterer(informer, cfg, m)
 	if err != nil {
 		return err
 	}

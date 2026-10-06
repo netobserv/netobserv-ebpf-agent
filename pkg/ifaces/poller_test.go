@@ -24,13 +24,8 @@ var (
 
 type fakeNetnsResolver struct{}
 
-func (f *fakeNetnsResolver) getNetNS() ([]string, error) {
-	return []string{""}, nil
-}
-
-func (f *fakeNetnsResolver) getCookie(_ netns.NsHandle) uint64 {
-	return 0
-}
+func (f *fakeNetnsResolver) getNetNS() ([]string, error)       { return []string{""}, nil }
+func (f *fakeNetnsResolver) getCookie(_ netns.NsHandle) uint64 { return 0 }
 
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
 	return NewInterface(index, name, mac, netns.None(), "", 0)
