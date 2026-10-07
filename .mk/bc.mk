@@ -88,7 +88,7 @@ define build_bc_flow_target
 	echo 'building flow bytecode image for arch $(1)'; \
 	echo '${FLOW_PROGRAMS}' | jq empty || { echo "Invalid JSON in FLOW_PROGRAMS"; exit 1; }; \
 	echo '${FLOW_MAPS}' | jq empty || { echo "Invalid JSON in FLOW_MAPS"; exit 1; }; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${FLOW_PROGRAMS}' --build-arg MAPS='${FLOW_MAPS}' --build-arg BC_AMD64_EL=flows/bpf_x86_bpfel.o --build-arg BC_ARM64_EL=flows/bpf_arm64_bpfel.o --build-arg BC_S390X_EB=flows/bpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=flows/bpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${BC_FLOW_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${FLOW_PROGRAMS}' --build-arg MAPS='${FLOW_MAPS}' --build-arg BC_AMD64_EL=flows/flowsbpf_x86_bpfel.o --build-arg BC_ARM64_EL=flows/flowsbpf_arm64_bpfel.o --build-arg BC_S390X_EB=flows/flowsbpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=flows/flowsbpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${BC_FLOW_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
 endef
 
 # build a single arch packet bytecode image
@@ -96,7 +96,7 @@ define build_bc_packet_target
 	echo 'building packet bytecode image for arch $(1)'; \
 	echo '${PACKET_PROGRAMS}' | jq empty || { echo "Invalid JSON in PACKET_PROGRAMS"; exit 1; }; \
 	echo '${PACKET_MAPS}' | jq empty || { echo "Invalid JSON in PACKET_MAPS"; exit 1; }; \
-	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${PACKET_PROGRAMS}' --build-arg MAPS='${PACKET_MAPS}' --build-arg BC_AMD64_EL=packets/packets_x86_bpfel.o --build-arg BC_ARM64_EL=packets/packets_arm64_bpfel.o --build-arg BC_S390X_EB=packets/packets_s390_bpfeb.o --build-arg BC_PPC64LE_EL=packets/packets_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${BC_PACKET_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
+	DOCKER_BUILDKIT=1 $(OCI_BIN) buildx build --platform linux/$(1) --load --build-arg PROGRAMS='${PACKET_PROGRAMS}' --build-arg MAPS='${PACKET_MAPS}' --build-arg BC_AMD64_EL=packets/packetsbpf_x86_bpfel.o --build-arg BC_ARM64_EL=packets/packetsbpf_arm64_bpfel.o --build-arg BC_S390X_EB=packets/packetsbpf_s390_bpfeb.o --build-arg BC_PPC64LE_EL=packets/packetsbpf_powerpc_bpfel.o --build-arg LDFLAGS="${LDFLAGS}" --build-arg TARGETARCH=$(1) ${OCI_BUILD_OPTS} ${EXTRA_BUILD_FLAGS} -t ${BC_PACKET_IMAGE}-$(1) -f ./Containerfile.bytecode.multi.arch ./pkg/ebpf;
 endef
 
 # push a single arch flow bytecode image

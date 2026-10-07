@@ -9,7 +9,7 @@ import (
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ func TestProtoConversion(t *testing.T) {
 	record := model.Record{
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
-		ID: ebpf.BpfFlowId{
+		ID: ebpf.FlowsBpfFlowId{
 			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
 			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 			SrcPort:           4321,
@@ -41,7 +41,7 @@ func TestProtoConversion(t *testing.T) {
 			TransportProtocol: 210,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				DirectionFirstSeen: 1,
 				EthProtocol:        3,
 				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
@@ -89,7 +89,7 @@ func TestIdenticalKeys(t *testing.T) {
 	record := model.Record{
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
-		ID: ebpf.BpfFlowId{
+		ID: ebpf.FlowsBpfFlowId{
 			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
 			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 			SrcPort:           4321,
@@ -98,7 +98,7 @@ func TestIdenticalKeys(t *testing.T) {
 			TransportProtocol: 210,
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				DirectionFirstSeen: 1,
 				EthProtocol:        3,
 				SrcMac:             [...]byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},

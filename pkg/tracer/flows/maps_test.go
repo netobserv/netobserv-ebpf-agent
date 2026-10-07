@@ -21,34 +21,32 @@ func TestConfigureFlowMaps(t *testing.T) {
 		cached, retained []string
 	}{
 		{name: "disabled"},
-		{name: "dns", features: configflows.Features{EnableDNSTracking: true}, cached: []string{ebpf.BpfMapAggregatedFlowsDns}, retained: []string{ebpf.BpfMapDnsFlows}},
-		{name: "network events", features: configflows.Features{EnableNetworkEventsMonitoring: true}, cached: []string{ebpf.BpfMapAggregatedFlowsNetworkEvents}},
-		{name: "drops", features: configflows.Features{EnablePktDrops: true}, cached: []string{ebpf.BpfMapAggregatedFlowsPktDrop}},
-		{name: "translation", features: configflows.Features{EnablePktTranslationTracking: true}, cached: []string{ebpf.BpfMapAggregatedFlowsXlat}},
-		{name: "rtt only", features: configflows.Features{EnableRTT: true}, cached: []string{ebpf.BpfMapAdditionalFlowMetrics}},
-		{name: "ipsec only", features: configflows.Features{EnableIPsecTracking: true}, cached: []string{ebpf.BpfMapAdditionalFlowMetrics}, retained: []string{ebpf.BpfMapIpsecIngressMap, ebpf.BpfMapIpsecEgressMap}},
-		{name: "rtt and ipsec", features: configflows.Features{EnableRTT: true, EnableIPsecTracking: true}, cached: []string{ebpf.BpfMapAdditionalFlowMetrics}, retained: []string{ebpf.BpfMapIpsecIngressMap, ebpf.BpfMapIpsecEgressMap}},
-		{name: "openssl", openssl: true, retained: []string{ebpf.BpfMapSslDataEventMap, ebpf.BpfMapSslReadActiveMap, ebpf.BpfMapSslFdMap}},
-		{name: "filter", filter: true, retained: []string{ebpf.BpfMapFilterMap, ebpf.BpfMapPeerFilterMap}},
-		{name: "fallback", features: configflows.Features{EnableFlowsRingbufFallback: true}, retained: []string{ebpf.BpfMapDirectFlows}},
+		{name: "dns", features: configflows.Features{EnableDNSTracking: true}, cached: []string{ebpf.FlowsBpfMapAggregatedFlowsDns}, retained: []string{ebpf.FlowsBpfMapDnsFlows}},
+		{name: "network events", features: configflows.Features{EnableNetworkEventsMonitoring: true}, cached: []string{ebpf.FlowsBpfMapAggregatedFlowsNetworkEvents}},
+		{name: "drops", features: configflows.Features{EnablePktDrops: true}, cached: []string{ebpf.FlowsBpfMapAggregatedFlowsPktDrop}},
+		{name: "translation", features: configflows.Features{EnablePktTranslationTracking: true}, cached: []string{ebpf.FlowsBpfMapAggregatedFlowsXlat}},
+		{name: "rtt only", features: configflows.Features{EnableRTT: true}, cached: []string{ebpf.FlowsBpfMapAdditionalFlowMetrics}},
+		{name: "ipsec only", features: configflows.Features{EnableIPsecTracking: true}, cached: []string{ebpf.FlowsBpfMapAdditionalFlowMetrics}, retained: []string{ebpf.FlowsBpfMapIpsecIngressMap, ebpf.FlowsBpfMapIpsecEgressMap}},
+		{name: "rtt and ipsec", features: configflows.Features{EnableRTT: true, EnableIPsecTracking: true}, cached: []string{ebpf.FlowsBpfMapAdditionalFlowMetrics}, retained: []string{ebpf.FlowsBpfMapIpsecIngressMap, ebpf.FlowsBpfMapIpsecEgressMap}},
+		{name: "filter", filter: true, retained: []string{ebpf.FlowsBpfMapFilterMap, ebpf.FlowsBpfMapPeerFilterMap}},
+		{name: "fallback", features: configflows.Features{EnableFlowsRingbufFallback: true}, retained: []string{ebpf.FlowsBpfMapDirectFlows}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			spec, err := ebpf.LoadBpf()
+			spec, err := ebpf.LoadFlowsBpf()
 			require.NoError(t, err)
 			expected := spec.Copy()
 			for _, name := range []string{
-				ebpf.BpfMapAggregatedFlowsDns, ebpf.BpfMapAggregatedFlowsNetworkEvents,
-				ebpf.BpfMapAggregatedFlowsPktDrop, ebpf.BpfMapAggregatedFlowsXlat,
-				ebpf.BpfMapAdditionalFlowMetrics, ebpf.BpfMapDnsFlows,
-				ebpf.BpfMapFilterMap, ebpf.BpfMapPeerFilterMap,
-				ebpf.BpfMapIpsecIngressMap, ebpf.BpfMapIpsecEgressMap,
-				ebpf.BpfMapQuicFlows, ebpf.BpfMapSslReadActiveMap, ebpf.BpfMapSslFdMap,
+				ebpf.FlowsBpfMapAggregatedFlowsDns, ebpf.FlowsBpfMapAggregatedFlowsNetworkEvents,
+				ebpf.FlowsBpfMapAggregatedFlowsPktDrop, ebpf.FlowsBpfMapAggregatedFlowsXlat,
+				ebpf.FlowsBpfMapAdditionalFlowMetrics, ebpf.FlowsBpfMapDnsFlows,
+				ebpf.FlowsBpfMapFilterMap, ebpf.FlowsBpfMapPeerFilterMap,
+				ebpf.FlowsBpfMapIpsecIngressMap, ebpf.FlowsBpfMapIpsecEgressMap,
+				ebpf.FlowsBpfMapQuicFlows,
 			} {
 				expected.Maps[name].MaxEntries = 1
 			}
-			expected.Maps[ebpf.BpfMapDirectFlows].MaxEntries = uint32(os.Getpagesize())
-			expected.Maps[ebpf.BpfMapSslDataEventMap].MaxEntries = uint32(os.Getpagesize())
-			expected.Maps[ebpf.BpfMapAggregatedFlows].MaxEntries = 5000
+			expected.Maps[ebpf.FlowsBpfMapDirectFlows].MaxEntries = uint32(os.Getpagesize())
+			expected.Maps[ebpf.FlowsBpfMapAggregatedFlows].MaxEntries = 5000
 			for _, name := range tc.cached {
 				expected.Maps[name].MaxEntries = 5000
 			}

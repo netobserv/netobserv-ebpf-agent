@@ -178,7 +178,7 @@ func PBToFlow(pb *Record) *model.Record {
 		return nil
 	}
 	out := model.Record{
-		ID: ebpf.BpfFlowId{
+		ID: ebpf.FlowsBpfFlowId{
 			TransportProtocol: uint8(pb.Transport.Protocol),
 			SrcIp:             ipToIPAddr(pb.Network.GetSrcAddr()),
 			DstIp:             ipToIPAddr(pb.Network.GetDstAddr()),
@@ -188,7 +188,7 @@ func PBToFlow(pb *Record) *model.Record {
 			IcmpCode:          uint8(pb.IcmpCode),
 		},
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				EthProtocol:    uint16(pb.EthProtocol),
 				SrcMac:         macToUint8(pb.DataLink.GetSrcMac()),
 				DstMac:         macToUint8(pb.DataLink.GetDstMac()),
@@ -202,28 +202,28 @@ func PBToFlow(pb *Record) *model.Record {
 				TlsCipherSuite: uint16(pb.TlsCipherSuite),
 				TlsKeyShare:    uint16(pb.TlsKeyShare),
 			},
-			DNSMetrics: &ebpf.BpfDnsMetrics{
+			DNSMetrics: &ebpf.FlowsBpfDnsMetrics{
 				Id:      uint16(pb.DnsId),
 				Name:    stringToInt8Array(pb.DnsName),
 				Flags:   uint16(pb.DnsFlags),
 				Errno:   uint8(pb.DnsErrno),
 				Latency: uint64(pb.DnsLatency.AsDuration()),
 			},
-			PktDropMetrics: &ebpf.BpfPktDropMetrics{
+			PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 				Bytes:           uint16(pb.PktDropBytes),
 				Packets:         uint16(pb.PktDropPackets),
 				LatestFlags:     uint16(pb.PktDropLatestFlags),
 				LatestState:     uint8(pb.PktDropLatestState),
 				LatestDropCause: pb.PktDropLatestDropCause,
 			},
-			XlatMetrics: &ebpf.BpfXlatMetrics{
+			XlatMetrics: &ebpf.FlowsBpfXlatMetrics{
 				Saddr:  ipToIPAddr(pb.Xlat.GetSrcAddr()),
 				Daddr:  ipToIPAddr(pb.Xlat.GetDstAddr()),
 				Sport:  uint16(pb.Xlat.GetSrcPort()),
 				Dport:  uint16(pb.Xlat.GetDstPort()),
 				ZoneId: uint16(pb.Xlat.GetZoneId()),
 			},
-			AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+			AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 				IpsecEncryptedRet: pb.IpsecEncryptedRet,
 			},
 		},
@@ -240,7 +240,7 @@ func PBToFlow(pb *Record) *model.Record {
 		out.Metrics.AdditionalMetrics.IpsecEncrypted = true
 	}
 	if pb.Quic != nil {
-		out.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{
+		out.Metrics.QuicMetrics = &ebpf.FlowsBpfQuicMetrics{
 			Version:      pb.Quic.Version,
 			SeenLongHdr:  uint8(pb.Quic.SeenLongHdr),
 			SeenShortHdr: uint8(pb.Quic.SeenShortHdr),

@@ -7,25 +7,25 @@ import (
 )
 
 type BpfFlowContent struct {
-	*ebpf.BpfFlowMetrics
-	DNSMetrics           *ebpf.BpfDnsMetrics
-	PktDropMetrics       *ebpf.BpfPktDropMetrics
-	NetworkEventsMetrics *ebpf.BpfNetworkEventsMetrics
-	XlatMetrics          *ebpf.BpfXlatMetrics
-	AdditionalMetrics    *ebpf.BpfAdditionalMetrics
-	QuicMetrics          *ebpf.BpfQuicMetrics
+	*ebpf.FlowsBpfFlowMetrics
+	DNSMetrics           *ebpf.FlowsBpfDnsMetrics
+	PktDropMetrics       *ebpf.FlowsBpfPktDropMetrics
+	NetworkEventsMetrics *ebpf.FlowsBpfNetworkEventsMetrics
+	XlatMetrics          *ebpf.FlowsBpfXlatMetrics
+	AdditionalMetrics    *ebpf.FlowsBpfAdditionalMetrics
+	QuicMetrics          *ebpf.FlowsBpfQuicMetrics
 }
 
 // nolint:gocritic // hugeParam: metric is reported as heavy; but it needs to be copied anyway, we don't want a pointer here
-func NewBpfFlowContent(metrics ebpf.BpfFlowMetrics) BpfFlowContent {
-	return BpfFlowContent{BpfFlowMetrics: &metrics}
+func NewBpfFlowContent(metrics ebpf.FlowsBpfFlowMetrics) BpfFlowContent {
+	return BpfFlowContent{FlowsBpfFlowMetrics: &metrics}
 }
 
-func (p *BpfFlowContent) AccumulateBase(other *ebpf.BpfFlowMetrics) {
-	p.BpfFlowMetrics = AccumulateBase(p.BpfFlowMetrics, other)
+func (p *BpfFlowContent) AccumulateBase(other *ebpf.FlowsBpfFlowMetrics) {
+	p.FlowsBpfFlowMetrics = AccumulateBase(p.FlowsBpfFlowMetrics, other)
 }
 
-func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.BpfFlowMetrics {
+func AccumulateBase(p *ebpf.FlowsBpfFlowMetrics, other *ebpf.FlowsBpfFlowMetrics) *ebpf.FlowsBpfFlowMetrics {
 	if other == nil {
 		return p
 	}
@@ -62,18 +62,18 @@ func AccumulateBase(p *ebpf.BpfFlowMetrics, other *ebpf.BpfFlowMetrics) *ebpf.Bp
 
 func (p *BpfFlowContent) buildBaseFromAdditional(start, end uint64, ethProto uint16) {
 	// Accumulate time into base metrics if unset
-	if p.BpfFlowMetrics.StartMonoTimeTs == 0 || (p.BpfFlowMetrics.StartMonoTimeTs > start && start != 0) {
-		p.BpfFlowMetrics.StartMonoTimeTs = start
+	if p.FlowsBpfFlowMetrics.StartMonoTimeTs == 0 || (p.FlowsBpfFlowMetrics.StartMonoTimeTs > start && start != 0) {
+		p.FlowsBpfFlowMetrics.StartMonoTimeTs = start
 	}
-	if p.BpfFlowMetrics.EndMonoTimeTs == 0 || p.BpfFlowMetrics.EndMonoTimeTs < end {
-		p.BpfFlowMetrics.EndMonoTimeTs = end
+	if p.FlowsBpfFlowMetrics.EndMonoTimeTs == 0 || p.FlowsBpfFlowMetrics.EndMonoTimeTs < end {
+		p.FlowsBpfFlowMetrics.EndMonoTimeTs = end
 	}
-	if p.BpfFlowMetrics.EthProtocol == 0 {
-		p.BpfFlowMetrics.EthProtocol = ethProto
+	if p.FlowsBpfFlowMetrics.EthProtocol == 0 {
+		p.FlowsBpfFlowMetrics.EthProtocol = ethProto
 	}
 }
 
-func (p *BpfFlowContent) AccumulateDNS(other *ebpf.BpfDnsMetrics) {
+func (p *BpfFlowContent) AccumulateDNS(other *ebpf.FlowsBpfDnsMetrics) {
 	if other == nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (p *BpfFlowContent) AccumulateDNS(other *ebpf.BpfDnsMetrics) {
 	}
 }
 
-func (p *BpfFlowContent) AccumulateDrops(other *ebpf.BpfPktDropMetrics) {
+func (p *BpfFlowContent) AccumulateDrops(other *ebpf.FlowsBpfPktDropMetrics) {
 	if other == nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (p *BpfFlowContent) AccumulateDrops(other *ebpf.BpfPktDropMetrics) {
 	}
 }
 
-func (p *BpfFlowContent) AccumulateNetworkEvents(other *ebpf.BpfNetworkEventsMetrics) {
+func (p *BpfFlowContent) AccumulateNetworkEvents(other *ebpf.FlowsBpfNetworkEventsMetrics) {
 	if other == nil {
 		return
 	}
@@ -136,7 +136,7 @@ func (p *BpfFlowContent) AccumulateNetworkEvents(other *ebpf.BpfNetworkEventsMet
 	}
 }
 
-func (p *BpfFlowContent) AccumulateXlat(other *ebpf.BpfXlatMetrics) {
+func (p *BpfFlowContent) AccumulateXlat(other *ebpf.FlowsBpfXlatMetrics) {
 	if other == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (p *BpfFlowContent) AccumulateXlat(other *ebpf.BpfXlatMetrics) {
 	}
 }
 
-func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) {
+func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.FlowsBpfAdditionalMetrics) {
 	if other == nil {
 		return
 	}
@@ -176,7 +176,7 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.BpfAdditionalMetrics) 
 	}
 }
 
-func (p *BpfFlowContent) AccumulateQuic(other *ebpf.BpfQuicMetrics) {
+func (p *BpfFlowContent) AccumulateQuic(other *ebpf.FlowsBpfQuicMetrics) {
 	if other == nil {
 		return
 	}
