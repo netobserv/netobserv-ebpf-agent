@@ -8,7 +8,7 @@ See also: [top-level architecture](../architecture.md) · [flow filtering](../fl
 
 Flow programs are compiled from [`bpf/flows/flows.c`](../../bpf/flows/flows.c). Go bindings are generated into [`pkg/ebpf/flows`](../../pkg/ebpf/flows) via bpf2go.
 
-The flow object includes TC/TCX/netkit `*_flow_parse` programs and optional feature hooks (DNS, RTT, packet drops, network events, IPsec, TLS, QUIC, OpenSSL, etc.). It does **not** include packet-capture (`*_packet_parse`) programs.
+The flow object includes TC/TCX/netkit `*_flow_parse` programs and optional feature hooks (DNS, RTT, packet drops, network events, IPsec, TLS, QUIC, etc.). It does **not** include packet-capture (`*_packet_parse`) programs.
 
 ## Kernel space
 
@@ -76,10 +76,8 @@ These are compiled into the flow BPF object and enabled via environment variable
 | NAT / address translation | `ENABLE_PKT_TRANSLATION` |
 | UDN mapping | `ENABLE_UDN_MAPPING` |
 | IPsec | `ENABLE_IPSEC_TRACKING` |
-| OpenSSL (flow metadata) | `ENABLE_OPENSSL_TRACKING` |
 | TLS | `ENABLE_TLS_TRACKING` |
 | QUIC | `QUIC_TRACKING_MODE` |
-| Ringbuf fallback | `ENABLE_FLOWS_RINGBUF_FALLBACK` |
 
 ## Filtering
 

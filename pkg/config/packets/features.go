@@ -20,4 +20,8 @@ type Features struct {
 	TLSPlaintextMinBytes int `env:"TLS_PLAINTEXT_MIN_BYTES" envDefault:"0"`
 	// TLSPlaintextPreviewBytes limits PlaintextPreview length (0 = full captured payload, default 256)
 	TLSPlaintextPreviewBytes int `env:"TLS_PLAINTEXT_PREVIEW_BYTES" envDefault:"256"`
+	// EnableOpenSSLTracking enables OpenSSL uprobe-based tracking.
+	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
+	// OpenSSLPath is the default path to the libssl shared library for uprobe attachment.
+	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/lib64/libssl.so.3"`
 }
