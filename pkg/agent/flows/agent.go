@@ -64,7 +64,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	common.TCAttacher
 
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }

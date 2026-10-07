@@ -64,7 +64,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, RawRecord{
-		Id: ebpf.BpfFlowId{
+		Id: ebpf.FlowsBpfFlowId{
 			SrcIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 			DstIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 			SrcPort:           0x0f0e,
@@ -73,7 +73,7 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			IcmpType:          0x00,
 			IcmpCode:          0x00,
 		},
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			DirectionFirstSeen: 0x03,
 			IfIndexFirstSeen:   0x16151413,
 			EthProtocol:        0x0201,
@@ -123,9 +123,9 @@ func (d *FakeSampleDecoder) DecodeCookie8Bytes(cookie [8]byte) (ovnmodel.Network
 }
 
 func TestNewRecord_MergeNetworkEventsInEmptyDrops(t *testing.T) {
-	r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{},
-		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+	r := NewRecord(ebpf.FlowsBpfFlowId{}, &BpfFlowContent{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{},
+		NetworkEventsMetrics: &ebpf.FlowsBpfNetworkEventsMetrics{
 			NetworkEvents:    [4][8]uint8{{1}, {2}},
 			Bytes:            [4]uint16{20, 25},
 			Packets:          [4]uint16{1, 2},
@@ -137,7 +137,7 @@ func TestNewRecord_MergeNetworkEventsInEmptyDrops(t *testing.T) {
 		{"Action": "allow", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
 		{"Action": "drop", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
 	}, r.NetworkMonitorEventsMD)
-	assert.Equal(t, &ebpf.BpfPktDropMetrics{
+	assert.Equal(t, &ebpf.FlowsBpfPktDropMetrics{
 		Bytes:           25,
 		Packets:         2,
 		LatestDropCause: 0x1000004,
@@ -146,16 +146,16 @@ func TestNewRecord_MergeNetworkEventsInEmptyDrops(t *testing.T) {
 }
 
 func TestNewRecord_MergeNetworkEventsInExistingDrops(t *testing.T) {
-	r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{},
-		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+	r := NewRecord(ebpf.FlowsBpfFlowId{}, &BpfFlowContent{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{},
+		PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 			Bytes:           100,
 			Packets:         10,
 			LatestDropCause: 5,
 			LatestFlags:     6,
 			LatestState:     7,
 		},
-		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+		NetworkEventsMetrics: &ebpf.FlowsBpfNetworkEventsMetrics{
 			NetworkEvents:    [4][8]uint8{{2}, {1}},
 			Bytes:            [4]uint16{20, 25},
 			Packets:          [4]uint16{1, 2},
@@ -167,7 +167,7 @@ func TestNewRecord_MergeNetworkEventsInExistingDrops(t *testing.T) {
 		{"Action": "drop", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
 		{"Action": "allow", "Direction": "Ingress", "Feature": "acl", "Name": "policy-1", "Namespace": "ns-1", "Type": "NetworkPolicy"},
 	}, r.NetworkMonitorEventsMD)
-	assert.Equal(t, &ebpf.BpfPktDropMetrics{
+	assert.Equal(t, &ebpf.FlowsBpfPktDropMetrics{
 		Bytes:           120,
 		Packets:         11,
 		LatestDropCause: 0x1000004,
@@ -183,7 +183,7 @@ func TestParallelNewRecord(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r := NewRecord(ebpf.BpfFlowId{}, &BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}, time.Now(), uint64(monotime.Now()), nil, map[string]string{})
+			r := NewRecord(ebpf.FlowsBpfFlowId{}, &BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}, time.Now(), uint64(monotime.Now()), nil, map[string]string{})
 			assert.NotNil(t, r)
 		}()
 	}
@@ -197,15 +197,15 @@ func TestNewRecordIntoReusesInterfaceCapacity(t *testing.T) {
 	// Build the second record first so an extra interface added to the first
 	// record would expose overlap between their backing slices.
 	records[1].Interfaces = interfaceBacking[1:1:2]
-	NewRecordInto(&records[1], ebpf.BpfFlowId{}, &BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{IfIndexFirstSeen: 20},
+	NewRecordInto(&records[1], ebpf.FlowsBpfFlowId{}, &BpfFlowContent{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{IfIndexFirstSeen: 20},
 	}, time.Time{}, 0, nil, nil)
 	secondInterface := records[1].Interfaces[0]
 	require.True(t, &records[1].Interfaces[0] == &interfaceBacking[1])
 
 	records[0].Interfaces = interfaceBacking[0:0:1]
-	NewRecordInto(&records[0], ebpf.BpfFlowId{}, &BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	NewRecordInto(&records[0], ebpf.FlowsBpfFlowId{}, &BpfFlowContent{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 			IfIndexFirstSeen: 10,
 			NbObservedIntf:   1,
 			ObservedIntf:     [MaxObservedInterfaces]uint32{11},
@@ -234,11 +234,11 @@ func TestDNSMetricsBinaryEncoding(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, // padding
 	}
-	var met ebpf.BpfDnsMetrics
+	var met ebpf.FlowsBpfDnsMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
-	assert.Equal(t, ebpf.BpfDnsMetrics{
+	assert.Equal(t, ebpf.FlowsBpfDnsMetrics{
 		StartMonoTimeTs: 0x10,
 		EndMonoTimeTs:   0xFF,
 		EthProtocol:     3,
@@ -265,11 +265,11 @@ func TestPktDropsMetricsBinaryEncoding(t *testing.T) {
 		0x1e,             // state
 		0x00, 0x00, 0x00, // padding
 	}
-	var met ebpf.BpfPktDropMetrics
+	var met ebpf.FlowsBpfPktDropMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
-	assert.Equal(t, ebpf.BpfPktDropMetrics{
+	assert.Equal(t, ebpf.FlowsBpfPktDropMetrics{
 		StartMonoTimeTs: 0x10,
 		EndMonoTimeTs:   0xFF,
 		EthProtocol:     3,
@@ -298,11 +298,11 @@ func TestNetworkEventsMetricsBinaryEncoding(t *testing.T) {
 		0x01,                         // u8 network_events_idx
 		0x00, 0x00, 0x00, 0x00, 0x00, // padding
 	}
-	var met ebpf.BpfNetworkEventsMetrics
+	var met ebpf.FlowsBpfNetworkEventsMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
-	assert.Equal(t, ebpf.BpfNetworkEventsMetrics{
+	assert.Equal(t, ebpf.FlowsBpfNetworkEventsMetrics{
 		StartMonoTimeTs:  0x10,
 		EndMonoTimeTs:    0xFF,
 		EthProtocol:      3,
@@ -331,11 +331,11 @@ func TestXlatMetricsBinaryEncoding(t *testing.T) {
 		0x02, 0x00,
 		0x03, 0x00, // u16 eth_protocol
 	}
-	var met ebpf.BpfXlatMetrics
+	var met ebpf.FlowsBpfXlatMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
-	assert.Equal(t, ebpf.BpfXlatMetrics{
+	assert.Equal(t, ebpf.FlowsBpfXlatMetrics{
 		StartMonoTimeTs: 0x10,
 		EndMonoTimeTs:   0xFF,
 		EthProtocol:     3,
@@ -359,11 +359,11 @@ func TestAdditionalMetricsBinaryEncoding(t *testing.T) {
 		0x01, // bool ipsec_encrypted
 		0x00, // padding
 	}
-	var met ebpf.BpfAdditionalMetrics
+	var met ebpf.FlowsBpfAdditionalMetrics
 	err := binary.Read(bytes.NewReader(b), binary.LittleEndian, &met)
 	require.NoError(t, err)
 
-	assert.Equal(t, ebpf.BpfAdditionalMetrics{
+	assert.Equal(t, ebpf.FlowsBpfAdditionalMetrics{
 		StartMonoTimeTs:   0x10,
 		EndMonoTimeTs:     0xFF,
 		EthProtocol:       3,

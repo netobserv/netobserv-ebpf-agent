@@ -10,14 +10,14 @@ import (
 //
 // These generators mirror the flows produced in the agent's default/common
 // deployment (EXPORT=grpc, SAMPLING off, no DNS/RTT/drops/network-events/PCA/
-// UDN/TLS features). They deliberately populate ONLY the base BpfFlowMetrics so
+// UDN/TLS features). They deliberately populate ONLY the base FlowsBpfFlowMetrics so
 // the benchmarks measure the path that actually runs in that configuration.
 
 // benchFlowID returns a synthetic, unique-ish flow id. Varying the low bytes of
 // the IPs/ports by i keeps map keys distinct so cache/eviction benchmarks behave
 // like a real high-cardinality node.
-func benchFlowID(i int) ebpf.BpfFlowId {
-	var id ebpf.BpfFlowId
+func benchFlowID(i int) ebpf.FlowsBpfFlowId {
+	var id ebpf.FlowsBpfFlowId
 	// IPv4-mapped addresses (::ffff:10.x.x.x style), matching how the agent encodes v4.
 	src := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)).To16()
 	dst := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i+1)).To16()
@@ -31,8 +31,8 @@ func benchFlowID(i int) ebpf.BpfFlowId {
 
 // benchFlowMetrics returns base metrics for an IPv4 TCP flow with a single
 // interface observed (the overwhelmingly common case in production).
-func benchFlowMetrics(i int) ebpf.BpfFlowMetrics {
-	return ebpf.BpfFlowMetrics{
+func benchFlowMetrics(i int) ebpf.FlowsBpfFlowMetrics {
+	return ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs:    uint64(1_000_000 + i),
 		EndMonoTimeTs:      uint64(2_000_000 + i),
 		Bytes:              uint64(1500 * (1 + i%10)),

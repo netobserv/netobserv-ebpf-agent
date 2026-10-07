@@ -11,7 +11,7 @@ import (
 	decodeflows "github.com/netobserv/netobserv-ebpf-agent/pkg/decode/flows"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -31,7 +31,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "TCP record with TLS",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -39,7 +39,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol:    2048,
 						SrcMac:         model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:         model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -53,8 +53,8 @@ func TestConversions(t *testing.T) {
 						TlsCipherSuite: 0x1302,
 						TlsKeyShare:    0x1d,
 					},
-					DNSMetrics:        &ebpf.BpfDnsMetrics{Errno: 0},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
+					DNSMetrics:        &ebpf.FlowsBpfDnsMetrics{Errno: 0},
+					AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{IpsecEncrypted: true},
 				},
 				Interfaces:    []model.IntfDirUdn{model.NewIntfDirUdn("eth0", model.DirectionEgress, nil)},
 				TimeFlowStart: someTime,
@@ -92,7 +92,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "UDP record",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -100,7 +100,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 17,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -109,7 +109,7 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 						Sampling:    2,
 					},
-					QuicMetrics: &ebpf.BpfQuicMetrics{
+					QuicMetrics: &ebpf.FlowsBpfQuicMetrics{
 						Version:      1,
 						SeenLongHdr:  1,
 						SeenShortHdr: 1,
@@ -147,7 +147,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "ICMPv4 record",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					TransportProtocol: 1,
@@ -155,7 +155,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -192,7 +192,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "ICMPv6 record",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 					DstIp:             model.IPAddr{11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26},
 					TransportProtocol: 58,
@@ -200,7 +200,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 0x86dd,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -237,7 +237,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "ARP layer2",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{},
 					DstIp:             model.IPAddr{},
 					SrcPort:           0,
@@ -247,7 +247,7 @@ func TestConversions(t *testing.T) {
 					IcmpCode:          0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2054, // ARP protocol
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -277,7 +277,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "L2 drops",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{},
 					DstIp:             model.IPAddr{},
 					SrcPort:           0,
@@ -285,14 +285,14 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 0,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2054, // ARP protocol
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
 						Bytes:       500,
 						Packets:     128,
 					},
-					PktDropMetrics: &ebpf.BpfPktDropMetrics{
+					PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 						Packets:         10,
 						Bytes:           100,
 						LatestFlags:     0x200,
@@ -327,7 +327,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "TCP + drop + DNS + RTT record",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -335,7 +335,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -345,21 +345,21 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 						SslVersion:  0x0200,
 					},
-					DNSMetrics: &ebpf.BpfDnsMetrics{
+					DNSMetrics: &ebpf.FlowsBpfDnsMetrics{
 						Latency: uint64(someDuration),
 						Id:      1,
 						Name:    [32]int8{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
 						Flags:   0x8001,
 						Errno:   0,
 					},
-					PktDropMetrics: &ebpf.BpfPktDropMetrics{
+					PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 						Packets:         10,
 						Bytes:           100,
 						LatestFlags:     0x200,
 						LatestState:     6,
 						LatestDropCause: 5,
 					},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+					AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 						IpsecEncrypted: true,
 					},
 				},
@@ -408,7 +408,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "Multiple interfaces record",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -416,7 +416,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -426,8 +426,8 @@ func TestConversions(t *testing.T) {
 						Dscp:        64,
 						SslVersion:  0x0303,
 					},
-					DNSMetrics:        &ebpf.BpfDnsMetrics{Errno: 0},
-					AdditionalMetrics: &ebpf.BpfAdditionalMetrics{IpsecEncrypted: true},
+					DNSMetrics:        &ebpf.FlowsBpfDnsMetrics{Errno: 0},
+					AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{IpsecEncrypted: true},
 				},
 				Interfaces: []model.IntfDirUdn{
 					model.NewIntfDirUdn("5e6e92caa1d51cf", model.DirectionIngress, nil),
@@ -464,7 +464,7 @@ func TestConversions(t *testing.T) {
 		{
 			name: "SSL Mismatch",
 			flow: &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 					DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 					SrcPort:           23000,
@@ -472,7 +472,7 @@ func TestConversions(t *testing.T) {
 					TransportProtocol: 6,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol: 2048,
 						SrcMac:      model.MacAddr{0x04, 0x05, 0x06, 0x07, 0x08, 0x09},
 						DstMac:      model.MacAddr{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},

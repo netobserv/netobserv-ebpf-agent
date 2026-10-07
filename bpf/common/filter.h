@@ -5,16 +5,17 @@
 #ifndef __FILTER_H__
 #define __FILTER_H__
 
-#include "../types.h"
+#include "utils.h"
+#include "counters.h"
 
 // filter_map and peer_filter_map must be defined before including this header
 
-#define BPF_PRINTK(fmt, args...)                                                                   \
-    if (trace_messages)                                                                            \
+#define BPF_PRINTK(fmt, args...)                                                                                       \
+    if (trace_messages)                                                                                                \
     bpf_printk(fmt, ##args)
 
-static __always_inline int filter_setup_lookup_key(flow_id *id, struct filter_key_t *key, u8 *len,
-                                                   u8 *offset, bool use_src_ip, u16 eth_protocol) {
+static __always_inline int filter_setup_lookup_key(flow_id *id, struct filter_key_t *key, u8 *len, u8 *offset,
+                                                   bool use_src_ip, u16 eth_protocol) {
 
     if (eth_protocol == ETH_P_IP) {
         *len = sizeof(u32);
@@ -40,9 +41,8 @@ static __always_inline int filter_setup_lookup_key(flow_id *id, struct filter_ke
     return 0;
 }
 
-static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *key,
-                                            filter_action *action, u8 len, u8 offset, u16 flags,
-                                            u32 drop_reason, u32 *sampling, u8 direction,
+static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *key, filter_action *action, u8 len,
+                                            u8 offset, u16 flags, u32 drop_reason, u32 *sampling, u8 direction,
                                             bool use_src_ip, u16 eth_protocol) {
     int result = 0;
 
@@ -63,8 +63,7 @@ static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *ke
             __builtin_memset(&peerKey, 0, sizeof(peerKey));
             // PeerCIDR lookup will will target the opposite IP compared to original CIDR lookup
             // In other words if cidr is using srcIP then peerCIDR will be the dstIP
-            if (filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip, eth_protocol) <
-                0) {
+            if (filter_setup_lookup_key(id, &peerKey, &len, &offset, use_src_ip, eth_protocol) < 0) {
                 BPF_PRINTK("peerCIDR failed to setup lookup key\n");
                 // Reset the action for default behaviour
                 *action = MAX_FILTER_ACTIONS;
@@ -97,8 +96,7 @@ static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *ke
             case IPPROTO_UDP:
             case IPPROTO_SCTP:
                 // dstPort matching
-                if ((rule->dstPortStart != 0 && rule->dstPortEnd == 0) || rule->dstPort1 != 0 ||
-                    rule->dstPort2 != 0) {
+                if ((rule->dstPortStart != 0 && rule->dstPortEnd == 0) || rule->dstPort1 != 0 || rule->dstPort2 != 0) {
                     if (rule->dstPortStart == id->dst_port || rule->dstPort1 == id->dst_port ||
                         rule->dstPort2 == id->dst_port) {
                         BPF_PRINTK("dstPort matched\n");
@@ -117,8 +115,7 @@ static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *ke
                     }
                 }
                 // srcPort matching
-                if ((rule->srcPortStart != 0 && rule->srcPortEnd == 0) || rule->srcPort1 != 0 ||
-                    rule->srcPort2 != 0) {
+                if ((rule->srcPortStart != 0 && rule->srcPortEnd == 0) || rule->srcPort1 != 0 || rule->srcPort2 != 0) {
                     if (rule->srcPortStart == id->src_port || rule->srcPort1 == id->src_port ||
                         rule->srcPort2 == id->src_port) {
                         BPF_PRINTK("srcPort matched\n");
@@ -137,11 +134,10 @@ static __always_inline int do_filter_lookup(flow_id *id, struct filter_key_t *ke
                     }
                 }
                 // Generic port matching check for either src or dst port
-                if ((rule->portStart != 0 && rule->portEnd == 0) || rule->port1 != 0 ||
-                    rule->port2 != 0) {
+                if ((rule->portStart != 0 && rule->portEnd == 0) || rule->port1 != 0 || rule->port2 != 0) {
                     if (rule->portStart == id->src_port || rule->portStart == id->dst_port ||
-                        rule->port1 == id->src_port || rule->port1 == id->dst_port ||
-                        rule->port2 == id->src_port || rule->port2 == id->dst_port) {
+                        rule->port1 == id->src_port || rule->port1 == id->dst_port || rule->port2 == id->src_port ||
+                        rule->port2 == id->dst_port) {
                         BPF_PRINTK("port matched\n");
                         result++;
                     } else {
@@ -226,9 +222,8 @@ end:
 /*
  * check if the flow match filter rule and return >= 1 if the flow is to be dropped
  */
-static __always_inline int matches_filter(flow_id *id, filter_action *action, u16 flags,
-                                          u32 drop_reason, u16 eth_protocol, u32 *sampling,
-                                          u8 direction) {
+static __always_inline int matches_filter(flow_id *id, filter_action *action, u16 flags, u32 drop_reason,
+                                          u16 eth_protocol, u32 *sampling, u8 direction) {
     struct filter_key_t key;
     u8 len, offset;
     int result = 0;
@@ -242,8 +237,8 @@ static __always_inline int matches_filter(flow_id *id, filter_action *action, u1
         return result;
     }
 
-    result = do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling,
-                              direction, false, eth_protocol);
+    result =
+        do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling, direction, false, eth_protocol);
     // we have a match so return
     if (result > 0) {
         return result;
@@ -255,8 +250,59 @@ static __always_inline int matches_filter(flow_id *id, filter_action *action, u1
         return result;
     }
 
-    return do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling, direction,
-                            true, eth_protocol);
+    return do_filter_lookup(id, &key, action, len, offset, flags, drop_reason, sampling, direction, true, eth_protocol);
+}
+
+static inline bool is_filter_enabled() {
+    return enable_filtering != 0;
+}
+
+/*
+ * check if filter is enabled and if we need to continue processing the packet or not
+ */
+static __always_inline bool check_and_apply_filter(flow_id *id, u16 flags, u32 drop_reason, u16 eth_protocol,
+                                                   u32 *sampling, u8 direction) {
+    // check if this packet need to be filtered if filtering feature is enabled
+    if (is_filter_enabled()) {
+        filter_action action = ACCEPT;
+        if (matches_filter(id, &action, flags, drop_reason, eth_protocol, sampling, direction) != 0 &&
+            action != MAX_FILTER_ACTIONS) {
+            // we have matching rules follow through the actions to decide if we should accept or reject the flow
+            // and update global counter for both cases
+            bool skip = false;
+            u32 key = 0;
+
+            switch (action) {
+            case REJECT:
+                key = FILTER_REJECT;
+                skip = true;
+                break;
+            case ACCEPT:
+                key = FILTER_ACCEPT;
+                break;
+            // should never come here
+            case MAX_FILTER_ACTIONS:
+                return true;
+            }
+
+            // update global counter for flows dropped by filter
+            increase_counter(key);
+            if (skip) {
+                return true;
+            }
+        } else {
+            // we have no matching rules so we update global counter for flows that are not matched by any rule
+            increase_counter(FILTER_NOMATCH);
+            // we have accept rule but no match so we can't let mismatched flows in the hashmap table or
+            // we have no match at all and the action is the default value MAX_FILTER_ACTIONS.
+            if (action == ACCEPT || action == MAX_FILTER_ACTIONS) {
+                return true;
+            } else {
+                // we have reject rule and no match so we can add the flows to the hashmap table.
+            }
+        }
+    }
+    return false;
 }
 
 #endif //__FILTER_H__

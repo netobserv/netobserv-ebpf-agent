@@ -128,11 +128,11 @@ func TestNewi_ParseFlowFilterRules(t *testing.T) {
 }
 
 var (
-	key1 = ebpf.BpfFlowId{
+	key1 = ebpf.FlowsBpfFlowId{
 		SrcPort: 123,
 		DstPort: 456,
 	}
-	key2 = ebpf.BpfFlowId{
+	key2 = ebpf.FlowsBpfFlowId{
 		SrcPort: 333,
 		DstPort: 532,
 	}
@@ -141,7 +141,7 @@ var (
 func TestNew_Decoration(t *testing.T) {
 	now := uint64(monotime.Now())
 	metrics1 := model.BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000,
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{Packets: 3, Bytes: 44, StartMonoTimeTs: now + 1000, EndMonoTimeTs: now + 1_000_000_000,
 			IfIndexFirstSeen:   1,
 			DirectionFirstSeen: 1,
 			NbObservedIntf:     1,
@@ -150,7 +150,7 @@ func TestNew_Decoration(t *testing.T) {
 		},
 	}
 	metrics2 := model.BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000,
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{Packets: 7, Bytes: 33, StartMonoTimeTs: now, EndMonoTimeTs: now + 2_000_000_000,
 			IfIndexFirstSeen:   4,
 			DirectionFirstSeen: 0,
 			NbObservedIntf:     2,
@@ -158,7 +158,7 @@ func TestNew_Decoration(t *testing.T) {
 			ObservedDirection:  [model.MaxObservedInterfaces]uint8{1, 1},
 		},
 	}
-	flows := map[ebpf.BpfFlowId]model.BpfFlowContent{
+	flows := map[ebpf.FlowsBpfFlowId]model.BpfFlowContent{
 		key1: metrics1,
 		key2: metrics2,
 	}
@@ -186,7 +186,7 @@ func TestNew_Decoration(t *testing.T) {
 	}
 }
 
-func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*model.Record {
+func testAgent(t *testing.T, flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent) []*model.Record {
 	ebpfTracer := test.NewTracerFake()
 	export := test.NewExporterFake()
 	agent, err := newAgent(

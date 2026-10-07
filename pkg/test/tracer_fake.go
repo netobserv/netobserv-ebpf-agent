@@ -16,14 +16,14 @@ import (
 // TracerFake fakes the kernel-side eBPF map structures for testing
 type TracerFake struct {
 	interfaces map[ifaces.InterfaceKey]struct{}
-	mapLookups chan map[ebpf.BpfFlowId]model.BpfFlowContent
+	mapLookups chan map[ebpf.FlowsBpfFlowId]model.BpfFlowContent
 	ringBuf    chan ringbuf.Record
 }
 
 func NewTracerFake() *TracerFake {
 	return &TracerFake{
 		interfaces: map[ifaces.InterfaceKey]struct{}{},
-		mapLookups: make(chan map[ebpf.BpfFlowId]model.BpfFlowContent, 100),
+		mapLookups: make(chan map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, 100),
 		ringBuf:    make(chan ringbuf.Record, 100),
 	}
 }
@@ -49,12 +49,12 @@ func (m *TracerFake) DetachTCX(_ *ifaces.Interface) error {
 	return nil
 }
 
-func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
+func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent {
 	select {
 	case r := <-m.mapLookups:
 		return r
 	default:
-		return map[ebpf.BpfFlowId]model.BpfFlowContent{}
+		return map[ebpf.FlowsBpfFlowId]model.BpfFlowContent{}
 	}
 }
 
@@ -69,7 +69,7 @@ func (m *TracerFake) ReadSSLRingBuf() (ringbuf.Record, error) {
 	return <-m.ringBuf, nil
 }
 
-func (m *TracerFake) AppendLookupResults(results map[ebpf.BpfFlowId]model.BpfFlowContent) {
+func (m *TracerFake) AppendLookupResults(results map[ebpf.FlowsBpfFlowId]model.BpfFlowContent) {
 	m.mapLookups <- results
 }
 

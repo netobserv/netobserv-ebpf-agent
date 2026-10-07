@@ -8,13 +8,13 @@ import (
 
 // Legacy implementations kept for old kernels.
 
-func (m *Fetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
+func (m *Fetcher) legacyLookupAndDeleteMap(met *metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent {
 	flowMap := m.objects.AggregatedFlows
 
 	iterator := flowMap.Iterate()
-	var flows = make(map[ebpf.BpfFlowId]model.BpfFlowContent, m.config.CacheMaxFlows)
-	var id ebpf.BpfFlowId
-	var baseMetrics ebpf.BpfFlowMetrics
+	var flows = make(map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, m.config.CacheMaxFlows)
+	var id ebpf.FlowsBpfFlowId
+	var baseMetrics ebpf.FlowsBpfFlowMetrics
 	count := 0
 
 	// Deleting while iterating is really bad for performance (like, really!) as it causes seeing multiple times the same key
