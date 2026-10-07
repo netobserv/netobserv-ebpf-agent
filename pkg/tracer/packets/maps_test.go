@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/config/packets"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestConfigurePacketMaps(t *testing.T) {
 				expected.Maps[ebpf.PacketsMapSslReadActiveMap].MaxEntries = 1
 				expected.Maps[ebpf.PacketsMapSslFdMap].MaxEntries = 1
 			}
-			cfg := &tracer.FetcherConfig{Agent: config.Agent{Common: config.Common{EnableOpenSSLTracking: enabled}}}
+			cfg := &tracer.FetcherConfig{Agent: config.Agent{Packets: packets.Features{EnableOpenSSLTracking: enabled}}}
 			configurePacketMaps(spec, cfg)
 			// Packet capture, filtering and all map ABI/flags must stay unchanged.
 			for name, before := range expected.Maps {

@@ -28,13 +28,7 @@ define FLOW_PROGRAMS
 	"xfrm_input_kprobe": "kprobe",
 	"xfrm_input_kretprobe": "kretprobe",
 	"xfrm_output_kprobe": "kprobe",
-	"xfrm_output_kretprobe": "kretprobe",
-	"probe_entry_SSL_write": "uprobe",
-	"probe_entry_SSL_read": "uprobe",
-	"probe_ret_SSL_read": "uretprobe",
-	"probe_entry_SSL_set_fd": "uprobe",
-	"probe_ret_SSL_set_fd": "uretprobe",
-	"probe_entry_SSL_free": "uprobe"
+	"xfrm_output_kretprobe": "kretprobe"
 }
 endef
 
@@ -54,10 +48,6 @@ define FLOW_MAPS
 	"peer_filter_map":"lpm_trie",
 	"ipsec_ingress_map":"hash",
 	"ipsec_egress_map":"hash",
-	"ssl_data_event_map":"ringbuf",
-	"ssl_read_active_map":"hash",
-	"ssl_fd_pending_map":"lru_hash",
-	"ssl_fd_map":"lru_hash",
 	"dns_name_map":"per_cpu_array",
 	"quic_flows":"per_cpu_hash"
 }

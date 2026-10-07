@@ -57,11 +57,6 @@
 #include "../ipsec.h"
 
 /*
- * Defines ssl tracker
- */
-#include "../openssl_tracker.h"
-
-/*
  * Defines quic tracker
  */
 #include "../quic_tracker.h"

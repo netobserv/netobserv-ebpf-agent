@@ -56,7 +56,7 @@ func TestConfigureFlowMaps(t *testing.T) {
 				expected.Maps[name].MaxEntries = spec.Maps[name].MaxEntries
 			}
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{
-				Common: config.Common{CacheMaxFlows: 5000, EnableOpenSSLTracking: tc.openssl},
+				Common: config.Common{CacheMaxFlows: 5000},
 				Flows:  tc.features,
 			}}
 			var filter *attach.Filter

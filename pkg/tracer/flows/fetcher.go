@@ -18,7 +18,6 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/plaintext"
 	"github.com/prometheus/client_golang/prometheus"
 
 	cilium "github.com/cilium/ebpf"
@@ -58,8 +57,6 @@ type Fetcher struct {
 	xfrmOutputKretProbeLink     link.Link
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
-	opensslAttacher             *plaintext.OpenSSLAttacher
-	sslDataEventsReader         *ringbuf.Reader
 	lookupAndDeleteSupported    bool
 	pinDir                      string
 	config                      *tracer.FetcherConfig
@@ -70,8 +67,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 	var pktDropsLink, networkEventsMonitoringLink, rttFentryLink, rttKprobeLink link.Link
 	var nfNatManIPLink, xfrmInputKretProbeLink, xfrmOutputKretProbeLink link.Link
 	var xfrmInputKProbeLink, xfrmOutputKProbeLink link.Link
-	var opensslAtt *plaintext.OpenSSLAttacher
-	var sslDataEvents *ringbuf.Reader
 	var err error
 	objects := ebpf.BpfObjects{}
 	var pinDir string
@@ -107,7 +102,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			ebpf.BpfMapGlobalCounters,
 			ebpf.BpfMapIpsecIngressMap,
 			ebpf.BpfMapIpsecEgressMap,
-			ebpf.BpfMapSslDataEventMap,
 			ebpf.BpfMapDnsNameMap,
 			ebpf.BpfMapQuicFlows,
 		} {
@@ -203,23 +197,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 				return nil, fmt.Errorf("failed to attach the BPF KretProbe program to xfrm_output: %w", err)
 			}
 		}
-
-		// Attach SSL uprobes for flow-level TLS metadata
-		if cfg.EnableOpenSSLTracking {
-			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
-			if err != nil {
-				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
-			}
-
-			opensslAtt, err = plaintext.AttachOpenSSLUprobes(cfg.PlaintextScope, cfg.OpenSSLPath,
-				objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read,
-				objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd, objects.ProbeRetSSL_setFd, objects.ProbeEntrySSL_free)
-			if err != nil {
-				return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
-			}
-			log.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.OpenSSLPath)
-		}
-
 	} else {
 		pinDir = cfg.BpfManBpfFSPath
 		opts := &cilium.LoadPinOptions{
@@ -305,16 +282,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
-		if cfg.EnableOpenSSLTracking {
-			if err := loadPinnedMapInto("SSL data event", ebpf.BpfMapSslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
-				return nil, err
-			}
-			sslDataEvents, err = ringbuf.NewReader(objects.BpfMaps.SslDataEventMap)
-			if err != nil {
-				return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
-			}
-		}
-
 		if cfg.Flows.QUICTrackingMode != 0 {
 			if err := loadPinnedMapInto("QUIC flows", ebpf.BpfMapQuicFlows, &objects.BpfMaps.QuicFlows); err != nil {
 				return nil, err
@@ -354,8 +321,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		xfrmOutputKretProbeLink:     xfrmOutputKretProbeLink,
 		xfrmInputKProbeLink:         xfrmInputKProbeLink,
 		xfrmOutputKProbeLink:        xfrmOutputKProbeLink,
-		opensslAttacher:             opensslAtt,
-		sslDataEventsReader:         sslDataEvents,
 		egressTCXLink:               egressTCXLink,
 		ingressTCXLink:              ingressTCXLink,
 		egressTCXAnchor:             netattach.TCXAnchor(cfg.TCXAttachAnchorEgress),
@@ -766,15 +731,6 @@ func (m *Fetcher) Close() error {
 		}
 	}
 
-	if m.opensslAttacher != nil {
-		m.opensslAttacher.Close()
-	}
-	if m.sslDataEventsReader != nil {
-		if err := m.sslDataEventsReader.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
 	// m.ringbufReader.Read is a blocking operation, so we need to close the ring buffer
 	// from another goroutine to avoid the system not being able to exit if there
 	// isn't traffic in a given interface
@@ -872,12 +828,6 @@ func (m *Fetcher) Close() error {
 			errs = append(errs, err)
 		}
 		if err := m.objects.IpsecEgressMap.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.SslDataEventMap.Unpin(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.SslDataEventMap.Close(); err != nil {
 			errs = append(errs, err)
 		}
 		if err := m.objects.DnsNameMap.Unpin(); err != nil {
@@ -983,10 +933,6 @@ func (m *Fetcher) removeAllPins() error {
 
 func (m *Fetcher) ReadRingBuf() (ringbuf.Record, error) {
 	return m.ringbufReader.Read()
-}
-
-func (m *Fetcher) ReadSSLRingBuf() (ringbuf.Record, error) {
-	return m.sslDataEventsReader.Read()
 }
 
 // LookupAndDeleteMap reads all the entries from the eBPF map and removes them from it.
@@ -1242,7 +1188,6 @@ func loadObjectsOldKernelRtKernel(spec *cilium.CollectionSpec, pinDir string) (e
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1273,12 +1218,6 @@ func loadObjectsOldKernelRtKernel(spec *cilium.CollectionSpec, pinDir string) (e
 			TcpRcvFentry:            nil,
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
-			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
-			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
-			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
-			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1298,7 +1237,6 @@ func loadObjectsOldKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfO
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1329,12 +1267,6 @@ func loadObjectsOldKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfO
 			TcpRcvFentry:            nil,
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
-			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
-			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
-			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
-			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1354,7 +1286,6 @@ func loadObjectsRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfOb
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1385,12 +1316,6 @@ func loadObjectsRtKernel(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfOb
 			TcpRcvKprobe:            nil,
 			KfreeSkb:                nil,
 			NetworkEventsMonitoring: nil,
-			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
-			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
-			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
-			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1412,7 +1337,6 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
 		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
 		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		plaintext.TLSBpfPrograms
 	}
 	type newBpfObjects struct {
 		newBpfPrograms
@@ -1441,12 +1365,6 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
 			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
 			NetworkEventsMonitoring: nil,
-			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
-			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
-			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
-			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1454,21 +1372,20 @@ func loadObjectsNoNetworkEvents(spec *cilium.CollectionSpec, pinDir string) (ebp
 
 func loadObjectsWithNetkit(spec *cilium.CollectionSpec, pinDir string) (ebpf.BpfObjects, error) {
 	type newBpfPrograms struct {
-		TcEgressFlowParse      *cilium.Program `ebpf:"tc_egress_flow_parse"`
-		TcIngressFlowParse     *cilium.Program `ebpf:"tc_ingress_flow_parse"`
-		NetkitPrimaryFlowParse *cilium.Program `ebpf:"netkit_primary_flow_parse"`
-		NetkitPeerFlowParse    *cilium.Program `ebpf:"netkit_peer_flow_parse"`
-		TcxEgressFlowParse     *cilium.Program `ebpf:"tcx_egress_flow_parse"`
-		TcxIngressFlowParse    *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
-		TCPRcvFentry           *cilium.Program `ebpf:"tcp_rcv_fentry"`
-		TCPRcvKprobe           *cilium.Program `ebpf:"tcp_rcv_kprobe"`
-		KfreeSkb               *cilium.Program `ebpf:"kfree_skb"`
-		TrackNatManipPkt       *cilium.Program `ebpf:"track_nat_manip_pkt"`
-		XfrmInputKretprobe     *cilium.Program `ebpf:"xfrm_input_kretprobe"`
-		XfrmOutputKretprobe    *cilium.Program `ebpf:"xfrm_output_kretprobe"`
-		XfrmInputKprobe        *cilium.Program `ebpf:"xfrm_input_kprobe"`
-		XfrmOutputKprobe       *cilium.Program `ebpf:"xfrm_output_kprobe"`
-		plaintext.TLSBpfPrograms
+		TcEgressFlowParse       *cilium.Program `ebpf:"tc_egress_flow_parse"`
+		TcIngressFlowParse      *cilium.Program `ebpf:"tc_ingress_flow_parse"`
+		NetkitPrimaryFlowParse  *cilium.Program `ebpf:"netkit_primary_flow_parse"`
+		NetkitPeerFlowParse     *cilium.Program `ebpf:"netkit_peer_flow_parse"`
+		TcxEgressFlowParse      *cilium.Program `ebpf:"tcx_egress_flow_parse"`
+		TcxIngressFlowParse     *cilium.Program `ebpf:"tcx_ingress_flow_parse"`
+		TCPRcvFentry            *cilium.Program `ebpf:"tcp_rcv_fentry"`
+		TCPRcvKprobe            *cilium.Program `ebpf:"tcp_rcv_kprobe"`
+		KfreeSkb                *cilium.Program `ebpf:"kfree_skb"`
+		TrackNatManipPkt        *cilium.Program `ebpf:"track_nat_manip_pkt"`
+		XfrmInputKretprobe      *cilium.Program `ebpf:"xfrm_input_kretprobe"`
+		XfrmOutputKretprobe     *cilium.Program `ebpf:"xfrm_output_kretprobe"`
+		XfrmInputKprobe         *cilium.Program `ebpf:"xfrm_input_kprobe"`
+		XfrmOutputKprobe        *cilium.Program `ebpf:"xfrm_output_kprobe"`
 		NetworkEventsMonitoring *cilium.Program `ebpf:"network_events_monitoring"`
 	}
 	type newBpfObjects struct {
@@ -1498,12 +1415,6 @@ func loadObjectsWithNetkit(spec *cilium.CollectionSpec, pinDir string) (ebpf.Bpf
 			XfrmInputKprobe:         newObjects.XfrmInputKprobe,
 			XfrmOutputKprobe:        newObjects.XfrmOutputKprobe,
 			NetworkEventsMonitoring: newObjects.NetworkEventsMonitoring,
-			ProbeEntrySSL_write:     newObjects.ProbeEntrySSLWrite,
-			ProbeEntrySSL_read:      newObjects.ProbeEntrySSLRead,
-			ProbeRetSSL_read:        newObjects.ProbeRetSSLRead,
-			ProbeEntrySSL_setFd:     newObjects.ProbeEntrySSLSetFd,
-			ProbeRetSSL_setFd:       newObjects.ProbeRetSSLSetFd,
-			ProbeEntrySSL_free:      newObjects.ProbeEntrySSLFree,
 		},
 		&newObjects.BpfMaps,
 	), nil
@@ -1586,10 +1497,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 	if cfg.Flows.EnableFlowsRingbufFallback {
 		enableDirectFlowRingbuf = 1
 	}
-	enableOpenSSLTracking := 0
-	if cfg.EnableOpenSSLTracking {
-		enableOpenSSLTracking = 1
-	}
 
 	// enable_quic_tracking mode:
 	// QUIC_CONFIG_DISABLED = 0, QUIC_CONFIG_ENABLED = 1, QUIC_CONFIG_ANY_UDP_PORT = 2.
@@ -1615,7 +1522,6 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		{Key: ebpf.BpfVarEnablePktTranslationTracking, Value: uint8(enablePktTranslation)},
 		{Key: ebpf.BpfVarEnableIpsec, Value: uint8(enableIPsec)},
 		{Key: ebpf.BpfVarEnableDirectflowsRingbuf, Value: uint8(enableDirectFlowRingbuf)},
-		{Key: ebpf.BpfVarEnableOpensslTracking, Value: uint8(enableOpenSSLTracking)},
 		{Key: ebpf.BpfVarEnableTlsUsageTracking, Value: uint8(enableTLSTracking)},
 		{Key: ebpf.BpfVarEnableQuicTracking, Value: uint8(enableQUICTracking)},
 	}

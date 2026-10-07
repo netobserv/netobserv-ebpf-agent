@@ -75,7 +75,7 @@ func New(cfg *config.Agent) (*Agent, error) {
 		return nil, err
 	}
 	var scope *plaintext.Scope
-	if cfg.EnableOpenSSLTracking {
+	if cfg.Packets.EnableOpenSSLTracking {
 		scope = plaintext.NewScope(
 			filterRules,
 			cfg.Packets.TLSPlaintextPIDAllowlist,
@@ -132,11 +132,11 @@ func newAgent(
 		plaintextExporter: plaintextExporter,
 	}
 
-	if cfg.EnableOpenSSLTracking && plaintextExporter == nil {
+	if cfg.Packets.EnableOpenSSLTracking && plaintextExporter == nil {
 		return nil, fmt.Errorf("TLS plaintext capture requires export=direct-flp")
 	}
 
-	if cfg.EnableOpenSSLTracking {
+	if cfg.Packets.EnableOpenSSLTracking {
 		a.plaintextTracer = flow.NewPlaintextTracer(fetcher, metrics.NoOp(), scope)
 		a.plaintextBuffer = flow.NewPlaintextBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
 		a.plaintextScope = scope

@@ -10,6 +10,6 @@ import (
 )
 
 func configurePacketMaps(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig) {
-	netattach.MinimizeMapsIfDisabled(spec, cfg.EnableOpenSSLTracking, 1, ebpf.PacketsMapSslReadActiveMap, ebpf.PacketsMapSslFdMap)
-	netattach.MinimizeMapsIfDisabled(spec, cfg.EnableOpenSSLTracking, os.Getpagesize(), ebpf.PacketsMapSslDataEventMap)
+	netattach.MinimizeMapsIfDisabled(spec, cfg.Packets.EnableOpenSSLTracking, 1, ebpf.PacketsMapSslReadActiveMap, ebpf.PacketsMapSslFdMap)
+	netattach.MinimizeMapsIfDisabled(spec, cfg.Packets.EnableOpenSSLTracking, os.Getpagesize(), ebpf.PacketsMapSslDataEventMap)
 }
