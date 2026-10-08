@@ -3,6 +3,7 @@ package flows
 import (
 	"iter"
 
+	cilium "github.com/cilium/ebpf"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 )
@@ -14,7 +15,52 @@ func (m *Fetcher) ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointT
 	if m.objects == nil || m.objects.EndpointIps == nil {
 		return nil
 	}
+	m.observeEndpointMaps()
 	return resolveEndpoints(ids, m.objects.EndpointIps.Lookup)
+}
+
+// observeEndpointMaps exports the bounded endpoint dictionaries' occupancy and
+// kernel allocation. The maps are append-only for the lifetime of the agent,
+// so the ID counter is also the endpoint high-water mark.
+func (m *Fetcher) observeEndpointMaps() {
+	if m.metrics == nil || m.objects == nil {
+		return
+	}
+	m.endpointMapInfoOnce.Do(func() {
+		for name, bpfMap := range map[string]*cilium.Map{
+			ebpf.BpfMapEndpointIds: m.objects.EndpointIds,
+			ebpf.BpfMapEndpointIps: m.objects.EndpointIps,
+		} {
+			if bpfMap == nil {
+				continue
+			}
+			info, err := bpfMap.Info()
+			if err != nil {
+				log.WithError(err).WithField("map", name).Debug("couldn't inspect endpoint map")
+				continue
+			}
+			m.metrics.EndpointMapMaxEntries.WithLabelValues(name).Set(float64(info.MaxEntries))
+			if bytes, ok := info.Memlock(); ok {
+				m.metrics.EndpointMapMemlockBytes.WithLabelValues(name).Set(float64(bytes))
+			}
+		}
+	})
+
+	var zero, next uint32
+	if m.objects.EndpointIdCounter == nil {
+		return
+	}
+	if err := m.objects.EndpointIdCounter.Lookup(&zero, &next); err != nil {
+		log.WithError(err).Debug("couldn't read endpoint ID counter")
+		return
+	}
+	entries := float64(0)
+	if next > 0 {
+		entries = float64(next - 1)
+	}
+	for _, name := range []string{ebpf.BpfMapEndpointIds, ebpf.BpfMapEndpointIps} {
+		m.metrics.EndpointMapEntries.WithLabelValues(name).Set(entries)
+	}
 }
 
 func resolveEndpoints(ids iter.Seq[ebpf.BpfFlowId], lookup func(key, valueOut any) error) model.EndpointTable {

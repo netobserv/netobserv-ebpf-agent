@@ -8,6 +8,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
@@ -63,6 +64,8 @@ type Fetcher struct {
 	lookupAndDeleteSupported    bool
 	pinDir                      string
 	config                      *tracer.FetcherConfig
+	metrics                     *metrics.Metrics
+	endpointMapInfoOnce         sync.Once
 }
 
 //nolint:cyclop // BPF load paths branch on kernel features and optional hooks.
@@ -375,6 +378,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
 		pinDir:                      pinDir,
 		config:                      cfg,
+		metrics:                     m,
 	}, nil
 }
 
