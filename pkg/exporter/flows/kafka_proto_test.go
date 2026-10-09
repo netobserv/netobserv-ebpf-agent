@@ -33,13 +33,15 @@ func TestProtoConversion(t *testing.T) {
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
 		ID: ebpf.BpfFlowId{
-			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
-			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
+			SrcId:             1,
+			DstId:             2,
 			SrcPort:           4321,
 			DstPort:           1234,
 			IcmpType:          8,
 			TransportProtocol: 210,
 		},
+		SrcAddr: model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
+		DstAddr: model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				DirectionFirstSeen: 1,
@@ -90,13 +92,15 @@ func TestIdenticalKeys(t *testing.T) {
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
 		ID: ebpf.BpfFlowId{
-			SrcIp:             model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
-			DstIp:             model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
+			SrcId:             1,
+			DstId:             2,
 			SrcPort:           4321,
 			DstPort:           1234,
 			IcmpType:          8,
 			TransportProtocol: 210,
 		},
+		SrcAddr: model.IPAddrFromNetIP(net.ParseIP("192.1.2.3")),
+		DstAddr: model.IPAddrFromNetIP(net.ParseIP("127.3.2.1")),
 		Metrics: model.BpfFlowContent{
 			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
 				DirectionFirstSeen: 1,
@@ -112,8 +116,8 @@ func TestIdenticalKeys(t *testing.T) {
 	}
 	key1 := getFlowKey(&record)
 
-	record.ID.SrcIp = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
-	record.ID.DstIp = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
+	record.SrcAddr = model.IPAddrFromNetIP(net.ParseIP("127.3.2.1"))
+	record.DstAddr = model.IPAddrFromNetIP(net.ParseIP("192.1.2.3"))
 	key2 := getFlowKey(&record)
 
 	// Both keys should be identical

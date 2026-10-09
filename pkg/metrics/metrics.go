@@ -117,6 +117,24 @@ var (
 		TypeGauge,
 		"name",
 	)
+	endpointMapEntries = defineMetric(
+		"endpoint_map_entries",
+		"Current number of entries in an endpoint map",
+		TypeGauge,
+		"map",
+	)
+	endpointMapMaxEntries = defineMetric(
+		"endpoint_map_max_entries",
+		"Maximum number of entries configured for an endpoint map",
+		TypeGauge,
+		"map",
+	)
+	endpointMapMemlockBytes = defineMetric(
+		"endpoint_map_memlock_bytes",
+		"Approximate kernel memory allocated for an endpoint map",
+		TypeGauge,
+		"map",
+	)
 	ifaceBufferSize = defineMetric(
 		"iface_buffer_size",
 		"Interface buffer size",
@@ -196,6 +214,9 @@ type Metrics struct {
 	FilteredFlowsCounter     *EvictionCounter
 	NetworkEventsCounter     *EvictionCounter
 	FlowBufferSizeGauge      *FlowBufferSizeGauge
+	EndpointMapEntries       *prometheus.GaugeVec
+	EndpointMapMaxEntries    *prometheus.GaugeVec
+	EndpointMapMemlockBytes  *prometheus.GaugeVec
 	Errors                   *ErrorCounter
 	InterfaceEventsCounter   *InterfaceEventsCounter
 	OpenSSLDataEventsCounter *OpenSSLDataEventsCounter
@@ -212,6 +233,9 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.FilteredFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&filterFlows)}
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
+	m.EndpointMapEntries = m.NewGaugeVec(&endpointMapEntries)
+	m.EndpointMapMaxEntries = m.NewGaugeVec(&endpointMapMaxEntries)
+	m.EndpointMapMemlockBytes = m.NewGaugeVec(&endpointMapMemlockBytes)
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
 	m.OpenSSLDataEventsCounter = &OpenSSLDataEventsCounter{vec: m.NewCounterVec(&opensslDataEventsCounter)}

@@ -28,11 +28,13 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     u64 rtt = 0;
     int ret = 0;
     flow_id id;
+    packet_addrs addrs;
 
     if (!enable_rtt) {
         return 0;
     }
     __builtin_memset(&id, 0, sizeof(id));
+    __builtin_memset(&addrs, 0, sizeof(addrs));
 
     u32 if_index = BPF_CORE_READ(skb, skb_iif);
     // filter out TCP sockets with unknown or loopback interface
@@ -44,7 +46,7 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     core_fill_in_l2(skb, &eth_protocol, &family);
 
     // read L3 info
-    core_fill_in_l3(skb, &id, family, &protocol, &dscp);
+    core_fill_in_l3(skb, &addrs, family, &protocol, &dscp);
 
     if (protocol != IPPROTO_TCP) {
         return 0;
@@ -59,8 +61,11 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     rtt *= 1000u;
 
     // check if this packet need to be filtered if filtering feature is enabled
-    bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
+    bool skip = check_and_apply_filter(&id, &addrs, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
+        return 0;
+    }
+    if (!intern_flow_endpoints(&id, &addrs)) {
         return 0;
     }
 

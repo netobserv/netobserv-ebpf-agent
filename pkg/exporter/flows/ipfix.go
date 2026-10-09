@@ -302,13 +302,13 @@ func setIEValue(record *model.Record, ieValPtr *entities.InfoElementWithValue) {
 	case "destinationMacAddress":
 		ieVal.SetMacAddressValue(record.Metrics.DstMac[:])
 	case "sourceIPv4Address":
-		setIPv4Address(ieValPtr, model.IP(record.ID.SrcIp).To4())
+		setIPv4Address(ieValPtr, model.IP(record.SrcAddr).To4())
 	case "destinationIPv4Address":
-		setIPv4Address(ieValPtr, model.IP(record.ID.DstIp).To4())
+		setIPv4Address(ieValPtr, model.IP(record.DstAddr).To4())
 	case "sourceIPv6Address":
-		ieVal.SetIPAddressValue(record.ID.SrcIp[:])
+		ieVal.SetIPAddressValue(record.SrcAddr[:])
 	case "destinationIPv6Address":
-		ieVal.SetIPAddressValue(record.ID.DstIp[:])
+		ieVal.SetIPAddressValue(record.DstAddr[:])
 	case "protocolIdentifier", "nextHeaderIPv6":
 		ieVal.SetUnsigned8Value(record.ID.TransportProtocol)
 	case "sourceTransportPort":
