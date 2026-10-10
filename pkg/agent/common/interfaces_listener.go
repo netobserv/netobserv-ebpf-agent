@@ -42,27 +42,26 @@ type retriableEvent struct {
 	lastError error
 }
 
-func CreateInformer(cfg *config.Agent, m *metrics.Metrics) ifaces.Informer {
+func CreateInformer(cfg *config.Agent, netnsResolver ifaces.NetnsResolver, m *metrics.Metrics) ifaces.Informer {
 	// configure informer for new interfaces
 	var informer ifaces.Informer
 	switch cfg.ListenInterfaces {
 	case config.ListenPoll:
 		ilog.WithField("period", cfg.ListenPollPeriod).Info("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
+		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength, netnsResolver)
 	case config.ListenWatch:
 		ilog.Info("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(cfg.BuffersLength, netnsResolver, m)
 	default:
 		ilog.WithField("providedValue", cfg.ListenInterfaces).Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(cfg.BuffersLength, netnsResolver, m)
 	}
-
 	return informer
 }
 
 // startInterfaceListener uses an informer to check new/deleted network interfaces. For each running
 // interface, it registers a flow ebpfFetcher that will forward new flows to the returned channel
-func StartInterfaceListener(ctx context.Context, attacher TCAttacher, cfg *config.Agent, m *metrics.Metrics, informer ifaces.Informer) error {
+func StartInterfaceListener(ctx context.Context, attacher TCAttacher, cfg *config.Agent, informer ifaces.Informer, m *metrics.Metrics) error {
 	filter, err := ifaces.FromConfig(cfg)
 	if err != nil {
 		return err
@@ -73,8 +72,8 @@ func StartInterfaceListener(ctx context.Context, attacher TCAttacher, cfg *confi
 		return err
 	}
 
-	interfaceNamer := func(ifIndex int, mac model.MacAddr) string {
-		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, mac)
+	interfaceNamer := func(ifIndex int, netnsCookie uint64, mac model.MacAddr) string {
+		iface, ok := registerer.IfaceNameForIndexAndMAC(ifIndex, netnsCookie, mac)
 		if !ok {
 			return "unknown"
 		}
