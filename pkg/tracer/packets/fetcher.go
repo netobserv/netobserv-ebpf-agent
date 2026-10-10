@@ -90,10 +90,7 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		spec.Maps[m].Pinning = 0
 	}
 
-	if !cfg.EnableOpenSSLTracking {
-		const ringbufMinSize = 1 << 12
-		spec.Maps["ssl_data_event_map"].MaxEntries = ringbufMinSize
-	}
+	configurePacketMaps(spec, cfg)
 
 	objects := &packets.PacketsObjects{}
 	if err := spec.LoadAndAssign(objects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {

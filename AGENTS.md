@@ -66,6 +66,11 @@ Add drop tracking to eBPF
 3. Mention regeneration steps (`make docker-generate` for eBPF changes)
 4. Check dependencies before adding new packages
 
+## Documentation changes
+
+- Describe the general behavior and applicable modes, including existing features that follow the same pattern. Avoid documenting only the maps or features touched by the current patch.
+- Update the existing explanation where possible; keep one-time experiment scripts and results outside the repository unless they have a reusable maintenance or testing purpose.
+
 ## Common Task Templates
 
 ### Add eBPF Feature
