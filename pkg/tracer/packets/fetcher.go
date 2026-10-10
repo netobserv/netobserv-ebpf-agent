@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
@@ -28,7 +27,7 @@ import (
 var plog = logrus.WithField("component", "ebpf.PacketFetcher")
 
 type Fetcher struct {
-	objects                  *packets.PacketsObjects
+	objects                  *packets.PacketsBpfObjects
 	qdiscs                   map[ifaces.InterfaceKey]*netlink.GenericQdisc
 	egressFilters            map[ifaces.InterfaceKey]*netlink.BpfFilter
 	ingressFilters           map[ifaces.InterfaceKey]*netlink.BpfFilter
@@ -54,7 +53,7 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 			Warn("can't remove mem lock. The agent could not be able to start eBPF programs")
 	}
 
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +63,13 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		enableFiltering = 1
 	}
 	enableOpenSSLTracking := uint8(0)
-	if cfg.EnableOpenSSLTracking {
+	if cfg.Packets.EnableOpenSSLTracking {
 		enableOpenSSLTracking = 1
 	}
 	variables := []netattach.VariableMapping{
-		{Key: ebpf.BpfVarSampling, Value: uint32(cfg.Sampling)},
-		{Key: ebpf.BpfVarEnableFiltering, Value: enableFiltering},
-		{Key: ebpf.BpfVarEnableOpensslTracking, Value: enableOpenSSLTracking},
+		{Key: packets.PacketsBpfVarSampling, Value: uint32(cfg.Sampling)},
+		{Key: packets.PacketsBpfVarEnableFiltering, Value: enableFiltering},
+		{Key: packets.PacketsBpfVarEnableOpensslTracking, Value: enableOpenSSLTracking},
 	}
 	for _, mapping := range variables {
 		if err := netattach.SetVariable(spec, mapping.Key, mapping.Value); err != nil {
@@ -90,12 +89,12 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 		spec.Maps[m].Pinning = 0
 	}
 
-	if !cfg.EnableOpenSSLTracking {
+	if !cfg.Packets.EnableOpenSSLTracking {
 		const ringbufMinSize = 1 << 12
 		spec.Maps["ssl_data_event_map"].MaxEntries = ringbufMinSize
 	}
 
-	objects := &packets.PacketsObjects{}
+	objects := &packets.PacketsBpfObjects{}
 	if err := spec.LoadAndAssign(objects, &cilium.CollectionOptions{Maps: cilium.MapOptions{PinPath: ""}}); err != nil {
 		var ve *cilium.VerifierError
 		if errors.As(err, &ve) {
@@ -116,21 +115,21 @@ func NewFetcher(cfg *tracer.FetcherConfig) (*Fetcher, error) {
 
 	var sslReader *ringbuf.Reader
 	var opensslAtt *plaintext.OpenSSLAttacher
-	if cfg.EnableOpenSSLTracking {
+	if cfg.Packets.EnableOpenSSLTracking {
 		sslReader, err = ringbuf.NewReader(objects.SslDataEventMap)
 		if err != nil {
 			return nil, fmt.Errorf("accessing SSL data event ringbuffer: %w", err)
 		}
 
 		opensslAtt, err = plaintext.AttachOpenSSLUprobes(
-			cfg.PlaintextScope, cfg.OpenSSLPath,
+			cfg.PlaintextScope, cfg.Packets.OpenSSLPath,
 			objects.ProbeEntrySSL_write, objects.ProbeEntrySSL_read,
 			objects.ProbeRetSSL_read, objects.ProbeEntrySSL_setFd, objects.ProbeRetSSL_setFd, objects.ProbeEntrySSL_free,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach OpenSSL uprobes: %w", err)
 		}
-		plog.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.OpenSSLPath)
+		plog.Infof("SSL tracking enabled with dynamic libssl discovery (default: %s)", cfg.Packets.OpenSSLPath)
 	}
 
 	return &Fetcher{

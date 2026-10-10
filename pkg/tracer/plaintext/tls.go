@@ -6,7 +6,7 @@ import (
 
 	cilium "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
-	ebpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
 )
 
@@ -23,8 +23,8 @@ func SetTLSCaptureVariables(spec *cilium.CollectionSpec, enableOpenSSL bool) err
 	if OpenSSLTrackingEnabled(enableOpenSSL) {
 		v = 1
 	}
-	if err := netattach.SetVariable(spec, ebpfflows.BpfVarEnableOpensslTracking, uint8(v)); err != nil {
-		return fmt.Errorf("setting TLS capture variable %s: %w", ebpfflows.BpfVarEnableOpensslTracking, err)
+	if err := netattach.SetVariable(spec, packets.PacketsBpfVarEnableOpensslTracking, uint8(v)); err != nil {
+		return fmt.Errorf("setting TLS capture variable %s: %w", packets.PacketsBpfVarEnableOpensslTracking, err)
 	}
 	return nil
 }
@@ -43,7 +43,7 @@ type PacketFetcherTLS struct {
 	OpensslAttacher *OpenSSLAttacher
 }
 
-func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scope *Scope, opensslPath string, maps *ebpfflows.BpfMaps, progs *TLSBpfPrograms) (*PacketFetcherTLS, error) {
+func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scope *Scope, opensslPath string, maps *packets.PacketsBpfMaps, progs *TLSBpfPrograms) (*PacketFetcherTLS, error) {
 	if !TLSPlaintextEnabled(enableOpenSSL) {
 		return nil, nil
 	}
@@ -90,6 +90,6 @@ func (t *PacketFetcherTLS) Close() {
 func TLSMapSizing(spec *cilium.CollectionSpec, enableOpenSSL bool) {
 	minEntries := uint32(os.Getpagesize())
 	if !TLSPlaintextEnabled(enableOpenSSL) {
-		spec.Maps[ebpfflows.BpfMapSslDataEventMap].MaxEntries = minEntries
+		spec.Maps[packets.PacketsBpfMapSslDataEventMap].MaxEntries = minEntries
 	}
 }

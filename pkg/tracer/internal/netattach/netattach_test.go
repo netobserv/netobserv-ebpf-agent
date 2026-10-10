@@ -19,17 +19,17 @@ func TestTCXAnchor(t *testing.T) {
 }
 
 func TestSetVariableFlowSpec(t *testing.T) {
-	spec, err := flows.LoadBpf()
+	spec, err := flows.LoadFlowsBpf()
 	require.NoError(t, err)
 
-	require.NoError(t, SetVariable(spec, flows.BpfVarSampling, uint32(50)))
+	require.NoError(t, SetVariable(spec, flows.FlowsBpfVarSampling, uint32(50)))
 }
 
 func TestSetVariablePacketSpec(t *testing.T) {
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	require.NoError(t, err)
 
-	require.NoError(t, SetVariable(spec, packets.PacketsVarSampling, uint32(10)))
+	require.NoError(t, SetVariable(spec, packets.PacketsBpfVarSampling, uint32(10)))
 }
 
 func TestWithNetNSNone(t *testing.T) {

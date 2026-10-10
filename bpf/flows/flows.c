@@ -13,69 +13,31 @@
 */
 #include <vmlinux.h>
 #include <bpf_helpers.h>
-#include "../configs.h"
-#include "../utils.h"
+#include "configs.h"
+#include "maps.h"
 
-/*
- * Defines a packet drops statistics tracker,
- * which attaches at kfree_skb hook. Is optional.
- */
-#include "../pkt_drops.h"
-
-/*
- * Defines a dns tracker,
- * which attaches at net_dev_queue hook. Is optional.
- */
-#include "../dns_tracker.h"
-
-/*
- * Defines the TLS tracker,
- */
-#include "../tls_tracker.h"
-
-/*
- * Defines an rtt tracker,
- * which runs inside flow_monitor. Is optional.
- */
-#include "../rtt_tracker.h"
-
-/* Do flow filtering. Is optional. */
+// Feature headers
 #include "../common/filter.h"
-/*
- * Defines an Network events monitoring tracker,
- * which runs inside flow_monitor. Is optional.
- */
-#include "../network_events_monitoring.h"
-/*
- * Defines packets translation tracker
- */
-#include "../pkt_translation.h"
+#include "pkt_drops.h"
+#include "dns_tracker.h"
+#include "tls_tracker.h"
+#include "rtt_tracker.h"
+#include "network_events_monitoring.h"
+#include "pkt_translation.h"
+#include "ipsec.h"
+#include "quic_tracker.h"
 
-/*
- * Defines ipsec tracker
- */
-#include "../ipsec.h"
-
-/*
- * Defines ssl tracker
- */
-#include "../openssl_tracker.h"
-
-/*
- * Defines quic tracker
- */
-#include "../quic_tracker.h"
+#define MISC_FLAGS_SSL_MISMATCH 0x01
+#define OBSERVED_DIRECTION_BOTH 3
 
 // return 0 on success, 1 if capacity reached
-static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
-                                             u8 direction) {
+static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index, u8 direction) {
     if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
         return 1;
     }
     for (u8 i = 0; i < value->nb_observed_intf; i++) {
         if (value->observed_intf[i] == if_index) {
-            if (value->observed_direction[i] != direction &&
-                value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
+            if (value->observed_direction[i] != direction && value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
                 // Same interface seen on a different direction => mark as both directions
                 value->observed_direction[i] = OBSERVED_DIRECTION_BOTH;
             }
@@ -89,9 +51,8 @@ static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt,
     return 0;
 }
 
-static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt,
-                                                 u64 len, u32 sampling, u32 if_index, u8 direction,
-                                                 tls_info *tls) {
+static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt, u64 len, u32 sampling,
+                                                 u32 if_index, u8 direction, tls_info *tls) {
     // Count only packets seen from the same interface as previously to avoid duplicate counts
     int maxReached = 0;
     bpf_spin_lock(&aggregate_flow->lock);
@@ -127,8 +88,8 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
     if (maxReached > 0) {
         BPF_PRINTK("observed interface missed (array capacity reached); ifindex=%d, eth_type=%d, "
                    "proto=%d, sport=%d, dport=%d\n",
-                   if_index, aggregate_flow->eth_protocol, pkt->id->transport_protocol,
-                   pkt->id->src_port, pkt->id->dst_port);
+                   if_index, aggregate_flow->eth_protocol, pkt->id->transport_protocol, pkt->id->src_port,
+                   pkt->id->dst_port);
         if (pkt->id->transport_protocol != 0) {
             // Only raise counter on non-zero proto; zero proto traffic is very likely to have its interface max count reached
             increase_counter(OBSERVED_INTF_MISSED);
@@ -214,8 +175,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
 
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction,
-                             &tls);
+        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction, &tls);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow;
@@ -240,11 +200,9 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         long ret = bpf_map_update_elem(&aggregated_flows, &id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {
             if (ret == -EEXIST) {
-                flow_metrics *aggregate_flow =
-                    (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
+                flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
-                    update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex,
-                                         direction, &tls);
+                    update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction, &tls);
                 } else {
                     if (trace_messages) {
                         bpf_printk("failed to update an exising flow\n");
@@ -259,8 +217,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 // which can be re-aggregated at userpace.
                 // other possible values https://chromium.googlesource.com/chromiumos/docs/+/master/constants/errnos.md
                 new_flow.errno = -ret;
-                flow_record *record =
-                    (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
+                flow_record *record = (flow_record *)bpf_ringbuf_reserve(&direct_flows, sizeof(flow_record), 0);
                 if (!record) {
                     if (trace_messages) {
                         bpf_printk("couldn't reserve space in the ringbuf. Dropping flow");
@@ -305,8 +262,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                 }
                 if (ret == -EEXIST) {
                     // Concurrent write from another CPU; retry
-                    dns_metrics *extra_metrics =
-                        (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
+                    dns_metrics *extra_metrics = (dns_metrics *)bpf_map_lookup_elem(&aggregated_flows_dns, &id);
                     if (extra_metrics != NULL) {
                         update_dns(extra_metrics, &pkt, dns_errno);
                     } else {

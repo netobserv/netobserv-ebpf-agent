@@ -20,7 +20,7 @@ const udpPortNATT = 4500
 // the encrypted form. When those flow_ids diverge, IPsec metrics land in orphan entries
 // with 0 bytes/packets (NETOBSERV-2343). Prefer correlating by IP endpoints rather than
 // dropping orphans entirely (partial flows remain useful for metrics when no sibling exists).
-func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
+func mergeIPsecOrphans(flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent) {
 	if len(flows) == 0 {
 		return
 	}
@@ -28,15 +28,15 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 	type ipKey struct {
 		src, dst [16]uint8
 	}
-	wireFlows := make(map[ipKey][]ebpf.BpfFlowId, len(flows))
-	var orphans []ebpf.BpfFlowId
+	wireFlows := make(map[ipKey][]ebpf.FlowsBpfFlowId, len(flows))
+	var orphans []ebpf.FlowsBpfFlowId
 
 	for id, flow := range flows {
 		if isIPsecOrphan(flow) {
 			orphans = append(orphans, id)
 			continue
 		}
-		if flow.BpfFlowMetrics == nil || flow.Packets == 0 {
+		if flow.FlowsBpfFlowMetrics == nil || flow.Packets == 0 {
 			continue
 		}
 		if !isIPsecWireFlow(id) {
@@ -70,7 +70,7 @@ func mergeIPsecOrphans(flows map[ebpf.BpfFlowId]model.BpfFlowContent) {
 	}
 }
 
-func cmpBpfFlowID(a, b ebpf.BpfFlowId) int {
+func cmpBpfFlowID(a, b ebpf.FlowsBpfFlowId) int {
 	if c := bytes.Compare(a.SrcIp[:], b.SrcIp[:]); c != 0 {
 		return c
 	}
@@ -93,7 +93,7 @@ func cmpBpfFlowID(a, b ebpf.BpfFlowId) int {
 }
 
 func isIPsecOrphan(flow model.BpfFlowContent) bool {
-	if flow.BpfFlowMetrics == nil || flow.AdditionalMetrics == nil {
+	if flow.FlowsBpfFlowMetrics == nil || flow.AdditionalMetrics == nil {
 		return false
 	}
 	if flow.Packets != 0 || flow.Bytes != 0 {
@@ -102,7 +102,7 @@ func isIPsecOrphan(flow model.BpfFlowContent) bool {
 	return flow.AdditionalMetrics.IpsecEncrypted || flow.AdditionalMetrics.IpsecEncryptedRet != 0
 }
 
-func isIPsecWireFlow(id ebpf.BpfFlowId) bool {
+func isIPsecWireFlow(id ebpf.FlowsBpfFlowId) bool {
 	if id.TransportProtocol == syscall.IPPROTO_ESP {
 		return true
 	}

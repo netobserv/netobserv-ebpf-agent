@@ -3,7 +3,7 @@
 
 #include "configs.h"
 #include "maps.h"
-#include "../common/packet_utils.h"
+#include "../common/filter.h"
 
 static inline void attach_packet_payload(struct __sk_buff *skb) {
     payload_meta *event;

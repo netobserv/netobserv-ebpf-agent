@@ -14,7 +14,7 @@ import (
 )
 
 func TestFlowToPBMarshalRoundTrip(t *testing.T) {
-	var id ebpf.BpfFlowId
+	var id ebpf.FlowsBpfFlowId
 	copy(id.SrcIp[:], net.IPv4(10, 1, 2, 3).To16())
 	copy(id.DstIp[:], net.IPv4(10, 1, 2, 4).To16())
 	id.SrcPort = 45678
@@ -25,7 +25,7 @@ func TestFlowToPBMarshalRoundTrip(t *testing.T) {
 	rec := &model.Record{
 		ID: id,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				Bytes:       12345,
 				Packets:     42,
 				EthProtocol: 0x0800, // IPv4
@@ -81,7 +81,7 @@ func TestFlowToPBMarshalRoundTrip(t *testing.T) {
 func TestFlowToPBRttSet(t *testing.T) {
 	rec := &model.Record{
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{EthProtocol: 0x0800}, // IPv4
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: 0x0800}, // IPv4
 		},
 		TimeFlowRtt: 5 * time.Millisecond,
 		AgentIP:     net.IPv4(10, 0, 0, 1),

@@ -35,7 +35,7 @@ type MapTracer struct {
 }
 
 type mapFetcher interface {
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 }
 

@@ -13,7 +13,7 @@ import (
 
 // TestPacketBPFSymbols is a smoke guard ensuring the packet BPF object is self-contained.
 func TestPacketBPFSymbols(t *testing.T) {
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	require.NoError(t, err)
 	require.NotEmpty(t, spec.Programs)
 	for name := range spec.Programs {

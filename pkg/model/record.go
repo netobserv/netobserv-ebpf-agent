@@ -60,11 +60,11 @@ func SetInterfaceNamer(ifaceNamer InterfaceNamer) {
 }
 
 // record structure as parsed from eBPF
-type RawRecord ebpf.BpfFlowRecordT
+type RawRecord ebpf.FlowsBpfFlowRecordT
 
 // Record contains accumulated metrics from a flow
 type Record struct {
-	ID      ebpf.BpfFlowId
+	ID      ebpf.FlowsBpfFlowId
 	Metrics BpfFlowContent
 
 	// TODO: redundant field from RecordMetrics. Reorganize structs
@@ -80,7 +80,7 @@ type Record struct {
 }
 
 func NewRecord(
-	key ebpf.BpfFlowId,
+	key ebpf.FlowsBpfFlowId,
 	metrics *BpfFlowContent,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
@@ -97,7 +97,7 @@ func NewRecord(
 // Shared subslices must have their capacity limited to their assigned region.
 func NewRecordInto(
 	dst *Record,
-	key ebpf.BpfFlowId,
+	key ebpf.FlowsBpfFlowId,
 	metrics *BpfFlowContent,
 	currentTime time.Time,
 	monotonicCurrentTime uint64,
@@ -157,7 +157,7 @@ func NewRecordInto(
 					if cause, isDrop := networkevents.ToDropReasonCode(md); isDrop {
 						// Inject as a packet drop
 						if dst.Metrics.PktDropMetrics == nil {
-							dst.Metrics.PktDropMetrics = &ebpf.BpfPktDropMetrics{
+							dst.Metrics.PktDropMetrics = &ebpf.FlowsBpfPktDropMetrics{
 								StartMonoTimeTs: metrics.NetworkEventsMetrics.StartMonoTimeTs,
 								EndMonoTimeTs:   metrics.NetworkEventsMetrics.EndMonoTimeTs,
 								LatestDropCause: cause,

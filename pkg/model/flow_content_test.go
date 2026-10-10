@@ -9,13 +9,13 @@ import (
 )
 
 func TestAccumulateDNS(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
 
-	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{
+	flow.AccumulateDNS(&ebpf.FlowsBpfDnsMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 		Latency:         1000,
@@ -23,8 +23,8 @@ func TestAccumulateDNS(t *testing.T) {
 		Flags:           0b00000011,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
-		DNSMetrics: &ebpf.BpfDnsMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		DNSMetrics: &ebpf.FlowsBpfDnsMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			Latency:         1000,
@@ -33,7 +33,7 @@ func TestAccumulateDNS(t *testing.T) {
 		},
 	}, flow)
 
-	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{
+	flow.AccumulateDNS(&ebpf.FlowsBpfDnsMetrics{
 		StartMonoTimeTs: 30,
 		EndMonoTimeTs:   30,
 		Latency:         2000,
@@ -41,8 +41,8 @@ func TestAccumulateDNS(t *testing.T) {
 		Flags:           0b00001001,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		DNSMetrics: &ebpf.BpfDnsMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		DNSMetrics: &ebpf.FlowsBpfDnsMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			Latency:         2000,
@@ -53,12 +53,12 @@ func TestAccumulateDNS(t *testing.T) {
 }
 
 func TestAccumulatePktDrops(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
-	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{
+	flow.AccumulateDrops(&ebpf.FlowsBpfPktDropMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 		Bytes:           5,
@@ -68,8 +68,8 @@ func TestAccumulatePktDrops(t *testing.T) {
 		LatestState:     200,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
-		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			Bytes:           5,
@@ -80,7 +80,7 @@ func TestAccumulatePktDrops(t *testing.T) {
 		},
 	}, flow)
 
-	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{
+	flow.AccumulateDrops(&ebpf.FlowsBpfPktDropMetrics{
 		StartMonoTimeTs: 30,
 		EndMonoTimeTs:   30,
 		Bytes:           10,
@@ -90,8 +90,8 @@ func TestAccumulatePktDrops(t *testing.T) {
 		LatestState:     201,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		PktDropMetrics: &ebpf.BpfPktDropMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		PktDropMetrics: &ebpf.FlowsBpfPktDropMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			Bytes:           15,
@@ -104,12 +104,12 @@ func TestAccumulatePktDrops(t *testing.T) {
 }
 
 func TestAccumulateNetEvents(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
-	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{
+	flow.AccumulateNetworkEvents(&ebpf.FlowsBpfNetworkEventsMetrics{
 		StartMonoTimeTs:  25,
 		EndMonoTimeTs:    25,
 		NetworkEventsIdx: 2,
@@ -118,8 +118,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 		Packets:          [MaxNetworkEvents]uint16{1, 2},
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
-		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		NetworkEventsMetrics: &ebpf.FlowsBpfNetworkEventsMetrics{
 			StartMonoTimeTs:  25,
 			EndMonoTimeTs:    25,
 			NetworkEventsIdx: 2,
@@ -129,7 +129,7 @@ func TestAccumulateNetEvents(t *testing.T) {
 		},
 	}, flow)
 
-	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{
+	flow.AccumulateNetworkEvents(&ebpf.FlowsBpfNetworkEventsMetrics{
 		StartMonoTimeTs:  30,
 		EndMonoTimeTs:    30,
 		NetworkEventsIdx: 2,
@@ -138,8 +138,8 @@ func TestAccumulateNetEvents(t *testing.T) {
 		Packets:          [MaxNetworkEvents]uint16{1, 1},
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		NetworkEventsMetrics: &ebpf.FlowsBpfNetworkEventsMetrics{
 			StartMonoTimeTs:  25,
 			EndMonoTimeTs:    25,
 			NetworkEventsIdx: 3,
@@ -151,30 +151,30 @@ func TestAccumulateNetEvents(t *testing.T) {
 }
 
 func TestAccumulateXlat(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
-	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{
+	flow.AccumulateXlat(&ebpf.FlowsBpfXlatMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
-		XlatMetrics: &ebpf.BpfXlatMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		XlatMetrics: &ebpf.FlowsBpfXlatMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 		},
 	}, flow)
 
-	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{
+	flow.AccumulateXlat(&ebpf.FlowsBpfXlatMetrics{
 		StartMonoTimeTs: 30,
 		EndMonoTimeTs:   30,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		XlatMetrics: &ebpf.BpfXlatMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		XlatMetrics: &ebpf.FlowsBpfXlatMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 		},
@@ -182,20 +182,20 @@ func TestAccumulateXlat(t *testing.T) {
 }
 
 func TestAccumulateAdditional(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
-	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{
+	flow.AccumulateAdditional(&ebpf.FlowsBpfAdditionalMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 		FlowRtt:         200,
 		IpsecEncrypted:  true,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3},
+		AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			FlowRtt:         200,
@@ -204,10 +204,10 @@ func TestAccumulateAdditional(t *testing.T) {
 	}, flow)
 
 	// Higher RTT, no ipsec info
-	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 1000})
+	flow.AccumulateAdditional(&ebpf.FlowsBpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 1000})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			FlowRtt:         1000,
@@ -216,15 +216,15 @@ func TestAccumulateAdditional(t *testing.T) {
 	}, flow)
 
 	// Lower RTT, ipsec failure
-	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{
+	flow.AccumulateAdditional(&ebpf.FlowsBpfAdditionalMetrics{
 		StartMonoTimeTs:   30,
 		EndMonoTimeTs:     30,
 		FlowRtt:           800,
 		IpsecEncryptedRet: 5,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 			StartMonoTimeTs:   25,
 			EndMonoTimeTs:     25,
 			FlowRtt:           1000,
@@ -233,10 +233,10 @@ func TestAccumulateAdditional(t *testing.T) {
 	}, flow)
 
 	// No change / empty ipsec
-	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 800})
+	flow.AccumulateAdditional(&ebpf.FlowsBpfAdditionalMetrics{StartMonoTimeTs: 30, EndMonoTimeTs: 30, FlowRtt: 800})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3},
+		AdditionalMetrics: &ebpf.FlowsBpfAdditionalMetrics{
 			StartMonoTimeTs:   25,
 			EndMonoTimeTs:     25,
 			FlowRtt:           1000,
@@ -246,14 +246,14 @@ func TestAccumulateAdditional(t *testing.T) {
 }
 
 func TestAccumulateQuic(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 	}}
 
 	// First QUIC metric should set base timestamps and initialize QuicMetrics.
-	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+	flow.AccumulateQuic(&ebpf.FlowsBpfQuicMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 		EthProtocol:     3,
@@ -262,8 +262,8 @@ func TestAccumulateQuic(t *testing.T) {
 		SeenShortHdr:    0,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3, EthProtocol: 3},
-		QuicMetrics: &ebpf.BpfQuicMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 25, Packets: 3, EthProtocol: 3},
+		QuicMetrics: &ebpf.FlowsBpfQuicMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			EthProtocol:     3,
@@ -274,7 +274,7 @@ func TestAccumulateQuic(t *testing.T) {
 	}, flow)
 
 	// Second QUIC metric should update max fields.
-	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+	flow.AccumulateQuic(&ebpf.FlowsBpfQuicMetrics{
 		StartMonoTimeTs: 30,
 		EndMonoTimeTs:   30,
 		EthProtocol:     3,
@@ -283,8 +283,8 @@ func TestAccumulateQuic(t *testing.T) {
 		SeenShortHdr:    1,
 	})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3, EthProtocol: 3},
-		QuicMetrics: &ebpf.BpfQuicMetrics{
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 10, EndMonoTimeTs: 30, Packets: 3, EthProtocol: 3},
+		QuicMetrics: &ebpf.FlowsBpfQuicMetrics{
 			StartMonoTimeTs: 25,
 			EndMonoTimeTs:   25,
 			EthProtocol:     3,
@@ -296,7 +296,7 @@ func TestAccumulateQuic(t *testing.T) {
 }
 
 func TestAccumulateQuic_NilNoop(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
@@ -308,13 +308,13 @@ func TestAccumulateQuic_NilNoop(t *testing.T) {
 }
 
 func TestAccumulateQuic_DoesNotDecrease(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 		StartMonoTimeTs: 10,
 		EndMonoTimeTs:   20,
 		Packets:         3,
 		EthProtocol:     2048,
 	}}
-	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+	flow.AccumulateQuic(&ebpf.FlowsBpfQuicMetrics{
 		StartMonoTimeTs: 25,
 		EndMonoTimeTs:   25,
 		EthProtocol:     2048,
@@ -322,7 +322,7 @@ func TestAccumulateQuic_DoesNotDecrease(t *testing.T) {
 		SeenLongHdr:     1,
 		SeenShortHdr:    1,
 	})
-	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{
+	flow.AccumulateQuic(&ebpf.FlowsBpfQuicMetrics{
 		StartMonoTimeTs: 30,
 		EndMonoTimeTs:   30,
 		EthProtocol:     2048,
@@ -336,45 +336,45 @@ func TestAccumulateQuic_DoesNotDecrease(t *testing.T) {
 }
 
 func TestAccumulateNowBase(t *testing.T) {
-	flow := BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateDNS(&ebpf.BpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	flow := BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateDNS(&ebpf.FlowsBpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
-		DNSMetrics:     &ebpf.BpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		DNSMetrics:          &ebpf.FlowsBpfDnsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 	}, flow)
 
-	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateDrops(&ebpf.BpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	flow = BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateDrops(&ebpf.FlowsBpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
-		PktDropMetrics: &ebpf.BpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		PktDropMetrics:      &ebpf.FlowsBpfPktDropMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 	}, flow)
 
-	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateNetworkEvents(&ebpf.BpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	flow = BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateNetworkEvents(&ebpf.FlowsBpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics:       &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
-		NetworkEventsMetrics: &ebpf.BpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		FlowsBpfFlowMetrics:  &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		NetworkEventsMetrics: &ebpf.FlowsBpfNetworkEventsMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 	}, flow)
 
-	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateXlat(&ebpf.BpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	flow = BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateXlat(&ebpf.FlowsBpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
-		XlatMetrics:    &ebpf.BpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		XlatMetrics:         &ebpf.FlowsBpfXlatMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 	}, flow)
 
-	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateAdditional(&ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
+	flow = BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateAdditional(&ebpf.FlowsBpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics:    &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
-		AdditionalMetrics: &ebpf.BpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
+		AdditionalMetrics:   &ebpf.FlowsBpfAdditionalMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25},
 	}, flow)
 
-	flow = BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}
-	flow.AccumulateQuic(&ebpf.BpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3})
+	flow = BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}
+	flow.AccumulateQuic(&ebpf.FlowsBpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3})
 	assert.Equal(t, BpfFlowContent{
-		BpfFlowMetrics: &ebpf.BpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
-		QuicMetrics:    &ebpf.BpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
+		FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
+		QuicMetrics:         &ebpf.FlowsBpfQuicMetrics{StartMonoTimeTs: 25, EndMonoTimeTs: 25, EthProtocol: 3},
 	}, flow)
 }

@@ -3,10 +3,8 @@ package flow
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -19,27 +17,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const maxSSLDataSize = 16 * 1024
-
 var rtlog = logrus.WithField("component", "flow.RingBufTracer")
 
 // RingBufTracer receives single-packet flows via ringbuffer (usually, these that couldn't be
 // added in the eBPF kernel space due to the map being full or busy) and submits them to the
 // userspace Aggregator map
 type RingBufTracer struct {
-	mapFlusher    mapFlusher
-	ringBuffer    ringBufReader
-	ringBufferSSL ringBufSSLReader
-	stats         stats
-	metrics       *metrics.Metrics
+	mapFlusher mapFlusher
+	ringBuffer ringBufReader
+	stats      stats
+	metrics    *metrics.Metrics
 }
 
 type ringBufReader interface {
 	ReadRingBuf() (ringbuf.Record, error)
-}
-
-type ringBufSSLReader interface {
-	ReadSSLRingBuf() (ringbuf.Record, error)
 }
 
 // stats supports atomic logging of ringBuffer metrics
@@ -63,21 +54,9 @@ func NewRingBufTracer(reader ringBufReader, flusher mapFlusher, logTimeout time.
 	}
 }
 
-func NewSSLRingBufTracer(reader ringBufSSLReader, flusher mapFlusher, logTimeout time.Duration, m *metrics.Metrics) *RingBufTracer {
-	return &RingBufTracer{
-		mapFlusher:    flusher,
-		ringBufferSSL: reader,
-		stats:         stats{loggingTimeout: logTimeout},
-		metrics:       m,
-	}
-}
-
 func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*model.RawRecord] {
 	return func(out chan<- *model.RawRecord) {
 		debugging := logrus.IsLevelEnabled(logrus.DebugLevel)
-		if m.ringBufferSSL != nil {
-			rtlog.Info("SSL RingBuf tracer started - listening for SSL events")
-		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -91,16 +70,6 @@ func (m *RingBufTracer) TraceLoop(ctx context.Context) node.StartFunc[*model.Raw
 							return
 						}
 						rtlog.WithError(err).Warn("ignoring flow event")
-						continue
-					}
-				}
-				if m.ringBufferSSL != nil {
-					if err := m.listenAndForwardRingBufferSSL(out); err != nil {
-						if errors.Is(err, ringbuf.ErrClosed) {
-							rtlog.Debug("Received signal, exiting..")
-							return
-						}
-						rtlog.WithError(err).Warn("ignoring SSL event")
 						continue
 					}
 				}
@@ -130,42 +99,6 @@ func (m *RingBufTracer) listenAndForwardRingBuffer(debugging bool, forwardCh cha
 	m.metrics.EvictedPacketsCounter.WithSourceAndReason("ringbuffer", errno.Error()).Inc()
 	// Will need to send it to accounter anyway to account regardless of complete/ongoing flow
 	forwardCh <- readFlow
-	return nil
-}
-
-func (m *RingBufTracer) listenAndForwardRingBufferSSL(_ chan<- *model.RawRecord) error {
-	event, err := m.ringBufferSSL.ReadSSLRingBuf()
-	if err != nil {
-		m.metrics.Errors.WithErrorName("ringbuffer", "CannotReadSSLRingbuffer", metrics.HighSeverity).Inc()
-		return fmt.Errorf("reading from SSL ring buffer: %w", err)
-	}
-
-	buf := bytes.NewReader(event.RawSample)
-
-	var timestamp uint64
-	var pidTgid uint64
-	var dataLen int32
-	var sslType uint8
-
-	if err := binary.Read(buf, binary.LittleEndian, &timestamp); err != nil {
-		return nil
-	}
-	if err := binary.Read(buf, binary.LittleEndian, &pidTgid); err != nil {
-		return nil
-	}
-	if err := binary.Read(buf, binary.LittleEndian, &dataLen); err != nil {
-		return nil
-	}
-	if err := binary.Read(buf, binary.LittleEndian, &sslType); err != nil {
-		return nil
-	}
-
-	if dataLen > 0 && dataLen <= maxSSLDataSize {
-		rtlog.Debugf("SSL EVENT: pid=%d, timestamp=%d, data_len=%d, ssl_type=%d",
-			pidTgid, timestamp, dataLen, sslType)
-		m.metrics.OpenSSLDataEventsCounter.Increase(strconv.Itoa(int(sslType)))
-	}
-
 	return nil
 }
 
