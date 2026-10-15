@@ -8,7 +8,6 @@ import (
 	"path"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
@@ -65,7 +64,6 @@ type Fetcher struct {
 	pinDir                      string
 	config                      *tracer.FetcherConfig
 	metrics                     *metrics.Metrics
-	endpointMapInfoOnce         sync.Once
 }
 
 //nolint:cyclop // BPF load paths branch on kernel features and optional hooks.
@@ -307,6 +305,10 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
+		if err := loadPinnedMapInto("endpoint IDs to IPs", ebpf.BpfMapEndpointIps, &objects.BpfMaps.EndpointIps); err != nil {
+			return nil, err
+		}
+
 		if cfg.EnableOpenSSLTracking {
 			if err := loadPinnedMapInto("SSL data event", ebpf.BpfMapSslDataEventMap, &objects.BpfMaps.SslDataEventMap); err != nil {
 				return nil, err
@@ -323,15 +325,6 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
-		if err := loadPinnedMapInto("endpoint IDs", ebpf.BpfMapEndpointIds, &objects.BpfMaps.EndpointIds); err != nil {
-			return nil, err
-		}
-		if err := loadPinnedMapInto("endpoint IPs", ebpf.BpfMapEndpointIps, &objects.BpfMaps.EndpointIps); err != nil {
-			return nil, err
-		}
-		if err := loadPinnedMapInto("endpoint ID counter", ebpf.BpfMapEndpointIdCounter, &objects.BpfMaps.EndpointIdCounter); err != nil {
-			return nil, err
-		}
 	}
 
 	if filter != nil {
@@ -905,23 +898,20 @@ func (m *Fetcher) Close() error {
 		if err := m.objects.QuicFlows.Close(); err != nil {
 			errs = append(errs, err)
 		}
-		if err := m.objects.EndpointIds.Unpin(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.EndpointIds.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.EndpointIps.Unpin(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.EndpointIps.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.EndpointIdCounter.Unpin(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := m.objects.EndpointIdCounter.Close(); err != nil {
-			errs = append(errs, err)
+		for _, bpfMap := range []*cilium.Map{
+			m.objects.EndpointIds,
+			m.objects.EndpointIps,
+			m.objects.EndpointIdCounter,
+		} {
+			if bpfMap == nil {
+				continue
+			}
+			if err := bpfMap.Unpin(); err != nil {
+				errs = append(errs, err)
+			}
+			if err := bpfMap.Close(); err != nil {
+				errs = append(errs, err)
+			}
 		}
 		if len(errs) == 0 {
 			m.objects = nil
