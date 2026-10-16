@@ -6,6 +6,7 @@
 #include "maps_definition.h"
 #include "common/filter.h"
 #include "common/packet_utils.h"
+#include "endpoint.h"
 
 static u8 do_sampling = 0;
 
@@ -26,8 +27,8 @@ static inline void core_fill_in_l2(struct sk_buff *skb, u16 *eth_protocol, u16 *
     }
 }
 
-static inline void core_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family, u8 *protocol,
-                                   u8 *dscp) {
+static inline void core_fill_in_l3(struct sk_buff *skb, packet_addrs *addrs, u16 family,
+                                   u8 *protocol, u8 *dscp) {
     u16 skb_network_header = BPF_CORE_READ(skb, network_header);
     u8 *skb_head = BPF_CORE_READ(skb, head);
 
@@ -36,10 +37,10 @@ static inline void core_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family,
         struct iphdr ip;
         __builtin_memset(&ip, 0, sizeof(ip));
         bpf_probe_read_kernel(&ip, sizeof(ip), (struct iphdr *)(skb_head + skb_network_header));
-        __builtin_memcpy(id->src_ip, ip4in6, sizeof(ip4in6));
-        __builtin_memcpy(id->dst_ip, ip4in6, sizeof(ip4in6));
-        __builtin_memcpy(id->src_ip + sizeof(ip4in6), &ip.saddr, sizeof(ip.saddr));
-        __builtin_memcpy(id->dst_ip + sizeof(ip4in6), &ip.daddr, sizeof(ip.daddr));
+        __builtin_memcpy(addrs->src_ip, ip4in6, sizeof(ip4in6));
+        __builtin_memcpy(addrs->dst_ip, ip4in6, sizeof(ip4in6));
+        __builtin_memcpy(addrs->src_ip + sizeof(ip4in6), &ip.saddr, sizeof(ip.saddr));
+        __builtin_memcpy(addrs->dst_ip + sizeof(ip4in6), &ip.daddr, sizeof(ip.daddr));
         *dscp = ipv4_get_dscp(&ip);
         *protocol = ip.protocol;
         break;
@@ -48,8 +49,8 @@ static inline void core_fill_in_l3(struct sk_buff *skb, flow_id *id, u16 family,
         struct ipv6hdr ip;
         __builtin_memset(&ip, 0, sizeof(ip));
         bpf_probe_read_kernel(&ip, sizeof(ip), (struct ipv6hdr *)(skb_head + skb_network_header));
-        __builtin_memcpy(id->src_ip, ip.saddr.in6_u.u6_addr8, IP_MAX_LEN);
-        __builtin_memcpy(id->dst_ip, ip.daddr.in6_u.u6_addr8, IP_MAX_LEN);
+        __builtin_memcpy(addrs->src_ip, ip.saddr.in6_u.u6_addr8, IP_MAX_LEN);
+        __builtin_memcpy(addrs->dst_ip, ip.daddr.in6_u.u6_addr8, IP_MAX_LEN);
         *dscp = ipv6_get_dscp(&ip);
         *protocol = ip.nexthdr;
         break;

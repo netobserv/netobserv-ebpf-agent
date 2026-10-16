@@ -23,13 +23,13 @@ static inline void fill_dns_id(flow_id *id, dns_flow_id *dns_flow, u16 dns_id, b
     dns_flow->id = dns_id;
     dns_flow->protocol = id->transport_protocol;
     if (reverse) {
-        __builtin_memcpy(dns_flow->src_ip, id->dst_ip, IP_MAX_LEN);
-        __builtin_memcpy(dns_flow->dst_ip, id->src_ip, IP_MAX_LEN);
+        dns_flow->src_id = id->dst_id;
+        dns_flow->dst_id = id->src_id;
         dns_flow->src_port = id->dst_port;
         dns_flow->dst_port = id->src_port;
     } else {
-        __builtin_memcpy(dns_flow->src_ip, id->src_ip, IP_MAX_LEN);
-        __builtin_memcpy(dns_flow->dst_ip, id->dst_ip, IP_MAX_LEN);
+        dns_flow->src_id = id->src_id;
+        dns_flow->dst_id = id->dst_id;
         dns_flow->src_port = id->src_port;
         dns_flow->dst_port = id->dst_port;
     }

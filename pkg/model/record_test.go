@@ -20,9 +20,9 @@ func TestRecordBinaryEncoding(t *testing.T) {
 	// Makes sure that we read the C *not packed* flow structure according
 	// to the order defined in bpf/flow.h
 	fr, err := ReadFrom(bytes.NewReader([]byte{
-		// ID
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09, // network: u8[16] src_ip
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d, // network: u8[16] dst_ip
+		// ID (native endian)
+		0x01, 0x00, 0x00, 0x00, // u32 src_id
+		0x02, 0x00, 0x00, 0x00, // u32 dst_id
 		0x0e, 0x0f, // transport: u16 src_port
 		0x10, 0x11, // transport: u16 dst_port
 		0x12, // transport: u8 transport_protocol
@@ -65,8 +65,8 @@ func TestRecordBinaryEncoding(t *testing.T) {
 
 	assert.Equal(t, RawRecord{
 		Id: ebpf.BpfFlowId{
-			SrcIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
-			DstIp:             IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
+			SrcId:             1,
+			DstId:             2,
 			SrcPort:           0x0f0e,
 			DstPort:           0x1110,
 			TransportProtocol: 0x12,
@@ -94,11 +94,28 @@ func TestRecordBinaryEncoding(t *testing.T) {
 			TlsTypes:           0x21,
 		},
 	}, *fr)
-	// assert that IP addresses are interpreted as IPv4 addresses
-	assert.Equal(t, "6.7.8.9", IP(fr.Id.SrcIp).String())
-	assert.Equal(t, "10.11.12.13", IP(fr.Id.DstIp).String())
+	assert.Equal(t, uint32(1), fr.Id.SrcId)
+	assert.Equal(t, uint32(2), fr.Id.DstId)
 	mac := MacAddr(fr.Metrics.SrcMac)
 	assert.Equal(t, "04:05:06:07:08:09", mac.String())
+}
+
+func TestEndpointTableAddrs(t *testing.T) {
+	src := IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09}
+	dst := IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d}
+	table := EndpointTable{1: src, 2: dst}
+
+	gotSrc, gotDst, ok := table.Addrs(ebpf.BpfFlowId{SrcId: 1, DstId: 2})
+	require.True(t, ok)
+	assert.Equal(t, "6.7.8.9", IP(gotSrc).String())
+	assert.Equal(t, "10.11.12.13", IP(gotDst).String())
+
+	_, _, ok = table.Addrs(ebpf.BpfFlowId{SrcId: 1, DstId: 99})
+	assert.False(t, ok)
+	_, _, ok = table.Addrs(ebpf.BpfFlowId{SrcId: 0, DstId: 2})
+	assert.False(t, ok)
+	_, _, ok = EndpointTable(nil).Addrs(ebpf.BpfFlowId{SrcId: 1, DstId: 2})
+	assert.False(t, ok)
 }
 
 type FakeSampleDecoder struct{}

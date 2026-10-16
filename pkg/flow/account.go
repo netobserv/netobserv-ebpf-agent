@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"iter"
 	"maps"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
 	"github.com/sirupsen/logrus"
 )
+
+type endpointResolver interface {
+	ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable
+}
 
 // Accounter accumulates flows metrics in memory and eventually evicts them via an evictor channel.
 // The accounting process is usually done at kernel-space. This type reimplements it at userspace
@@ -25,6 +30,7 @@ type Accounter struct {
 	metrics      *metrics.Metrics
 	s            *ovnobserv.SampleDecoder
 	udnEnabled   bool
+	endpoints    endpointResolver
 }
 
 var alog = logrus.WithField("component", "flow/Accounter")
@@ -38,6 +44,7 @@ func NewAccounter(
 	m *metrics.Metrics,
 	s *ovnobserv.SampleDecoder,
 	udnEnabled bool,
+	endpoints endpointResolver,
 ) *Accounter {
 	acc := Accounter{
 		maxEntries:   maxEntries,
@@ -48,6 +55,7 @@ func NewAccounter(
 		metrics:      m,
 		s:            s,
 		udnEnabled:   udnEnabled,
+		endpoints:    endpoints,
 	}
 	return &acc
 }
@@ -117,11 +125,22 @@ func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evict
 			alog.Tracef("GetInterfaceUDNS map: %v", udnCache)
 		}
 	}
+	var endpoints model.EndpointTable
+	if c.endpoints != nil && len(entries) > 0 {
+		endpoints = c.endpoints.ResolveEndpoints(maps.Keys(entries))
+	}
 	i := 0
-	for key, metrics := range entries {
-		flowContent := model.NewBpfFlowContent(*metrics)
+	for key, entryMetrics := range entries {
+		flowContent := model.NewBpfFlowContent(*entryMetrics)
 		recordsBacking[i].Interfaces = interfacesBacking[i : i : i+1]
 		model.NewRecordInto(&recordsBacking[i], key, &flowContent, now, monotonicNow, c.s, udnCache)
+		src, dst, ok := endpoints.Addrs(key)
+		if !ok {
+			alog.WithField("flowId", key).Warn("missing endpoint ID at export; leaving addresses empty")
+			c.metrics.Errors.WithErrorName("accounter", "CannotResolveEndpoint", metrics.HighSeverity).Inc()
+		}
+		recordsBacking[i].SrcAddr = src
+		recordsBacking[i].DstAddr = dst
 		records = append(records, &recordsBacking[i])
 		i++
 	}

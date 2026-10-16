@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"encoding/binary"
+	"iter"
 	"time"
 
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
@@ -15,6 +16,7 @@ import (
 
 // TracerFake fakes the kernel-side eBPF map structures for testing
 type TracerFake struct {
+	Endpoints  model.EndpointTable
 	interfaces map[ifaces.InterfaceKey]struct{}
 	mapLookups chan map[ebpf.BpfFlowId]model.BpfFlowContent
 	ringBuf    chan ringbuf.Record
@@ -59,6 +61,18 @@ func (m *TracerFake) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId]m
 }
 
 func (m *TracerFake) DeleteMapsStaleEntries(_ time.Duration) {
+}
+
+func (m *TracerFake) ResolveEndpoints(ids iter.Seq[ebpf.BpfFlowId]) model.EndpointTable {
+	table := make(model.EndpointTable)
+	for id := range ids {
+		for _, endpoint := range []uint32{id.SrcId, id.DstId} {
+			if addr, ok := m.Endpoints[endpoint]; ok {
+				table[endpoint] = addr
+			}
+		}
+	}
+	return table
 }
 
 func (m *TracerFake) ReadRingBuf() (ringbuf.Record, error) {
