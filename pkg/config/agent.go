@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/caarlos0/env/v11"
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
 	configpackets "github.com/netobserv/netobserv-ebpf-agent/pkg/config/packets"
 )
@@ -12,8 +13,13 @@ type Agent struct {
 	Packets configpackets.Features
 }
 
-// ManageDeprecatedConfigs migrates deprecated environment variable names.
-func ManageDeprecatedConfigs(cfg *Agent) {
+func FromEnv() (*Agent, error) {
+	cfg := Agent{}
+	if err := env.Parse(&cfg); err != nil {
+		return nil, err
+	}
+
+	// Deprecated fields
 	if len(cfg.FlowsTargetHost) != 0 {
 		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
 		cfg.TargetHost = cfg.FlowsTargetHost
@@ -26,4 +32,23 @@ func ManageDeprecatedConfigs(cfg *Agent) {
 		clog.Infof("Using deprecated PCAServerPort %d", cfg.PCAServerPort)
 		cfg.TargetPort = cfg.PCAServerPort
 	}
+
+	// Special defaults
+	if cfg.CacheMaxDNSFlows == 0 {
+		cfg.CacheMaxDNSFlows = cfg.CacheMaxFlows / 10
+	}
+	if cfg.CacheMaxNetworkEventFlows == 0 {
+		cfg.CacheMaxNetworkEventFlows = cfg.CacheMaxFlows / 2
+	}
+	if cfg.CacheMaxPktDropsFlows == 0 {
+		cfg.CacheMaxPktDropsFlows = cfg.CacheMaxFlows / 2
+	}
+	if cfg.CacheMaxXlatFlows == 0 {
+		cfg.CacheMaxXlatFlows = cfg.CacheMaxFlows / 2
+	}
+	if cfg.CacheMaxAdditionalFlows == 0 {
+		cfg.CacheMaxAdditionalFlows = cfg.CacheMaxFlows
+	}
+
+	return &cfg, nil
 }

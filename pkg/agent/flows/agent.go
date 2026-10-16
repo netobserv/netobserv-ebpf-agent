@@ -75,9 +75,6 @@ type ebpfFlowFetcher interface {
 func New(cfg *config.Agent) (*Agent, error) {
 	alog.Info("initializing Flows agent")
 
-	// manage deprecated configs
-	config.ManageDeprecatedConfigs(cfg)
-
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := common.FetchAgentIP(cfg)
 	if err != nil {

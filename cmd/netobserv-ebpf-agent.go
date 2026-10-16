@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/caarlos0/env/v11"
 	"github.com/sirupsen/logrus"
 
 	flowsagent "github.com/netobserv/netobserv-ebpf-agent/pkg/agent/flows"
@@ -41,11 +40,11 @@ func terminateAgent() (ctx context.Context) {
 
 func main() {
 	logrus.Infof("starting NetObserv eBPF Agent [build version: %s, build date: %s]", buildVersion, buildDate)
-	config := config.Agent{}
-	if err := env.Parse(&config); err != nil {
+	config, err := config.FromEnv()
+	if err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
-	setLoggerVerbosity(&config)
+	setLoggerVerbosity(config)
 
 	if config.PprofAddr != "" {
 		go func() {
@@ -64,7 +63,7 @@ func main() {
 		if err := config.ValidateForPackets(); err != nil {
 			logrus.WithError(err).Fatal("[PCA] invalid configuration for packet capture mode")
 		}
-		packetsAgent, err := packetsagent.New(&config)
+		packetsAgent, err := packetsagent.New(config)
 		if err != nil {
 			logrus.WithError(err).Fatal("[PCA] can't instantiate NetObserv eBPF Agent")
 		}
@@ -77,7 +76,7 @@ func main() {
 		if err := config.ValidateForFlows(); err != nil {
 			logrus.WithError(err).Fatal("invalid configuration for flow capture mode")
 		}
-		flowsAgent, err := flowsagent.New(&config)
+		flowsAgent, err := flowsagent.New(config)
 
 		if err != nil {
 			logrus.WithError(err).Fatal("can't instantiate NetObserv eBPF Agent")
