@@ -55,7 +55,6 @@ type ebpfPacketFetcher interface {
 // New instantiates a new packet capture agent from configuration.
 func New(cfg *config.Agent) (*Agent, error) {
 	plog.Info("initializing Packets agent")
-	config.ManageDeprecatedConfigs(cfg)
 
 	plog.Info("[PCA]acquiring Agent IP")
 	agentIP, err := common.FetchAgentIP(cfg)
