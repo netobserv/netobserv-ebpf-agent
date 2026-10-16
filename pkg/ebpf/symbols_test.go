@@ -17,7 +17,7 @@ import (
 )
 
 func TestFlowObjectHasNoPacketPrograms(t *testing.T) {
-	spec, err := flows.LoadBpf()
+	spec, err := flows.LoadFlowsBpf()
 	require.NoError(t, err)
 	for name := range spec.Programs {
 		assert.NotContains(t, name, "packet_parse", "flow BPF object must not contain packet programs")
@@ -26,7 +26,7 @@ func TestFlowObjectHasNoPacketPrograms(t *testing.T) {
 }
 
 func TestPacketObjectHasNoFlowPrograms(t *testing.T) {
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	require.NoError(t, err)
 	for name := range spec.Programs {
 		assert.NotContains(t, name, "flow_parse", "packet BPF object must not contain flow programs")
@@ -38,10 +38,10 @@ func TestPacketObjectHasNoFlowPrograms(t *testing.T) {
 }
 
 func TestFlowMapNamesMatchBPF2GoSpec(t *testing.T) {
-	spec, err := flows.LoadBpf()
+	spec, err := flows.LoadFlowsBpf()
 	require.NoError(t, err)
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.BpfMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.FlowsBpfMapSpecs{}))
 	specNames := bpfDataMapNames(spec.Maps)
 
 	assert.Equal(t, tagNames, specNames,
@@ -49,10 +49,10 @@ func TestFlowMapNamesMatchBPF2GoSpec(t *testing.T) {
 }
 
 func TestPacketMapNamesMatchBPF2GoSpec(t *testing.T) {
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	require.NoError(t, err)
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsBpfMapSpecs{}))
 	specNames := bpfDataMapNames(spec.Maps)
 
 	assert.Equal(t, tagNames, specNames,
@@ -60,33 +60,29 @@ func TestPacketMapNamesMatchBPF2GoSpec(t *testing.T) {
 }
 
 func TestFlowMapNameConstantsMatchBPF2GoSpec(t *testing.T) {
-	spec, err := flows.LoadBpf()
+	spec, err := flows.LoadFlowsBpf()
 	require.NoError(t, err)
 
 	constants := []string{
-		flows.BpfMapAdditionalFlowMetrics,
-		flows.BpfMapAggregatedFlows,
-		flows.BpfMapAggregatedFlowsDns,
-		flows.BpfMapAggregatedFlowsNetworkEvents,
-		flows.BpfMapAggregatedFlowsPktDrop,
-		flows.BpfMapAggregatedFlowsXlat,
-		flows.BpfMapDirectFlows,
-		flows.BpfMapDnsFlows,
-		flows.BpfMapDnsNameMap,
-		flows.BpfMapFilterMap,
-		flows.BpfMapGlobalCounters,
-		flows.BpfMapIpsecEgressMap,
-		flows.BpfMapIpsecIngressMap,
-		flows.BpfMapPeerFilterMap,
-		flows.BpfMapQuicFlows,
-		flows.BpfMapSslDataEventMap,
-		flows.BpfMapSslFdMap,
-		flows.BpfMapSslFdPendingMap,
-		flows.BpfMapSslReadActiveMap,
+		flows.FlowsBpfMapAdditionalFlowMetrics,
+		flows.FlowsBpfMapAggregatedFlows,
+		flows.FlowsBpfMapAggregatedFlowsDns,
+		flows.FlowsBpfMapAggregatedFlowsNetworkEvents,
+		flows.FlowsBpfMapAggregatedFlowsPktDrop,
+		flows.FlowsBpfMapAggregatedFlowsXlat,
+		flows.FlowsBpfMapDirectFlows,
+		flows.FlowsBpfMapDnsFlows,
+		flows.FlowsBpfMapDnsNameMap,
+		flows.FlowsBpfMapFilterMap,
+		flows.FlowsBpfMapGlobalCounters,
+		flows.FlowsBpfMapIpsecEgressMap,
+		flows.FlowsBpfMapIpsecIngressMap,
+		flows.FlowsBpfMapPeerFilterMap,
+		flows.FlowsBpfMapQuicFlows,
 	}
 	sort.Strings(constants)
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.BpfMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.FlowsBpfMapSpecs{}))
 	assert.Equal(t, tagNames, constants,
 		"flow bpf2go BpfMap* constants must match BpfMapSpecs ebpf tags")
 
@@ -96,22 +92,22 @@ func TestFlowMapNameConstantsMatchBPF2GoSpec(t *testing.T) {
 }
 
 func TestPacketMapNameConstantsMatchBPF2GoSpec(t *testing.T) {
-	spec, err := packets.LoadPackets()
+	spec, err := packets.LoadPacketsBpf()
 	require.NoError(t, err)
 
 	constants := []string{
-		packets.PacketsMapFilterMap,
-		packets.PacketsMapGlobalCounters,
-		packets.PacketsMapPacketRecord,
-		packets.PacketsMapPeerFilterMap,
-		packets.PacketsMapSslDataEventMap,
-		packets.PacketsMapSslFdMap,
-		packets.PacketsMapSslFdPendingMap,
-		packets.PacketsMapSslReadActiveMap,
+		packets.PacketsBpfMapFilterMap,
+		packets.PacketsBpfMapGlobalCounters,
+		packets.PacketsBpfMapPacketRecord,
+		packets.PacketsBpfMapPeerFilterMap,
+		packets.PacketsBpfMapSslDataEventMap,
+		packets.PacketsBpfMapSslFdMap,
+		packets.PacketsBpfMapSslFdPendingMap,
+		packets.PacketsBpfMapSslReadActiveMap,
 	}
 	sort.Strings(constants)
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsBpfMapSpecs{}))
 	assert.Equal(t, tagNames, constants,
 		"packet bpf2go PacketsMap* constants must match PacketsMapSpecs ebpf tags")
 
@@ -124,7 +120,7 @@ func TestFlowMapNamesMatchBytecodeManifest(t *testing.T) {
 	bcMaps, err := extractBcMkMapNames("../../.mk/bc.mk", "FLOW_MAPS")
 	require.NoError(t, err, "failed to extract map names from .mk/bc.mk")
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.BpfMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(flows.FlowsBpfMapSpecs{}))
 	sort.Strings(bcMaps)
 
 	assert.Equal(t, tagNames, bcMaps,
@@ -135,7 +131,7 @@ func TestPacketMapNamesMatchBytecodeManifest(t *testing.T) {
 	bcMaps, err := extractBcMkMapNames("../../.mk/bc.mk", "PACKET_MAPS")
 	require.NoError(t, err, "failed to extract map names from .mk/bc.mk")
 
-	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsMapSpecs{}))
+	tagNames := mapNamesFromEBPFTags(reflect.TypeOf(packets.PacketsBpfMapSpecs{}))
 	sort.Strings(bcMaps)
 
 	assert.Equal(t, tagNames, bcMaps,

@@ -2,7 +2,9 @@
 #define __PACKETS_MAPS_H__
 
 #include <vmlinux.h>
-#include "../types.h"
+#include "types.h"
+
+#define MAX_FILTER_ENTRIES 16
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
