@@ -106,6 +106,10 @@ typedef struct flow_metrics_t {
     u8 dst_mac[ETH_ALEN];
     // OS interface index
     u32 if_index_first_seen;
+    // Network namespace cookie of first seen interface (0 when feature is unsupported)
+    u64 netns_cookie_first_seen;
+    // Network namespace cookie for each observed interface
+    u64 observed_netns_cookie[MAX_OBSERVED_INTERFACES];
     struct bpf_spin_lock lock;
     u32 sampling;
     u8 direction_first_seen;

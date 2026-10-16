@@ -19,6 +19,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/flows"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -186,14 +187,16 @@ func TestNew_Decoration(t *testing.T) {
 	}
 }
 
-func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*model.Record {
+func testAgent(t *testing.T, fl map[ebpf.BpfFlowId]model.BpfFlowContent) []*model.Record {
 	ebpfTracer := test.NewTracerFake()
 	export := test.NewExporterFake()
 	agent, err := newAgent(
-		&config.Agent{
-			Common: config.Common{
-				CacheActiveTimeout: 10 * time.Millisecond,
-				CacheMaxFlows:      100,
+		&flows.FetcherConfig{
+			Agent: config.Agent{
+				Common: config.Common{
+					CacheActiveTimeout: 10 * time.Millisecond,
+					CacheMaxFlows:      100,
+				},
 			},
 		},
 		metrics.NoOp(),
@@ -202,9 +205,9 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 	require.NoError(t, err)
 
 	agent.informer = test.SliceInformerFake{
-		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, ""),
-		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, ""),
-		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, ""),
+		ifaces.NewInterface(1, "eth0", [6]uint8{}, 0, "", 0),
+		ifaces.NewInterface(3, "foo", [6]uint8{}, 0, "", 0),
+		ifaces.NewInterface(4, "bar", [6]uint8{}, 0, "", 0),
 	}
 
 	go func() {
@@ -214,6 +217,6 @@ func testAgent(t *testing.T, flows map[ebpf.BpfFlowId]model.BpfFlowContent) []*m
 		require.Equal(t, common.StatusStarted, agent.status)
 	})
 
-	ebpfTracer.AppendLookupResults(flows)
+	ebpfTracer.AppendLookupResults(fl)
 	return export.Get(t, timeout)
 }

@@ -68,12 +68,13 @@
 
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index,
-                                             u8 direction) {
+                                             u64 netns_cookie, u8 direction) {
     if (value->nb_observed_intf >= MAX_OBSERVED_INTERFACES) {
         return 1;
     }
     for (u8 i = 0; i < value->nb_observed_intf; i++) {
-        if (value->observed_intf[i] == if_index) {
+        if (value->observed_intf[i] == if_index &&
+            value->observed_netns_cookie[i] == netns_cookie) {
             if (value->observed_direction[i] != direction &&
                 value->observed_direction[i] != OBSERVED_DIRECTION_BOTH) {
                 // Same interface seen on a different direction => mark as both directions
@@ -84,18 +85,20 @@ static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt,
         }
     }
     value->observed_intf[value->nb_observed_intf] = if_index;
+    value->observed_netns_cookie[value->nb_observed_intf] = netns_cookie;
     value->observed_direction[value->nb_observed_intf] = direction;
     value->nb_observed_intf++;
     return 0;
 }
 
 static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, pkt_info *pkt,
-                                                 u64 len, u32 sampling, u32 if_index, u8 direction,
-                                                 tls_info *tls) {
-    // Count only packets seen from the same interface as previously to avoid duplicate counts
+                                                 u64 len, u32 sampling, u32 if_index,
+                                                 u64 netns_cookie, u8 direction, tls_info *tls) {
+    // Count only packets seen from the same interface as previously to avoid duplicate counts.
     int maxReached = 0;
     bpf_spin_lock(&aggregate_flow->lock);
-    if (aggregate_flow->if_index_first_seen == if_index) {
+    if (aggregate_flow->if_index_first_seen == if_index &&
+        aggregate_flow->netns_cookie_first_seen == netns_cookie) {
         aggregate_flow->packets += 1;
         aggregate_flow->bytes += len;
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
@@ -121,7 +124,7 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
         // Only add info that we've seen this interface (we can also update end time & flags)
         aggregate_flow->end_mono_time_ts = pkt->current_ts;
         aggregate_flow->flags |= pkt->flags;
-        maxReached = add_observed_intf(aggregate_flow, pkt, if_index, direction);
+        maxReached = add_observed_intf(aggregate_flow, pkt, if_index, netns_cookie, direction);
     }
     bpf_spin_unlock(&aggregate_flow->lock);
     if (maxReached > 0) {
@@ -212,15 +215,20 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         track_quic_packet(skb, &pkt, eth_protocol, direction, len);
     }
 
+    // Network namespace cookie of the interface capturing this packet. Gated by a load-time
+    // constant so the helper is dead-code-eliminated when off.
+    u64 netns_cookie = enable_netns_cookie ? bpf_get_netns_cookie(skb) : 0;
+
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {
-        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, direction,
-                             &tls);
+        update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex, netns_cookie,
+                             direction, &tls);
     } else {
         // Key does not exist in the map, and will need to create a new entry.
         flow_metrics new_flow;
         __builtin_memset(&new_flow, 0, sizeof(new_flow));
         new_flow.if_index_first_seen = skb->ifindex;
+        new_flow.netns_cookie_first_seen = netns_cookie;
         new_flow.direction_first_seen = direction;
         new_flow.packets = 1;
         new_flow.bytes = len;
@@ -244,7 +252,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
                     (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
                 if (aggregate_flow != NULL) {
                     update_existing_flow(aggregate_flow, &pkt, len, flow_sampling, skb->ifindex,
-                                         direction, &tls);
+                                         netns_cookie, direction, &tls);
                 } else {
                     if (trace_messages) {
                         bpf_printk("failed to update an exising flow\n");

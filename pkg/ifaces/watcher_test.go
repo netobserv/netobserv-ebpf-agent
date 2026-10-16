@@ -19,10 +19,9 @@ func TestWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	watcher := NewWatcher(10, &fakeNetnsResolver{}, metrics.NoOp())
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
-	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+	watcher.interfaces = func(_ netns.NsHandle, _ string, _ uint64) ([]Interface, error) {
 		return []Interface{
 			simpleInterface(1, "foo", macFoo),
 			simpleInterface(2, "bar", macBar),

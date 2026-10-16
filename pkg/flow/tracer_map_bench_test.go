@@ -69,7 +69,7 @@ func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.BpfFlowId]model.BpfFlo
 //
 // Sizes are chosen to bracket realistic CACHE_MAX_FLOWS values.
 func BenchmarkEvictFlows(b *testing.B) {
-	model.SetInterfaceNamer(func(ifIndex int, _ model.MacAddr) string {
+	model.SetInterfaceNamer(func(ifIndex int, _ uint64, _ model.MacAddr) string {
 		switch ifIndex {
 		case 2:
 			return "eth0"

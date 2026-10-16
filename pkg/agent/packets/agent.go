@@ -119,7 +119,7 @@ func newAgent(
 ) (*Agent, error) {
 	ringbufTracer := NewRingbufTracer(fetcher, cfg.CacheActiveTimeout)
 	packetbuffer := NewBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
-	informer := common.CreateInformer(cfg, metrics.NoOp())
+	informer := common.CreateInformer(cfg, ifaces.NewDisabledResolver(), metrics.NoOp())
 
 	a := &Agent{
 		ebpf:              fetcher,
@@ -219,7 +219,7 @@ func (a *Agent) Status() common.Status {
 func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.PacketRecord], error) {
 	if !a.cfg.EbpfProgramManagerMode {
 		plog.Debug("registering interfaces' listener in background")
-		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, metrics.NoOp(), a.informer)
+		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, metrics.NoOp())
 		if err != nil {
 			return nil, err
 		}

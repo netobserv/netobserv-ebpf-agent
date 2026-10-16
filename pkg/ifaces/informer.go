@@ -38,8 +38,12 @@ type Event struct {
 
 type Interface struct {
 	InterfaceKey
-	MAC   [6]uint8
-	NetNS netns.NsHandle
+	MAC [6]uint8
+	// NetNSCookie is the kernel network namespace cookie (bpf_get_netns_cookie) of the
+	// interface's namespace. It is 0 when netns-cookie tracking is disabled, so that it
+	// matches the value carried by flows and interface lookups stay consistent.
+	NetNSCookie uint64
+	NetNS       netns.NsHandle
 }
 
 func (i Interface) String() string {
@@ -56,15 +60,16 @@ func (k InterfaceKey) String() string {
 	return fmt.Sprintf("index=%d name=%s ns=%s", k.Index, k.Name, k.NSName)
 }
 
-func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string) Interface {
+func NewInterface(index int, name string, mac [6]uint8, netNS netns.NsHandle, nsname string, netnsCookie uint64) Interface {
 	return Interface{
 		InterfaceKey: InterfaceKey{
 			Index:  index,
 			Name:   name,
 			NSName: nsname,
 		},
-		MAC:   mac,
-		NetNS: netNS,
+		MAC:         mac,
+		NetNS:       netNS,
+		NetNSCookie: netnsCookie,
 	}
 }
 
@@ -75,7 +80,7 @@ type Informer interface {
 	Subscribe(ctx context.Context) (<-chan Event, error)
 }
 
-func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
+func netInterfaces(nsh netns.NsHandle, ns string, netnsCookie uint64) ([]Interface, error) {
 	handle, err := netlink.NewHandleAt(nsh)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create handle for netns (%s): %w", nsh.String(), err)
@@ -105,7 +110,10 @@ func netInterfaces(nsh netns.NsHandle, ns string) ([]Interface, error) {
 				log.WithField("link", link).Infof("ignoring link with invalid MAC: %s", err.Error())
 				continue
 			}
-			intfs = append(intfs, NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns))
+			intfs = append(
+				intfs,
+				NewInterface(link.Attrs().Index, link.Attrs().Name, mac, nsh, ns, netnsCookie),
+			)
 		}
 	}
 	return intfs, nil
