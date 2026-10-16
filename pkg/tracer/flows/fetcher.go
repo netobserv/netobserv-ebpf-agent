@@ -8,6 +8,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
@@ -64,6 +65,7 @@ type Fetcher struct {
 	pinDir                      string
 	config                      *tracer.FetcherConfig
 	metrics                     *metrics.Metrics
+	endpointMapInfoOnce         sync.Once
 }
 
 //nolint:cyclop // BPF load paths branch on kernel features and optional hooks.
@@ -305,6 +307,12 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			}
 		}
 
+		if err := loadPinnedMapInto("endpoint IDs", ebpf.BpfMapEndpointIds, &objects.BpfMaps.EndpointIds); err != nil {
+			return nil, err
+		}
+		if err := loadPinnedMapInto("endpoint ID counter", ebpf.BpfMapEndpointIdCounter, &objects.BpfMaps.EndpointIdCounter); err != nil {
+			return nil, err
+		}
 		if err := loadPinnedMapInto("endpoint IDs to IPs", ebpf.BpfMapEndpointIps, &objects.BpfMaps.EndpointIps); err != nil {
 			return nil, err
 		}
