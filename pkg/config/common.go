@@ -131,11 +131,25 @@ type Common struct {
 	// because the Kafka or GRPC endpoint is slow), incoming flow batches will be dropped. If unset,
 	// its value is the same as the BUFFERS_LENGTH property.
 	ExporterBufferLength int `env:"EXPORTER_BUFFER_LENGTH"`
-	// CacheMaxFlows specifies how many flows can be accumulated in the accounting cache before
-	// being flushed for its later export
+	// CacheMaxFlows specifies how many flows can be accumulated in the BPF flows maps between evictions.
 	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"5000"`
-	// CacheActiveTimeout specifies the maximum duration that flows are kept in the accounting
-	// cache before being flushed for its later export
+	// CacheMaxDNSFlows specifies how many flows can be accumulated in the BPF DNS maps between evictions.
+	// It defaults to CacheMaxFlows / 10.
+	CacheMaxDNSFlows int `env:"CACHE_MAX_DNS_FLOWS"`
+	// CacheMaxNetworkEventFlows specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
+	// It defaults to CacheMaxFlows / 2.
+	CacheMaxNetworkEventFlows int `env:"CACHE_MAX_NETWORK_EVENT_FLOWS"`
+	// CacheMaxPktDropsFlows specifies how many flows can be accumulated in the BPF PktDrops maps between evictions.
+	// It defaults to CacheMaxFlows / 2.
+	CacheMaxPktDropsFlows int `env:"CACHE_MAX_PKT_DROPS_FLOWS"`
+	// CacheMaxXlatFlows specifies how many flows can be accumulated in the BPF Xlat maps between evictions.
+	// It defaults to CacheMaxFlows / 2.
+	CacheMaxXlatFlows int `env:"CACHE_MAX_XLAT_FLOWS"`
+	// CacheMaxAdditionalFlows specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions.
+	// It defaults to CacheMaxFlows.
+	CacheMaxAdditionalFlows int `env:"CACHE_MAX_ADDITIONAL_FLOWS"`
+	// CacheActiveTimeout specifies the duration between two eviction cycles, during which flows are
+	// accumulated in cache.
 	CacheActiveTimeout time.Duration `env:"CACHE_ACTIVE_TIMEOUT" envDefault:"5s"`
 	// Direction allows selecting which flows to trace according to its direction. Accepted values
 	// are "ingress", "egress" or "both" (default).

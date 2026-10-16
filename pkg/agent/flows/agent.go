@@ -73,9 +73,6 @@ type ebpfFlowFetcher interface {
 func New(cfg *config.Agent) (*Agent, error) {
 	alog.Info("initializing Flows agent")
 
-	// manage deprecated configs
-	config.ManageDeprecatedConfigs(cfg)
-
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := common.FetchAgentIP(cfg)
 	if err != nil {
@@ -164,7 +161,13 @@ func newAgent(
 	samplingGauge.Set(float64(cfg.Sampling))
 
 	mapCapacityGauge := m.CreateBPFMapCapacity()
-	mapCapacityGauge.Set(float64(cfg.CacheMaxFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameFlows).Set(float64(cfg.CacheMaxFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameDNS).Set(float64(cfg.CacheMaxDNSFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameDrops).Set(float64(cfg.CacheMaxPktDropsFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameNetEvents).Set(float64(cfg.CacheMaxNetworkEventFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameXlat).Set(float64(cfg.CacheMaxXlatFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameAdditional).Set(float64(cfg.CacheMaxAdditionalFlows))
+	mapCapacityGauge.WithLabelValues(metrics.MapNameQUIC).Set(65_536) // currently not configurable
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.Flows.StaleEntriesEvictTimeout, m, s, cfg.Flows.EnableUDNMapping)
 	var rbTracer *flow.RingBufTracer

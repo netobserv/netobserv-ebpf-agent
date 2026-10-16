@@ -50,6 +50,16 @@ const (
 	TypeHistogram metricType = "histogram"
 )
 
+const (
+	MapNameFlows      = "flowmap"
+	MapNameDNS        = "dnsmap"
+	MapNameDrops      = "pktdropsmap"
+	MapNameNetEvents  = "networkeventsmap"
+	MapNameXlat       = "xlatmap"
+	MapNameAdditional = "additionalmap"
+	MapNameQUIC       = "quicmap"
+)
+
 var allMetrics = []MetricDefinition{}
 
 func defineMetric(name, help string, t metricType, labels ...string) MetricDefinition {
@@ -136,8 +146,9 @@ var (
 	)
 	bpfMapCapacity = defineMetric(
 		"bpf_map_capacity",
-		"Configured BPF maximum map size (CACHE_MAX_FLOWS)",
+		"Configured BPF maximum map size (CACHE_MAX_FLOWS, CACHE_MAX_DNS_FLOWS, etc.)",
 		TypeGauge,
+		"name",
 	)
 	errorsCounter = defineMetric(
 		"errors_total",
@@ -393,8 +404,8 @@ func (m *Metrics) CreateSamplingInterval() prometheus.Gauge {
 	return m.NewGauge(&samplingInterval)
 }
 
-func (m *Metrics) CreateBPFMapCapacity() prometheus.Gauge {
-	return m.NewGauge(&bpfMapCapacity)
+func (m *Metrics) CreateBPFMapCapacity() *prometheus.GaugeVec {
+	return m.NewGaugeVec(&bpfMapCapacity)
 }
 
 func (m *Metrics) CreateInterfaceBufferGauge(name string, f func() float64) {
