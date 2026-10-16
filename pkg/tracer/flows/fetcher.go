@@ -984,7 +984,7 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 		}
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
-	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
+	met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameFlows).Set(float64(countMain))
 	return flows, true
 }
 
@@ -997,7 +997,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateDNS(&dns[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("dnsmap").Set(float64(countDNS))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDNS).Set(float64(countDNS))
 	}
 	if m.config.Flows.EnablePktDrops {
 		var pktDrops []ebpf.FlowsBpfPktDropMetrics
@@ -1006,7 +1006,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateDrops(&pktDrops[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("pktdropsmap").Set(float64(countDrops))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDrops).Set(float64(countDrops))
 	}
 	if m.config.Flows.EnableNetworkEventsMonitoring {
 		var netev []ebpf.FlowsBpfNetworkEventsMetrics
@@ -1015,7 +1015,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateNetworkEvents(&netev[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("networkeventsmap").Set(float64(countNetEv))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameNetEvents).Set(float64(countNetEv))
 	}
 	if m.config.Flows.EnablePktTranslationTracking {
 		var xlat []ebpf.FlowsBpfXlatMetrics
@@ -1024,7 +1024,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateXlat(&xlat[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("xlatmap").Set(float64(countXlat))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameXlat).Set(float64(countXlat))
 	}
 	if m.config.Flows.EnableRTT || m.config.Flows.EnableIPsecTracking {
 		var addit []ebpf.FlowsBpfAdditionalMetrics
@@ -1033,7 +1033,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateAdditional(&addit[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameAdditional).Set(float64(countAddit))
 		if m.config.Flows.EnableIPsecTracking {
 			// Correlate IPsec partials (inner xfrm 5-tuple) with on-wire ESP/NAT-T flows.
 			mergeIPsecOrphans(flows)
@@ -1046,7 +1046,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 				flow.AccumulateQuic(&quic[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("quicmap").Set(float64(countQuic))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameQUIC).Set(float64(countQuic))
 	}
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 }

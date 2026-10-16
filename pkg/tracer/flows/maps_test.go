@@ -54,8 +54,15 @@ func TestConfigureFlowMaps(t *testing.T) {
 				expected.Maps[name].MaxEntries = spec.Maps[name].MaxEntries
 			}
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{
-				Common: config.Common{CacheMaxFlows: 5000},
-				Flows:  tc.features,
+				Common: config.Common{
+					CacheMaxFlows:             5000,
+					CacheMaxDNSFlows:          5000,
+					CacheMaxPktDropsFlows:     5000,
+					CacheMaxNetworkEventFlows: 5000,
+					CacheMaxXlatFlows:         5000,
+					CacheMaxAdditionalFlows:   5000,
+				},
+				Flows: tc.features,
 			}}
 			var filter *attach.Filter
 			if tc.filter {

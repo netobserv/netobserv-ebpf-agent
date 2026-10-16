@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/caarlos0/env/v11"
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
 	configpackets "github.com/netobserv/netobserv-ebpf-agent/pkg/config/packets"
 )
@@ -12,18 +13,11 @@ type Agent struct {
 	Packets configpackets.Features
 }
 
-// ManageDeprecatedConfigs migrates deprecated environment variable names.
-func ManageDeprecatedConfigs(cfg *Agent) {
-	if len(cfg.FlowsTargetHost) != 0 {
-		clog.Infof("Using deprecated FlowsTargetHost %s", cfg.FlowsTargetHost)
-		cfg.TargetHost = cfg.FlowsTargetHost
+func FromEnv() (*Agent, error) {
+	cfg := Agent{}
+	if err := env.Parse(&cfg); err != nil {
+		return nil, err
 	}
-
-	if cfg.FlowsTargetPort != 0 {
-		clog.Infof("Using deprecated FlowsTargetPort %d", cfg.FlowsTargetPort)
-		cfg.TargetPort = cfg.FlowsTargetPort
-	} else if cfg.PCAServerPort != 0 {
-		clog.Infof("Using deprecated PCAServerPort %d", cfg.PCAServerPort)
-		cfg.TargetPort = cfg.PCAServerPort
-	}
+	cfg.Normalize()
+	return &cfg, nil
 }
