@@ -92,11 +92,11 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 
 		// Resize maps according to user-provided configuration
 		spec.Maps[ebpf.BpfMapAggregatedFlows].MaxEntries = uint32(cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, cfg.Flows.EnableDNSTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsNetworkEvents, cfg.Flows.EnableNetworkEventsMonitoring, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsPktDrop, cfg.Flows.EnablePktDrops, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsXlat, cfg.Flows.EnablePktTranslationTracking, cfg.CacheMaxFlows)
-		sizeMapForFeature(spec, ebpf.BpfMapAdditionalFlowMetrics, cfg.Flows.EnableRTT || cfg.Flows.EnableIPsecTracking, cfg.CacheMaxFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsDns, cfg.Flows.EnableDNSTracking, cfg.CacheMaxDNSFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsNetworkEvents, cfg.Flows.EnableNetworkEventsMonitoring, cfg.CacheMaxNetworkEventFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsPktDrop, cfg.Flows.EnablePktDrops, cfg.CacheMaxPktDropsFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAggregatedFlowsXlat, cfg.Flows.EnablePktTranslationTracking, cfg.CacheMaxXlatFlows)
+		sizeMapForFeature(spec, ebpf.BpfMapAdditionalFlowMetrics, cfg.Flows.EnableRTT || cfg.Flows.EnableIPsecTracking, cfg.CacheMaxAdditionalFlows)
 
 		ringbufMinSize := uint32(os.Getpagesize())
 
