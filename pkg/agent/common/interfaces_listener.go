@@ -48,13 +48,13 @@ func CreateInformer(cfg *config.Agent, m *metrics.Metrics) ifaces.Informer {
 	switch cfg.ListenInterfaces {
 	case config.ListenPoll:
 		ilog.WithField("period", cfg.ListenPollPeriod).Info("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.ListenPollPeriod, cfg.BuffersLength)
+		informer = ifaces.NewPoller(cfg.Common.EnableSecondaryNetworks, cfg.ListenPollPeriod, cfg.BuffersLength)
 	case config.ListenWatch:
 		ilog.Info("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(cfg.Common.EnableSecondaryNetworks, cfg.BuffersLength, m)
 	default:
 		ilog.WithField("providedValue", cfg.ListenInterfaces).Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(cfg.Common.EnableSecondaryNetworks, cfg.BuffersLength, m)
 	}
 
 	return informer

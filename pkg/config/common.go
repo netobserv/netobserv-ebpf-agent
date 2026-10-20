@@ -228,6 +228,9 @@ type Common struct {
 	EnableOpenSSLTracking bool `env:"ENABLE_OPENSSL_TRACKING" envDefault:"false"`
 	// OpenSSLPath is the default path to the libssl shared library for uprobe attachment.
 	OpenSSLPath string `env:"OPENSSL_PATH" envDefault:"/usr/lib64/libssl.so.3"`
+	// EnableSecondaryNetworks enables capturing flows on all network interfaces
+	EnableSecondaryNetworks bool `env:"ENABLE_SECONDARY_NETWORKS" envDefault:"false"`
+
 	/* Deprecated configs are listed below this line
 	 * See manageDeprecatedConfigs function for details
 	 */

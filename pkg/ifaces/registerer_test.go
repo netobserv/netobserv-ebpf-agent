@@ -17,8 +17,75 @@ func TestRegisterer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10, metrics.NoOp())
+	watcher := NewWatcher(true, 10, metrics.NoOp())
 	watcher.netNamespaces = defaultNetNSForTest
+	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
+	require.NoError(t, err)
+
+	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
+	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		return []Interface{
+			simpleInterface(1, "foo", macFoo),
+			simpleInterface(2, "bar", macBar),
+			simpleInterface(3, "baz", macBaz),
+		}, nil
+	}
+	inputLinks := make(chan netlink.LinkUpdate, 10)
+	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
+		go func() {
+			for link := range inputLinks {
+				ch <- link
+			}
+		}()
+		return nil
+	}
+
+	outputEvents, err := registry.Subscribe(ctx)
+	require.NoError(t, err)
+
+	// initial set of fetched elements
+	for i := 0; i < 3; i++ {
+		getEvent(t, outputEvents, timeout)
+	}
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo"}, registry.ifaces[1])
+	assert.Equal(t, map[[6]uint8]string{macBar: "bar"}, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+
+	// updates
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
+	for i := 0; i < 2; i++ {
+		getEvent(t, outputEvents, timeout)
+	}
+
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
+
+	inputLinks <- upAndRunning("fiu", 1, macOverlapped[:], netns.None())
+	getEvent(t, outputEvents, timeout)
+
+	assert.Equal(t, map[[6]uint8]string{macFoo: "foo", macOverlapped: "fiu"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
+
+	inputLinks <- down("foo", 1, macFoo[:], netns.None())
+	getEvent(t, outputEvents, timeout)
+
+	assert.Equal(t, map[[6]uint8]string{macOverlapped: "fiu"}, registry.ifaces[1])
+	assert.Nil(t, registry.ifaces[2])
+	assert.Equal(t, map[[6]uint8]string{macBaz: "baz"}, registry.ifaces[3])
+	assert.Equal(t, map[[6]uint8]string{macBae: "bae"}, registry.ifaces[4])
+}
+
+func TestRegistererNoNetNs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	watcher := NewWatcher(false, 10, metrics.NoOp())
+	watcher.netNamespaces = nil
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -91,7 +158,7 @@ func TestRegisterer_Lookup(t *testing.T) {
 		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
 	)
 
-	watcher := NewWatcher(10, metrics.NoOp())
+	watcher := NewWatcher(true, 10, metrics.NoOp())
 	watcher.netNamespaces = defaultNetNSForTest
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}}, metrics.NoOp())
 	require.NoError(t, err)
@@ -156,7 +223,7 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10, metrics.NoOp())
+	watcher := NewWatcher(true, 10, metrics.NoOp())
 	watcher.netNamespaces = defaultNetNSForTest
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)

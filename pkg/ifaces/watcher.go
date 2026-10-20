@@ -27,10 +27,11 @@ var log = logrus.WithField("component", "ifaces.Watcher")
 // Watcher uses system's netlink to get real-time information events about network interfaces'
 // addition or removal.
 type Watcher struct {
-	bufLen     int
-	current    map[InterfaceKey]Interface
-	mapSize    int
-	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
+	enableNetNs bool
+	bufLen      int
+	current     map[InterfaceKey]Interface
+	mapSize     int
+	interfaces  func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
 	linkSubscriberAt func(ns netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
@@ -40,9 +41,10 @@ type Watcher struct {
 	netNamespaces    func() ([]string, error)
 }
 
-func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
+func NewWatcher(enableNetNs bool, bufLen int, m *metrics.Metrics) *Watcher {
 	current := map[InterfaceKey]Interface{}
 	w := &Watcher{
+		enableNetNs:      enableNetNs,
 		bufLen:           bufLen,
 		current:          current,
 		interfaces:       netInterfaces,
@@ -57,22 +59,25 @@ func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 	out := make(chan Event, w.bufLen)
-	getNS := w.netNamespaces
-	if getNS == nil {
-		getNS = getNetNS
-	}
-	netns, err := getNS()
-	if err != nil {
-		w.nsDone.Store("", make(chan struct{}))
-		go w.sendUpdates(ctx, "", out)
-	} else {
+	if w.enableNetNs {
+		getNS := w.netNamespaces
+		if getNS == nil {
+			getNS = getNetNS
+		}
+		netns, err := getNS()
+		if err != nil {
+			return nil, err
+		}
 		for _, n := range netns {
 			w.nsDone.Store(n, make(chan struct{}))
 			go w.sendUpdates(ctx, n, out)
 		}
+		// register to get notification when netns is created or deleted and register for link update for new netns
+		w.netnsNotify(ctx, out)
+	} else {
+		w.nsDone.Store("", make(chan struct{}))
+		go w.sendUpdates(ctx, "", out)
 	}
-	// register to get notification when netns is created or deleted and register for link update for new netns
-	w.netnsNotify(ctx, out)
 	return out, nil
 }
 
@@ -193,7 +198,6 @@ func getNetNS() ([]string, error) {
 	log := logrus.WithField("component", "ifaces.Watcher")
 	files, err := os.ReadDir(netnsVolume)
 	if err != nil {
-		log.Warningf("can't detect any network-namespaces err: %v [Ignore if the agent privileged flag is not set]", err)
 		return nil, fmt.Errorf("failed to list network-namespaces: %w", err)
 	}
 	netns := []string{""}
@@ -271,7 +275,7 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 
 	err = w.netnsWatcher.Add(netnsVolume)
 	if err != nil {
-		log.Warningf("failed to add watcher to netns directory err: %v [Ignore if the agent privileged flag is not set]", err)
+		log.WithError(err).Error("failed to add watcher to netns directory")
 	}
 }
 
