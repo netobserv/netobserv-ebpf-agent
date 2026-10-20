@@ -52,9 +52,78 @@ func TestPoller(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	poller := NewPoller(5*time.Millisecond, 10)
+	poller := NewPoller(true, 5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
 	poller.netNamespaces = defaultNetNSForTest
+
+	updates, err := poller.Subscribe(ctx)
+	require.NoError(t, err)
+	// first poll: two interfaces are added
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(1, "foo", macFoo)},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(2, "bar", macBar)},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(4, "bae", macBae)},
+		getEvent(t, updates, timeout))
+	// second poll: one interface is added and another is removed
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(3, "baz", macBaz)},
+		getEvent(t, updates, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(4, "ovlp", macOverlapped)},
+		getEvent(t, updates, timeout))
+	// Order isn't guaranteed for next events, so use assert.ElementsMatch
+	next1 := getEvent(t, updates, timeout)
+	next2 := getEvent(t, updates, timeout)
+	assert.ElementsMatch(t,
+		[]Event{next1, next2},
+		[]Event{
+			{Type: EventDeleted, Interface: simpleInterface(2, "bar", macBar)},
+			{Type: EventDeleted, Interface: simpleInterface(4, "bae", macBae)},
+		},
+	)
+
+	// successive polls: no more events are forwarded
+	time.Sleep(poller.period * 2)
+	select {
+	case ev := <-updates:
+		require.Failf(t, "unexpected event", "%#v", ev)
+	default:
+	}
+	cancel()
+	for ev := range updates {
+		_ = ev
+	}
+}
+
+func TestPollerNoNetNs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// fake net.Interfaces implementation that returns two different sets of
+	// interfaces on successive invocations, with overlapping Index
+	firstInvocation := true
+	var fakeInterfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		if firstInvocation {
+			firstInvocation = false
+			return []Interface{
+				simpleInterface(1, "foo", macFoo),
+				simpleInterface(2, "bar", macBar),
+				simpleInterface(4, "bae", macBae),
+			}, nil
+		}
+		return []Interface{
+			simpleInterface(1, "foo", macFoo),
+			simpleInterface(3, "baz", macBaz),
+			simpleInterface(4, "ovlp", macOverlapped),
+		}, nil
+	}
+	poller := NewPoller(false, 5*time.Millisecond, 10)
+	poller.interfaces = fakeInterfaces
+	poller.netNamespaces = nil
 
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)

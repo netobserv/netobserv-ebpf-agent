@@ -110,6 +110,7 @@ The following environment variables are available to configure the NetObserv eBP
 * `TLS_CURVE_PREFERENCES` (default: unset). Comma-separated list of TLS curve IDs (decimal uint16) for key exchange (e.g. `23` for P-256, `24` for P-384, `29` for X25519).
 * `FLOW_FILTER_RULES` (default: unset). Filtering rules, in JSON format. See [docs](./flow_filtering.md) for details.
 * `PREFERRED_INTERFACE_FOR_MAC_PREFIX` (default: unset). It is a comma-separated list of key=value pairs, allowing to specify a preference when retrieving interface names per flow in case of index collision, when using multiple network namespaces are used. This setting is only used when the interface name could not be found for a given index and MAC. E.g. "0a:58=eth0" (used for ovn-kubernetes).
+* `ENABLE_SECONDARY_NETWORKS` (default: `false`). Set `true` to monitor all network namespaces, thus showing flows on secondary networks. It requires access to host /var/run/netns, and `CAP_SYS_ADMIN`.
 
 ## Development-only variables
 
