@@ -97,9 +97,9 @@ var (
 		"source",
 		"reason",
 	)
-	filterFlows = defineMetric(
-		"filtered_flows_total",
-		"Number of filtered flows",
+	filteredPackets = defineMetric(
+		"filtered_packets_total",
+		"Number of filtered packets",
 		TypeCounter,
 		"source",
 		"reason",
@@ -193,7 +193,7 @@ type Metrics struct {
 	EvictedFlowsCounter      *EvictionCounter
 	EvictedPacketsCounter    *EvictionCounter
 	DroppedFlowsCounter      *EvictionCounter
-	FilteredFlowsCounter     *EvictionCounter
+	FilteredPacketsCounter   *EvictionCounter
 	NetworkEventsCounter     *EvictionCounter
 	FlowBufferSizeGauge      *FlowBufferSizeGauge
 	Errors                   *ErrorCounter
@@ -209,7 +209,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.EvictedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedFlowsTotal)}
 	m.EvictedPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&evictedPktTotal)}
 	m.DroppedFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&droppedFlows)}
-	m.FilteredFlowsCounter = &EvictionCounter{vec: m.NewCounterVec(&filterFlows)}
+	m.FilteredPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&filteredPackets)}
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
