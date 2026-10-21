@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -30,17 +29,17 @@ type Watcher struct {
 	bufLen     int
 	current    map[InterfaceKey]Interface
 	mapSize    int
-	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
+	interfaces func(handle netns.NsHandle, ns string, netnsCookie uint64) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
 	linkSubscriberAt func(ns netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
 	mutex            *sync.Mutex
 	netnsWatcher     *fsnotify.Watcher
 	nsDone           sync.Map
-	netNamespaces    func() ([]string, error)
+	netnsResolver    NetnsResolver
 }
 
-func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
+func NewWatcher(bufLen int, netnsResolver NetnsResolver, m *metrics.Metrics) *Watcher {
 	current := map[InterfaceKey]Interface{}
 	w := &Watcher{
 		bufLen:           bufLen,
@@ -50,6 +49,7 @@ func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
 		mutex:            &sync.Mutex{},
 		netnsWatcher:     &fsnotify.Watcher{},
 		nsDone:           sync.Map{},
+		netnsResolver:    netnsResolver,
 	}
 	m.CreateInterfaceBufferGauge("watcher", func() float64 { return float64(w.mapSize) })
 	return w
@@ -57,11 +57,7 @@ func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
 	out := make(chan Event, w.bufLen)
-	getNS := w.netNamespaces
-	if getNS == nil {
-		getNS = getNetNS
-	}
-	netns, err := getNS()
+	netns, err := w.netnsResolver.getNetNS()
 	if err != nil {
 		w.nsDone.Store("", make(chan struct{}))
 		go w.sendUpdates(ctx, "", out)
@@ -123,10 +119,11 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 		return
 	}
 
-	// before sending netlink updates, send all the existing interfaces at the moment of starting
-	// the Watcher
+	cookie := w.netnsResolver.getCookie(netnsHandle)
+
+	// before sending netlink updates, send all the existing interfaces at the moment of starting the Watcher
 	if netnsHandle.IsOpen() || netnsHandle.Equal(netns.None()) {
-		if ifaces, err := w.interfaces(netnsHandle, ns); err != nil {
+		if ifaces, err := w.interfaces(netnsHandle, ns, cookie); err != nil {
 			log.WithError(err).Error("can't fetch network interfaces. You might be missing flows")
 		} else {
 			for _, iface := range ifaces {
@@ -150,7 +147,7 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 			log.WithField("link", link).Debugf("ignoring link update with invalid MAC: %s", err.Error())
 			continue
 		}
-		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns)
+		iface := NewInterface(attrs.Index, attrs.Name, mac, netnsHandle, ns, cookie)
 		w.mutex.Lock()
 		if link.Flags&(syscall.IFF_UP|syscall.IFF_RUNNING) != 0 && attrs.OperState == netlink.OperUp {
 			log.WithFields(logrus.Fields{
@@ -187,27 +184,6 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 		w.mapSize = len(w.current)
 		w.mutex.Unlock()
 	}
-}
-
-func getNetNS() ([]string, error) {
-	log := logrus.WithField("component", "ifaces.Watcher")
-	files, err := os.ReadDir(netnsVolume)
-	if err != nil {
-		log.Warningf("can't detect any network-namespaces err: %v [Ignore if the agent privileged flag is not set]", err)
-		return nil, fmt.Errorf("failed to list network-namespaces: %w", err)
-	}
-	netns := []string{""}
-	if len(files) == 0 {
-		log.WithField("netns", files).Debug("empty network-namespaces list")
-		return netns, nil
-	}
-	for _, f := range files {
-		ns := f.Name()
-		netns = append(netns, ns)
-		log.WithFields(logrus.Fields{"netns": ns}).Debug("Detected network-namespace")
-	}
-
-	return netns, nil
 }
 
 func (w *Watcher) handleEvent(ctx context.Context, event fsnotify.Event, out chan Event) {

@@ -14,7 +14,7 @@ import (
 func BenchmarkNewRecord(b *testing.B) {
 	// Use a realistic interface namer (returns a stable string per ifindex)
 	// rather than the default fmt.Sprintf-based placeholder.
-	SetInterfaceNamer(func(ifIndex int, _ MacAddr) string {
+	SetInterfaceNamer(func(ifIndex int, _ uint64, _ MacAddr) string {
 		switch ifIndex {
 		case 2:
 			return "eth0"
@@ -40,9 +40,9 @@ func BenchmarkNewRecord(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
+
 	var sink *Record
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		idx := i & 1023
 		sink = NewRecord(keys[idx], &contents[idx], now, mono, nil, nil)
 	}
@@ -55,8 +55,8 @@ func BenchmarkAccumulateBase(b *testing.B) {
 	base := benchFlowMetrics(1)
 	other := benchFlowMetrics(2)
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		p := base
 		AccumulateBase(&p, &other)
 	}
