@@ -16,6 +16,10 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+const (
+	netnsVolume = "/var/run/netns"
+)
+
 var ilog = logrus.WithField("component", "agent.Interfaces")
 
 // TCAttacher registers eBPF TC/TCX hooks on network interfaces.
@@ -44,17 +48,21 @@ type retriableEvent struct {
 
 func CreateInformer(cfg *config.Agent, m *metrics.Metrics) ifaces.Informer {
 	// configure informer for new interfaces
+	var path string
+	if cfg.Common.EnableSecondaryNetworks {
+		path = netnsVolume
+	}
 	var informer ifaces.Informer
 	switch cfg.ListenInterfaces {
 	case config.ListenPoll:
 		ilog.WithField("period", cfg.ListenPollPeriod).Info("listening for new interfaces: use polling")
-		informer = ifaces.NewPoller(cfg.Common.EnableSecondaryNetworks, cfg.ListenPollPeriod, cfg.BuffersLength)
+		informer = ifaces.NewPoller(path, cfg.ListenPollPeriod, cfg.BuffersLength)
 	case config.ListenWatch:
 		ilog.Info("listening for new interfaces: use watching")
-		informer = ifaces.NewWatcher(cfg.Common.EnableSecondaryNetworks, cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(path, cfg.BuffersLength, m)
 	default:
 		ilog.WithField("providedValue", cfg.ListenInterfaces).Warn("wrong interface listen method. Using file watcher as default")
-		informer = ifaces.NewWatcher(cfg.Common.EnableSecondaryNetworks, cfg.BuffersLength, m)
+		informer = ifaces.NewWatcher(path, cfg.BuffersLength, m)
 	}
 
 	return informer

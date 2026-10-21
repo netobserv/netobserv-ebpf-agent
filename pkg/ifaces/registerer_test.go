@@ -17,8 +17,9 @@ func TestRegisterer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(true, 10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	watcher := NewWatcher(netnsPath, 10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -84,8 +85,7 @@ func TestRegistererNoNetNs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(false, 10, metrics.NoOp())
-	watcher.netNamespaces = nil
+	watcher := NewWatcher("", 10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -158,8 +158,9 @@ func TestRegisterer_Lookup(t *testing.T) {
 		macMadeUpOVN = [6]uint8{0x0a, 0x58, 0x64, 0x58, 0x00, 0x07}
 	)
 
-	watcher := NewWatcher(true, 10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	watcher := NewWatcher(netnsPath, 10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10, PreferredInterfaceForMACPrefix: "0a:58=eth0"}}, metrics.NoOp())
 	require.NoError(t, err)
 
@@ -223,8 +224,9 @@ func TestRegisterer_LookupRace(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(true, 10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	watcher := NewWatcher(netnsPath, 10, metrics.NoOp())
 	registry, err := NewRegisterer(watcher, &config.Agent{Common: config.Common{BuffersLength: 10}}, metrics.NoOp())
 	require.NoError(t, err)
 

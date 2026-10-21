@@ -18,16 +18,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-const (
-	netnsVolume = "/var/run/netns"
-)
-
 var log = logrus.WithField("component", "ifaces.Watcher")
 
 // Watcher uses system's netlink to get real-time information events about network interfaces'
 // addition or removal.
 type Watcher struct {
-	enableNetNs bool
+	netnsVolume string
 	bufLen      int
 	current     map[InterfaceKey]Interface
 	mapSize     int
@@ -38,13 +34,12 @@ type Watcher struct {
 	mutex            *sync.Mutex
 	netnsWatcher     *fsnotify.Watcher
 	nsDone           sync.Map
-	netNamespaces    func() ([]string, error)
 }
 
-func NewWatcher(enableNetNs bool, bufLen int, m *metrics.Metrics) *Watcher {
+func NewWatcher(netnsVolume string, bufLen int, m *metrics.Metrics) *Watcher {
 	current := map[InterfaceKey]Interface{}
 	w := &Watcher{
-		enableNetNs:      enableNetNs,
+		netnsVolume:      netnsVolume,
 		bufLen:           bufLen,
 		current:          current,
 		interfaces:       netInterfaces,
@@ -58,26 +53,32 @@ func NewWatcher(enableNetNs bool, bufLen int, m *metrics.Metrics) *Watcher {
 }
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
-	out := make(chan Event, w.bufLen)
-	if w.enableNetNs {
-		getNS := w.netNamespaces
-		if getNS == nil {
-			getNS = getNetNS
-		}
-		netns, err := getNS()
-		if err != nil {
-			return nil, err
-		}
-		for _, n := range netns {
-			w.nsDone.Store(n, make(chan struct{}))
-			go w.sendUpdates(ctx, n, out)
-		}
-		// register to get notification when netns is created or deleted and register for link update for new netns
-		w.netnsNotify(ctx, out)
-	} else {
-		w.nsDone.Store("", make(chan struct{}))
-		go w.sendUpdates(ctx, "", out)
+	netns, err := getNetNS(w.netnsVolume)
+	if err != nil {
+		return nil, err
 	}
+
+	if w.netnsVolume != "" {
+		// Setup fsnotify watcher
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			return nil, fmt.Errorf("can't subscribe fsnotify: %w", err)
+		}
+		if err = watcher.Add(w.netnsVolume); err != nil {
+			_ = watcher.Close()
+			return nil, fmt.Errorf("failed to add watcher to netns directory: %w", err)
+		}
+		w.netnsWatcher = watcher
+	}
+
+	out := make(chan Event, w.bufLen)
+	for _, n := range netns {
+		w.nsDone.Store(n, make(chan struct{}))
+		go w.sendUpdates(ctx, n, out)
+	}
+	// register to get notification when netns is created or deleted and register for link update for new netns
+	w.netnsNotify(ctx, out)
+
 	return out, nil
 }
 
@@ -194,13 +195,20 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	}
 }
 
-func getNetNS() ([]string, error) {
+func getNetNS(netnsVolume string) ([]string, error) {
+	// Empty string stands for default netns
+	netns := []string{""}
+
+	if netnsVolume == "" {
+		// No netns
+		return netns, nil
+	}
+
 	log := logrus.WithField("component", "ifaces.Watcher")
 	files, err := os.ReadDir(netnsVolume)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list network-namespaces: %w", err)
 	}
-	netns := []string{""}
 	if len(files) == 0 {
 		log.WithField("netns", files).Debug("empty network-namespaces list")
 		return netns, nil
@@ -248,11 +256,8 @@ func (w *Watcher) deleteNamespace(ns string) {
 }
 
 func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
-	var err error
-
-	w.netnsWatcher, err = fsnotify.NewWatcher()
-	if err != nil {
-		log.WithError(err).Error("can't subscribe fsnotify")
+	if w.netnsVolume == "" {
+		// netns disabled
 		return
 	}
 	// Start a goroutine to handle netns events
@@ -272,11 +277,6 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 			}
 		}
 	}()
-
-	err = w.netnsWatcher.Add(netnsVolume)
-	if err != nil {
-		log.WithError(err).Error("failed to add watcher to netns directory")
-	}
 }
 
 func macToFixed6(in net.HardwareAddr) ([6]uint8, error) {

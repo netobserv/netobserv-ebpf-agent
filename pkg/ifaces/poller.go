@@ -11,17 +11,16 @@ import (
 // Poller periodically looks for the network interfaces in the system and forwards Event
 // notifications when interfaces are added or deleted.
 type Poller struct {
-	enableNetNs   bool
-	period        time.Duration
-	current       map[InterfaceKey]Interface
-	interfaces    func(handle netns.NsHandle, ns string) ([]Interface, error)
-	bufLen        int
-	netNamespaces func() ([]string, error)
+	netnsVolume string
+	period      time.Duration
+	current     map[InterfaceKey]Interface
+	interfaces  func(handle netns.NsHandle, ns string) ([]Interface, error)
+	bufLen      int
 }
 
-func NewPoller(enableNetNs bool, period time.Duration, bufLen int) *Poller {
+func NewPoller(netnsVolume string, period time.Duration, bufLen int) *Poller {
 	return &Poller{
-		enableNetNs: enableNetNs,
+		netnsVolume: netnsVolume,
 		period:      period,
 		bufLen:      bufLen,
 		interfaces:  netInterfaces,
@@ -30,22 +29,16 @@ func NewPoller(enableNetNs bool, period time.Duration, bufLen int) *Poller {
 }
 
 func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
-	out := make(chan Event, np.bufLen)
-	if np.enableNetNs {
-		getNS := np.netNamespaces
-		if getNS == nil {
-			getNS = getNetNS
-		}
-		netns, err := getNS()
-		if err != nil {
-			return nil, err
-		}
-		for _, n := range netns {
-			go np.pollForEvents(ctx, n, out)
-		}
-	} else {
-		go np.pollForEvents(ctx, "", out)
+	netns, err := getNetNS(np.netnsVolume)
+	if err != nil {
+		return nil, err
 	}
+
+	out := make(chan Event, np.bufLen)
+	for _, n := range netns {
+		go np.pollForEvents(ctx, n, out)
+	}
+
 	return out, nil
 }
 
