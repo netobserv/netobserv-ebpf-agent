@@ -19,8 +19,71 @@ func TestWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	watcher := NewWatcher(netnsPath, 10, metrics.NoOp())
+	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
+	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
+		return []Interface{
+			simpleInterface(1, "foo", macFoo),
+			simpleInterface(2, "bar", macBar),
+			simpleInterface(3, "baz", macBaz),
+		}, nil
+	}
+	inputLinks := make(chan netlink.LinkUpdate, 10)
+	watcher.linkSubscriberAt = func(_ netns.NsHandle, ch chan<- netlink.LinkUpdate, _ <-chan struct{}) error {
+		go func() {
+			for link := range inputLinks {
+				ch <- link
+			}
+		}()
+		return nil
+	}
+
+	outputEvents, err := watcher.Subscribe(ctx)
+	require.NoError(t, err)
+
+	// initial set of fetched elements
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(1, "foo", macFoo)},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(2, "bar", macBar)},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(3, "baz", macBaz)},
+		getEvent(t, outputEvents, timeout))
+
+	// updates
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
+	assert.Equal(t,
+		Event{Type: EventAdded, Interface: simpleInterface(4, "bae", macBae)},
+		getEvent(t, outputEvents, timeout))
+	assert.Equal(t,
+		Event{Type: EventDeleted, Interface: simpleInterface(2, "bar", macBar)},
+		getEvent(t, outputEvents, timeout))
+
+	// repeated updates that do not involve a change in the current track of interfaces
+	// will be ignored
+	inputLinks <- upAndRunning("bae", 4, macBae[:], netns.None())
+	inputLinks <- upAndRunning("foo", 1, macFoo[:], netns.None())
+	inputLinks <- down("bar", 2, macBar[:], netns.None())
+	inputLinks <- down("eth0", 3, macBaz[:], netns.None())
+
+	select {
+	case ev := <-outputEvents:
+		require.Failf(t, "unexpected event", "%#v", ev)
+	default:
+		// ok!
+	}
+}
+
+func TestWatcherNoNetNs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	watcher := NewWatcher("", 10, metrics.NoOp())
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{
