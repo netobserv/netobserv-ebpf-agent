@@ -19,8 +19,9 @@ func TestWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(true, 10, metrics.NoOp())
-	watcher.netNamespaces = defaultNetNSForTest
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	watcher := NewWatcher(netnsPath, 10, metrics.NoOp())
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{
@@ -82,8 +83,7 @@ func TestWatcherNoNetNs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	watcher := NewWatcher(false, 10, metrics.NoOp())
-	watcher.netNamespaces = nil
+	watcher := NewWatcher("", 10, metrics.NoOp())
 	// mock net.Interfaces and linkSubscriber to control which interfaces are discovered
 	watcher.interfaces = func(_ netns.NsHandle, _ string) ([]Interface, error) {
 		return []Interface{

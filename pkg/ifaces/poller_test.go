@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -22,8 +23,10 @@ var (
 	macOverlapped = [6]uint8{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
 )
 
-func defaultNetNSForTest() ([]string, error) {
-	return []string{""}, nil
+func setupEmptyNetNS(t *testing.T) (string, func()) {
+	dname, err := os.MkdirTemp("", "netns")
+	require.NoError(t, err)
+	return dname, func() { os.RemoveAll(dname) }
 }
 
 func simpleInterface(index int, name string, mac [6]uint8) Interface {
@@ -52,9 +55,10 @@ func TestPoller(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	poller := NewPoller(true, 5*time.Millisecond, 10)
+	netnsPath, cleanup := setupEmptyNetNS(t)
+	defer cleanup()
+	poller := NewPoller(netnsPath, 5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
-	poller.netNamespaces = defaultNetNSForTest
 
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)
@@ -121,9 +125,8 @@ func TestPollerNoNetNs(t *testing.T) {
 			simpleInterface(4, "ovlp", macOverlapped),
 		}, nil
 	}
-	poller := NewPoller(false, 5*time.Millisecond, 10)
+	poller := NewPoller("", 5*time.Millisecond, 10)
 	poller.interfaces = fakeInterfaces
-	poller.netNamespaces = nil
 
 	updates, err := poller.Subscribe(ctx)
 	require.NoError(t, err)
