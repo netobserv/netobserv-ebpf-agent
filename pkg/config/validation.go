@@ -12,5 +12,5 @@ func (a *Agent) ValidateForPackets() error {
 
 // ValidateForFlows rejects packet-capture-only options in flow mode.
 func (a *Agent) ValidateForFlows() error {
-	return configpackets.Validate(a.Packets)
+	return configpackets.Validate(&a.Packets)
 }
