@@ -10,7 +10,6 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent/common"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	exporterpackets "github.com/netobserv/netobserv-ebpf-agent/pkg/exporter/packets"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
@@ -33,8 +32,8 @@ type Agent struct {
 	// processing nodes to be wired in the buildAndStartPipeline method
 	ringbufTracer     *RingbufTracer
 	packetbuffer      *Buffer
-	plaintextTracer   *flow.PlaintextTracer
-	plaintextBuffer   *flow.PlaintextBuffer
+	plaintextTracer   *PlaintextTracer
+	plaintextBuffer   *PlaintextBuffer
 	plaintextExporter node.TerminalFunc[[]*model.PlaintextRecord]
 	plaintextScope    *plaintext.Scope
 	exporter          node.TerminalFunc[[]*model.PacketRecord]
@@ -75,7 +74,7 @@ func New(cfg *config.Agent) (*Agent, error) {
 		return nil, err
 	}
 	var scope *plaintext.Scope
-	if cfg.EnableOpenSSLTracking {
+	if cfg.Packets.EnableOpenSSLTracking {
 		scope = plaintext.NewScope(
 			filterRules,
 			cfg.Packets.TLSPlaintextPIDAllowlist,
@@ -132,13 +131,13 @@ func newAgent(
 		plaintextExporter: plaintextExporter,
 	}
 
-	if cfg.EnableOpenSSLTracking && plaintextExporter == nil {
+	if cfg.Packets.EnableOpenSSLTracking && plaintextExporter == nil {
 		return nil, fmt.Errorf("TLS plaintext capture requires export=direct-flp")
 	}
 
-	if cfg.EnableOpenSSLTracking {
-		a.plaintextTracer = flow.NewPlaintextTracer(fetcher, metrics.NoOp(), scope)
-		a.plaintextBuffer = flow.NewPlaintextBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
+	if cfg.Packets.EnableOpenSSLTracking {
+		a.plaintextTracer = NewPlaintextTracer(fetcher, metrics.NoOp(), scope)
+		a.plaintextBuffer = NewPlaintextBuffer(cfg.CacheMaxFlows, cfg.CacheActiveTimeout)
 		a.plaintextScope = scope
 	}
 

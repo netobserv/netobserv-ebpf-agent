@@ -16,13 +16,13 @@ import (
 // pre-built flow map on each LookupAndDeleteMap call, so we can benchmark the
 // userspace eviction/record-building cost in isolation from the kernel.
 type benchFakeFetcher struct {
-	flows map[ebpf.BpfFlowId]model.BpfFlowContent
+	flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent
 }
 
-func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFlowId]model.BpfFlowContent {
+func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent {
 	// Return a copy: evictFlows consumes the map, and we want each iteration to
 	// process the same population.
-	out := make(map[ebpf.BpfFlowId]model.BpfFlowContent, len(f.flows))
+	out := make(map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, len(f.flows))
 	for k, v := range f.flows {
 		out[k] = v
 	}
@@ -31,10 +31,10 @@ func (f *benchFakeFetcher) LookupAndDeleteMap(_ *metrics.Metrics) map[ebpf.BpfFl
 
 func (f *benchFakeFetcher) DeleteMapsStaleEntries(_ time.Duration) {}
 
-func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.BpfFlowId]model.BpfFlowContent {
-	m := make(map[ebpf.BpfFlowId]model.BpfFlowContent, n)
+func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent {
+	m := make(map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, n)
 	for i := 0; i < n; i++ {
-		var id ebpf.BpfFlowId
+		var id ebpf.FlowsBpfFlowId
 		src := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)).To16()
 		dst := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i+1)).To16()
 		copy(id.SrcIp[:], src)
@@ -42,7 +42,7 @@ func benchBuildFlowMap(n, interfacesPerFlow int) map[ebpf.BpfFlowId]model.BpfFlo
 		id.SrcPort = uint16(1024 + (i % 60000))
 		id.DstPort = 443
 		id.TransportProtocol = 6
-		flowMetrics := ebpf.BpfFlowMetrics{
+		flowMetrics := ebpf.FlowsBpfFlowMetrics{
 			StartMonoTimeTs:  uint64(1_000_000 + i),
 			EndMonoTimeTs:    uint64(2_000_000 + i),
 			Bytes:            uint64(1500 * (1 + i%10)),

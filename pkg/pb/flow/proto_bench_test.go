@@ -13,7 +13,7 @@ import (
 // produces for a base IPv4 TCP flow with a single interface (the common,
 // no-extra-features configuration).
 func benchRecord(i int) *model.Record {
-	var id ebpf.BpfFlowId
+	var id ebpf.FlowsBpfFlowId
 	src := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)).To16()
 	dst := net.IPv4(10, byte(i>>16), byte(i>>8), byte(i+1)).To16()
 	copy(id.SrcIp[:], src)
@@ -26,7 +26,7 @@ func benchRecord(i int) *model.Record {
 	return &model.Record{
 		ID: id,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				StartMonoTimeTs: uint64(1_000_000 + i),
 				EndMonoTimeTs:   uint64(2_000_000 + i),
 				Bytes:           uint64(1500 * (1 + i%10)),
@@ -52,9 +52,9 @@ func benchRecord(i int) *model.Record {
 func BenchmarkFlowToPB(b *testing.B) {
 	r := benchRecord(1)
 	b.ReportAllocs()
-	b.ResetTimer()
+
 	var sink *Record
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		sink = FlowToPB(r)
 	}
 	_ = sink
@@ -70,9 +70,9 @@ func BenchmarkFlowsToPB(b *testing.B) {
 	}
 	const maxPerMsg = 10000 // GRPCMessageMaxFlows default
 	b.ReportAllocs()
-	b.ResetTimer()
+
 	var sink []*Records
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		sink = FlowsToPB(batch, maxPerMsg)
 	}
 	_ = sink

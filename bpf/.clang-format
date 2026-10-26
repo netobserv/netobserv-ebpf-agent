@@ -1,7 +1,7 @@
 {
   BasedOnStyle: LLVM,
   AllowShortFunctionsOnASingleLine: InlineOnly,
-  ColumnLimit: 100,
+  ColumnLimit: 120,
   IndentWidth: 4,
   SortIncludes: false,
   ReflowComments: false,

@@ -23,29 +23,27 @@ import (
 // These tests load programs but never attach them to interfaces or processes.
 func TestFeatureMapsKernel(t *testing.T) {
 	require.NoError(t, rlimit.RemoveMemlock())
-	for name, load := range map[string]func() (*cilium.CollectionSpec, error){"flows": ebpfflows.LoadBpf, "packets": ebpfpackets.LoadPackets} {
-		for _, enabled := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/openssl=%t", name, enabled), func(t *testing.T) {
-				spec, err := load()
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("packets/openssl=%t", enabled), func(t *testing.T) {
+			spec, err := ebpfpackets.LoadPacketsBpf()
+			require.NoError(t, err)
+			prepareFeatureMapTest(spec)
+			var flag uint8
+			if enabled {
+				flag = 1
+			}
+			netattach.MinimizeMapsIfDisabled(spec, enabled, os.Getpagesize(), "ssl_data_event_map")
+			netattach.MinimizeMapsIfDisabled(spec, enabled, 1, "ssl_read_active_map", "ssl_fd_map")
+			require.NoError(t, spec.Variables["enable_openssl_tracking"].Set(flag))
+			collection, err := cilium.NewCollection(spec)
+			require.NoError(t, err, "%+v", err)
+			defer collection.Close()
+			for _, name := range []string{"ssl_data_event_map", "ssl_read_active_map", "ssl_fd_map"} {
+				info, err := collection.Maps[name].Info()
 				require.NoError(t, err)
-				prepareFeatureMapTest(spec)
-				var flag uint8
-				if enabled {
-					flag = 1
-				}
-				netattach.MinimizeMapsIfDisabled(spec, enabled, os.Getpagesize(), "ssl_data_event_map")
-				netattach.MinimizeMapsIfDisabled(spec, enabled, 1, "ssl_read_active_map", "ssl_fd_map")
-				require.NoError(t, spec.Variables["enable_openssl_tracking"].Set(flag))
-				collection, err := cilium.NewCollection(spec)
-				require.NoError(t, err, "%+v", err)
-				defer collection.Close()
-				for _, name := range []string{"ssl_data_event_map", "ssl_read_active_map", "ssl_fd_map"} {
-					info, err := collection.Maps[name].Info()
-					require.NoError(t, err)
-					require.Equal(t, spec.Maps[name].MaxEntries, info.MaxEntries)
-				}
-			})
-		}
+				require.Equal(t, spec.Maps[name].MaxEntries, info.MaxEntries)
+			}
+		})
 	}
 }
 
@@ -53,7 +51,7 @@ func TestQUICMapKernel(t *testing.T) {
 	require.NoError(t, rlimit.RemoveMemlock())
 	for _, mode := range []int{0, 1, 2} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
-			spec, err := ebpfflows.LoadBpf()
+			spec, err := ebpfflows.LoadFlowsBpf()
 			require.NoError(t, err)
 			prepareFeatureMapTest(spec)
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{Common: config.Common{CacheMaxFlows: 32}, Flows: configflows.Features{QUICTrackingMode: mode}}}

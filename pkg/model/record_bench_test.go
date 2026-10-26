@@ -33,16 +33,16 @@ func BenchmarkNewRecord(b *testing.B) {
 
 	// Pre-build the metrics so we only measure NewRecord itself.
 	contents := make([]BpfFlowContent, 1024)
-	keys := make([]ebpf.BpfFlowId, 1024)
+	keys := make([]ebpf.FlowsBpfFlowId, 1024)
 	for i := range contents {
 		contents[i] = benchFlowContent(i)
 		keys[i] = benchFlowID(i)
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
+
 	var sink *Record
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		idx := i & 1023
 		sink = NewRecord(keys[idx], &contents[idx], now, mono, nil, nil)
 	}
@@ -55,8 +55,8 @@ func BenchmarkAccumulateBase(b *testing.B) {
 	base := benchFlowMetrics(1)
 	other := benchFlowMetrics(2)
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		p := base
 		AccumulateBase(&p, &other)
 	}

@@ -25,19 +25,19 @@ var (
 		0x11, 0x22, 0x33, 0x44}
 )
 
-var k1 = ebpf.BpfFlowId{
+var k1 = ebpf.FlowsBpfFlowId{
 	SrcPort: 333,
 	DstPort: 8080,
 	SrcIp:   srcAddr1,
 	DstIp:   dstAddr1,
 }
-var k2 = ebpf.BpfFlowId{
+var k2 = ebpf.FlowsBpfFlowId{
 	SrcPort: 12,
 	DstPort: 8080,
 	SrcIp:   srcAddr2,
 	DstIp:   dstAddr1,
 }
-var k3 = ebpf.BpfFlowId{
+var k3 = ebpf.FlowsBpfFlowId{
 	SrcPort: 333,
 	DstPort: 443,
 	SrcIp:   srcAddr1,
@@ -64,19 +64,19 @@ func TestEvict_MaxEntries(t *testing.T) {
 	requireNoEviction(t, evictor)
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 123, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
 		},
 	}
 	inputs <- &model.RawRecord{
 		Id: k2,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 		},
 	}
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 321, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
 		},
 	}
@@ -85,13 +85,13 @@ func TestEvict_MaxEntries(t *testing.T) {
 	// WHEN a new record surpasses the maximum number of records
 	inputs <- &model.RawRecord{
 		Id: k3,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 111, Packets: 1, StartMonoTimeTs: 888, EndMonoTimeTs: 888, Flags: 1,
 		},
 	}
 
 	// THEN the old records are evicted
-	received := map[ebpf.BpfFlowId]model.Record{}
+	received := map[ebpf.FlowsBpfFlowId]model.Record{}
 	r := receiveTimeout(t, evictor)
 	require.Len(t, r, 2)
 	received[r[0].ID] = *r[0]
@@ -101,11 +101,11 @@ func TestEvict_MaxEntries(t *testing.T) {
 
 	// AND the returned records summarize the number of bytes and packages
 	// of each flow
-	assert.Equal(t, map[ebpf.BpfFlowId]model.Record{
+	assert.Equal(t, map[ebpf.FlowsBpfFlowId]model.Record{
 		k1: {
 			ID: k1,
 			Metrics: model.BpfFlowContent{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 					Bytes: 444, Packets: 2, StartMonoTimeTs: 123, EndMonoTimeTs: 789, Flags: 1,
 				},
 			},
@@ -116,7 +116,7 @@ func TestEvict_MaxEntries(t *testing.T) {
 		k2: {
 			ID: k2,
 			Metrics: model.BpfFlowContent{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 					Bytes: 456, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 				},
 			},
@@ -143,19 +143,19 @@ func TestEvict_Period(t *testing.T) {
 
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 123, EndMonoTimeTs: 123, Flags: 1,
 		},
 	}
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 456, EndMonoTimeTs: 456, Flags: 1,
 		},
 	}
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 789, EndMonoTimeTs: 789, Flags: 1,
 		},
 	}
@@ -163,13 +163,13 @@ func TestEvict_Period(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1123, EndMonoTimeTs: 1123, Flags: 1,
 		},
 	}
 	inputs <- &model.RawRecord{
 		Id: k1,
-		Metrics: ebpf.BpfFlowMetrics{
+		Metrics: ebpf.FlowsBpfFlowMetrics{
 			Bytes: 10, Packets: 1, StartMonoTimeTs: 1456, EndMonoTimeTs: 1456, Flags: 1,
 		},
 	}
@@ -181,7 +181,7 @@ func TestEvict_Period(t *testing.T) {
 	assert.Equal(t, model.Record{
 		ID: k1,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				Bytes:           30,
 				Packets:         3,
 				StartMonoTimeTs: 123,
@@ -198,7 +198,7 @@ func TestEvict_Period(t *testing.T) {
 	assert.Equal(t, model.Record{
 		ID: k1,
 		Metrics: model.BpfFlowContent{
-			BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+			FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 				Bytes:           20,
 				Packets:         2,
 				StartMonoTimeTs: 1123,

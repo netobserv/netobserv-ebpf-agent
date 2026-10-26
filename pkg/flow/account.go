@@ -19,7 +19,7 @@ import (
 type Accounter struct {
 	maxEntries   int
 	evictTimeout time.Duration
-	entries      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics
+	entries      map[ebpf.FlowsBpfFlowId]*ebpf.FlowsBpfFlowMetrics
 	clock        func() time.Time
 	monoClock    func() time.Duration
 	metrics      *metrics.Metrics
@@ -42,7 +42,7 @@ func NewAccounter(
 	acc := Accounter{
 		maxEntries:   maxEntries,
 		evictTimeout: evictTimeout,
-		entries:      map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{},
+		entries:      map[ebpf.FlowsBpfFlowId]*ebpf.FlowsBpfFlowMetrics{},
 		clock:        clock,
 		monoClock:    monoClock,
 		metrics:      m,
@@ -65,7 +65,7 @@ func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Reco
 				break
 			}
 			evictingEntries := c.entries
-			c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
+			c.entries = map[ebpf.FlowsBpfFlowId]*ebpf.FlowsBpfFlowMetrics{}
 			logrus.WithField("flows", len(evictingEntries)).
 				Debug("evicting flows from userspace accounter on timeout")
 			c.evict(evictingEntries, out, "timeout")
@@ -84,7 +84,7 @@ func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Reco
 			} else {
 				if len(c.entries) >= c.maxEntries {
 					evictingEntries := c.entries
-					c.entries = map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics{}
+					c.entries = map[ebpf.FlowsBpfFlowId]*ebpf.FlowsBpfFlowMetrics{}
 					logrus.WithField("flows", len(evictingEntries)).
 						Debug("evicting flows from userspace accounter after reaching cache max length")
 					c.evict(evictingEntries, out, "full")
@@ -99,7 +99,7 @@ func (c *Accounter) Account(in <-chan *model.RawRecord, out chan<- []*model.Reco
 	}
 }
 
-func (c *Accounter) evict(entries map[ebpf.BpfFlowId]*ebpf.BpfFlowMetrics, evictor chan<- []*model.Record, reason string) {
+func (c *Accounter) evict(entries map[ebpf.FlowsBpfFlowId]*ebpf.FlowsBpfFlowMetrics, evictor chan<- []*model.Record, reason string) {
 	now := c.clock()
 	monotonicNow := uint64(c.monoClock())
 	// Records are forwarded and released as a batch, so allocate their values and

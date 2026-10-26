@@ -12,7 +12,7 @@ import (
 	grpcflow "github.com/netobserv/netobserv-ebpf-agent/pkg/grpc/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
@@ -49,10 +49,10 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	// Send some flows to the input of the exporter stage
 	flows := make(chan []*model.Record, 10)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
+		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
 	}
 	flows <- []*model.Record{
-		{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{EthProtocol: model.IPv6Type}},
+		{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("8888::1111")},
 	}
 	go exporter.ExportFlows(flows)
@@ -100,10 +100,10 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	// Send some flows to the input of the exporter stage
 	flows := make(chan []*model.Record, 10)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.11.12.13"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
+		{AgentIP: net.ParseIP("10.11.12.13"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
 	}
 	flows <- []*model.Record{
-		{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{EthProtocol: model.IPv6Type}},
+		{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("9999::2222")},
 	}
 	go exporter.ExportFlows(flows)
@@ -152,7 +152,7 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	flows := make(chan []*model.Record, 10)
 	var input []*model.Record
 	for i := 0; i < 25000; i++ {
-		input = append(input, &model.Record{Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+		input = append(input, &model.Record{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
 		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil)}})
 	}
@@ -232,7 +232,7 @@ func TestConnectionReset(t *testing.T) {
 	go func() {
 		for i := range nFlows {
 			flows <- []*model.Record{
-				{AgentIP: net.ParseIP(fmt.Sprintf("10.9.8.%d", i)), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
+				{AgentIP: net.ParseIP(fmt.Sprintf("10.9.8.%d", i)), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
 			}
 			time.Sleep(300 * time.Millisecond)
 		}
