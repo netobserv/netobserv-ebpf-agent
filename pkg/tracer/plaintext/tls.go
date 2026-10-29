@@ -6,7 +6,7 @@ import (
 
 	cilium "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
-	ebpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
 )
 
@@ -23,13 +23,15 @@ func SetTLSCaptureVariables(spec *cilium.CollectionSpec, enableOpenSSL bool) err
 	if OpenSSLTrackingEnabled(enableOpenSSL) {
 		v = 1
 	}
-	if err := netattach.SetVariable(spec, ebpfflows.BpfVarEnableOpensslTracking, uint8(v)); err != nil {
-		return fmt.Errorf("setting TLS capture variable %s: %w", ebpfflows.BpfVarEnableOpensslTracking, err)
+	if err := netattach.SetVariable(spec, packets.PacketsBpfVarEnableOpensslTracking, uint8(v)); err != nil {
+		return fmt.Errorf("setting TLS capture variable %s: %w", packets.PacketsBpfVarEnableOpensslTracking, err)
 	}
 	return nil
 }
 
 type TLSBpfPrograms struct {
+	ProbeRetSSLSetFd   *cilium.Program `ebpf:"probe_ret_SSL_set_fd"`
+	ProbeEntrySSLFree  *cilium.Program `ebpf:"probe_entry_SSL_free"`
 	ProbeEntrySSLWrite *cilium.Program `ebpf:"probe_entry_SSL_write"`
 	ProbeEntrySSLSetFd *cilium.Program `ebpf:"probe_entry_SSL_set_fd"`
 	ProbeEntrySSLRead  *cilium.Program `ebpf:"probe_entry_SSL_read"`
@@ -41,7 +43,7 @@ type PacketFetcherTLS struct {
 	OpensslAttacher *OpenSSLAttacher
 }
 
-func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scope *Scope, opensslPath string, maps *ebpfflows.BpfMaps, progs *TLSBpfPrograms) (*PacketFetcherTLS, error) {
+func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scope *Scope, opensslPath string, maps *packets.PacketsBpfMaps, progs *TLSBpfPrograms) (*PacketFetcherTLS, error) {
 	if !TLSPlaintextEnabled(enableOpenSSL) {
 		return nil, nil
 	}
@@ -61,7 +63,7 @@ func SetupPacketFetcherTLS(spec *cilium.CollectionSpec, enableOpenSSL bool, scop
 		if scope == nil || !scope.IsPIDScopeActive() {
 			olog.Warn("OpenSSL libssl discovery is not peer-scoped; attaches per-container libssl on this node — set peer_ip/peer_cidr in FLOW_FILTER_RULES to narrow")
 		}
-		attacher, err := AttachOpenSSLUprobes(scope, opensslPath, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd)
+		attacher, err := AttachOpenSSLUprobes(scope, opensslPath, progs.ProbeEntrySSLWrite, progs.ProbeEntrySSLRead, progs.ProbeRetSSLRead, progs.ProbeEntrySSLSetFd, progs.ProbeRetSSLSetFd, progs.ProbeEntrySSLFree)
 		if err != nil {
 			result.Close()
 			return nil, fmt.Errorf("attaching OpenSSL uprobes: %w", err)
@@ -86,8 +88,5 @@ func (t *PacketFetcherTLS) Close() {
 }
 
 func TLSMapSizing(spec *cilium.CollectionSpec, enableOpenSSL bool) {
-	minEntries := uint32(os.Getpagesize())
-	if !TLSPlaintextEnabled(enableOpenSSL) {
-		spec.Maps[ebpfflows.BpfMapSslDataEventMap].MaxEntries = minEntries
-	}
+	netattach.MinimizeMapsIfDisabled(spec, TLSPlaintextEnabled(enableOpenSSL), os.Getpagesize(), packets.PacketsBpfMapSslDataEventMap)
 }

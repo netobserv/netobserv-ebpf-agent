@@ -33,6 +33,9 @@ func TestReadPlaintextFromKernelTuple(t *testing.T) {
 	if rec.TLSSource != TLSSourceKTLS {
 		t.Fatalf("unexpected source %q", rec.TLSSource)
 	}
+	if rec.TupleSource != "kernel" {
+		t.Fatalf("missing kernel tuple provenance: %#v", rec)
+	}
 	if rec.SrcAddr != "10.244.2.7" || rec.DstAddr != "10.244.2.1" {
 		t.Fatalf("unexpected tuple %s:%d -> %s:%d", rec.SrcAddr, rec.SrcPort, rec.DstAddr, rec.DstPort)
 	}

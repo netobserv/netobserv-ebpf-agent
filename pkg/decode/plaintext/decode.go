@@ -26,6 +26,9 @@ func ToMap(pr *model.PlaintextRecord, previewBytes int) config.GenericMap {
 	out["Direction"] = pr.Direction
 	out["TLSSource"] = pr.TLSSource
 	out["SSLType"] = pr.SSLType
+	if pr.TupleSource != "" {
+		out["TupleSource"] = pr.TupleSource
+	}
 	if pr.SrcAddr != "" {
 		out["SrcAddr"] = pr.SrcAddr
 	}

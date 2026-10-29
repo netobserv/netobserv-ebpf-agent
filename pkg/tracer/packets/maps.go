@@ -1,0 +1,15 @@
+package packets
+
+import (
+	"os"
+
+	cilium "github.com/cilium/ebpf"
+	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
+)
+
+func configurePacketMaps(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig) {
+	netattach.MinimizeMapsIfDisabled(spec, cfg.Packets.EnableOpenSSLTracking, 1, ebpf.PacketsBpfMapSslReadActiveMap, ebpf.PacketsBpfMapSslFdMap)
+	netattach.MinimizeMapsIfDisabled(spec, cfg.Packets.EnableOpenSSLTracking, os.Getpagesize(), ebpf.PacketsBpfMapSslDataEventMap)
+}

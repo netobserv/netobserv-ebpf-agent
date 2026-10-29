@@ -23,20 +23,21 @@ const (
 
 // PlaintextRecord holds TLS plaintext captured via OpenSSL uprobes.
 type PlaintextRecord struct {
-	Timestamp time.Time
-	Pid       uint32
-	Tgid      uint32
-	Data      []byte
-	Direction string
-	TLSSource string
-	SSLType   uint8
-	SrcAddr   string
-	DstAddr   string
-	SrcPort   uint16
-	DstPort   uint16
-	Protocol  string
-	SocketFd  int32
-	ConnPtr   uint64
+	Timestamp   time.Time
+	Pid         uint32
+	Tgid        uint32
+	Data        []byte
+	Direction   string
+	TLSSource   string
+	SSLType     uint8
+	SrcAddr     string
+	DstAddr     string
+	SrcPort     uint16
+	DstPort     uint16
+	Protocol    string
+	TupleSource string
+	SocketFd    int32
+	ConnPtr     uint64
 }
 
 func tlsSourceName(source uint8) string {
@@ -130,6 +131,7 @@ func ReadPlaintextFrom(r io.Reader) (*PlaintextRecord, error) {
 	}
 
 	if tupleValid != 0 {
+		rec.TupleSource = "kernel"
 		if srcIP := ipFromEventAddr(srcAddr[:]); srcIP != nil {
 			rec.SrcAddr = srcIP.String()
 		}

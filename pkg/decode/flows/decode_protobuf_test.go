@@ -8,7 +8,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	"github.com/stretchr/testify/assert"
@@ -178,7 +178,7 @@ func TestRecordToMap_OptionalMetrics(t *testing.T) {
 	someTime := time.Unix(1700000000, 0).UTC()
 	makeFlow := func(withQuic bool) *model.Record {
 		f := &model.Record{
-			ID: ebpf.BpfFlowId{
+			ID: ebpf.FlowsBpfFlowId{
 				SrcIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x07, 0x08, 0x09},
 				DstIp:             model.IPAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0b, 0x0c, 0x0d},
 				SrcPort:           23000,
@@ -186,7 +186,7 @@ func TestRecordToMap_OptionalMetrics(t *testing.T) {
 				TransportProtocol: 17,
 			},
 			Metrics: model.BpfFlowContent{
-				BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+				FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 					EthProtocol: 2048,
 					Bytes:       456,
 					Packets:     123,
@@ -198,7 +198,7 @@ func TestRecordToMap_OptionalMetrics(t *testing.T) {
 			AgentIP:       net.IPv4(0x0a, 0x0b, 0x0c, 0x0d),
 		}
 		if withQuic {
-			f.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
+			f.Metrics.QuicMetrics = &ebpf.FlowsBpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
 		}
 		return f
 	}
@@ -245,7 +245,7 @@ func TestPBFlowRoundTrip_OptionalFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			in := &model.Record{
-				ID: ebpf.BpfFlowId{
+				ID: ebpf.FlowsBpfFlowId{
 					TransportProtocol: 17,
 					SrcIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 1, 2, 3, 4},
 					DstIp:             model.IPAddr{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 5, 6, 7, 8},
@@ -253,7 +253,7 @@ func TestPBFlowRoundTrip_OptionalFields(t *testing.T) {
 					DstPort:           443,
 				},
 				Metrics: model.BpfFlowContent{
-					BpfFlowMetrics: &ebpf.BpfFlowMetrics{
+					FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 						EthProtocol:        2048,
 						DirectionFirstSeen: 1,
 						Bytes:              10,
@@ -264,7 +264,7 @@ func TestPBFlowRoundTrip_OptionalFields(t *testing.T) {
 				TimeFlowEnd:   now,
 			}
 			if tt.withQuic {
-				in.Metrics.QuicMetrics = &ebpf.BpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
+				in.Metrics.QuicMetrics = &ebpf.FlowsBpfQuicMetrics{Version: 1, SeenLongHdr: 1, SeenShortHdr: 1}
 			}
 
 			pb := pbflow.FlowToPB(in)

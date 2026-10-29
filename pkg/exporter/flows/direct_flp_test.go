@@ -45,7 +45,7 @@ parameters:
 	flows := make(chan []*model.Record, 10)
 	go flp.ExportFlows(flows)
 	flows <- []*model.Record{
-		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{BpfFlowMetrics: &ebpf.BpfFlowMetrics{}}},
+		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
 	}
 
 	// Read capture

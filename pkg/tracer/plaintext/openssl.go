@@ -35,6 +35,8 @@ type OpenSSLAttacher struct {
 	readEntryProg *ebpf.Program
 	readRetProg   *ebpf.Program
 	setFdProg     *ebpf.Program
+	setFdRetProg  *ebpf.Program
+	freeProg      *ebpf.Program
 	scope         *Scope
 	links         []link.Link
 	attached      map[string]bool
@@ -42,12 +44,14 @@ type OpenSSLAttacher struct {
 	stopCh        chan struct{}
 }
 
-func newOpenSSLAttacher(writeProg, readEntryProg, readRetProg, setFdProg *ebpf.Program, scope *Scope) *OpenSSLAttacher {
+func newOpenSSLAttacher(writeProg, readEntryProg, readRetProg, setFdProg, setFdRetProg, freeProg *ebpf.Program, scope *Scope) *OpenSSLAttacher {
 	return &OpenSSLAttacher{
 		writeProg:     writeProg,
 		readEntryProg: readEntryProg,
 		readRetProg:   readRetProg,
 		setFdProg:     setFdProg,
+		setFdRetProg:  setFdRetProg,
+		freeProg:      freeProg,
 		scope:         scope,
 		attached:      map[string]bool{},
 		stopCh:        make(chan struct{}),
@@ -216,14 +220,12 @@ func (a *OpenSSLAttacher) attachToLibrary(attachPath string) {
 	}
 
 	attached := false
-	if a.setFdProg != nil {
-		l, err := exe.Uprobe("SSL_set_fd", a.setFdProg, nil)
-		if err != nil {
-			olog.WithError(err).Debugf("SSL_set_fd uprobe failed on %s", attachPath)
-		} else {
-			a.links = append(a.links, l)
-			attached = true
-		}
+	// Bindings are safe only if both successful setup and invalidation are
+	// observed. Keep plaintext capture available when these hooks are absent.
+	if links, err := a.attachSocketTracking(exe); err != nil {
+		olog.WithError(err).Warnf("socket identity tracking unavailable on %s", attachPath)
+	} else {
+		a.links = append(a.links, links...)
 	}
 
 	if a.writeProg != nil {
@@ -259,6 +261,40 @@ func (a *OpenSSLAttacher) attachToLibrary(attachPath string) {
 	}
 }
 
+func (a *OpenSSLAttacher) attachSocketTracking(exe *link.Executable) ([]link.Link, error) {
+	if a.setFdProg == nil || a.setFdRetProg == nil || a.freeProg == nil {
+		return nil, fmt.Errorf("missing socket identity programs")
+	}
+	var links []link.Link
+	failed := true
+	defer func() {
+		if failed {
+			for _, l := range links {
+				_ = l.Close()
+			}
+		}
+	}()
+	for _, symbol := range []string{"SSL_free", "SSL_set_bio", "SSL_set0_rbio", "SSL_set0_wbio"} {
+		l, err := exe.Uprobe(symbol, a.freeProg, nil)
+		if err != nil {
+			return nil, fmt.Errorf("attaching %s invalidation: %w", symbol, err)
+		}
+		links = append(links, l)
+	}
+	entry, err := exe.Uprobe("SSL_set_fd", a.setFdProg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("attaching SSL_set_fd: %w", err)
+	}
+	links = append(links, entry)
+	ret, err := exe.Uretprobe("SSL_set_fd", a.setFdRetProg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("attaching SSL_set_fd return: %w", err)
+	}
+	links = append(links, ret)
+	failed = false
+	return links, nil
+}
+
 // resolveHostLibSSLPath maps host library paths into the agent mount namespace.
 func resolveHostLibSSLPath(libPath string) string {
 	if libPath == "" {
@@ -282,11 +318,11 @@ func resolveOpenSSLLibPath(libPath string) string {
 	return resolveHostLibSSLPath(libPath)
 }
 
-func AttachOpenSSLUprobes(scope *Scope, opensslPath string, writeProg, readEntryProg, readRetProg, setFdProg *ebpf.Program) (*OpenSSLAttacher, error) {
+func AttachOpenSSLUprobes(scope *Scope, opensslPath string, writeProg, readEntryProg, readRetProg, setFdProg, setFdRetProg, freeProg *ebpf.Program) (*OpenSSLAttacher, error) {
 	if writeProg == nil && readEntryProg == nil && readRetProg == nil && setFdProg == nil {
 		return nil, fmt.Errorf("no OpenSSL programs loaded")
 	}
-	attacher := newOpenSSLAttacher(writeProg, readEntryProg, readRetProg, setFdProg, scope)
+	attacher := newOpenSSLAttacher(writeProg, readEntryProg, readRetProg, setFdProg, setFdRetProg, freeProg, scope)
 	attacher.Start(opensslPath)
 	return attacher, nil
 }

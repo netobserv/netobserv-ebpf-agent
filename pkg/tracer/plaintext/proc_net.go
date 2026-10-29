@@ -233,18 +233,6 @@ func listInterfaceIPsInNetNS(pid int) []net.IP {
 	return ips
 }
 
-func connectionUsesNetNSIPs(c *procTCPConn, netnsIPs []net.IP) bool {
-	if c == nil {
-		return false
-	}
-	for _, ip := range netnsIPs {
-		if ipMatches(ip, c.localIP) || ipMatches(ip, c.remoteIP) {
-			return true
-		}
-	}
-	return false
-}
-
 func pidsWithIPInNet(peerNet *net.IPNet) map[int]struct{} {
 	result := map[int]struct{}{}
 	entries, err := os.ReadDir(procRootDir)

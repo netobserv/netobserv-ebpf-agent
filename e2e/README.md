@@ -64,3 +64,15 @@ Deleted nodes: ["basic-test-cluster20241212-125815-control-plane"]
 ```
 
 If not cleaned up, a subsequent run of e2e tests will fail due to addresses (ports) already in use.
+
+### Feature map kernel checks
+
+To check disabled and enabled OpenSSL map loading in both modes, and exercise
+QUIC modes 0, 1, and 2 with synthetic packets, run on a privileged Linux host:
+
+```sh
+sudo -E go test -tags integration ./pkg/tracer/flows -run 'Test(FeatureMapsKernel|QUICMapKernel)' -v
+```
+
+These tests load TC/OpenSSL programs and run synthetic TC packets without
+attaching hooks to host interfaces or processes. They require BPF privileges.
