@@ -30,6 +30,36 @@
 #define MISC_FLAGS_SSL_MISMATCH 0x01
 #define OBSERVED_DIRECTION_BOTH 3
 
+/*
+ * bpf_cast_to_kern_ctx (kernel 6.3+) returns the real "struct sk_buff" behind the "struct __sk_buff"
+ * UAPI view, so we can reach fields the view doesn't expose. It is a pure type cast: the verifier
+ * rewrites the call into a register move, so it costs nothing at runtime.
+ *
+ * Declared weak on purpose: when the kfunc or kernel BTF is missing, the loader poisons the call,
+ * and the program only loads because enable_netns_cookie == 0 makes it dead code.
+ */
+extern void *bpf_cast_to_kern_ctx(void *obj) __ksym __weak;
+
+/*
+ * Returns the network namespace cookie of the *device* this program is attached to.
+ *
+ * We deliberately do NOT use bpf_get_netns_cookie(skb): for TC programs that helper returns the
+ * cookie of skb->sk, falling back to init_net when the skb carries no socket. On ingress there is
+ * never a socket, so every ingress packet would be tagged with the host cookie regardless of the
+ * namespace its device actually lives in, misattributing interfaces on secondary networks.
+ */
+static __always_inline u64 get_netns_cookie(struct __sk_buff *skb) {
+    struct sk_buff *kskb = bpf_cast_to_kern_ctx(skb);
+    if (kskb == NULL) {
+        return 0;
+    }
+    struct net_device *dev = BPF_CORE_READ(kskb, dev);
+    if (dev == NULL) {
+        return 0;
+    }
+    return BPF_CORE_READ(dev, nd_net.net, net_cookie);
+}
+
 // return 0 on success, 1 if capacity reached
 static __always_inline int add_observed_intf(flow_metrics *value, pkt_info *pkt, u32 if_index, u64 netns_cookie,
                                              u8 direction) {
@@ -176,8 +206,8 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
     }
 
     // Network namespace cookie of the interface capturing this packet. Gated by a load-time
-    // constant so the helper is dead-code-eliminated when off.
-    u64 netns_cookie = enable_netns_cookie ? bpf_get_netns_cookie(skb) : 0;
+    // constant so the kfunc call and CO-RE reads are dead-code-eliminated when off.
+    u64 netns_cookie = enable_netns_cookie ? get_netns_cookie(skb) : 0;
 
     flow_metrics *aggregate_flow = (flow_metrics *)bpf_map_lookup_elem(&aggregated_flows, &id);
     if (aggregate_flow != NULL) {

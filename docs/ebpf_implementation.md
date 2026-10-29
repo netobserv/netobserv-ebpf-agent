@@ -56,19 +56,53 @@ index alone is therefore not enough to name an interface: indexes are unique onl
 namespace and collide across namespaces when secondary networks are used.
 
 To disambiguate, each interface identity in `flow_metrics_t` (`if_index_first_seen` and each entry of
-`observed_intf`) is paired with the network namespace cookie
-([`bpf_get_netns_cookie`](https://docs.ebpf.io/linux/helper-function/bpf_get_netns_cookie/)) of the
-namespace where it was seen (`netns_cookie_first_seen` and `observed_netns_cookie`). Userspace reads
-the same value per namespace via the `SO_NETNS_COOKIE` socket option (they are guaranteed equal) and
-keys the interface-name cache on `(netns_cookie, index)`.
+`observed_intf`) is paired with the cookie of the network namespace **the capturing device lives in**
+(`netns_cookie_first_seen` and `observed_netns_cookie`). Userspace reads the same value per namespace
+via the `SO_NETNS_COOKIE` socket option — both are `struct net.net_cookie`, so they are guaranteed
+equal — and keys the interface-name cache on `(netns_cookie, index)`.
 
-The helper was only enabled for TC programs (`sched_cls`/`sched_act`) in kernel 6.13
-([commit eb62f49](https://github.com/torvalds/linux/commit/eb62f49de7eca5917be8cebb3ad8aa3710af7021)),
-so it is gated at load time by the `enable_netns_cookie` `.rodata` constant (dead-code-eliminated on
-older kernels, where the helper needn't exist). The agent probes the running kernel for the helper
-(`features.HaveProgramHelper`) instead of comparing kernel versions, so distro backports are detected automatically. The
-same resolver decides both the eBPF gate and the userspace cookie computation so they never disagree. When disabled, cookies are 0 everywhere and attribution falls
-back to the historical MAC-based heuristic. The cookie stays internal to the agent (not exported on
-the wire). Genuine cross-namespace 5-tuple collisions (same 5-tuple in two namespaces at the same
-time, rare and transient due to ephemeral ports) remain merged: this is inherent to keeping the
-namespace out of the flow key so that veth-crossing deduplication keeps working.
+##### Why not bpf_get_netns_cookie
+
+[`bpf_get_netns_cookie`](https://docs.ebpf.io/linux/helper-function/bpf_get_netns_cookie/) is
+available to TC programs since kernel 6.13, but it answers a different question:
+
+```c
+BPF_CALL_1(bpf_get_netns_cookie, struct sk_buff *, skb)
+{
+	return __bpf_get_netns_cookie(skb && skb->sk ? skb->sk : NULL);  /* NULL sk => init_net */
+}
+```
+
+It returns the namespace of `skb->sk` — the *socket* — falling back to `init_net` when the skb
+carries no socket. On ingress there is never a socket, so every ingress packet would be tagged with
+the host cookie no matter which namespace its device is in, and pod interfaces on secondary networks
+would be misattributed (showing up as `unknown`). That helper exists for the opposite correlation:
+reading a pod's socket namespace from a hook on the host side.
+
+Instead, `get_netns_cookie()` in [bpf/flows/flows.c](../bpf/flows/flows.c) reaches the device's
+namespace directly:
+
+```c
+struct sk_buff *kskb = bpf_cast_to_kern_ctx(skb);
+return BPF_CORE_READ(kskb, dev, nd_net.net, net_cookie);
+```
+
+[`bpf_cast_to_kern_ctx`](https://github.com/torvalds/linux/commit/fd264ca020948a743e4c36731dfdecc4a812153c)
+(kernel 6.3+) returns the real `struct sk_buff` behind the `struct __sk_buff` UAPI view, so CO-RE can
+walk fields the view does not expose. It is a pure type cast — the verifier rewrites the call into a
+register move, so it costs nothing at runtime — and it works in both directions.
+
+##### Feature gating
+
+The read is gated at load time by the `enable_netns_cookie` `.rodata` constant, so on kernels without
+the kfunc the (weak, therefore poisoned) call is dead-code-eliminated and the program still loads.
+Rather than comparing kernel versions — unreliable, since distros backport, and RHEL deliberately
+reports an older base version — the agent probes kernel BTF for `bpf_cast_to_kern_ctx`,
+`net_device.nd_net` and `net.net_cookie`. The same resolver decides both the eBPF gate and the
+userspace cookie computation, so the two can never disagree (a mismatch would make every lookup
+miss). When disabled, cookies are 0 everywhere and attribution falls back to the historical MAC-based
+heuristic. The cookie stays internal to the agent and is not exported on the wire.
+
+Genuine cross-namespace 5-tuple collisions (the same 5-tuple live in two namespaces at once — rare
+and transient, given ephemeral ports) remain merged: that is inherent to keeping the namespace out of
+the flow key so that veth-crossing deduplication keeps working.

@@ -22,9 +22,7 @@ import (
 	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
 	tracerflows "github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/flows"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/asm"
-	"github.com/cilium/ebpf/features"
+	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
@@ -389,14 +387,41 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 }
 
 // isNetNSCookieSupported resolves whether netns-cookie interface attribution should be enabled.
-// bpf_get_netns_cookie was enabled for TC programs upstream in 6.13. Using cilium's feature checker
-// first to probe the running kernel rather than strict versions, because distros can backport it.
+// The eBPF side reads the device's namespace via bpf_cast_to_kern_ctx (kernel 6.3+) followed by
+// CO-RE reads of net_device.nd_net and net.net_cookie, so all three must be present in kernel BTF.
+// Probing BTF rather than comparing kernel versions means distro backports are picked up too.
 func isNetNSCookieSupported() bool {
-	err := features.HaveProgramHelper(ebpf.SchedCLS, asm.FnGetNetnsCookie)
-	if err != nil && !errors.Is(err, ebpf.ErrNotSupported) {
-		// Inconclusive probe (e.g. missing capabilities): fall back to the version check.
-		alog.WithError(err).Debug("netns cookie helper probe inconclusive, falling back to kernel version check")
-		return !kernel.IsKernelOlderThan("6.13.0")
+	spec, err := btf.LoadKernelSpec()
+	if err != nil {
+		alog.WithError(err).Info("no kernel BTF available, disabling netns cookie interface attribution")
+		return false
 	}
-	return err == nil
+	var fn *btf.Func
+	if err := spec.TypeByName("bpf_cast_to_kern_ctx", &fn); err != nil {
+		alog.WithError(err).Info("bpf_cast_to_kern_ctx not found, disabling netns cookie interface attribution")
+		return false
+	}
+	for _, f := range []struct{ structName, field string }{
+		{"net_device", "nd_net"},
+		{"net", "net_cookie"},
+	} {
+		if !btfStructHasField(spec, f.structName, f.field) {
+			alog.Infof("%s.%s not found in kernel BTF, disabling netns cookie interface attribution", f.structName, f.field)
+			return false
+		}
+	}
+	return true
+}
+
+func btfStructHasField(spec *btf.Spec, structName, field string) bool {
+	var st *btf.Struct
+	if err := spec.TypeByName(structName, &st); err != nil {
+		return false
+	}
+	for i := range st.Members {
+		if st.Members[i].Name == field {
+			return true
+		}
+	}
+	return false
 }
