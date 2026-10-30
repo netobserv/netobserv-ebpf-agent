@@ -120,6 +120,13 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	}
 
 	cookie := w.netnsResolver.getCookie(netnsHandle)
+	// Logged so that an unresolved interface can be traced back to either a namespace we never
+	// subscribed to, or one we did but whose interface arrived before we enumerated it.
+	log.WithFields(logrus.Fields{
+		"netns":       ns,
+		"netnsHandle": netnsHandle.String(),
+		"cookie":      cookie,
+	}).Debug("resolved netns cookie")
 
 	// before sending netlink updates, send all the existing interfaces at the moment of starting the Watcher
 	if netnsHandle.IsOpen() || netnsHandle.Equal(netns.None()) {

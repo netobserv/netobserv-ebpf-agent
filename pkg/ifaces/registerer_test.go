@@ -1,12 +1,14 @@
 package ifaces
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -328,4 +330,34 @@ func TestRegisterer_PreferredInterfacesNominal(t *testing.T) {
 	name, ok = pref[3].matches([6]uint8{0x0c, 0x60, 0x80, 0x04, 0x05, 0x06}, allowList)
 	assert.True(t, ok)
 	assert.Equal(t, "if3", name)
+}
+
+func TestRegisterer_LookupMissLogsClashingCookies(t *testing.T) {
+	// This log is the diagnostic for cross-namespace ifindex reuse: an SR-IOV VF keeps its
+	// ifindex when moved from the host netns into a pod, so the same index can be registered
+	// under a cookie other than the one the flow reports. Check it actually says so.
+	var buf bytes.Buffer
+	prevOut, prevLevel := rlog.Logger.Out, rlog.Logger.Level
+	rlog.Logger.SetOutput(&buf)
+	rlog.Logger.SetLevel(logrus.DebugLevel)
+	t.Cleanup(func() {
+		rlog.Logger.SetOutput(prevOut)
+		rlog.Logger.SetLevel(prevLevel)
+	})
+
+	registry := &Registerer{ifaces: map[ifaceKey]map[[6]uint8]string{
+		{cookie: 111, index: 7}: {macFoo: "net1"},
+	}}
+
+	// Same ifindex, different namespace: report who does hold it.
+	_, ok := registry.IfaceNameForIndexAndMAC(7, 222, macBar)
+	assert.False(t, ok)
+	assert.Contains(t, buf.String(), "ifindex=7 cookie=222")
+	assert.Contains(t, buf.String(), "net1 (cookie=111")
+
+	// Unknown ifindex: say that nothing holds it, rather than staying silent.
+	buf.Reset()
+	_, ok = registry.IfaceNameForIndexAndMAC(99, 222, macBar)
+	assert.False(t, ok)
+	assert.Contains(t, buf.String(), "not registered under any cookie")
 }

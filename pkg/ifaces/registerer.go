@@ -149,6 +149,30 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, cookie uint64, mac [6]uint
 			}
 		}
 	}
+	// Lookup miss. Dump what we know about this ifindex so we can tell a namespace that was never
+	// enumerated (cookie unknown to us) from one whose interface is registered under another
+	// cookie, e.g. an SR-IOV VF that kept its ifindex when moved from the host into a pod.
+	// Debug-only: this scans the whole interface map, and runs per flow.
+	if rlog.Logger.IsLevelEnabled(logrus.DebugLevel) {
+		var others []string
+		for k, macs := range r.ifaces {
+			if k.index != idx {
+				continue
+			}
+			for m, name := range macs {
+				otherMAC := model.MacAddr(m)
+				others = append(others, fmt.Sprintf("%s (cookie=%d, mac=%s)", name, k.cookie, otherMAC.String()))
+			}
+		}
+		sMac := model.MacAddr(mac)
+		if len(others) == 0 {
+			rlog.Debugf("interface lookup miss: ifindex=%d cookie=%d mac=%s; that ifindex is not registered under any cookie",
+				idx, cookie, sMac.String())
+		} else {
+			rlog.Debugf("interface lookup miss: ifindex=%d cookie=%d mac=%s; same ifindex registered under: %s",
+				idx, cookie, sMac.String(), strings.Join(others, ", "))
+		}
+	}
 	return "", false
 }
 
