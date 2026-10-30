@@ -1497,6 +1497,10 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 	if cfg.Flows.EnableFlowsRingbufFallback {
 		enableDirectFlowRingbuf = 1
 	}
+	enableNetnsCookie := uint8(0)
+	if cfg.IsNetNSCookieSupported {
+		enableNetnsCookie = 1
+	}
 
 	// enable_quic_tracking mode:
 	// QUIC_CONFIG_DISABLED = 0, QUIC_CONFIG_ENABLED = 1, QUIC_CONFIG_ANY_UDP_PORT = 2.
@@ -1524,6 +1528,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		{Key: ebpf.FlowsBpfVarEnableDirectflowsRingbuf, Value: uint8(enableDirectFlowRingbuf)},
 		{Key: ebpf.FlowsBpfVarEnableTlsUsageTracking, Value: uint8(enableTLSTracking)},
 		{Key: ebpf.FlowsBpfVarEnableQuicTracking, Value: uint8(enableQUICTracking)},
+		{Key: ebpf.FlowsBpfVarEnableNetnsCookie, Value: enableNetnsCookie},
 	}
 
 	for _, mapping := range variables {

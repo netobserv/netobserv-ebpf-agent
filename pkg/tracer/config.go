@@ -8,9 +8,10 @@ import (
 // FetcherConfig is shared tracer configuration for flow and packet capture modes.
 type FetcherConfig struct {
 	config.Agent
-	EnableIngress  bool
-	EnableEgress   bool
-	Debug          bool
-	FilterConfig   []*FilterConfig
-	PlaintextScope *plaintext.Scope
+	EnableIngress          bool
+	EnableEgress           bool
+	Debug                  bool
+	FilterConfig           []*FilterConfig
+	PlaintextScope         *plaintext.Scope
+	IsNetNSCookieSupported bool
 }

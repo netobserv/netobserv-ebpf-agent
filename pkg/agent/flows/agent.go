@@ -12,7 +12,7 @@ import (
 	"github.com/netobserv/gopipes/pkg/node"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/agent/common"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
-	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	ebpfFlows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	exporterflows "github.com/netobserv/netobserv-ebpf-agent/pkg/exporter/flows"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/ifaces"
@@ -22,6 +22,7 @@ import (
 	promo "github.com/netobserv/netobserv-ebpf-agent/pkg/prometheus"
 	tracerflows "github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/flows"
 
+	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/gavv/monotime"
 	ovnobserv "github.com/ovn-org/ovn-kubernetes/go-controller/observability-lib/sampledecoder"
@@ -42,8 +43,9 @@ type Agent struct {
 	cfg *config.Agent
 
 	// input data providers
-	informer ifaces.Informer
-	ebpf     ebpfFlowFetcher
+	informer      ifaces.Informer
+	netnsResolver ifaces.NetnsResolver
+	ebpf          ebpfFlowFetcher
 
 	// processing nodes to be wired in the buildAndStartPipeline method
 	mapTracer *flow.MapTracer
@@ -64,7 +66,7 @@ type ebpfFlowFetcher interface {
 	io.Closer
 	common.TCAttacher
 
-	LookupAndDeleteMap(*metrics.Metrics) map[ebpf.FlowsBpfFlowId]model.BpfFlowContent
+	LookupAndDeleteMap(*metrics.Metrics) map[ebpfFlows.FlowsBpfFlowId]model.BpfFlowContent
 	DeleteMapsStaleEntries(timeOut time.Duration)
 	ReadRingBuf() (ringbuf.Record, error)
 }
@@ -129,11 +131,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 	}
 
 	ebpfConfig := &tracerflows.FetcherConfig{
-		Agent:         *cfg,
-		EnableIngress: ingress,
-		EnableEgress:  egress,
-		Debug:         debug,
-		FilterConfig:  filterRules,
+		Agent:                  *cfg,
+		EnableIngress:          ingress,
+		EnableEgress:           egress,
+		Debug:                  debug,
+		FilterConfig:           filterRules,
+		IsNetNSCookieSupported: isNetNSCookieSupported(),
 	}
 
 	fetcher, err := tracerflows.NewFetcher(ebpfConfig, m)
@@ -141,12 +144,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 		return nil, err
 	}
 
-	return newAgent(cfg, m, fetcher, exportFunc, agentIP, s)
+	return newAgent(ebpfConfig, m, fetcher, exportFunc, agentIP, s)
 }
 
 // newAgent is a private constructor with injectable dependencies, usable for tests.
 func newAgent(
-	cfg *config.Agent,
+	cfg *tracerflows.FetcherConfig,
 	m *metrics.Metrics,
 	fetcher ebpfFlowFetcher,
 	exporter node.TerminalFunc[[]*model.Record],
@@ -175,17 +178,19 @@ func newAgent(
 	}
 	limiter := flow.NewCapacityLimiter(m)
 
-	informer := common.CreateInformer(cfg, m)
+	netnsResolver := ifaces.NewNetnsResolver(cfg.IsNetNSCookieSupported)
+	informer := common.CreateInformer(&cfg.Agent, netnsResolver, m)
 
 	return &Agent{
 		ebpf:          fetcher,
 		exporter:      exporter,
-		cfg:           cfg,
+		cfg:           &cfg.Agent,
 		mapTracer:     mapTracer,
 		rbTracer:      rbTracer,
 		accounter:     accounter,
 		limiter:       limiter,
 		informer:      informer,
+		netnsResolver: netnsResolver,
 		promoServer:   promoServer,
 		metrics:       m,
 		sampleDecoder: s,
@@ -337,7 +342,7 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 
 	if !a.cfg.EbpfProgramManagerMode {
 		alog.Debug("registering interfaces listener in background")
-		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.metrics, a.informer)
+		err := common.StartInterfaceListener(ctx, a.ebpf, a.cfg, a.informer, a.metrics)
 		if err != nil {
 			return nil, err
 		}
@@ -379,4 +384,44 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 		rbTracer.Start()
 	}
 	return export, nil
+}
+
+// isNetNSCookieSupported resolves whether netns-cookie interface attribution should be enabled.
+// The eBPF side reads the device's namespace via bpf_cast_to_kern_ctx (kernel 6.3+) followed by
+// CO-RE reads of net_device.nd_net and net.net_cookie, so all three must be present in kernel BTF.
+// Probing BTF rather than comparing kernel versions means distro backports are picked up too.
+func isNetNSCookieSupported() bool {
+	spec, err := btf.LoadKernelSpec()
+	if err != nil {
+		alog.WithError(err).Info("no kernel BTF available, disabling netns cookie interface attribution")
+		return false
+	}
+	var fn *btf.Func
+	if err := spec.TypeByName("bpf_cast_to_kern_ctx", &fn); err != nil {
+		alog.WithError(err).Info("bpf_cast_to_kern_ctx not found, disabling netns cookie interface attribution")
+		return false
+	}
+	for _, f := range []struct{ structName, field string }{
+		{"net_device", "nd_net"},
+		{"net", "net_cookie"},
+	} {
+		if !btfStructHasField(spec, f.structName, f.field) {
+			alog.Infof("%s.%s not found in kernel BTF, disabling netns cookie interface attribution", f.structName, f.field)
+			return false
+		}
+	}
+	return true
+}
+
+func btfStructHasField(spec *btf.Spec, structName, field string) bool {
+	var st *btf.Struct
+	if err := spec.TypeByName(structName, &st); err != nil {
+		return false
+	}
+	for i := range st.Members {
+		if st.Members[i].Name == field {
+			return true
+		}
+	}
+	return false
 }
