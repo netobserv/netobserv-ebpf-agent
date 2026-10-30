@@ -18,31 +18,28 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-const (
-	netnsVolume = "/var/run/netns"
-)
-
 var log = logrus.WithField("component", "ifaces.Watcher")
 
 // Watcher uses system's netlink to get real-time information events about network interfaces'
 // addition or removal.
 type Watcher struct {
-	bufLen     int
-	current    map[InterfaceKey]Interface
-	mapSize    int
-	interfaces func(handle netns.NsHandle, ns string) ([]Interface, error)
+	netnsVolume string
+	bufLen      int
+	current     map[InterfaceKey]Interface
+	mapSize     int
+	interfaces  func(handle netns.NsHandle, ns string) ([]Interface, error)
 	// linkSubscriber abstracts netlink.LinkSubscribe implementation, allowing the injection of
 	// mocks for unit testing
 	linkSubscriberAt func(ns netns.NsHandle, ch chan<- netlink.LinkUpdate, done <-chan struct{}) error
 	mutex            *sync.Mutex
 	netnsWatcher     *fsnotify.Watcher
 	nsDone           sync.Map
-	netNamespaces    func() ([]string, error)
 }
 
-func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
+func NewWatcher(netnsVolume string, bufLen int, m *metrics.Metrics) *Watcher {
 	current := map[InterfaceKey]Interface{}
 	w := &Watcher{
+		netnsVolume:      netnsVolume,
 		bufLen:           bufLen,
 		current:          current,
 		interfaces:       netInterfaces,
@@ -56,23 +53,32 @@ func NewWatcher(bufLen int, m *metrics.Metrics) *Watcher {
 }
 
 func (w *Watcher) Subscribe(ctx context.Context) (<-chan Event, error) {
-	out := make(chan Event, w.bufLen)
-	getNS := w.netNamespaces
-	if getNS == nil {
-		getNS = getNetNS
-	}
-	netns, err := getNS()
+	netns, err := getNetNS(w.netnsVolume)
 	if err != nil {
-		w.nsDone.Store("", make(chan struct{}))
-		go w.sendUpdates(ctx, "", out)
-	} else {
-		for _, n := range netns {
-			w.nsDone.Store(n, make(chan struct{}))
-			go w.sendUpdates(ctx, n, out)
+		return nil, err
+	}
+
+	if w.netnsVolume != "" {
+		// Setup fsnotify watcher
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			return nil, fmt.Errorf("can't subscribe fsnotify: %w", err)
 		}
+		if err = watcher.Add(w.netnsVolume); err != nil {
+			_ = watcher.Close()
+			return nil, fmt.Errorf("failed to add watcher to netns directory: %w", err)
+		}
+		w.netnsWatcher = watcher
+	}
+
+	out := make(chan Event, w.bufLen)
+	for _, n := range netns {
+		w.nsDone.Store(n, make(chan struct{}))
+		go w.sendUpdates(ctx, n, out)
 	}
 	// register to get notification when netns is created or deleted and register for link update for new netns
 	w.netnsNotify(ctx, out)
+
 	return out, nil
 }
 
@@ -189,14 +195,20 @@ func (w *Watcher) sendUpdates(ctx context.Context, ns string, out chan Event) {
 	}
 }
 
-func getNetNS() ([]string, error) {
+func getNetNS(netnsVolume string) ([]string, error) {
+	// Empty string stands for default netns
+	netns := []string{""}
+
+	if netnsVolume == "" {
+		// No netns
+		return netns, nil
+	}
+
 	log := logrus.WithField("component", "ifaces.Watcher")
 	files, err := os.ReadDir(netnsVolume)
 	if err != nil {
-		log.Warningf("can't detect any network-namespaces err: %v [Ignore if the agent privileged flag is not set]", err)
 		return nil, fmt.Errorf("failed to list network-namespaces: %w", err)
 	}
-	netns := []string{""}
 	if len(files) == 0 {
 		log.WithField("netns", files).Debug("empty network-namespaces list")
 		return netns, nil
@@ -244,11 +256,8 @@ func (w *Watcher) deleteNamespace(ns string) {
 }
 
 func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
-	var err error
-
-	w.netnsWatcher, err = fsnotify.NewWatcher()
-	if err != nil {
-		log.WithError(err).Error("can't subscribe fsnotify")
+	if w.netnsVolume == "" {
+		// netns disabled
 		return
 	}
 	// Start a goroutine to handle netns events
@@ -268,11 +277,6 @@ func (w *Watcher) netnsNotify(ctx context.Context, out chan Event) {
 			}
 		}
 	}()
-
-	err = w.netnsWatcher.Add(netnsVolume)
-	if err != nil {
-		log.Warningf("failed to add watcher to netns directory err: %v [Ignore if the agent privileged flag is not set]", err)
-	}
 }
 
 func macToFixed6(in net.HardwareAddr) ([6]uint8, error) {
