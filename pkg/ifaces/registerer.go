@@ -74,7 +74,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 		for ev := range innerCh {
 			switch ev.Type {
 			case EventAdded:
-				rlog.Debugf("Registerer:Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
+				rlog.Debugf("Subscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
 				r.metrics.InterfaceEventsCounter.Increase("reg_subscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				key := ifaceKey{cookie: ev.Interface.NetNSCookie, index: ev.Interface.Index}
 				r.m.Lock()
@@ -85,6 +85,7 @@ func (r *Registerer) Subscribe(ctx context.Context) (<-chan Event, error) {
 				r.mapSize = len(r.ifaces)
 				r.m.Unlock()
 			case EventDeleted:
+				rlog.Debugf("Unsubscribe %d=%s", ev.Interface.Index, ev.Interface.Name)
 				r.metrics.InterfaceEventsCounter.Increase("reg_unsubscribed", ev.Interface.Name, ev.Interface.Index, ev.Interface.NSName, ev.Interface.MAC, 1)
 				key := ifaceKey{cookie: ev.Interface.NetNSCookie, index: ev.Interface.Index}
 				r.m.Lock()
@@ -136,6 +137,11 @@ func (r *Registerer) IfaceNameForIndexAndMAC(idx int, cookie uint64, mac [6]uint
 	defer r.m.RUnlock()
 
 	macsMap, ok := r.ifaces[ifaceKey{cookie: cookie, index: idx}]
+	if !ok && cookie != 0 {
+		// Degraded interface name attribution
+		// Retry with cookie == 0, in case we failed to read the cookie at interface registration time
+		macsMap, ok = r.ifaces[ifaceKey{cookie: 0, index: idx}]
+	}
 	if ok {
 		if len(macsMap) == 1 {
 			// No risk of collision, just return entry without checking for MAC

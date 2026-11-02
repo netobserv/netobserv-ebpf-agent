@@ -94,7 +94,9 @@ register move, so it costs nothing at runtime — and it works in both direction
 
 ##### Feature gating
 
-The read is gated at load time by the `enable_netns_cookie` `.rodata` constant, so on kernels without
+The read has two gates:
+- The `ENABLE_SECONDARY_NETWORKS` env / config must be enabled.
+- And at load time by the `enable_netns_cookie` `.rodata` constant, so on kernels without
 the kfunc the (weak, therefore poisoned) call is dead-code-eliminated and the program still loads.
 Rather than comparing kernel versions — unreliable, since distros backport, and RHEL deliberately
 reports an older base version — the agent probes kernel BTF for `bpf_cast_to_kern_ctx`,

@@ -1498,7 +1498,7 @@ func configureFlowSpecVariables(spec *cilium.CollectionSpec, cfg *tracer.Fetcher
 		enableDirectFlowRingbuf = 1
 	}
 	enableNetnsCookie := uint8(0)
-	if cfg.IsNetNSCookieSupported {
+	if cfg.IsNetNSCookieEnabled {
 		enableNetnsCookie = 1
 	}
 
