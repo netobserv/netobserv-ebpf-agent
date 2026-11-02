@@ -131,12 +131,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 	}
 
 	ebpfConfig := &tracerflows.FetcherConfig{
-		Agent:                  *cfg,
-		EnableIngress:          ingress,
-		EnableEgress:           egress,
-		Debug:                  debug,
-		FilterConfig:           filterRules,
-		IsNetNSCookieSupported: isNetNSCookieSupported(),
+		Agent:                *cfg,
+		EnableIngress:        ingress,
+		EnableEgress:         egress,
+		Debug:                debug,
+		FilterConfig:         filterRules,
+		IsNetNSCookieEnabled: cfg.Common.EnableSecondaryNetworks && isNetNSCookieSupported(),
 	}
 
 	fetcher, err := tracerflows.NewFetcher(ebpfConfig, m)
@@ -178,7 +178,7 @@ func newAgent(
 	}
 	limiter := flow.NewCapacityLimiter(m)
 
-	netnsResolver := ifaces.NewNetnsResolver(cfg.Common.EnableSecondaryNetworks, cfg.IsNetNSCookieSupported)
+	netnsResolver := ifaces.NewNetnsResolver(cfg.Common.EnableSecondaryNetworks, cfg.IsNetNSCookieEnabled)
 	informer := common.CreateInformer(&cfg.Agent, netnsResolver, m)
 
 	return &Agent{
