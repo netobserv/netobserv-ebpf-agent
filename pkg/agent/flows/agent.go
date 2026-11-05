@@ -160,8 +160,11 @@ func newAgent(
 		promoServer = promo.InitializePrometheus(m.Settings)
 	}
 
-	samplingGauge := m.CreateSamplingRate()
+	samplingGauge := m.CreateSamplingInterval()
 	samplingGauge.Set(float64(cfg.Sampling))
+
+	mapCapacityGauge := m.CreateBPFMapCapacity()
+	mapCapacityGauge.Set(float64(cfg.CacheMaxFlows))
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.Flows.StaleEntriesEvictTimeout, m, s, cfg.Flows.EnableUDNMapping)
 	var rbTracer *flow.RingBufTracer
