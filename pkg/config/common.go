@@ -145,6 +145,9 @@ type Common struct {
 	// CacheMaxXlatFlows specifies how many flows can be accumulated in the BPF Xlat maps between evictions.
 	// It defaults to CacheMaxFlows / 2.
 	CacheMaxXlatFlows int `env:"CACHE_MAX_XLAT_FLOWS"`
+	// CacheMaxQUICFlows specifies how many flows can be accumulated in the BPF QUIC maps between evictions.
+	// It defaults to CacheMaxFlows / 2.
+	CacheMaxQUICFlows int `env:"CACHE_MAX_QUIC_FLOWS"`
 	// CacheMaxAdditionalFlows specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions.
 	// It defaults to CacheMaxFlows.
 	CacheMaxAdditionalFlows int `env:"CACHE_MAX_ADDITIONAL_FLOWS"`

@@ -43,6 +43,9 @@ func (a *Agent) Normalize() {
 	if a.CacheMaxXlatFlows <= 0 {
 		a.CacheMaxXlatFlows = max(a.CacheMaxFlows/2, 1)
 	}
+	if a.CacheMaxQUICFlows <= 0 {
+		a.CacheMaxQUICFlows = max(a.CacheMaxFlows/2, 1)
+	}
 	if a.CacheMaxAdditionalFlows <= 0 {
 		a.CacheMaxAdditionalFlows = max(a.CacheMaxFlows, 1)
 	}

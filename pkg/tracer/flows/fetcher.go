@@ -85,7 +85,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			return nil, fmt.Errorf("loading BPF data: %w", err)
 		}
 
-		configureFlowMaps(spec, cfg, filter)
+		configureFlowMaps(spec, cfg, filter, m)
 
 		// remove pinning from all maps
 		for _, m := range []string{
