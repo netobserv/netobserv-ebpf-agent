@@ -212,6 +212,7 @@ type Metrics struct {
 	FilteredPacketsCounter   *EvictionCounter
 	NetworkEventsCounter     *EvictionCounter
 	FlowBufferSizeGauge      *FlowBufferSizeGauge
+	MapCapacityGauge         *MapCapacityGauge
 	Errors                   *ErrorCounter
 	InterfaceEventsCounter   *InterfaceEventsCounter
 	OpenSSLDataEventsCounter *OpenSSLDataEventsCounter
@@ -228,6 +229,7 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.FilteredPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&filteredPackets)}
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
+	m.MapCapacityGauge = &MapCapacityGauge{vec: m.NewGaugeVec(&bpfMapCapacity)}
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
 	m.OpenSSLDataEventsCounter = &OpenSSLDataEventsCounter{vec: m.NewCounterVec(&opensslDataEventsCounter)}
@@ -396,16 +398,20 @@ func (g *FlowBufferSizeGauge) WithBufferName(bufferName string) prometheus.Gauge
 	return g.vec.WithLabelValues(bufferName)
 }
 
+type MapCapacityGauge struct {
+	vec *prometheus.GaugeVec
+}
+
+func (g *MapCapacityGauge) WithName(name string) prometheus.Gauge {
+	return g.vec.WithLabelValues(name)
+}
+
 func (m *Metrics) CreateBatchCounter(exporter string) prometheus.Counter {
 	return m.NewCounter(&exportedBatchCounterTotal, exporter)
 }
 
 func (m *Metrics) CreateSamplingInterval() prometheus.Gauge {
 	return m.NewGauge(&samplingInterval)
-}
-
-func (m *Metrics) CreateBPFMapCapacity() *prometheus.GaugeVec {
-	return m.NewGaugeVec(&bpfMapCapacity)
 }
 
 func (m *Metrics) CreateInterfaceBufferGauge(name string, f func() float64) {

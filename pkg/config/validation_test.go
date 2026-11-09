@@ -37,6 +37,7 @@ func TestNormalize(t *testing.T) {
 	assert.Equal(t, 50, cfg.CacheMaxNetworkEventFlows)
 	assert.Equal(t, 50, cfg.CacheMaxXlatFlows)
 	assert.Equal(t, 50, cfg.CacheMaxPktDropsFlows)
+	assert.Equal(t, 50, cfg.CacheMaxQUICFlows)
 
 	// Too small CacheMaxFlows
 	cfg = &Agent{Common: Common{CacheMaxFlows: 1}}
@@ -47,6 +48,7 @@ func TestNormalize(t *testing.T) {
 	assert.Equal(t, 1, cfg.CacheMaxNetworkEventFlows)
 	assert.Equal(t, 1, cfg.CacheMaxXlatFlows)
 	assert.Equal(t, 1, cfg.CacheMaxPktDropsFlows)
+	assert.Equal(t, 1, cfg.CacheMaxQUICFlows)
 
 	// Not based on CacheMaxFlows
 	cfg = &Agent{Common: Common{
@@ -56,6 +58,7 @@ func TestNormalize(t *testing.T) {
 		CacheMaxNetworkEventFlows: 400,
 		CacheMaxXlatFlows:         500,
 		CacheMaxPktDropsFlows:     600,
+		CacheMaxQUICFlows:         700,
 	}}
 	cfg.Normalize()
 
@@ -64,4 +67,5 @@ func TestNormalize(t *testing.T) {
 	assert.Equal(t, 400, cfg.CacheMaxNetworkEventFlows)
 	assert.Equal(t, 500, cfg.CacheMaxXlatFlows)
 	assert.Equal(t, 600, cfg.CacheMaxPktDropsFlows)
+	assert.Equal(t, 700, cfg.CacheMaxQUICFlows)
 }

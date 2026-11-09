@@ -148,7 +148,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, quic_metrics);
-    __uint(max_entries, 1 << 16);
+    __uint(max_entries, 1 << 16); // overridden by CACHE_MAX_QUIC_FLOWS
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } quic_flows SEC(".maps");
