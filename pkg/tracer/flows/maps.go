@@ -18,6 +18,7 @@ var mapToMetricName = map[string]string{
 	ebpf.FlowsBpfMapAggregatedFlowsPktDrop:       metrics.MapNameDrops,
 	ebpf.FlowsBpfMapAggregatedFlowsXlat:          metrics.MapNameXlat,
 	ebpf.FlowsBpfMapAdditionalFlowMetrics:        metrics.MapNameAdditional,
+	ebpf.FlowsBpfMapQuicFlows:                    metrics.MapNameQUIC,
 }
 
 func configureFlowMaps(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig, filter *attach.Filter, met *metrics.Metrics) {
