@@ -15,6 +15,7 @@ import (
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
 	ebpfflows "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	ebpfpackets "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/packets"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/internal/netattach"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,8 @@ func TestQUICMapKernel(t *testing.T) {
 			require.NoError(t, err)
 			prepareFeatureMapTest(spec)
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{Common: config.Common{CacheMaxFlows: 32}, Flows: configflows.Features{QUICTrackingMode: mode}}}
-			configureFlowMaps(spec, cfg, nil)
+			cfg.Normalize()
+			configureFlowMaps(spec, cfg, nil, metrics.NoOp())
 			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
 			collection, err := cilium.NewCollection(spec)
 			require.NoError(t, err, "%+v", err)
