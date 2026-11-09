@@ -25,7 +25,7 @@ func TestMetricsCreation(t *testing.T) {
 	assert.NotNil(t, counter)
 
 	// Test Gauge creation
-	gauge := metrics.CreateSamplingRate()
+	gauge := metrics.CreateSamplingInterval()
 	assert.NotNil(t, gauge)
 
 	// Test Histogram creation

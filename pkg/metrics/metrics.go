@@ -129,9 +129,14 @@ var (
 		TypeCounter,
 		"exporter",
 	)
-	samplingRate = defineMetric(
+	samplingInterval = defineMetric(
 		"sampling_rate",
-		"Sampling interval",
+		"Configured sampling interval",
+		TypeGauge,
+	)
+	bpfMapCapacity = defineMetric(
+		"bpf_map_capacity",
+		"Configured BPF maximum map size (CACHE_MAX_FLOWS)",
 		TypeGauge,
 	)
 	errorsCounter = defineMetric(
@@ -384,8 +389,12 @@ func (m *Metrics) CreateBatchCounter(exporter string) prometheus.Counter {
 	return m.NewCounter(&exportedBatchCounterTotal, exporter)
 }
 
-func (m *Metrics) CreateSamplingRate() prometheus.Gauge {
-	return m.NewGauge(&samplingRate)
+func (m *Metrics) CreateSamplingInterval() prometheus.Gauge {
+	return m.NewGauge(&samplingInterval)
+}
+
+func (m *Metrics) CreateBPFMapCapacity() prometheus.Gauge {
+	return m.NewGauge(&bpfMapCapacity)
 }
 
 func (m *Metrics) CreateInterfaceBufferGauge(name string, f func() float64) {
