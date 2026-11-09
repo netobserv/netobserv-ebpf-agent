@@ -7,6 +7,7 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
 	"github.com/stretchr/testify/assert"
@@ -54,14 +55,22 @@ func TestConfigureFlowMaps(t *testing.T) {
 				expected.Maps[name].MaxEntries = spec.Maps[name].MaxEntries
 			}
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{
-				Common: config.Common{CacheMaxFlows: 5000},
-				Flows:  tc.features,
+				Common: config.Common{
+					CacheMaxFlows:             5000,
+					CacheMaxDNSFlows:          5000,
+					CacheMaxPktDropsFlows:     5000,
+					CacheMaxNetworkEventFlows: 5000,
+					CacheMaxXlatFlows:         5000,
+					CacheMaxQUICFlows:         5000,
+					CacheMaxAdditionalFlows:   5000,
+				},
+				Flows: tc.features,
 			}}
 			var filter *attach.Filter
 			if tc.filter {
 				filter = attach.NewFilter([]*attach.FilterConfig{{Action: "Accept"}})
 			}
-			configureFlowMaps(spec, cfg, filter)
+			configureFlowMaps(spec, cfg, filter, metrics.NoOp())
 			// Check capacities, unrelated maps, and the ABI/flags required by the BPF object.
 			for name, before := range expected.Maps {
 				after := spec.Maps[name]

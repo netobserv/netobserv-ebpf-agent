@@ -73,9 +73,6 @@ type ebpfFlowFetcher interface {
 func New(cfg *config.Agent) (*Agent, error) {
 	alog.Info("initializing Flows agent")
 
-	// manage deprecated configs
-	config.ManageDeprecatedConfigs(cfg)
-
 	alog.Debug("acquiring Agent IP")
 	agentIP, err := common.FetchAgentIP(cfg)
 	if err != nil {
@@ -162,9 +159,6 @@ func newAgent(
 
 	samplingGauge := m.CreateSamplingInterval()
 	samplingGauge.Set(float64(cfg.Sampling))
-
-	mapCapacityGauge := m.CreateBPFMapCapacity()
-	mapCapacityGauge.Set(float64(cfg.CacheMaxFlows))
 
 	mapTracer := flow.NewMapTracer(fetcher, cfg.CacheActiveTimeout, cfg.Flows.StaleEntriesEvictTimeout, m, s, cfg.Flows.EnableUDNMapping)
 	var rbTracer *flow.RingBufTracer

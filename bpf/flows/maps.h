@@ -77,7 +77,8 @@ struct {
 // to allow calculating latency in ebpf agent directly
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1 << 20); // Will take around 64MB of space.
+    __uint(max_entries,
+           1 << 19); // Will take around 32MB of space (per entry: key ~ 40B + value 8B + some overhead => 50-60B)
     __type(key, dns_flow_id);
     __type(value, u64);
     __uint(map_flags, BPF_F_NO_PREALLOC);
@@ -147,7 +148,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, quic_metrics);
-    __uint(max_entries, 1 << 16);
+    __uint(max_entries, 1 << 16); // overridden by CACHE_MAX_QUIC_FLOWS
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } quic_flows SEC(".maps");
