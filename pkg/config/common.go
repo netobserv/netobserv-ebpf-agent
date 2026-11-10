@@ -211,6 +211,11 @@ type Common struct {
 	MetricsTLSCertPath string `env:"METRICS_TLS_CERT_PATH"`
 	// MetricsTLSKeyPath is the path to the server private key for TLS connections
 	MetricsTLSKeyPath string `env:"METRICS_TLS_KEY_PATH"`
+	// MetricsAuthType is the authentication required from the clients scraping the metrics endpoint:
+	// "disabled" (default) or "kubernetes".
+	MetricsAuthType string `env:"METRICS_AUTH_TYPE"`
+	// MetricsAuthKubeConfigPath is the path to a kubeconfig file, to authenticate from outside of a cluster.
+	MetricsAuthKubeConfigPath string `env:"METRICS_AUTH_KUBE_CONFIG_PATH"`
 	// MetricsPrefix is the prefix of the metrics that are sent to the server.
 	MetricsPrefix string `env:"METRICS_PREFIX" envDefault:"ebpf_agent_"`
 	// FlowFilterRules list of flow filter rules
