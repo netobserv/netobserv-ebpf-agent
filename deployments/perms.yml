@@ -40,3 +40,37 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: netobserv
+---
+# Only needed when METRICS_AUTH_TYPE=kubernetes, to let the agent authenticate and
+# authorize the clients scraping its metrics endpoint. TokenReview and SubjectAccessReview
+# are cluster-scoped, hence a ClusterRoleBinding rather than a RoleBinding.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: netobserv-metrics-auth
+rules:
+  - apiGroups:
+     - authentication.k8s.io
+    resources:
+     - tokenreviews
+    verbs:
+     - create
+  - apiGroups:
+     - authorization.k8s.io
+    resources:
+     - subjectaccessreviews
+    verbs:
+     - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: netobserv-metrics-auth
+subjects:
+  - kind: ServiceAccount
+    name: netobserv
+    namespace: netobserv
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: netobserv-metrics-auth

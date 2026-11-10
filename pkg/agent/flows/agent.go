@@ -98,6 +98,12 @@ func New(cfg *config.Agent) (*Agent, error) {
 			KeyPath:  cfg.MetricsTLSKeyPath,
 		}
 	}
+	if cfg.MetricsAuthType != "" {
+		metricsSettings.PromConnectionInfo.Auth = &metrics.PromAuth{
+			Type:           metrics.PromAuthTypeEnum(cfg.MetricsAuthType),
+			KubeConfigPath: cfg.MetricsAuthKubeConfigPath,
+		}
+	}
 	m := metrics.NewMetrics(metricsSettings)
 
 	var s *ovnobserv.SampleDecoder
@@ -157,7 +163,10 @@ func newAgent(
 
 	var promoServer *http.Server
 	if cfg.MetricsEnable {
-		promoServer = promo.InitializePrometheus(m.Settings)
+		var err error
+		if promoServer, err = promo.InitializePrometheus(m.Settings); err != nil {
+			return nil, fmt.Errorf("starting prometheus server: %w", err)
+		}
 	}
 
 	samplingGauge := m.CreateSamplingInterval()

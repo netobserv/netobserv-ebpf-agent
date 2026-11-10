@@ -38,6 +38,60 @@ IMAGE=dockerhub.io/myuser/plugin:tag make images
 The eBPF Agent is configured by means of environment variables. Check the
 [configuration documentation](./docs/config.md) for more details.
 
+### Authenticating the metrics endpoint
+
+When `METRICS_ENABLE` is `true`, the agent exposes its own Prometheus metrics on `/metrics`.
+By default that endpoint is not authenticated: anyone able to reach the port can read all metrics.
+When running on Kubernetes, authentication can be delegated to the Kubernetes API:
+
+```bash
+export METRICS_ENABLE=true
+export METRICS_TLS_CERT_PATH=/etc/tls/private/tls.crt
+export METRICS_TLS_KEY_PATH=/etc/tls/private/tls.key
+export METRICS_AUTH_TYPE=kubernetes
+```
+
+With `METRICS_AUTH_TYPE=kubernetes`, every request must carry a bearer token. The agent validates it
+with a `TokenReview` and then checks the caller's access with a `SubjectAccessReview`, the same
+mechanism used by flowlogs-pipeline and by the NetObserv operator for their own metrics endpoints.
+Authentication is opt-in: when `METRICS_AUTH_TYPE` is unset or `disabled`, the endpoint behaves as
+before.
+
+This requires RBAC on both sides. The agent's own ServiceAccount must be allowed to submit the
+reviews (see [deployments/perms.yml](./deployments/perms.yml)):
+
+```yaml
+rules:
+- apiGroups: [authentication.k8s.io]
+  resources: [tokenreviews]
+  verbs: [create]
+- apiGroups: [authorization.k8s.io]
+  resources: [subjectaccessreviews]
+  verbs: [create]
+```
+
+and the scraping client (for instance Prometheus) must be granted access to the endpoint path.
+Note this is a *non-resource* URL rule, since the authorization check is made against the request path:
+
+```yaml
+rules:
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+```
+
+A Prometheus `ServiceMonitor` then scrapes with its ServiceAccount token:
+
+```yaml
+endpoints:
+- port: prometheus
+  scheme: https
+  bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+```
+
+Outside of a cluster, `METRICS_AUTH_KUBE_CONFIG_PATH` points the agent at a kubeconfig file instead
+of using the in-cluster configuration. If authentication is configured but cannot be set up, the
+agent fails to start, rather than falling back to serving metrics unauthenticated.
+
 ## How to run
 
 The NetObserv eBPF Agent is designed to run as a DaemonSet in OpenShift/K8s. It is triggered and

@@ -7,6 +7,7 @@ import (
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/server"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/server/auth"
 
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -19,12 +20,12 @@ var (
 )
 
 // InitializePrometheus starts the global Prometheus server, used for operational metrics and prom-encode stages if they don't override the server settings
-func InitializePrometheus(settings *metrics.Settings) *http.Server {
+func InitializePrometheus(settings *metrics.Settings) (*http.Server, error) {
 	return StartServerAsync(settings, nil)
 }
 
 // StartServerAsync listens for prometheus resource usage requests
-func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Server {
+func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) (*http.Server, error) {
 	// create prometheus server for operational metrics
 	// if value of address is empty, then by default it will take 0.0.0.0
 	port := conn.Port
@@ -49,7 +50,15 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 	} else {
 		mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	}
-	httpServer.Handler = mux
+	// Authentication must wrap the mux before server.Default, which adds the body-size
+	// limit on top of whatever handler is set.
+	handler, err := auth.NewHandler(conn.Auth, mux)
+	if err != nil {
+		// Note that we deliberately do not fall back to an unauthenticated server here:
+		// if authentication was requested but could not be set up, no metrics server runs.
+		return nil, fmt.Errorf("cannot set up metrics endpoint authentication: %w", err)
+	}
+	httpServer.Handler = handler
 	httpServer = server.Default(httpServer)
 
 	go func() {
@@ -64,5 +73,5 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 		}
 	}()
 
-	return httpServer
+	return httpServer, nil
 }
