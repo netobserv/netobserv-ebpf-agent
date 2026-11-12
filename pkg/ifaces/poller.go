@@ -48,6 +48,7 @@ func (np *Poller) pollForEvents(ctx context.Context, ns string, out chan Event) 
 
 	netnsHandle, err := np.netnsResolver.getHandle(ns)
 	if err != nil {
+		log.WithError(err).WithField("netns", ns).Warn("can't get netns handle; not polling this namespace")
 		return
 	}
 
