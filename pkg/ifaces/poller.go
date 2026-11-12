@@ -11,29 +11,28 @@ import (
 // Poller periodically looks for the network interfaces in the system and forwards Event
 // notifications when interfaces are added or deleted.
 type Poller struct {
-	netnsVolume string
-	period      time.Duration
-	current     map[InterfaceKey]Interface
-	interfaces  func(handle netns.NsHandle, ns string) ([]Interface, error)
-	bufLen      int
+	period        time.Duration
+	current       map[InterfaceKey]Interface
+	interfaces    func(handle netns.NsHandle, ns string, netnsCookie uint64) ([]Interface, error)
+	bufLen        int
+	netnsResolver NetnsResolver
 }
 
-func NewPoller(netnsVolume string, period time.Duration, bufLen int) *Poller {
+func NewPoller(period time.Duration, bufLen int, netnsResolver NetnsResolver) *Poller {
 	return &Poller{
-		netnsVolume: netnsVolume,
-		period:      period,
-		bufLen:      bufLen,
-		interfaces:  netInterfaces,
-		current:     map[InterfaceKey]Interface{},
+		period:        period,
+		bufLen:        bufLen,
+		interfaces:    netInterfaces,
+		current:       map[InterfaceKey]Interface{},
+		netnsResolver: netnsResolver,
 	}
 }
 
 func (np *Poller) Subscribe(ctx context.Context) (<-chan Event, error) {
-	netns, err := getNetNS(np.netnsVolume)
+	netns, err := np.netnsResolver.listNetNS()
 	if err != nil {
 		return nil, err
 	}
-
 	out := make(chan Event, np.bufLen)
 	for _, n := range netns {
 		go np.pollForEvents(ctx, n, out)
@@ -46,21 +45,17 @@ func (np *Poller) pollForEvents(ctx context.Context, ns string, out chan Event) 
 	log := logrus.WithField("component", "ifaces.Poller")
 	log.WithField("period", np.period).Debug("subscribing to Interface events")
 	ticker := time.NewTicker(np.period)
-	var netnsHandle netns.NsHandle
-	var err error
 
-	if ns == "" {
-		netnsHandle = netns.None()
-	} else {
-		netnsHandle, err = netns.GetFromName(ns)
-		if err != nil {
-			return
-		}
+	netnsHandle, err := np.netnsResolver.getHandle(ns)
+	if err != nil {
+		log.WithError(err).WithField("netns", ns).Warn("can't get netns handle; not polling this namespace")
+		return
 	}
 
+	cookie := np.netnsResolver.getCookie(netnsHandle)
 	defer ticker.Stop()
 	for {
-		if ifaces, err := np.interfaces(netnsHandle, ns); err != nil {
+		if ifaces, err := np.interfaces(netnsHandle, ns, cookie); err != nil {
 			log.WithError(err).Warn("fetching interface names")
 		} else {
 			log.WithField("names", ifaces).Debug("fetched interface names")
