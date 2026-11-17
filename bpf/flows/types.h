@@ -55,6 +55,7 @@ typedef struct dns_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
     u64 latency;
+    struct bpf_spin_lock lock;
     u16 id;
     u16 flags;
     u16 eth_protocol;
@@ -94,6 +95,7 @@ typedef struct xlat_metrics_t {
     u16 eth_protocol;
 } xlat_metrics;
 
+// TODO: split rtt/ipsec, global, spinlock
 typedef struct additional_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
@@ -165,6 +167,7 @@ typedef struct quic_metrics_t {
     u64 start_mono_time_ts;
     u64 end_mono_time_ts;
     u32 version;       // QUIC version (from long header), 0 if unknown
+    struct bpf_spin_lock lock;
     u16 eth_protocol;  // ETH_P_IP or ETH_P_IPV6
     u8 seen_long_hdr;  // Saw handshake packets (long header)
     u8 seen_short_hdr; // Saw established packets (short header)

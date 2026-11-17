@@ -223,6 +223,7 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
     // Lookup or create QUIC metrics
     quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
     if (flow) {
+        bpf_spin_lock(&flow->lock);
         flow->end_mono_time_ts = now;
         if (hdr_type == QUIC_HEADER_TYPE_LONG) {
             flow->seen_long_hdr = 1;
@@ -231,6 +232,7 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
         } else {
             flow->seen_short_hdr = 1;
         }
+        bpf_spin_unlock(&flow->lock);
     } else {
         quic_metrics new_flow = {
             .start_mono_time_ts = now,
@@ -248,6 +250,7 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
             if (ret == -EEXIST) {
                 quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
                 if (flow) {
+                    bpf_spin_lock(&flow->lock);
                     flow->end_mono_time_ts = now;
                     if (hdr_type == QUIC_HEADER_TYPE_LONG) {
                         flow->seen_long_hdr = 1;
@@ -256,6 +259,7 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
                     } else {
                         flow->seen_short_hdr = 1;
                     }
+                    bpf_spin_unlock(&flow->lock);
                 }
             }
         }

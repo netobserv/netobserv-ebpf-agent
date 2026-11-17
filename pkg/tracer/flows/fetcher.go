@@ -991,17 +991,17 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 // accumulateSecondaryMaps merges per-CPU / secondary eBPF map metrics into the main flow map.
 func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, met *metrics.Metrics) {
 	if m.config.Flows.EnableDNSTracking {
-		var dns []ebpf.FlowsBpfDnsMetrics
-		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
-			for i := range dns {
-				flow.AccumulateDNS(&dns[i])
-			}
+		// Global map => use single receiver
+		var dns ebpf.FlowsBpfDnsMetrics
+		countDNS := lookupAndDeleteSecondaryMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
+			flow.AccumulateDNS(&dns)
 		})
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDNS).Set(float64(countDNS))
 	}
 	if m.config.Flows.EnablePktDrops {
+		// Per-CPU map => use slice receiver
 		var pktDrops []ebpf.FlowsBpfPktDropMetrics
-		countDrops := lookupAndDeletePerCPUMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+		countDrops := lookupAndDeleteSecondaryMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
 			for i := range pktDrops {
 				flow.AccumulateDrops(&pktDrops[i])
 			}
@@ -1009,8 +1009,9 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDrops).Set(float64(countDrops))
 	}
 	if m.config.Flows.EnableNetworkEventsMonitoring {
+		// Per-CPU map => use slice receiver
 		var netev []ebpf.FlowsBpfNetworkEventsMetrics
-		countNetEv := lookupAndDeletePerCPUMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+		countNetEv := lookupAndDeleteSecondaryMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
 			for i := range netev {
 				flow.AccumulateNetworkEvents(&netev[i])
 			}
@@ -1018,8 +1019,9 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameNetEvents).Set(float64(countNetEv))
 	}
 	if m.config.Flows.EnablePktTranslationTracking {
+		// Per-CPU map => use slice receiver
 		var xlat []ebpf.FlowsBpfXlatMetrics
-		countXlat := lookupAndDeletePerCPUMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+		countXlat := lookupAndDeleteSecondaryMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
 			for i := range xlat {
 				flow.AccumulateXlat(&xlat[i])
 			}
@@ -1027,8 +1029,9 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameXlat).Set(float64(countXlat))
 	}
 	if m.config.Flows.EnableRTT || m.config.Flows.EnableIPsecTracking {
+		// Per-CPU map => use slice receiver
 		var addit []ebpf.FlowsBpfAdditionalMetrics
-		countAddit := lookupAndDeletePerCPUMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+		countAddit := lookupAndDeleteSecondaryMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
 			for i := range addit {
 				flow.AccumulateAdditional(&addit[i])
 			}
@@ -1040,20 +1043,19 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		}
 	}
 	if m.config.Flows.QUICTrackingMode != 0 {
-		var quic []ebpf.FlowsBpfQuicMetrics
-		countQuic := lookupAndDeletePerCPUMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
-			for i := range quic {
-				flow.AccumulateQuic(&quic[i])
-			}
+		// Global map => use single receiver
+		var quic ebpf.FlowsBpfQuicMetrics
+		countQuic := lookupAndDeleteSecondaryMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
+			flow.AccumulateQuic(&quic)
 		})
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameQUIC).Set(float64(countQuic))
 	}
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 }
 
-func lookupAndDeletePerCPUMap(
+func lookupAndDeleteSecondaryMap(
 	flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent,
-	perCPUReceiver any,
+	receiver any,
 	bpfMap *cilium.Map,
 	met *metrics.Metrics,
 	accumulator func(flow *model.BpfFlowContent),
@@ -1062,11 +1064,11 @@ func lookupAndDeletePerCPUMap(
 	ids := []ebpf.FlowsBpfFlowId{}
 
 	it := bpfMap.Iterate()
-	for it.Next(&id, perCPUReceiver) {
+	for it.Next(&id, receiver) {
 		ids = append(ids, id)
 	}
 	for _, id := range ids {
-		if err := bpfMap.LookupAndDelete(&id, perCPUReceiver); err != nil {
+		if err := bpfMap.LookupAndDelete(&id, receiver); err != nil {
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete secondary map entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteSecondaryMetric", metrics.HighSeverity).Inc()
 			continue

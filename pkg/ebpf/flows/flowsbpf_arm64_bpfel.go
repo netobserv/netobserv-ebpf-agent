@@ -50,12 +50,16 @@ type FlowsBpfDnsMetricsT struct {
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
 	Latency         uint64
-	Id              uint16
-	Flags           uint16
-	EthProtocol     uint16
-	Errno           uint8
-	Name            [32]int8
-	_               [1]byte
+	Lock            struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	Id          uint16
+	Flags       uint16
+	EthProtocol uint16
+	Errno       uint8
+	Name        [32]int8
+	_           [5]byte
 }
 
 type FlowsBpfDnsNameBuffer struct {
@@ -221,9 +225,14 @@ type FlowsBpfQuicMetricsT struct {
 	StartMonoTimeTs uint64
 	EndMonoTimeTs   uint64
 	Version         uint32
-	EthProtocol     uint16
-	SeenLongHdr     uint8
-	SeenShortHdr    uint8
+	Lock            struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	EthProtocol  uint16
+	SeenLongHdr  uint8
+	SeenShortHdr uint8
+	_            [4]byte
 }
 
 type FlowsBpfTcpFlagsT uint32
