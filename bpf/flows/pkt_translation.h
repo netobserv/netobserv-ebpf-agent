@@ -85,7 +85,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags, stru
 
     xlat_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_xlat, id);
     if (extra_metrics != NULL) {
-        extra_metrics->end_mono_time_ts = current_time;
+        extra_metrics->mono_time_ts = current_time;
         parse_tuple(reply_t, extra_metrics, zone_id, family, id->transport_protocol, true);
         return ret;
     }
@@ -93,8 +93,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags, stru
     // there is no matching flows so lets create new one and add the xlation
     xlat_metrics new_extra_metrics;
     __builtin_memset(&new_extra_metrics, 0, sizeof(new_extra_metrics));
-    new_extra_metrics.start_mono_time_ts = current_time;
-    new_extra_metrics.end_mono_time_ts = current_time;
+    new_extra_metrics.mono_time_ts = current_time;
     new_extra_metrics.eth_protocol = eth_protocol;
     parse_tuple(reply_t, &new_extra_metrics, zone_id, family, id->transport_protocol, true);
     ret = bpf_map_update_elem(&aggregated_flows_xlat, id, &new_extra_metrics, BPF_NOEXIST);
@@ -105,7 +104,7 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags, stru
         if (ret == -EEXIST) {
             xlat_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_xlat, id);
             if (extra_metrics != NULL) {
-                extra_metrics->end_mono_time_ts = current_time;
+                extra_metrics->mono_time_ts = current_time;
                 parse_tuple(reply_t, extra_metrics, zone_id, family, id->transport_protocol, true);
                 return 0;
             }

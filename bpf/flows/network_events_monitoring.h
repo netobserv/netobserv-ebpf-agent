@@ -46,7 +46,7 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
         }
     }
 
-    extra_metrics->end_mono_time_ts = ts;
+    extra_metrics->mono_time_ts = ts;
     if (!exists) {
         __builtin_memcpy(extra_metrics->network_events[idx], cookie, MAX_EVENT_MD);
         extra_metrics->packets[idx] = 1;
@@ -119,8 +119,7 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     u64 current_time = bpf_ktime_get_ns();
     network_events_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
-    new_flow.start_mono_time_ts = current_time;
-    new_flow.end_mono_time_ts = current_time;
+    new_flow.mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.network_events_idx = 0;
     bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);

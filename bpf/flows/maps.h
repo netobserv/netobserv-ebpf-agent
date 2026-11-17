@@ -10,7 +10,7 @@
 // Unused unless ENABLE_FLOWS_RINGBUF_FALLBACK is set
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);   // minimized to os.Getpagesize() when unused
+    __uint(max_entries, 1 << 24); // minimized to os.Getpagesize() when unused
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } direct_flows SEC(".maps");
 
@@ -20,7 +20,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, flow_id);
     __type(value, flow_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows SEC(".maps");
@@ -31,7 +31,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, flow_id);
     __type(value, dns_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_DNS_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_DNS_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_dns SEC(".maps");
@@ -43,7 +43,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, pkt_drop_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_PKT_DROPS_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_PKT_DROPS_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_pkt_drop SEC(".maps");
@@ -55,7 +55,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, network_events_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_NETWORK_EVENT_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_NETWORK_EVENT_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_network_events SEC(".maps");
@@ -67,19 +67,19 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, xlat_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_XLAT_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_XLAT_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } aggregated_flows_xlat SEC(".maps");
 
 // Key: the flow identifier. Value: extra metrics for that identifier.
 // Used if ENABLE_RTT or ENABLE_IPSEC_TRACKING is true
-// TODO: split rtt/ipsec, global, spinlock
 struct {
+    // per-cpu because: "tracing progs cannot use bpf_spin_lock yet"
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __type(key, flow_id);
     __type(value, additional_metrics);
-    __uint(max_entries, 1 << 24);   // changed to CACHE_MAX_ADDITIONAL_FLOWS at startup
+    __uint(max_entries, 1 << 24); // changed to CACHE_MAX_ADDITIONAL_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } additional_flow_metrics SEC(".maps");
@@ -161,7 +161,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, flow_id);
     __type(value, quic_metrics);
-    __uint(max_entries, 1 << 16);   // changed to CACHE_MAX_QUIC_FLOWS at startup
+    __uint(max_entries, 1 << 16); // changed to CACHE_MAX_QUIC_FLOWS at startup
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } quic_flows SEC(".maps");

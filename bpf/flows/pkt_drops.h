@@ -9,7 +9,7 @@ static inline long pkt_drop_lookup_and_update_flow(flow_id *id, u8 state, u16 fl
                                                    u64 len) {
     pkt_drop_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_pkt_drop, id);
     if (extra_metrics != NULL) {
-        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
+        extra_metrics->mono_time_ts = bpf_ktime_get_ns();
         extra_metrics->packets = add_len_u16(extra_metrics->packets, 1);
         extra_metrics->bytes = add_len_u16(extra_metrics->bytes, len);
         extra_metrics->latest_state = state;
@@ -74,8 +74,7 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb, enum 
     u64 current_time = bpf_ktime_get_ns();
     pkt_drop_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
-    new_flow.start_mono_time_ts = current_time;
-    new_flow.end_mono_time_ts = current_time;
+    new_flow.mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.packets = 1;
     new_flow.bytes = add_len_u16(0, len);

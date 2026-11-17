@@ -52,8 +52,7 @@ typedef struct flow_metrics_t {
 const static struct flow_metrics_t *unused_flowmet __attribute__((unused));
 
 typedef struct dns_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
+    u64 mono_time_ts;
     u64 latency;
     struct bpf_spin_lock lock;
     u16 id;
@@ -64,8 +63,7 @@ typedef struct dns_metrics_t {
 } dns_metrics;
 
 typedef struct pkt_drop_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
+    u64 mono_time_ts;
     u16 bytes;
     u16 packets;
     u32 latest_drop_cause;
@@ -75,8 +73,7 @@ typedef struct pkt_drop_metrics_t {
 } pkt_drop_metrics;
 
 typedef struct network_events_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
+    u64 mono_time_ts;
     u8 network_events[MAX_NETWORK_EVENTS][MAX_EVENT_MD];
     u16 bytes[MAX_NETWORK_EVENTS];
     u16 packets[MAX_NETWORK_EVENTS];
@@ -85,8 +82,7 @@ typedef struct network_events_metrics_t {
 } network_events_metrics;
 
 typedef struct xlat_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
+    u64 mono_time_ts;
     u8 saddr[IP_MAX_LEN];
     u8 daddr[IP_MAX_LEN];
     u16 sport;
@@ -95,11 +91,9 @@ typedef struct xlat_metrics_t {
     u16 eth_protocol;
 } xlat_metrics;
 
-// TODO: split rtt/ipsec, global, spinlock
 typedef struct additional_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
-    u64 flow_rtt;
+    u64 mono_time_ts;
+    u32 flow_rtt;
     int ipsec_encrypted_ret;
     u16 eth_protocol;
     bool ipsec_encrypted;
@@ -164,9 +158,8 @@ const enum global_counters_key_t *unused_counters __attribute__((unused));
 
 // QUIC flow metrics
 typedef struct quic_metrics_t {
-    u64 start_mono_time_ts;
-    u64 end_mono_time_ts;
-    u32 version;       // QUIC version (from long header), 0 if unknown
+    u64 mono_time_ts;
+    u32 version; // QUIC version (from long header), 0 if unknown
     struct bpf_spin_lock lock;
     u16 eth_protocol;  // ETH_P_IP or ETH_P_IPV6
     u8 seen_long_hdr;  // Saw handshake packets (long header)
