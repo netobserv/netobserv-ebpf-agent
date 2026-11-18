@@ -37,7 +37,7 @@ eBPF verifier requirements:
 - No config files from agent's perspective
 - Source of truth: `pkg/config/agent.go`
 - All options documented in [docs/config.md](./docs/config.md)
-- Agent does NOT access Kubernetes API directly
+- Agent does NOT access Kubernetes API directly, with one exception: when `METRICS_AUTH_TYPE=kubernetes`, it submits `TokenReview` / `SubjectAccessReview` requests to authenticate clients scraping its metrics endpoint (see `pkg/server/auth/`)
 
 ### 🚨 Licenses
 - eBPF code (`bpf/`): GPL v2 (see `bpf/LICENSE`)
@@ -191,7 +191,7 @@ Export modes (check `EXPORT` env var):
 - **Sampling**: `SAMPLING` env var (agent default: 0 = disabled, commonly deployed: 50 = 1:50 packets). Lower = more flows/resources
 - **Caching**: `CACHE_MAX_FLOWS` (default: 5000), `CACHE_ACTIVE_TIMEOUT` (default: 5s)
 - **Memory**: Watch for eBPF map sizes and userspace cache
-- **Metrics**: Prometheus metrics exposed on `METRICS_SERVER_PORT` (default: 9090)
+- **Metrics**: Prometheus metrics exposed on `METRICS_SERVER_PORT` (default: 9090). Optionally served over TLS (`METRICS_TLS_CERT_PATH` / `METRICS_TLS_KEY_PATH`) and authenticated (`METRICS_AUTH_TYPE`)
 
 ### eBPF Maps
 - **aggregated_flows**: `BPF_MAP_TYPE_HASH` (global, not per-CPU) - main flow aggregation

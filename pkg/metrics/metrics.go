@@ -22,10 +22,28 @@ type PromTLS struct {
 	KeyPath  string
 }
 
+type PromAuthTypeEnum string
+
+const (
+	// PromAuthDisabled serves the metrics endpoint without authentication (default).
+	PromAuthDisabled PromAuthTypeEnum = "disabled"
+	// PromAuthKubernetes delegates to the Kubernetes API: callers must provide a bearer token
+	// accepted by a TokenReview, and be granted access by a SubjectAccessReview on the requested path.
+	PromAuthKubernetes PromAuthTypeEnum = "kubernetes"
+)
+
+// PromAuth configures authentication of the clients scraping the metrics endpoint.
+type PromAuth struct {
+	Type PromAuthTypeEnum
+	// KubeConfigPath is optional, to run outside of a cluster.
+	KubeConfigPath string
+}
+
 type PromConnectionInfo struct {
 	Address string
 	Port    int
 	TLS     *PromTLS
+	Auth    *PromAuth
 }
 
 type Level string
