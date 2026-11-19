@@ -154,18 +154,29 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	for i := 0; i < 25000; i++ {
 		input = append(input, &model.Record{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
+			Bytes:       uint64(i),
 		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil)}})
 	}
 	flows <- input
+	close(flows)
 	go exporter.ExportFlows(flows)
 
-	// expect that the submitted message is split in chunks no longer than msgMaxLen
-	rs := test2.ReceiveTimeout(t, serverOut, timeout)
-	assert.Len(t, rs.Entries, cfg.Flows.GRPCMessageMaxFlows)
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
-	assert.Len(t, rs.Entries, cfg.Flows.GRPCMessageMaxFlows)
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
-	assert.Len(t, rs.Entries, 5000)
+	// Every input flow must be exported exactly once, in bounded messages.
+	seen := make([]bool, len(input))
+	var rs *pbflow.Records
+	for _, expectedSize := range []int{cfg.Flows.GRPCMessageMaxFlows, cfg.Flows.GRPCMessageMaxFlows, 5000} {
+		rs = test2.ReceiveTimeout(t, serverOut, timeout)
+		assert.Len(t, rs.Entries, expectedSize)
+		for _, record := range rs.Entries {
+			index := int(record.GetBytes())
+			require.Less(t, index, len(seen))
+			require.False(t, seen[index], "duplicate flow %d", index)
+			seen[index] = true
+		}
+	}
+	for i, exported := range seen {
+		require.True(t, exported, "flow %d was not exported", i)
+	}
 
 	// after all the operation, no more flows are sent
 	select {

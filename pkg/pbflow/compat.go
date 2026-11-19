@@ -38,6 +38,7 @@ var (
 
 	FlowToPB                = flowpb.FlowToPB
 	FlowsToPB               = flowpb.FlowsToPB
+	ForEachFlowBatch        = flowpb.ForEachFlowBatch
 	NewCollectorClient      = flowpb.NewCollectorClient
 	PBToFlow                = flowpb.PBToFlow
 	RegisterCollectorServer = flowpb.RegisterCollectorServer
