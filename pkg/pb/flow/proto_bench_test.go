@@ -2,7 +2,6 @@ package pbflow
 
 import (
 	"net"
-	"runtime"
 	"testing"
 	"time"
 
@@ -63,8 +62,7 @@ func BenchmarkFlowToPB(b *testing.B) {
 
 // BenchmarkForEachFlowBatchLargeEviction measures conversion of an eviction at a
 // configured map capacity. ReportAllocs records total allocations per
-// eviction; peak-chunk-B records the most bytes allocated to convert one
-// protobuf batch, and peak-pb-records records its maximum number of records.
+// eviction, and peak-pb-records records the maximum protobuf batch length.
 func BenchmarkForEachFlowBatchLargeEviction(b *testing.B) {
 	const n = 120000
 	batch := make([]*model.Record, n)
@@ -76,21 +74,12 @@ func BenchmarkForEachFlowBatchLargeEviction(b *testing.B) {
 
 	var sink *Record
 	peakBatchRecords := 0
-	peakChunkBytes := uint64(0)
 	for b.Loop() {
-		var stats runtime.MemStats
-		runtime.ReadMemStats(&stats)
-		previousTotalAlloc := stats.TotalAlloc
 		ForEachFlowBatch(batch, maxPerMsg, func(records *Records) {
 			peakBatchRecords = max(peakBatchRecords, len(records.Entries))
-			runtime.ReadMemStats(&stats)
-			chunkBytes := stats.TotalAlloc - previousTotalAlloc
-			peakChunkBytes = max(peakChunkBytes, chunkBytes)
-			previousTotalAlloc = stats.TotalAlloc
 			sink = records.Entries[len(records.Entries)-1]
 		})
 	}
 	_ = sink
-	b.ReportMetric(float64(peakChunkBytes), "peak-chunk-B")
 	b.ReportMetric(float64(peakBatchRecords), "peak-pb-records")
 }
