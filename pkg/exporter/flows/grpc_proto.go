@@ -77,7 +77,7 @@ func (g *GRPCProto) reconnect() error {
 
 // ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (g *GRPCProto) ExportFlows(input <-chan []*model.Record) {
+func (g *GRPCProto) ExportFlows(input <-chan *model.FlowBatch) {
 	socket := utils.GetSocket(g.hostIP, g.hostPort)
 	log := glog.WithField("collector", socket)
 
@@ -104,8 +104,9 @@ func (g *GRPCProto) ExportFlows(input <-chan []*model.Record) {
 			}
 		}()
 	}
-	for inputRecords := range input {
-		g.sendBatch(inputRecords, log)
+	for batch := range input {
+		g.sendBatch(batch.Records, log)
+		batch.Release()
 	}
 	if err := g.clientConn.Close(); err != nil {
 		log.WithError(err).Warn("couldn't close flow export client")

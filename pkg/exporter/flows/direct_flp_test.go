@@ -42,11 +42,11 @@ parameters:
 	}()
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*model.Record, 10)
+	flows := make(chan *model.FlowBatch, 10)
 	go flp.ExportFlows(flows)
-	flows <- []*model.Record{
+	flows <- model.NewFlowBatch([]*model.Record{
 		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
-	}
+	}, 0, nil)
 
 	// Read capture
 	time.Sleep(10 * time.Millisecond)

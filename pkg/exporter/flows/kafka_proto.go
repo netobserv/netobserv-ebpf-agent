@@ -23,15 +23,48 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer  kafkaWriter
-	Metrics *metrics.Metrics
+	Writer        kafkaWriter
+	Metrics       *metrics.Metrics
+	Async         bool
+	QueueCapacity int
 }
 
-func (kp *KafkaProto) ExportFlows(input <-chan []*model.Record) {
+func (kp *KafkaProto) ExportFlows(input <-chan *model.FlowBatch) {
 	klog.Info("starting Kafka exporter")
-	for records := range input {
-		kp.batchAndSubmit(records)
+	if kp.Async {
+		kp.exportFlowsAsync(input)
+		return
 	}
+	for batch := range input {
+		kp.batchAndSubmit(batch.Records)
+		batch.Release()
+	}
+}
+
+// exportFlowsAsync keeps asynchronous handoff inside the agent's byte budget.
+// The worker uses synchronous Kafka writes and releases each batch only after
+// WriteMessages returns. The queue has a finite capacity; if it fills, reading
+// from the upstream exporter channel pauses and the shared limiter rejects new
+// batches instead of allowing Kafka's internal async queue to grow unbounded.
+func (kp *KafkaProto) exportFlowsAsync(input <-chan *model.FlowBatch) {
+	queueCapacity := kp.QueueCapacity
+	if queueCapacity < 1 {
+		queueCapacity = 1
+	}
+	queue := make(chan *model.FlowBatch, queueCapacity)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		for batch := range queue {
+			kp.batchAndSubmit(batch.Records)
+			batch.Release()
+		}
+	}()
+	for batch := range input {
+		queue <- batch
+	}
+	close(queue)
+	<-workerDone
 }
 
 func getFlowKey(record *model.Record) []byte {

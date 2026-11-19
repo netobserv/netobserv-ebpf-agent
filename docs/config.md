@@ -44,6 +44,14 @@ The following environment variables are available to configure the NetObserv eBP
   cache. If the accounter reaches the max number of flows, it flushes them to the collector.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
+* `FLOW_BATCH_BUFFER_BYTES` (default: `268435456`, or 256 MiB). Maximum estimated memory held by
+  flow batches waiting for or being processed by the exporter. The agent estimates each batch's
+  retained Go memory, including variable-sized interface and event metadata. A batch that would
+  exceed the shared budget is dropped immediately so map draining can continue. Batches larger
+  than the complete budget are also dropped. The `flow_batch_in_flight_bytes` and
+  `flow_batch_in_flight_batches` metrics report current queue and exporter usage;
+  `dropped_flow_batches_total{reason=...}` reports rejected batches. These names use the
+  configured `METRICS_PREFIX`.
 * `DEDUPER` (default: `none`, disabled). Accepted values are `none` (disabled) and `firstCome`.
   When enabled, it will detect duplicate flows (flows that have been detected e.g. through
   both the physical and a virtual interface).
@@ -119,12 +127,14 @@ so no user should need to change them.
 
 * `BUFFERS_LENGTH` (default: `50`). Length of the internal communication channels between the different
   processing stages.
-* `EXPORTER_BUFFER_LENGTH` (default: value of `BUFFERS_LENGTH`) establishes the length of the buffer
-  of flow batches (not individual flows) that can be accumulated before the Kafka or GRPC exporter.
-  When this buffer is full (e.g. because the Kafka or GRPC endpoint is slow), incoming flow batches
-  will be dropped. If unset, its value is the same as the BUFFERS_LENGTH property.
-* `KAFKA_ASYNC` (default: `true`). If `true`, the message writing process will never block. It also
-  means that errors are ignored since the caller will not receive the returned value.
+* `EXPORTER_BUFFER_LENGTH` (default: value of `BUFFERS_LENGTH`) establishes the maximum number of
+  flow batches (not individual flows) queued before the exporter. The shared byte budget also
+  limits this queue and the batch currently being exported. When either limit is reached, incoming
+  flow batches are dropped and counted. If unset, its value is the same as `BUFFERS_LENGTH`.
+* `KAFKA_ASYNC` (default: `true`). Enables an agent-owned asynchronous Kafka queue. The queue is
+  finite and its batches remain charged to the shared flow-batch byte budget until the synchronous
+  Kafka write completes. If the queue and budget fill, new batches are dropped and counted rather
+  than being retained by kafka-go's unbounded asynchronous queue.
 * `LISTEN_INTERFACES` (default: `watch`). Mechanism used by the agent to listen for added or removed
   network interfaces. Accepted values are:
   - `watch`: interfaces are traced immediately after they are created. This is
