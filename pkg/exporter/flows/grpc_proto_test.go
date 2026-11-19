@@ -47,14 +47,14 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*model.Record, 10)
-	flows <- []*model.Record{
+	flows := make(chan *model.FlowBatch, 10)
+	flows <- model.NewFlowBatch([]*model.Record{
 		{AgentIP: net.ParseIP("10.9.8.7"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
-	}
-	flows <- []*model.Record{
+	}, 0, nil)
+	flows <- model.NewFlowBatch([]*model.Record{
 		{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("8888::1111")},
-	}
+	}, 0, nil)
 	go exporter.ExportFlows(flows)
 
 	rs := test2.ReceiveTimeout(t, serverOut, timeout)
@@ -98,14 +98,14 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send some flows to the input of the exporter stage
-	flows := make(chan []*model.Record, 10)
-	flows <- []*model.Record{
+	flows := make(chan *model.FlowBatch, 10)
+	flows <- model.NewFlowBatch([]*model.Record{
 		{AgentIP: net.ParseIP("10.11.12.13"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
-	}
-	flows <- []*model.Record{
+	}, 0, nil)
+	flows <- model.NewFlowBatch([]*model.Record{
 		{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: model.IPv6Type}},
 			AgentIP: net.ParseIP("9999::2222")},
-	}
+	}, 0, nil)
 	go exporter.ExportFlows(flows)
 
 	rs := test2.ReceiveTimeout(t, serverOut, timeout)
@@ -149,14 +149,14 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send a message much longer than the limit length
-	flows := make(chan []*model.Record, 10)
+	flows := make(chan *model.FlowBatch, 10)
 	var input []*model.Record
 	for i := 0; i < 25000; i++ {
 		input = append(input, &model.Record{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{
 			EthProtocol: model.IPv6Type,
 		}}, AgentIP: net.ParseIP("1111::1111"), Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("12345678", 0, nil)}})
 	}
-	flows <- input
+	flows <- model.NewFlowBatch(input, 0, nil)
 	go exporter.ExportFlows(flows)
 
 	// expect that the submitted message is split in chunks no longer than msgMaxLen
@@ -227,13 +227,13 @@ func TestConnectionReset(t *testing.T) {
 
 	// Send some flows to the input of the exporter stage
 	nFlows := 5
-	flows := make(chan []*model.Record, nFlows+1)
+	flows := make(chan *model.FlowBatch, nFlows+1)
 	go exporter.ExportFlows(flows)
 	go func() {
 		for i := range nFlows {
-			flows <- []*model.Record{
+			flows <- model.NewFlowBatch([]*model.Record{
 				{AgentIP: net.ParseIP(fmt.Sprintf("10.9.8.%d", i)), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
-			}
+			}, 0, nil)
 			time.Sleep(300 * time.Millisecond)
 		}
 	}()

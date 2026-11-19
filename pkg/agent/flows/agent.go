@@ -50,7 +50,7 @@ type Agent struct {
 	rbTracer  *flow.RingBufTracer
 	accounter *flow.Accounter
 	limiter   *flow.CapacityLimiter
-	exporter  node.TerminalFunc[[]*model.Record]
+	exporter  node.TerminalFunc[*model.FlowBatch]
 
 	status        common.Status
 	promoServer   *http.Server
@@ -149,7 +149,7 @@ func newAgent(
 	cfg *config.Agent,
 	m *metrics.Metrics,
 	fetcher ebpfFlowFetcher,
-	exporter node.TerminalFunc[[]*model.Record],
+	exporter node.TerminalFunc[*model.FlowBatch],
 	agentIP net.IP,
 	s *ovnobserv.SampleDecoder,
 ) (*Agent, error) {
@@ -176,7 +176,7 @@ func newAgent(
 	if rbTracer != nil {
 		accounter = flow.NewAccounter(cfg.CacheMaxFlows, cfg.CacheActiveTimeout, time.Now, monotime.Now, m, s, cfg.Flows.EnableUDNMapping)
 	}
-	limiter := flow.NewCapacityLimiter(m)
+	limiter := flow.NewCapacityLimiter(m, cfg.FlowBatchBufferBytes)
 
 	informer := common.CreateInformer(cfg, m)
 
@@ -195,7 +195,7 @@ func newAgent(
 	}, nil
 }
 
-func buildFlowExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildFlowExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[*model.FlowBatch], error) {
 	switch cfg.Export {
 	case "grpc":
 		return buildGRPCExporter(cfg, m)
@@ -212,7 +212,7 @@ func buildFlowExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc
 	}
 }
 
-func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[*model.FlowBatch], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -224,7 +224,7 @@ func buildGRPCExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc
 	return grpcExporter.ExportFlows, nil
 }
 
-func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.Record], error) {
+func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[*model.FlowBatch], error) {
 	flpExporter, err := exporterflows.StartDirectFLP(cfg.FLPConfig, cfg.BuffersLength, 0)
 	if err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ func buildFlowDirectFLPExporter(cfg *config.Agent) (node.TerminalFunc[[]*model.R
 	return flpExporter.ExportFlows, nil
 }
 
-func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[[]*model.Record], error) {
+func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFunc[*model.FlowBatch], error) {
 	if len(cfg.Flows.KafkaBrokers) == 0 {
 		return nil, errors.New("at least one Kafka broker is needed")
 	}
@@ -256,7 +256,13 @@ func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFun
 		}
 		transport.SASL = mechanism
 	}
+	queueCapacity := cfg.ExporterBufferLength
+	if queueCapacity == 0 {
+		queueCapacity = cfg.BuffersLength
+	}
 	return (&exporterflows.KafkaProto{
+		Async:         cfg.Flows.KafkaAsync,
+		QueueCapacity: queueCapacity,
 		Writer: &kafkago.Writer{
 			Addr:      kafkago.TCP(cfg.Flows.KafkaBrokers...),
 			Topic:     cfg.Flows.KafkaTopic,
@@ -273,16 +279,18 @@ func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFun
 			// timeout throttling
 			// https://github.com/netobserv/flowlogs-pipeline/pull/233#discussion_r897830057
 			BatchTimeout: time.Nanosecond,
-			Async:        cfg.Flows.KafkaAsync,
-			Compression:  compression,
-			Transport:    &transport,
-			Balancer:     &kafkago.Hash{},
+			// Keep kafka-go's internal queue synchronous; KafkaProto provides a bounded
+			// asynchronous queue whose batches remain reserved until delivery completes.
+			Async:       false,
+			Compression: compression,
+			Transport:   &transport,
+			Balancer:    &kafkago.Hash{},
 		},
 		Metrics: m,
 	}).ExportFlows, nil
 }
 
-func buildIPFIXExporter(cfg *config.Agent, proto string) (node.TerminalFunc[[]*model.Record], error) {
+func buildIPFIXExporter(cfg *config.Agent, proto string) (node.TerminalFunc[*model.FlowBatch], error) {
 	if cfg.TargetHost == "" || cfg.TargetPort == 0 {
 		return nil, fmt.Errorf("missing target host or port: %s:%d",
 			cfg.TargetHost, cfg.TargetPort)
@@ -336,7 +344,7 @@ func (a *Agent) Status() common.Status {
 
 // buildAndStartPipeline creates the ETL flow processing graph.
 // For a more visual view, check the docs/architecture.md document.
-func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*model.Record], error) {
+func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[*model.FlowBatch], error) {
 
 	if !a.cfg.EbpfProgramManagerMode {
 		alog.Debug("registering interfaces listener in background")
@@ -357,7 +365,9 @@ func (a *Agent) buildAndStartPipeline(ctx context.Context) (*node.Terminal[[]*mo
 		accounter = node.AsMiddle(a.accounter.Account, node.ChannelBufferLen(a.cfg.BuffersLength))
 	}
 
-	limiter := node.AsMiddle(a.limiter.Limit, node.ChannelBufferLen(a.cfg.BuffersLength))
+	// Keep the flow-batch handoff unbuffered: all queued batch memory must be
+	// reserved by the limiter before it can enter the exporter queue.
+	limiter := node.AsMiddle(a.limiter.Limit)
 
 	ebl := a.cfg.ExporterBufferLength
 	if ebl == 0 {

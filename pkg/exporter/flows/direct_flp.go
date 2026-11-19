@@ -43,11 +43,12 @@ func StartDirectFLP(jsonConfig string, bufLen int, plaintextPreviewBytes int) (*
 
 // ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to *pbflow.Records instances, and submits them to the collector.
-func (d *DirectFLP) ExportFlows(input <-chan []*model.Record) {
-	for inputRecords := range input {
-		for _, rec := range inputRecords {
+func (d *DirectFLP) ExportFlows(input <-chan *model.FlowBatch) {
+	for batch := range input {
+		for _, rec := range batch.Records {
 			d.fwd <- decodeflows.RecordToMap(rec)
 		}
+		batch.Release()
 	}
 }
 
