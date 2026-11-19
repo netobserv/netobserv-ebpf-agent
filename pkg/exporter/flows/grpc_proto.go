@@ -117,7 +117,7 @@ func (g *GRPCProto) sendBatch(batch []*model.Record, log *logrus.Entry) {
 	g.m.RLock()
 	defer g.m.RUnlock()
 	g.metrics.EvictionCounter.WithSource(componentGRPC).Inc()
-	for _, pbRecords := range pbflow.FlowsToPB(batch, g.maxFlowsPerMessage) {
+	pbflow.ForEachFlowBatch(batch, g.maxFlowsPerMessage, func(pbRecords *pbflow.Records) {
 		log.Debugf("sending %d records", len(pbRecords.Entries))
 		if _, err := g.clientConn.Client().Send(context.TODO(), pbRecords); err != nil {
 			g.metrics.Errors.WithErrorName(componentGRPC, "CannotWriteMessage", metrics.HighSeverity).Inc()
@@ -125,7 +125,7 @@ func (g *GRPCProto) sendBatch(batch []*model.Record, log *logrus.Entry) {
 		}
 		g.batchCounterMetric.Inc()
 		g.metrics.EvictedFlowsCounter.WithSource(componentGRPC).Add(float64(len(pbRecords.Entries)))
-	}
+	})
 }
 
 func randomizeTimer(cfg *config.Agent) time.Duration {

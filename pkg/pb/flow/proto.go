@@ -16,23 +16,35 @@ import (
 
 var protoLog = logrus.WithField("component", "pbflow")
 
-// FlowsToPB is an auxiliary function to convert flow records, as returned by the eBPF agent,
-// into protobuf-encoded messages ready to be sent to the collector via GRPC
+const defaultMaxFlowsPerBatch = 10_000
+
+// FlowsToPB converts flow records into protobuf messages and retains all
+// converted messages in its result. Export paths should use ForEachFlowBatch
+// when the input can contain a large eviction.
 func FlowsToPB(inputRecords []*model.Record, maxLen int) []*Records {
-	entries := make([]*Record, 0, len(inputRecords))
-	for _, record := range inputRecords {
-		entries = append(entries, FlowToPB(record))
-	}
 	var records []*Records
-	for len(entries) > 0 {
-		end := len(entries)
-		if end > maxLen {
-			end = maxLen
-		}
-		records = append(records, &Records{Entries: entries[:end]})
-		entries = entries[end:]
-	}
+	ForEachFlowBatch(inputRecords, maxLen, func(batch *Records) {
+		records = append(records, batch)
+	})
 	return records
+}
+
+// ForEachFlowBatch converts and visits one bounded protobuf batch at a time.
+// The visitor is called synchronously so callers can send or otherwise consume
+// each batch before the next batch is converted. This bounds the protobuf
+// objects retained by the export path to maxLen records.
+func ForEachFlowBatch(inputRecords []*model.Record, maxLen int, visit func(*Records)) {
+	if maxLen <= 0 {
+		maxLen = defaultMaxFlowsPerBatch
+	}
+	for start := 0; start < len(inputRecords); start += maxLen {
+		end := start + min(maxLen, len(inputRecords)-start)
+		entries := make([]*Record, 0, end-start)
+		for _, record := range inputRecords[start:end] {
+			entries = append(entries, FlowToPB(record))
+		}
+		visit(&Records{Entries: entries})
+	}
 }
 
 // FlowToPB is an auxiliary function to convert a single flow record, as returned by the eBPF agent,
