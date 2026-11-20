@@ -15,13 +15,12 @@ import (
 
 type FlowsBpfAdditionalMetrics struct {
 	_                 structs.HostLayout
-	StartMonoTimeTs   uint64
-	EndMonoTimeTs     uint64
-	FlowRtt           uint64
+	MonoTimeTs        uint64
+	FlowRtt           uint32
 	IpsecEncryptedRet int32
 	EthProtocol       uint16
 	IpsecEncrypted    bool
-	_                 [1]byte
+	_                 [5]byte
 }
 
 type FlowsBpfDirectionT uint32
@@ -46,16 +45,19 @@ type FlowsBpfDnsFlowId struct {
 type FlowsBpfDnsMetrics FlowsBpfDnsMetricsT
 
 type FlowsBpfDnsMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Latency         uint64
-	Id              uint16
-	Flags           uint16
-	EthProtocol     uint16
-	Errno           uint8
-	Name            [32]int8
-	_               [1]byte
+	_          structs.HostLayout
+	MonoTimeTs uint64
+	Latency    uint64
+	Lock       struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	Id          uint16
+	Flags       uint16
+	EthProtocol uint16
+	Errno       uint8
+	Name        [32]int8
+	_           [5]byte
 }
 
 type FlowsBpfDnsNameBuffer struct {
@@ -181,8 +183,7 @@ type FlowsBpfNetworkEventsMetrics FlowsBpfNetworkEventsMetricsT
 
 type FlowsBpfNetworkEventsMetricsT struct {
 	_                structs.HostLayout
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
+	MonoTimeTs       uint64
 	NetworkEvents    [4][8]uint8
 	Bytes            [4]uint16
 	Packets          [4]uint16
@@ -195,8 +196,7 @@ type FlowsBpfPktDropMetrics FlowsBpfPktDropMetricsT
 
 type FlowsBpfPktDropMetricsT struct {
 	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
+	MonoTimeTs      uint64
 	Bytes           uint16
 	Packets         uint16
 	LatestDropCause uint32
@@ -217,13 +217,17 @@ const (
 type FlowsBpfQuicMetrics FlowsBpfQuicMetricsT
 
 type FlowsBpfQuicMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Version         uint32
-	EthProtocol     uint16
-	SeenLongHdr     uint8
-	SeenShortHdr    uint8
+	_          structs.HostLayout
+	MonoTimeTs uint64
+	Version    uint32
+	Lock       struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	EthProtocol  uint16
+	SeenLongHdr  uint8
+	SeenShortHdr uint8
+	_            [4]byte
 }
 
 type FlowsBpfTcpFlagsT uint32
@@ -245,15 +249,14 @@ const (
 type FlowsBpfXlatMetrics FlowsBpfXlatMetricsT
 
 type FlowsBpfXlatMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Saddr           [16]uint8
-	Daddr           [16]uint8
-	Sport           uint16
-	Dport           uint16
-	ZoneId          uint16
-	EthProtocol     uint16
+	_           structs.HostLayout
+	MonoTimeTs  uint64
+	Saddr       [16]uint8
+	Daddr       [16]uint8
+	Sport       uint16
+	Dport       uint16
+	ZoneId      uint16
+	EthProtocol uint16
 }
 
 // Names of all BPF objects in the ELF.

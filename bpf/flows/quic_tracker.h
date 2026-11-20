@@ -169,6 +169,19 @@ static __always_inline quic_header_type parse_quic_header(struct __sk_buff *skb,
     return QUIC_HEADER_TYPE_SHORT;
 }
 
+static __always_inline void update_quic(quic_metrics *flow, quic_header_type hdr_type, u32 version, u64 ts) {
+    bpf_spin_lock(&flow->lock);
+    flow->mono_time_ts = ts;
+    if (hdr_type == QUIC_HEADER_TYPE_LONG) {
+        flow->seen_long_hdr = 1;
+        if (version != 0)
+            flow->version = version;
+    } else {
+        flow->seen_short_hdr = 1;
+    }
+    bpf_spin_unlock(&flow->lock);
+}
+
 static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pkt, u16 eth_protocol, u8 direction,
                                              u32 len) {
     if (pkt->id->transport_protocol != IPPROTO_UDP) {
@@ -223,18 +236,10 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
     // Lookup or create QUIC metrics
     quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
     if (flow) {
-        flow->end_mono_time_ts = now;
-        if (hdr_type == QUIC_HEADER_TYPE_LONG) {
-            flow->seen_long_hdr = 1;
-            if (version != 0)
-                flow->version = version;
-        } else {
-            flow->seen_short_hdr = 1;
-        }
+        update_quic(flow, hdr_type, version, now);
     } else {
         quic_metrics new_flow = {
-            .start_mono_time_ts = now,
-            .end_mono_time_ts = now,
+            .mono_time_ts = now,
             .version = version,
             .eth_protocol = eth_protocol,
             .seen_long_hdr = (hdr_type == QUIC_HEADER_TYPE_LONG) ? 1 : 0,
@@ -248,14 +253,7 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
             if (ret == -EEXIST) {
                 quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);
                 if (flow) {
-                    flow->end_mono_time_ts = now;
-                    if (hdr_type == QUIC_HEADER_TYPE_LONG) {
-                        flow->seen_long_hdr = 1;
-                        if (version != 0)
-                            flow->version = version;
-                    } else {
-                        flow->seen_short_hdr = 1;
-                    }
+                    update_quic(flow, hdr_type, version, now);
                 }
             }
         }

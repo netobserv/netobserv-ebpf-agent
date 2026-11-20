@@ -139,7 +139,7 @@ func NewRecordInto(
 	}
 	if metrics.AdditionalMetrics != nil {
 		if metrics.AdditionalMetrics.FlowRtt != 0 {
-			dst.TimeFlowRtt = time.Duration(metrics.AdditionalMetrics.FlowRtt)
+			dst.TimeFlowRtt = time.Microsecond * time.Duration(metrics.AdditionalMetrics.FlowRtt)
 		}
 	}
 	if s != nil && metrics.NetworkEventsMetrics != nil {
@@ -158,8 +158,7 @@ func NewRecordInto(
 						// Inject as a packet drop
 						if dst.Metrics.PktDropMetrics == nil {
 							dst.Metrics.PktDropMetrics = &ebpf.FlowsBpfPktDropMetrics{
-								StartMonoTimeTs: metrics.NetworkEventsMetrics.StartMonoTimeTs,
-								EndMonoTimeTs:   metrics.NetworkEventsMetrics.EndMonoTimeTs,
+								MonoTimeTs:      metrics.NetworkEventsMetrics.MonoTimeTs,
 								LatestDropCause: cause,
 								Bytes:           metrics.NetworkEventsMetrics.Bytes[i],
 								Packets:         metrics.NetworkEventsMetrics.Packets[i],

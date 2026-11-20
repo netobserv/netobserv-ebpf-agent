@@ -33,7 +33,7 @@ static inline void ipsec_to_wire_flow_id(flow_id *id) {
 static inline int ipsec_lookup_and_update_flow(flow_id *id, int flow_encrypted_ret, u16 eth_protocol) {
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
-        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
+        extra_metrics->mono_time_ts = bpf_ktime_get_ns();
         extra_metrics->eth_protocol = eth_protocol;
         if (flow_encrypted_ret != 0) {
             extra_metrics->ipsec_encrypted_ret = flow_encrypted_ret;
@@ -84,8 +84,7 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
     u64 current_time = bpf_ktime_get_ns();
     additional_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
-    new_flow.start_mono_time_ts = current_time;
-    new_flow.end_mono_time_ts = current_time;
+    new_flow.mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.ipsec_encrypted_ret = flow_encrypted_ret;
     new_flow.ipsec_encrypted = flow_encrypted_ret == 0 ? true : false;

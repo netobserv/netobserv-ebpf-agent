@@ -171,7 +171,7 @@ gen-protobuf: prereqs ## Generate protocol buffer (pkg/proto package)
 generate: gen-bpf gen-protobuf
 
 .PHONY: docker-generate
-docker-generate: ## Create the container that generates the eBPF binaries
+docker-generate: fmt ## Create the container that generates the eBPF binaries
 	@echo "### Creating the container that generates the eBPF binaries"
 	$(OCI_BIN) buildx build . -f scripts/generators.Dockerfile -t $(LOCAL_GENERATOR_IMAGE) --platform=linux/$(GENERATOR_TARGETARCH) --build-arg TARGETARCH="$(GENERATOR_TARGETARCH)" --build-arg EXTENSION="$(GENERATOR_PROTOC_ARCH)" --build-arg PROTOCVERSION="$(PROTOC_VERSION)" --build-arg GOVERSION="$(GO_VERSION)" --load
 	$(OCI_BIN) run --privileged --rm -v $(shell pwd):/src $(LOCAL_GENERATOR_IMAGE)
