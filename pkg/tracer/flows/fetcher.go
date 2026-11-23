@@ -994,7 +994,9 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Global map => use single receiver
 		var dns ebpf.FlowsBpfDnsMetrics
 		countDNS := lookupAndDeleteSecondaryMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
-			flow.AccumulateDNS(&dns)
+			// copy receiver to not share memory slot across calls
+			entry := dns
+			flow.AccumulateDNS(&entry)
 		})
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDNS).Set(float64(countDNS))
 	}
@@ -1002,6 +1004,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Per-CPU map => use slice receiver
 		var pktDrops []ebpf.FlowsBpfPktDropMetrics
 		countDrops := lookupAndDeleteSecondaryMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range pktDrops {
 				flow.AccumulateDrops(&pktDrops[i])
 			}
@@ -1012,6 +1015,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Per-CPU map => use slice receiver
 		var netev []ebpf.FlowsBpfNetworkEventsMetrics
 		countNetEv := lookupAndDeleteSecondaryMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range netev {
 				flow.AccumulateNetworkEvents(&netev[i])
 			}
@@ -1022,6 +1026,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Per-CPU map => use slice receiver
 		var xlat []ebpf.FlowsBpfXlatMetrics
 		countXlat := lookupAndDeleteSecondaryMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range xlat {
 				flow.AccumulateXlat(&xlat[i])
 			}
@@ -1032,6 +1037,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Per-CPU map => use slice receiver
 		var addit []ebpf.FlowsBpfAdditionalMetrics
 		countAddit := lookupAndDeleteSecondaryMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range addit {
 				flow.AccumulateAdditional(&addit[i])
 			}
@@ -1046,7 +1052,9 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 		// Global map => use single receiver
 		var quic ebpf.FlowsBpfQuicMetrics
 		countQuic := lookupAndDeleteSecondaryMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
-			flow.AccumulateQuic(&quic)
+			// copy receiver to not share memory slot across calls
+			entry := quic
+			flow.AccumulateQuic(&entry)
 		})
 		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameQUIC).Set(float64(countQuic))
 	}
