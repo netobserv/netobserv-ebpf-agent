@@ -98,8 +98,11 @@ static inline long translate_lookup_and_update_flow(flow_id *id, u16 flags, stru
     parse_tuple(reply_t, &new_extra_metrics, zone_id, family, id->transport_protocol, true);
     ret = bpf_map_update_elem(&aggregated_flows_xlat, id, &new_extra_metrics, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error packet translation creating new flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_XLAT);
+            if (trace_messages) {
+                bpf_printk("error packet translation creating new flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
             xlat_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_xlat, id);

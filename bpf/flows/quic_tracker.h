@@ -247,8 +247,11 @@ static __always_inline int track_quic_packet(struct __sk_buff *skb, pkt_info *pk
         };
         long ret = bpf_map_update_elem(&quic_flows, id, &new_flow, BPF_NOEXIST);
         if (ret != 0) {
-            if (trace_messages && ret != -EEXIST) {
-                bpf_printk("error adding quic flow %d\n", ret);
+            if (ret != -EEXIST) {
+                increase_counter(HASHMAP_FAIL_UPDATE_QUIC);
+                if (trace_messages) {
+                    bpf_printk("error adding quic flow %d\n", ret);
+                }
             }
             if (ret == -EEXIST) {
                 quic_metrics *flow = bpf_map_lookup_elem(&quic_flows, id);

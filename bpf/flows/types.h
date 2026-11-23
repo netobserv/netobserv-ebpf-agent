@@ -136,25 +136,29 @@ typedef struct dns_flow_id_t {
 } dns_flow_id;
 
 // Enum to define global counters keys and share it with userspace
-typedef enum global_counters_key_t {
+typedef enum counters_key_t {
     HASHMAP_FAIL_UPDATE_FLOW,
     HASHMAP_FAIL_CREATE_FLOW,
     HASHMAP_FAIL_UPDATE_DNS,
+    HASHMAP_FAIL_UPDATE_NETWORK_EVENT,
+    HASHMAP_FAIL_UPDATE_PKT_DROP,
+    HASHMAP_FAIL_UPDATE_XLAT,
+    HASHMAP_FAIL_UPDATE_QUIC,
+    HASHMAP_FAIL_UPDATE_ADDITIONAL,
     FILTER_REJECT,
     FILTER_ACCEPT,
     FILTER_NOMATCH,
     NETWORK_EVENTS_ERR,
     NETWORK_EVENTS_ERR_GROUPID_MISMATCH,
-    NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS,
-    NETWORK_EVENTS_GOOD,
     NETWORK_EVENTS_OVERFLOW,
     NETWORK_EVENTS_COOKIE_TOO_BIG,
+    NETWORK_EVENTS_COOKIE_MISSING,
     OBSERVED_INTF_MISSED,
     MAX_COUNTERS,
-} global_counters_key;
+} counters_key;
 
 // Force emitting enums/structs into the ELF
-const enum global_counters_key_t *unused_counters __attribute__((unused));
+const enum counters_key_t *unused_counters __attribute__((unused));
 
 // QUIC flow metrics
 typedef struct quic_metrics_t {

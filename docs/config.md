@@ -40,8 +40,18 @@ The following environment variables are available to configure the NetObserv eBP
 * `SAMPLING` (default: disabled). Interval at which packets should be sampled and sent to the target
   collector. E.g. if set to 10, one out of 10 packets, on average, will be sent to the target
   collector.
-* `CACHE_MAX_FLOWS` (default: `5000`). Number of flows that can be accumulated in the accounting
-  cache. If the accounter reaches the max number of flows, it flushes them to the collector.
+* `CACHE_MAX_FLOWS` (default: `5000`): specifies how many flows can be accumulated in the BPF flows maps between evictions.
+* `CACHE_MAX_DNS_FLOWS`: specifies how many flows can be accumulated in the BPF DNS maps between evictions.
+  It defaults to CACHE_MAX_FLOWS / 10.
+* `CACHE_MAX_NETWORK_EVENT_FLOWS`: specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
+  It defaults to CACHE_MAX_FLOWS / 2.
+* `CACHE_MAX_PKT_DROPS_FLOWS`: specifies how many flows can be accumulated in the BPF PktDrops maps between evictions.
+  It defaults to CACHE_MAX_FLOWS / 2.
+* `CACHE_MAX_XLAT_FLOWS`: specifies how many flows can be accumulated in the BPF Xlat maps between evictions.
+  It defaults to CACHE_MAX_FLOWS / 2.
+* `CACHE_MAX_QUIC_FLOWS`: specifies how many flows can be accumulated in the BPF QUIC maps between evictions.
+  It defaults to CACHE_MAX_FLOWS / 2.
+* `CACHE_MAX_ADDITIONAL_FLOWS`: specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions. It defaults to CACHE_MAX_FLOWS.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
 * `DEDUPER` (default: `none`, disabled). Accepted values are `none` (disabled) and `firstCome`.

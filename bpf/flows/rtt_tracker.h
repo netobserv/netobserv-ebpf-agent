@@ -76,13 +76,19 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     new_flow.flow_rtt = rtt;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error rtt track creating flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
+            if (trace_messages) {
+                bpf_printk("error rtt track creating flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
             ret = rtt_lookup_and_update_flow(&id, current_time, rtt);
-            if (trace_messages && ret != 0) {
-                bpf_printk("error rtt track updating an existing flow %d\n", ret);
+            if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
+                if (trace_messages) {
+                    bpf_printk("error rtt track updating an existing flow %d\n", ret);
+                }
             }
         }
     }

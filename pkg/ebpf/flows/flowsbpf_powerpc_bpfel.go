@@ -23,6 +23,29 @@ type FlowsBpfAdditionalMetrics struct {
 	_                 [5]byte
 }
 
+type FlowsBpfCountersKeyT uint32
+
+const (
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_FLOW            FlowsBpfCountersKeyT = 0
+	FlowsBpfCountersKeyTHASHMAP_FAIL_CREATE_FLOW            FlowsBpfCountersKeyT = 1
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_DNS             FlowsBpfCountersKeyT = 2
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_NETWORK_EVENT   FlowsBpfCountersKeyT = 3
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_PKT_DROP        FlowsBpfCountersKeyT = 4
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_XLAT            FlowsBpfCountersKeyT = 5
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_QUIC            FlowsBpfCountersKeyT = 6
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_ADDITIONAL      FlowsBpfCountersKeyT = 7
+	FlowsBpfCountersKeyTFILTER_REJECT                       FlowsBpfCountersKeyT = 8
+	FlowsBpfCountersKeyTFILTER_ACCEPT                       FlowsBpfCountersKeyT = 9
+	FlowsBpfCountersKeyTFILTER_NOMATCH                      FlowsBpfCountersKeyT = 10
+	FlowsBpfCountersKeyTNETWORK_EVENTS_ERR                  FlowsBpfCountersKeyT = 11
+	FlowsBpfCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH FlowsBpfCountersKeyT = 12
+	FlowsBpfCountersKeyTNETWORK_EVENTS_OVERFLOW             FlowsBpfCountersKeyT = 13
+	FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       FlowsBpfCountersKeyT = 14
+	FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_MISSING       FlowsBpfCountersKeyT = 15
+	FlowsBpfCountersKeyTOBSERVED_INTF_MISSED                FlowsBpfCountersKeyT = 16
+	FlowsBpfCountersKeyTMAX_COUNTERS                        FlowsBpfCountersKeyT = 17
+)
+
 type FlowsBpfDirectionT uint32
 
 const (
@@ -159,25 +182,6 @@ type FlowsBpfFlowRecordT struct {
 	Id      FlowsBpfFlowId
 	Metrics FlowsBpfFlowMetrics
 }
-
-type FlowsBpfGlobalCountersKeyT uint32
-
-const (
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW            FlowsBpfGlobalCountersKeyT = 0
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW            FlowsBpfGlobalCountersKeyT = 1
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS             FlowsBpfGlobalCountersKeyT = 2
-	FlowsBpfGlobalCountersKeyTFILTER_REJECT                       FlowsBpfGlobalCountersKeyT = 3
-	FlowsBpfGlobalCountersKeyTFILTER_ACCEPT                       FlowsBpfGlobalCountersKeyT = 4
-	FlowsBpfGlobalCountersKeyTFILTER_NOMATCH                      FlowsBpfGlobalCountersKeyT = 5
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  FlowsBpfGlobalCountersKeyT = 6
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH FlowsBpfGlobalCountersKeyT = 7
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS FlowsBpfGlobalCountersKeyT = 8
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 FlowsBpfGlobalCountersKeyT = 9
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW             FlowsBpfGlobalCountersKeyT = 10
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       FlowsBpfGlobalCountersKeyT = 11
-	FlowsBpfGlobalCountersKeyTOBSERVED_INTF_MISSED                FlowsBpfGlobalCountersKeyT = 12
-	FlowsBpfGlobalCountersKeyTMAX_COUNTERS                        FlowsBpfGlobalCountersKeyT = 13
-)
 
 type FlowsBpfNetworkEventsMetrics FlowsBpfNetworkEventsMetricsT
 

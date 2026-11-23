@@ -83,13 +83,19 @@ static inline int trace_pkt_drop(void *ctx, u8 state, struct sk_buff *skb, enum 
     new_flow.latest_drop_cause = reason;
     ret = bpf_map_update_elem(&aggregated_flows_pkt_drop, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error packet drop creating new flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_PKT_DROP);
+            if (trace_messages) {
+                bpf_printk("error packet drop creating new flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
             ret = pkt_drop_lookup_and_update_flow(&id, state, flags, reason, len);
-            if (ret != 0 && trace_messages) {
-                bpf_printk("error packet drop updating an existing flow %d\n", ret);
+            if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_PKT_DROP);
+                if (trace_messages) {
+                    bpf_printk("error packet drop updating an existing flow %d\n", ret);
+                }
             }
         }
     }

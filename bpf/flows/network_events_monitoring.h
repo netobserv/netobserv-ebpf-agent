@@ -59,7 +59,7 @@ static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8
     return 0;
 }
 
-static inline int trace_network_events(struct sk_buff *skb, struct psample_metadata *md) {
+static inline void trace_network_events(struct sk_buff *skb, struct psample_metadata *md) {
     u8 dscp = 0, protocol = 0, md_len = 0;
     u16 family = 0, flags = 0, eth_protocol = 0;
     u8 *user_cookie = NULL;
@@ -71,8 +71,13 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
 
     md_len = BPF_CORE_READ(md, user_cookie_len);
     user_cookie = (u8 *)BPF_CORE_READ(md, user_cookie);
-    if (md_len == 0 || md_len > MAX_EVENT_MD || user_cookie == NULL) {
-        return -1;
+    if (md_len > MAX_EVENT_MD) {
+        increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
+        return;
+    }
+    if (md_len == 0 || user_cookie == NULL) {
+        increase_counter(NETWORK_EVENTS_COOKIE_MISSING);
+        return;
     }
 
     // read L2 info
@@ -105,14 +110,14 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     // check if this packet need to be filtered if filtering feature is enabled
     bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
-        return 0;
+        return;
     }
 
     len = BPF_CORE_READ(skb, len);
 
     ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
     if (ret == 0) {
-        return ret;
+        return;
     }
 
     // there is no matching flows so lets create new one and add the network event metadata
@@ -128,17 +133,22 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     new_flow.network_events_idx++;
     ret = bpf_map_update_elem(&aggregated_flows_network_events, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error network events creating new flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_NETWORK_EVENT);
+            if (trace_messages) {
+                bpf_printk("error network events creating new flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
             ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
-            if (ret != 0 && trace_messages) {
-                bpf_printk("error network events failed to update an existing flow %d\n", ret);
+            if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_NETWORK_EVENT);
+                if (trace_messages) {
+                    bpf_printk("error network events failed to update an existing flow %d\n", ret);
+                }
             }
         }
     }
-    return ret;
 }
 
 SEC("kprobe/psample_sample_packet")
@@ -157,12 +167,7 @@ int BPF_KPROBE(network_events_monitoring, struct psample_group *group, struct sk
         increase_counter(NETWORK_EVENTS_ERR_GROUPID_MISMATCH);
         return 0;
     }
-    long ret = 0;
-    if ((ret = trace_network_events(skb, md)) != 0) {
-        increase_counter(NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS);
-        return 0;
-    }
-    increase_counter(NETWORK_EVENTS_GOOD);
+    trace_network_events(skb, md);
     return 0;
 }
 

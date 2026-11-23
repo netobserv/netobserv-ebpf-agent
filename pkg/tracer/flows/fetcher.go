@@ -1086,23 +1086,27 @@ func lookupAndDeleteSecondaryMap(
 // ReadGlobalCounter reads the global counter and updates drop flows counter metrics
 func (m *Fetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
-	globalCounters := map[ebpf.FlowsBpfGlobalCountersKeyT]prometheus.Counter{
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotCreateFlowsHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_REJECT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterReject"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_ACCEPT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterAccept"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_NOMATCH:                      met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterNoMatch"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR:                  met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrors"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
-		ebpf.FlowsBpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW:             met.Errors.WithErrorName("network-events", "EventsOverflow", metrics.MediumSeverity),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG:       met.Errors.WithErrorName("network-events", "CookieTooBig", metrics.MediumSeverity),
+	globalCounters := map[ebpf.FlowsBpfCountersKeyT]prometheus.Counter{
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_CREATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotCreateFlowsHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_PKT_DROP:        met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdatePktDropHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_NETWORK_EVENT:   met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateNetworkEventHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_QUIC:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateQuicHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_XLAT:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateXlatHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_ADDITIONAL:      met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateAdditionalHashMap"),
+		ebpf.FlowsBpfCountersKeyTFILTER_REJECT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterReject"),
+		ebpf.FlowsBpfCountersKeyTFILTER_ACCEPT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterAccept"),
+		ebpf.FlowsBpfCountersKeyTFILTER_NOMATCH:                      met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterNoMatch"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_ERR:                  met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrors"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_OVERFLOW:             met.Errors.WithErrorName("network-events", "EventsOverflow", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG:       met.Errors.WithErrorName("network-events", "CookieTooBig", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_MISSING:       met.Errors.WithErrorName("network-events", "CookieMissing", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
-	for key := ebpf.FlowsBpfGlobalCountersKeyT(0); key < ebpf.FlowsBpfGlobalCountersKeyTMAX_COUNTERS; key++ {
+	for key := ebpf.FlowsBpfCountersKeyT(0); key < ebpf.FlowsBpfCountersKeyTMAX_COUNTERS; key++ {
 		if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
 			log.WithError(err).Warnf("couldn't read global counter")
 			return

@@ -91,11 +91,13 @@ static inline int update_flow_with_ipsec_return(int flow_encrypted_ret, directio
     ret = bpf_map_update_elem(&additional_flow_metrics, id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
         if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
             BPF_PRINTK("error ipsec creating flow err: %d\n", ret);
         }
         if (ret == -EEXIST) {
             ret = ipsec_lookup_and_update_flow(id, flow_encrypted_ret, eth_protocol);
             if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
                 BPF_PRINTK("error ipsec updating an existing flow err: %d\n", ret);
             }
         }
