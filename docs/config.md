@@ -44,14 +44,20 @@ The following environment variables are available to configure the NetObserv eBP
 * `CACHE_MAX_DNS_FLOWS`: specifies how many flows can be accumulated in the BPF DNS maps between evictions.
   It defaults to CACHE_MAX_FLOWS / 10.
 * `CACHE_MAX_NETWORK_EVENT_FLOWS`: specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
-  It defaults to CACHE_MAX_FLOWS / 2.
+  It defaults to CACHE_MAX_FLOWS / possible CPUs.
 * `CACHE_MAX_PKT_DROPS_FLOWS`: specifies how many flows can be accumulated in the BPF PktDrops maps between evictions.
-  It defaults to CACHE_MAX_FLOWS / 2.
+  It defaults to CACHE_MAX_FLOWS / possible CPUs.
 * `CACHE_MAX_XLAT_FLOWS`: specifies how many flows can be accumulated in the BPF Xlat maps between evictions.
-  It defaults to CACHE_MAX_FLOWS / 2.
+  It defaults to CACHE_MAX_FLOWS / possible CPUs.
 * `CACHE_MAX_QUIC_FLOWS`: specifies how many flows can be accumulated in the BPF QUIC maps between evictions.
   It defaults to CACHE_MAX_FLOWS / 2.
-* `CACHE_MAX_ADDITIONAL_FLOWS`: specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions. It defaults to CACHE_MAX_FLOWS.
+* `CACHE_MAX_ADDITIONAL_FLOWS`: specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions.
+  It defaults to CACHE_MAX_FLOWS / possible CPUs.
+
+  The Network Events, PktDrops, Xlat and additional data (RTT, IPsec) maps are per-CPU maps: every entry
+  costs its key plus one value per possible CPU. Their default capacity is therefore derived from
+  CACHE_MAX_FLOWS divided by the number of possible CPUs, which keeps their memory footprint roughly
+  independent from the host CPU count.
 * `CACHE_ACTIVE_TIMEOUT` (default: `5s`). Duration string that specifies the maximum duration
   that flows are kept in the accounting cache before being flushed to the collector.
 * `DEDUPER` (default: `none`, disabled). Accepted values are `none` (disabled) and `firstCome`.

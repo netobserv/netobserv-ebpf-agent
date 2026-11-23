@@ -57,7 +57,7 @@ func TestConfigureQUICMapCapacity(t *testing.T) {
 					Common: config.Common{CacheMaxFlows: 120_000},
 				},
 			}
-			cfg.Normalize()
+			cfg.Normalize(2)
 			configureFlowMaps(spec, cfg, nil, metrics.NoOp())
 			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
 			if mode != 1 && mode != 2 {

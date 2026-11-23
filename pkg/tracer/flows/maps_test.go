@@ -84,3 +84,23 @@ func TestConfigureFlowMaps(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigureFlowMapsPerCPUCapacities(t *testing.T) {
+	spec, err := ebpf.LoadFlowsBpf()
+	require.NoError(t, err)
+	cfg := &tracer.FetcherConfig{Agent: config.Agent{
+		Common: config.Common{CacheMaxFlows: 5000},
+		Flows:  configflows.Features{EnablePktDrops: true, EnableNetworkEventsMonitoring: true},
+	}}
+	cfg.Normalize(4)
+	configureFlowMaps(spec, cfg, nil, metrics.NoOp())
+
+	// enabled per-CPU maps get the capacity defaulted by Normalize (5000/4)
+	assert.Equal(t, 1250, cfg.CacheMaxPktDropsFlows)
+	assert.Equal(t, uint32(1250), spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsPktDrop].MaxEntries)
+	assert.Equal(t, 1250, cfg.CacheMaxNetworkEventFlows)
+	assert.Equal(t, uint32(1250), spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsNetworkEvents].MaxEntries)
+	// disabled maps keep the minimum size
+	assert.EqualValues(t, 1, int(spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsXlat].MaxEntries))
+	assert.EqualValues(t, 1, int(spec.Maps[ebpf.FlowsBpfMapAdditionalFlowMetrics].MaxEntries))
+}

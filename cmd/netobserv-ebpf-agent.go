@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
+	cilium "github.com/cilium/ebpf"
 	"github.com/sirupsen/logrus"
 
 	flowsagent "github.com/netobserv/netobserv-ebpf-agent/pkg/agent/flows"
@@ -40,7 +42,7 @@ func terminateAgent() (ctx context.Context) {
 
 func main() {
 	logrus.Infof("starting NetObserv eBPF Agent [build version: %s, build date: %s]", buildVersion, buildDate)
-	config, err := config.FromEnv()
+	config, err := config.FromEnv(possibleCPUs())
 	if err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
@@ -96,4 +98,17 @@ func setLoggerVerbosity(cfg *config.Agent) {
 		lvl = logrus.InfoLevel
 	}
 	logrus.SetLevel(lvl)
+}
+
+// possibleCPUs returns the number of CPUs the kernel may allocate per-CPU
+// memory for (including currently offline CPUs). It falls back on the number
+// of usable CPUs when the possible CPU count cannot be read.
+func possibleCPUs() int {
+	cpus, err := cilium.PossibleCPU()
+	if err != nil {
+		logrus.WithError(err).Warn("couldn't read the number of possible CPUs," +
+			" falling back on the number of usable CPUs")
+		return runtime.NumCPU()
+	}
+	return cpus
 }

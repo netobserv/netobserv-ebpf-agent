@@ -13,11 +13,14 @@ type Agent struct {
 	Packets configpackets.Features
 }
 
-func FromEnv() (*Agent, error) {
+// FromEnv loads the agent configuration from the environment variables.
+// cpus is the number of possible CPUs of the host, used to derive the default
+// capacity of the per-CPU BPF maps (see Normalize).
+func FromEnv(cpus int) (*Agent, error) {
 	cfg := Agent{}
 	if err := env.Parse(&cfg); err != nil {
 		return nil, err
 	}
-	cfg.Normalize()
+	cfg.Normalize(cpus)
 	return &cfg, nil
 }

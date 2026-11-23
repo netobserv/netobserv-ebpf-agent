@@ -137,19 +137,19 @@ type Common struct {
 	// It defaults to CacheMaxFlows / 10.
 	CacheMaxDNSFlows int `env:"CACHE_MAX_DNS_FLOWS"`
 	// CacheMaxNetworkEventFlows specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
-	// It defaults to CacheMaxFlows / 2.
+	// It defaults to CacheMaxFlows / possible CPUs / 2.
 	CacheMaxNetworkEventFlows int `env:"CACHE_MAX_NETWORK_EVENT_FLOWS"`
 	// CacheMaxPktDropsFlows specifies how many flows can be accumulated in the BPF PktDrops maps between evictions.
-	// It defaults to CacheMaxFlows / 2.
+	// It defaults to CacheMaxFlows / possible CPUs / 2.
 	CacheMaxPktDropsFlows int `env:"CACHE_MAX_PKT_DROPS_FLOWS"`
 	// CacheMaxXlatFlows specifies how many flows can be accumulated in the BPF Xlat maps between evictions.
-	// It defaults to CacheMaxFlows / 2.
+	// It defaults to CacheMaxFlows / possible CPUs / 2.
 	CacheMaxXlatFlows int `env:"CACHE_MAX_XLAT_FLOWS"`
 	// CacheMaxQUICFlows specifies how many flows can be accumulated in the BPF QUIC maps between evictions.
 	// It defaults to CacheMaxFlows / 2.
 	CacheMaxQUICFlows int `env:"CACHE_MAX_QUIC_FLOWS"`
 	// CacheMaxAdditionalFlows specifies how many flows can be accumulated in the BPF maps for additional data (RTT, IPsec) between evictions.
-	// It defaults to CacheMaxFlows.
+	// It defaults to CacheMaxFlows / possible CPUs / 2.
 	CacheMaxAdditionalFlows int `env:"CACHE_MAX_ADDITIONAL_FLOWS"`
 	// CacheActiveTimeout specifies the duration between two eviction cycles, during which flows are
 	// accumulated in cache.

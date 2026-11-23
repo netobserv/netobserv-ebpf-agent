@@ -56,7 +56,7 @@ func TestQUICMapKernel(t *testing.T) {
 			require.NoError(t, err)
 			prepareFeatureMapTest(spec)
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{Common: config.Common{CacheMaxFlows: 32}, Flows: configflows.Features{QUICTrackingMode: mode}}}
-			cfg.Normalize()
+			cfg.Normalize(2)
 			configureFlowMaps(spec, cfg, nil, metrics.NoOp())
 			require.NoError(t, configureFlowSpecVariables(spec, cfg, nil))
 			collection, err := cilium.NewCollection(spec)
