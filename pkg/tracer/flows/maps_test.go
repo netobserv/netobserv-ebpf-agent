@@ -10,9 +10,31 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReportMapCapacity(t *testing.T) {
+	met := metrics.NoOp()
+	readGauge := func(label string) float64 {
+		var metric dto.Metric
+		require.NoError(t, met.MapCapacityGauge.WithName(label).Write(&metric))
+		return metric.GetGauge().GetValue()
+	}
+
+	// each map with an associated metric name reports its capacity
+	for mapName, label := range mapToMetricName {
+		reportMapCapacity(met, mapName, 1234)
+		assert.Equal(t, float64(1234), readGauge(label), mapName)
+	}
+
+	// maps without an associated metric name are ignored
+	reportMapCapacity(met, ebpf.FlowsBpfMapDirectFlows, 4321)
+	for _, label := range mapToMetricName {
+		assert.Equal(t, float64(1234), readGauge(label), label)
+	}
+}
 
 func TestConfigureFlowMaps(t *testing.T) {
 	for _, tc := range []struct {

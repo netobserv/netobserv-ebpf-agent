@@ -21,11 +21,17 @@ var mapToMetricName = map[string]string{
 	ebpf.FlowsBpfMapQuicFlows:                    metrics.MapNameQUIC,
 }
 
+// reportMapCapacity emits the capacity of the given map as a metric gauge.
+// Maps without an associated metric name are ignored.
+func reportMapCapacity(met *metrics.Metrics, name string, capacity int) {
+	if label, ok := mapToMetricName[name]; ok {
+		met.MapCapacityGauge.WithName(label).Set(float64(capacity))
+	}
+}
+
 func configureFlowMaps(spec *cilium.CollectionSpec, cfg *tracer.FetcherConfig, filter *attach.Filter, met *metrics.Metrics) {
 	updater := func(name string, size int) {
-		if label, ok := mapToMetricName[name]; ok {
-			met.MapCapacityGauge.WithName(label).Set(float64(size))
-		}
+		reportMapCapacity(met, name, size)
 	}
 	netattach.ResizeMaps(spec, true, cfg.CacheMaxFlows, updater, ebpf.FlowsBpfMapAggregatedFlows)
 	netattach.ResizeMaps(spec, cfg.Flows.EnableDNSTracking, cfg.CacheMaxDNSFlows, updater, ebpf.FlowsBpfMapAggregatedFlowsDns)

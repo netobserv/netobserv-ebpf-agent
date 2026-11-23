@@ -208,11 +208,13 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		loadPinnedMapInto := func(msg, mapName string, dst **cilium.Map) error {
 			log.Infof("BPFManager mode: loading %s pinned maps", msg)
 			mPath := path.Join(pinDir, mapName)
-			m, err := cilium.LoadPinnedMap(mPath, opts)
+			mp, err := cilium.LoadPinnedMap(mPath, opts)
 			if err != nil {
 				return fmt.Errorf("failed to load %s: %w", mPath, err)
 			}
-			*dst = m
+			*dst = mp
+			// report the capacity of the maps managed by the eBPF manager
+			reportMapCapacity(m, mapName, int(mp.MaxEntries()))
 			return nil
 		}
 
