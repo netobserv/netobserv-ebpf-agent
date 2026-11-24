@@ -25,6 +25,7 @@ import (
 const timeout = 2 * time.Second
 
 func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -76,6 +77,7 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 }
 
 func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "::1")
 	// start remote ingestor
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -126,7 +128,67 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	}
 }
 
+// Same as TestIPv6GRPCProto_ExportFlows_AgentIP, but pinning the collector
+// to an explicit IPv6 loopback listener instead of the default wildcard one.
+// A wildcard listener only serves both address families when the runtime's
+// IPv4-mapped-IPv6 capability probe succeeds (see
+// test.SkipUnlessWildcardListenerAccepts), which is not the case on
+// single-stack hosts nor in restricted environments such as some sandboxes;
+// this variant keeps the IPv6 transport covered in those environments too.
+func TestIPv6GRPCProto_ExportFlows_AgentIP_ExplicitIPv6Listener(t *testing.T) {
+	test2.SkipUnlessLoopbackListenerAccepts(t, "::1")
+	// start remote ingestor
+	port, err := test.FreeTCPPort()
+	require.NoError(t, err)
+	serverOut := make(chan *pbflow.Records)
+	coll, err := grpcflow.StartCollector(port, serverOut, grpcflow.WithListenHost("::1"))
+	require.NoError(t, err)
+	defer coll.Close()
+
+	// Start GRPCProto exporter stage
+	cfg := config.Agent{
+		Common: config.Common{
+			TargetHost: "::1",
+			TargetPort: port,
+		},
+		Flows: configflows.Features{
+			GRPCMessageMaxFlows: 1000,
+		},
+	}
+	exporter, err := StartGRPCProto(&cfg, metrics.NoOp())
+	require.NoError(t, err)
+
+	// Send some flows to the input of the exporter stage
+	flows := make(chan []*model.Record, 10)
+	flows <- []*model.Record{
+		{AgentIP: net.ParseIP("10.11.12.13"), Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}},
+	}
+	flows <- []*model.Record{
+		{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{EthProtocol: model.IPv6Type}},
+			AgentIP: net.ParseIP("9999::2222")},
+	}
+	go exporter.ExportFlows(flows)
+
+	rs := test2.ReceiveTimeout(t, serverOut, timeout)
+	assert.Len(t, rs.Entries, 1)
+	r := rs.Entries[0]
+	assert.EqualValues(t, 0x0a0b0c0d, r.GetAgentIp().GetIpv4())
+
+	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	assert.Len(t, rs.Entries, 1)
+	r = rs.Entries[0]
+	assert.EqualValues(t, net.ParseIP("9999::2222"), r.GetAgentIp().GetIpv6())
+
+	select {
+	case rs = <-serverOut:
+		assert.Failf(t, "shouldn't have received any flow", "Got: %#v", rs)
+	default:
+		// ok!
+	}
+}
+
 func TestGRPCProto_SplitLargeMessages(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
@@ -198,6 +260,7 @@ func (c *collectorAPI) Send(ctx context.Context, records *pbflow.Records) (*pbfl
 }
 
 func TestConnectionReset(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)

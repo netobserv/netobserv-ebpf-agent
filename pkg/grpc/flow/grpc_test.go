@@ -22,6 +22,7 @@ import (
 const timeout = 5 * time.Second
 
 func TestGRPCCommunication(t *testing.T) {
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	port, err := test2.FreeTCPPort()
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
@@ -99,6 +100,7 @@ func TestGRPCCommunication(t *testing.T) {
 }
 
 func TestConstructorOptions(t *testing.T) {
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	port, err := test2.FreeTCPPort()
 	require.NoError(t, err)
 	intercepted := make(chan struct{})
@@ -133,6 +135,7 @@ func TestConstructorOptions(t *testing.T) {
 }
 
 func BenchmarkIPv4GRPCCommunication(b *testing.B) {
+	test.SkipUnlessWildcardListenerAccepts(b, "127.0.0.1")
 	port, err := test2.FreeTCPPort()
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
@@ -194,6 +197,7 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 }
 
 func BenchmarkIPv6GRPCCommunication(b *testing.B) {
+	test.SkipUnlessWildcardListenerAccepts(b, "::1")
 	port, err := test2.FreeTCPPort()
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
@@ -258,6 +262,7 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 
 // Note: there's more tests focused on TLS in FLP, that also cover agent's functions
 func TestGRPCCommunication_TLS(t *testing.T) {
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	_, _, _, ca, cert, key, cleanup := test.CreateAllCerts(t)
 	defer cleanup()
 	opts, err := buildTLSServerOptions(cert, key, "")
@@ -309,6 +314,7 @@ func TestGRPCCommunication_TLS(t *testing.T) {
 
 // Note: there's more tests focused on TLS in FLP, that also cover agent's functions
 func TestGRPCCommunication_MutualTLS(t *testing.T) {
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	clCA, clCert, clKey, ca, cert, key, cleanup := test.CreateAllCerts(t)
 	defer cleanup()
 	opts, err := buildTLSServerOptions(cert, key, clCA)
@@ -359,6 +365,7 @@ func TestGRPCCommunication_MutualTLS(t *testing.T) {
 }
 
 func TestGRPCCommunication_MutualTLS_InvalidCert(t *testing.T) {
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	_, clCert, clKey, ca, cert, key, cleanup := test.CreateAllCerts(t)
 	defer cleanup()
 

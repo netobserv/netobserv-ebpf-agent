@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
+	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/mariomac/guara/pkg/test"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +18,7 @@ import (
 const timeout = 5 * time.Second
 
 func TestGRPCCommunication(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
 	serverOut := make(chan *pbpacket.Packet)
@@ -54,6 +56,7 @@ func TestGRPCCommunication(t *testing.T) {
 }
 
 func TestConstructorOptions(t *testing.T) {
+	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	port, err := test.FreeTCPPort()
 	require.NoError(t, err)
 	intercepted := make(chan struct{})

@@ -2,8 +2,9 @@ package prometheus
 
 import (
 	"crypto/tls"
-	"fmt"
+	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/server"
@@ -31,7 +32,7 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 	if port == 0 {
 		port = 9090
 	}
-	addr := fmt.Sprintf("%s:%v", conn.Address, port)
+	addr := net.JoinHostPort(conn.Address, strconv.Itoa(port))
 	plog.Infof("StartServerAsync: addr = %s", addr)
 
 	httpServer := &http.Server{

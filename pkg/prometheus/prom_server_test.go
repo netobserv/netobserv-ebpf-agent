@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStartServerAsync(t *testing.T) {
@@ -49,4 +51,33 @@ func TestStartServerAsync(t *testing.T) {
 
 	// Assert the response status code
 	assert.Equal(t, http.StatusOK, rr.Code, "Unexpected status code")
+}
+
+// TestStartServerAsyncIPv6Literal verifies that the metrics server can be
+// bound to an IPv6 literal address (METRICS_SERVER_ADDRESS=::1)
+func TestStartServerAsyncIPv6Literal(t *testing.T) {
+	test.SkipUnlessLoopbackListenerAccepts(t, "::1")
+	srv := StartServerAsync(&metrics.Settings{
+		PromConnectionInfo: metrics.PromConnectionInfo{
+			Address: "::1",
+			Port:    9092,
+		},
+	}, nil)
+	defer func() {
+		assert.NoError(t, srv.Shutdown(context.TODO()))
+	}()
+
+	// the server starts asynchronously: poll until it answers
+	var resp *http.Response
+	var err error
+	for i := 0; ; i++ {
+		resp, err = http.Get("http://[::1]:9092/metrics")
+		if err == nil || i >= 20 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.NoError(t, err, "metrics server did not start on [::1]:9092")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
