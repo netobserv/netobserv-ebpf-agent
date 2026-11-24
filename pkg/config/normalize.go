@@ -21,6 +21,10 @@ func (a *Agent) Normalize(cpus int) {
 		a.TargetPort = a.PCAServerPort
 	}
 
+	if a.CacheMaxFlows <= 0 {
+		a.CacheMaxFlows = 5000 // Env default
+	}
+
 	// Special defaults
 	if a.CacheMaxDNSFlows <= 0 {
 		a.CacheMaxDNSFlows = max(a.CacheMaxFlows/10, 1)
