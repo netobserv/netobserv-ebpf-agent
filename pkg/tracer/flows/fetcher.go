@@ -58,6 +58,7 @@ type Fetcher struct {
 	xfrmInputKProbeLink         link.Link
 	xfrmOutputKProbeLink        link.Link
 	lookupAndDeleteSupported    bool
+	maybeLockFlag               cilium.MapLookupFlags
 	pinDir                      string
 	config                      *tracer.FetcherConfig
 }
@@ -71,6 +72,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 	objects := ebpf.FlowsBpfObjects{}
 	var pinDir string
 	var filter *attach.Filter
+	var maybeLockFlag cilium.MapLookupFlags
 	if len(cfg.FilterConfig) > 0 {
 		filter = attach.NewFilter(cfg.FilterConfig)
 	}
@@ -126,6 +128,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		if err != nil {
 			return nil, err
 		}
+		maybeLockFlag = probeBpfLockSupport(objects.FlowsBpfMaps.AggregatedFlows)
 
 		if cfg.Flows.EnablePktDrops && !oldKernel && !rtOldKernel {
 			pktDropsLink, err = link.Tracepoint("skb", ebpf.FlowsBpfProgKfreeSkb, objects.KfreeSkb, nil)
@@ -221,6 +224,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		if err := loadPinnedMapInto("aggregated flows", ebpf.FlowsBpfMapAggregatedFlows, &objects.FlowsBpfMaps.AggregatedFlows); err != nil {
 			return nil, err
 		}
+		maybeLockFlag = probeBpfLockSupport(objects.FlowsBpfMaps.AggregatedFlows)
 
 		if err := loadPinnedMapInto("additional flow metrics", ebpf.FlowsBpfMapAdditionalFlowMetrics, &objects.FlowsBpfMaps.AdditionalFlowMetrics); err != nil {
 			return nil, err
@@ -331,6 +335,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		netkitPeerLinks:             map[ifaces.InterfaceKey]link.Link{},
 		networkEventsMonitoringLink: networkEventsMonitoringLink,
 		lookupAndDeleteSupported:    true, // this will be turned off later if found to be not supported
+		maybeLockFlag:               maybeLockFlag,
 		pinDir:                      pinDir,
 		config:                      cfg,
 	}, nil
@@ -974,7 +979,7 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 	// Run the atomic Lookup+Delete; if new ids have been inserted in the meantime, they'll be fetched next time
 	for i, id := range ids {
 		countMain++
-		if err := flowMap.LookupAndDelete(&id, &baseMetrics); err != nil {
+		if err := flowMap.LookupAndDeleteWithFlags(&id, &baseMetrics, m.maybeLockFlag); err != nil {
 			if i == 0 && errors.Is(err, cilium.ErrNotSupported) {
 				log.WithError(err).Warnf("switching to legacy mode")
 				m.lookupAndDeleteSupported = false
@@ -995,7 +1000,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.EnableDNSTracking {
 		// Global map => use single receiver
 		var dns ebpf.FlowsBpfDnsMetrics
-		countDNS := lookupAndDeleteSecondaryMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
+		countDNS := lookupAndDeleteSecondaryMap(flows, &dns, m.objects.AggregatedFlowsDns, m.maybeLockFlag, met, func(flow *model.BpfFlowContent) {
 			// copy receiver to not share memory slot across calls
 			entry := dns
 			flow.AccumulateDNS(&entry)
@@ -1005,7 +1010,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.EnablePktDrops {
 		// Per-CPU map => use slice receiver
 		var pktDrops []ebpf.FlowsBpfPktDropMetrics
-		countDrops := lookupAndDeleteSecondaryMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+		countDrops := lookupAndDeleteSecondaryMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, 0 /*no spinlock here*/, met, func(flow *model.BpfFlowContent) {
 			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range pktDrops {
 				flow.AccumulateDrops(&pktDrops[i])
@@ -1016,7 +1021,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.EnableNetworkEventsMonitoring {
 		// Per-CPU map => use slice receiver
 		var netev []ebpf.FlowsBpfNetworkEventsMetrics
-		countNetEv := lookupAndDeleteSecondaryMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+		countNetEv := lookupAndDeleteSecondaryMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, 0 /*no spinlock here*/, met, func(flow *model.BpfFlowContent) {
 			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range netev {
 				flow.AccumulateNetworkEvents(&netev[i])
@@ -1027,7 +1032,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.EnablePktTranslationTracking {
 		// Per-CPU map => use slice receiver
 		var xlat []ebpf.FlowsBpfXlatMetrics
-		countXlat := lookupAndDeleteSecondaryMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+		countXlat := lookupAndDeleteSecondaryMap(flows, &xlat, m.objects.AggregatedFlowsXlat, 0 /*no spinlock here*/, met, func(flow *model.BpfFlowContent) {
 			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range xlat {
 				flow.AccumulateXlat(&xlat[i])
@@ -1038,7 +1043,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.EnableRTT || m.config.Flows.EnableIPsecTracking {
 		// Per-CPU map => use slice receiver
 		var addit []ebpf.FlowsBpfAdditionalMetrics
-		countAddit := lookupAndDeleteSecondaryMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+		countAddit := lookupAndDeleteSecondaryMap(flows, &addit, m.objects.AdditionalFlowMetrics, 0 /*no spinlock here*/, met, func(flow *model.BpfFlowContent) {
 			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range addit {
 				flow.AccumulateAdditional(&addit[i])
@@ -1053,7 +1058,7 @@ func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.Bp
 	if m.config.Flows.QUICTrackingMode != 0 {
 		// Global map => use single receiver
 		var quic ebpf.FlowsBpfQuicMetrics
-		countQuic := lookupAndDeleteSecondaryMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
+		countQuic := lookupAndDeleteSecondaryMap(flows, &quic, m.objects.QuicFlows, m.maybeLockFlag, met, func(flow *model.BpfFlowContent) {
 			// copy receiver to not share memory slot across calls
 			entry := quic
 			flow.AccumulateQuic(&entry)
@@ -1067,6 +1072,7 @@ func lookupAndDeleteSecondaryMap(
 	flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent,
 	receiver any,
 	bpfMap *cilium.Map,
+	flag cilium.MapLookupFlags,
 	met *metrics.Metrics,
 	accumulator func(flow *model.BpfFlowContent),
 ) int {
@@ -1078,7 +1084,7 @@ func lookupAndDeleteSecondaryMap(
 		ids = append(ids, id)
 	}
 	for _, id := range ids {
-		if err := bpfMap.LookupAndDelete(&id, receiver); err != nil {
+		if err := bpfMap.LookupAndDeleteWithFlags(&id, receiver, flag); err != nil {
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete secondary map entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteSecondaryMetric", metrics.HighSeverity).Inc()
 			continue
