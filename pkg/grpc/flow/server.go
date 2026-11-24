@@ -2,13 +2,13 @@ package flowgrpc
 
 import (
 	"context"
-	"fmt"
 	"net"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 // CollectorServer wraps a Flow Collector connection & session
@@ -18,6 +18,7 @@ type CollectorServer struct {
 
 type collectorOptions struct {
 	grpcServerOptions []grpc.ServerOption
+	listenHost        string
 }
 
 // CollectorOption allows overriding the default configuration of the CollectorServer instance.
@@ -27,6 +28,14 @@ type CollectorOption func(options *collectorOptions)
 func WithGRPCServerOptions(options ...grpc.ServerOption) CollectorOption {
 	return func(copt *collectorOptions) {
 		copt.grpcServerOptions = options
+	}
+}
+
+// WithListenHost makes the collector listen on the given host (e.g. "127.0.0.1",
+// "::1" or "localhost") instead of on all interfaces (":port").
+func WithListenHost(host string) CollectorOption {
+	return func(copt *collectorOptions) {
+		copt.listenHost = host
 	}
 }
 
@@ -43,7 +52,7 @@ func StartCollectorWithAPI(port int, api pbflow.CollectorServer, options ...Coll
 		opt(&copts)
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := net.Listen("tcp", utils.JoinHostPort(copts.listenHost, port))
 	if err != nil {
 		return nil, err
 	}

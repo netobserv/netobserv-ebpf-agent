@@ -100,7 +100,7 @@ The following environment variables are available to configure the NetObserv eBP
 * `TLS_PLAINTEXT_PREVIEW_BYTES` (default: `256`). Length of the `PlaintextPreview` string on exported events. `0` includes the full captured payload (up to 16 KiB per eBPF event). The full payload is always available in the base64 `Plaintext` field.
 * `FLP_CONFIG`: [flowlogs-pipeline](https://github.com/netobserv/flowlogs-pipeline) configuration as YAML or JSON, used when `EXPORT` is `direct-flp`. The ingest stage must be omitted from this configuration, since it is handled internally by the agent. The first stage should follow "preset-ingester". E.g, for a minimal configuration printing on terminal: `{"pipeline":[{"name": "writer","follows": "preset-ingester"}],"parameters":[{"name": "writer","write": {"type": "stdout"}}]}`. Refer to flowlogs-pipeline documentation for more options.
 * `METRICS_ENABLED` (default: `false`). If `true`, the agent will export metrics to the configured `EXPORT` endpoint.
-  * `METRICS_SERVER_ADDRESS` Address of the server where the metrics will be exported.
+  * `METRICS_SERVER_ADDRESS` (default: all interfaces) Address where the agent's Prometheus metrics server listens. IPv6 literal addresses (e.g. `::1`) are supported.
   * `METRICS_SERVER_PORT` (default: 9090). Port of the server where the metrics will be exported.
   * `METRICS_TLS_CERT_PATH` (default: unset). Path to the certificate file for the TLS connection.
   * `METRICS_TLS_KEY_PATH` (default: unset). Path to the private key file for the TLS connection.

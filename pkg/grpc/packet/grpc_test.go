@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
+	pbpacket "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/packet"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
-	"github.com/mariomac/guara/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -17,7 +17,8 @@ import (
 const timeout = 5 * time.Second
 
 func TestGRPCCommunication(t *testing.T) {
-	port, err := test.FreeTCPPort()
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbpacket.Packet)
 	_, err = StartCollector(port, serverOut)
@@ -54,7 +55,8 @@ func TestGRPCCommunication(t *testing.T) {
 }
 
 func TestConstructorOptions(t *testing.T) {
-	port, err := test.FreeTCPPort()
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	intercepted := make(chan struct{})
 	// Override the default GRPC collector to verify that StartCollector is applying the
