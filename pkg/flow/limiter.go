@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"sync"
 	"time"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
@@ -13,28 +14,77 @@ const maxLogPeriod = time.Hour
 
 var cllog = logrus.WithField("component", "capacity.Limiter")
 
-// CapacityLimiter forwards the flows between two nodes but checks the status of the destination
-// node's buffered channel. If it is already full, it drops the incoming flow and periodically will
-// log a message about the number of lost flows.
+// CapacityLimiter forwards flow batches while bounding estimated bytes retained
+// by the exporter queue and active exporter call. It never waits for the
+// exporter: a batch that does not fit the byte budget or queue is dropped.
 type CapacityLimiter struct {
-	droppedFlows int
-	metrics      *metrics.Metrics
+	droppedFlows    int
+	metrics         *metrics.Metrics
+	maxBytes        uint64
+	mu              sync.Mutex
+	inFlight        uint64
+	inFlightBatches uint64
 }
 
-func NewCapacityLimiter(m *metrics.Metrics) *CapacityLimiter {
-	return &CapacityLimiter{metrics: m}
+func NewCapacityLimiter(m *metrics.Metrics, maxBytes uint64) *CapacityLimiter {
+	if maxBytes == 0 {
+		// Directly constructed test or embedding configs may not have passed
+		// through envDefault processing.
+		maxBytes = 64 << 20
+	}
+	return &CapacityLimiter{metrics: m, maxBytes: maxBytes}
 }
 
-func (c *CapacityLimiter) Limit(in <-chan []*model.Record, out chan<- []*model.Record) {
+func (c *CapacityLimiter) Limit(in <-chan []*model.Record, out chan<- *model.FlowBatch) {
 	go c.logDroppedFlows()
-	for i := range in {
-		if len(out) < cap(out) || cap(out) == 0 {
-			out <- i
-		} else {
-			c.metrics.DroppedFlowsCounter.WithSourceAndReason("limiter", "full").Add(float64(len(i)))
-			c.droppedFlows += len(i)
+	for records := range in {
+		size := model.EstimateFlowBatchBytes(records)
+		if !c.tryReserve(size) {
+			c.drop(records, "byte_budget")
+			continue
+		}
+		batch := model.NewFlowBatch(records, size, func() { c.release(size) })
+		select {
+		case out <- batch:
+		default:
+			batch.Release()
+			c.drop(records, "exporter_queue_full")
 		}
 	}
+}
+
+func (c *CapacityLimiter) tryReserve(size uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if size > c.maxBytes || c.inFlight > c.maxBytes-size {
+		return false
+	}
+	c.inFlight += size
+	c.inFlightBatches++
+	c.metrics.FlowBatchInFlightBytes.Set(float64(c.inFlight))
+	c.metrics.FlowBatchInFlightBatches.Set(float64(c.inFlightBatches))
+	return true
+}
+
+func (c *CapacityLimiter) release(size uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if size > c.inFlight || c.inFlightBatches == 0 {
+		cllog.Errorf("flow batch budget accounting underflow: releasing %d bytes from %d bytes / %d batches", size, c.inFlight, c.inFlightBatches)
+		c.inFlight = 0
+		c.inFlightBatches = 0
+	} else {
+		c.inFlight -= size
+		c.inFlightBatches--
+	}
+	c.metrics.FlowBatchInFlightBytes.Set(float64(c.inFlight))
+	c.metrics.FlowBatchInFlightBatches.Set(float64(c.inFlightBatches))
+}
+
+func (c *CapacityLimiter) drop(records []*model.Record, reason string) {
+	c.metrics.DroppedFlowBatches.WithLabelValues(reason).Inc()
+	c.metrics.DroppedFlowsCounter.WithSourceAndReason("limiter", reason).Add(float64(len(records)))
+	c.droppedFlows += len(records)
 }
 
 func (c *CapacityLimiter) logDroppedFlows() {
@@ -48,9 +98,8 @@ func (c *CapacityLimiter) logDroppedFlows() {
 		df := c.droppedFlows
 		if df > 0 {
 			c.droppedFlows = 0
-			cllog.Warnf("%d flows were dropped during the last %s because the agent is forwarding "+
-				"more flows than the remote ingestor is able to process. You might "+
-				"want to increase the CACHE_MAX_FLOWS and CACHE_ACTIVE_TIMEOUT property",
+			cllog.Warnf("%d flows were dropped during the last %s because an in-flight flow batch "+
+				"exceeded the memory budget or the exporter queue was full",
 				df, logPeriod)
 
 			// if not debug logs, backoff to avoid flooding the log with warning messages

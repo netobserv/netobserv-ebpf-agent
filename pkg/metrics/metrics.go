@@ -123,6 +123,22 @@ var (
 		TypeGauge,
 		"name",
 	)
+	flowBatchInFlightBytes = defineMetric(
+		"flow_batch_in_flight_bytes",
+		"Estimated bytes held by queued or currently exported flow batches",
+		TypeGauge,
+	)
+	flowBatchInFlightBatches = defineMetric(
+		"flow_batch_in_flight_batches",
+		"Number of queued or currently exported flow batches",
+		TypeGauge,
+	)
+	droppedFlowBatches = defineMetric(
+		"dropped_flow_batches_total",
+		"Number of flow batches rejected by the in-flight memory budget or exporter queue",
+		TypeCounter,
+		"reason",
+	)
 	exportedBatchCounterTotal = defineMetric(
 		"exported_batch_total",
 		"Exported batches",
@@ -201,6 +217,9 @@ type Metrics struct {
 	FilteredPacketsCounter   *EvictionCounter
 	NetworkEventsCounter     *EvictionCounter
 	FlowBufferSizeGauge      *FlowBufferSizeGauge
+	FlowBatchInFlightBytes   prometheus.Gauge
+	FlowBatchInFlightBatches prometheus.Gauge
+	DroppedFlowBatches       *prometheus.CounterVec
 	Errors                   *ErrorCounter
 	InterfaceEventsCounter   *InterfaceEventsCounter
 	OpenSSLDataEventsCounter *OpenSSLDataEventsCounter
@@ -217,6 +236,9 @@ func NewMetrics(settings *Settings) *Metrics {
 	m.FilteredPacketsCounter = &EvictionCounter{vec: m.NewCounterVec(&filteredPackets)}
 	m.NetworkEventsCounter = &EvictionCounter{vec: m.NewCounterVec(&networkEvents)}
 	m.FlowBufferSizeGauge = &FlowBufferSizeGauge{vec: m.NewGaugeVec(&flowBufferSize)}
+	m.FlowBatchInFlightBytes = m.NewGauge(&flowBatchInFlightBytes)
+	m.FlowBatchInFlightBatches = m.NewGauge(&flowBatchInFlightBatches)
+	m.DroppedFlowBatches = m.NewCounterVec(&droppedFlowBatches)
 	m.Errors = &ErrorCounter{vec: m.NewCounterVec(&errorsCounter)}
 	m.InterfaceEventsCounter = newInterfaceEventsCounter(m.NewCounterVec(&interfaceEventsCounter), settings.Level)
 	m.OpenSSLDataEventsCounter = &OpenSSLDataEventsCounter{vec: m.NewCounterVec(&opensslDataEventsCounter)}

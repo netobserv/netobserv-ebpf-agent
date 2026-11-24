@@ -17,11 +17,12 @@ func NewExporterFake() *ExporterFake {
 	}
 }
 
-func (ef *ExporterFake) Export(in <-chan []*model.Record) {
-	for i := range in {
-		if len(i) > 0 {
-			ef.messages <- i
+func (ef *ExporterFake) Export(in <-chan *model.FlowBatch) {
+	for batch := range in {
+		if len(batch.Records) > 0 {
+			ef.messages <- batch.Records
 		}
+		batch.Release()
 	}
 }
 
