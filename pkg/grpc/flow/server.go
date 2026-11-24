@@ -3,12 +3,12 @@ package flowgrpc
 import (
 	"context"
 	"net"
-	"strconv"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 // CollectorServer wraps a Flow Collector connection & session
@@ -52,7 +52,7 @@ func StartCollectorWithAPI(port int, api pbflow.CollectorServer, options ...Coll
 		opt(&copts)
 	}
 
-	lis, err := net.Listen("tcp", net.JoinHostPort(copts.listenHost, strconv.Itoa(port)))
+	lis, err := net.Listen("tcp", utils.JoinHostPort(copts.listenHost, port))
 	if err != nil {
 		return nil, err
 	}

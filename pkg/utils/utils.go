@@ -3,6 +3,7 @@ package utils //nolint:revive
 import (
 	"fmt"
 	"net"
+	"strconv"
 )
 
 // GetSocket returns socket string in the correct format based on address family
@@ -57,4 +58,19 @@ func DNSRawNameToDotted(rawI8 []int8) string {
 		i += l
 	}
 	return string(out)
+}
+
+// StripBrackets normalizes a hostname in the shape of an IPv6 address, removing enclosing brackets if any.
+// Otherwise, host is returned unchanged.
+func StripBrackets(host string) string {
+	if len(host) > 2 && host[0] == '[' && host[len(host)-1] == ']' {
+		return host[1 : len(host)-1]
+	}
+	return host
+}
+
+// JoinHostPort is similar to net.JoinHostPort, with port as an int, and trimming bracket-formatted IPv6.
+// Like net.JoinHostPort, it does not perform any validation.
+func JoinHostPort(host string, port int) string {
+	return net.JoinHostPort(StripBrackets(host), strconv.Itoa(port))
 }

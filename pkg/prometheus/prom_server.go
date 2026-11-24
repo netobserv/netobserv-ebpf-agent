@@ -2,12 +2,11 @@ package prometheus
 
 import (
 	"crypto/tls"
-	"net"
 	"net/http"
-	"strconv"
 
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/server"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -32,7 +31,7 @@ func StartServerAsync(conn *metrics.Settings, registry *prom.Registry) *http.Ser
 	if port == 0 {
 		port = 9090
 	}
-	addr := net.JoinHostPort(conn.Address, strconv.Itoa(port))
+	addr := utils.JoinHostPort(conn.Address, port)
 	plog.Infof("StartServerAsync: addr = %s", addr)
 
 	httpServer := &http.Server{

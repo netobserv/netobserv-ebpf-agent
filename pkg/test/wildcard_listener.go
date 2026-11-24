@@ -2,9 +2,10 @@ package test
 
 import (
 	"net"
-	"strconv"
 	"testing"
 	"time"
+
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/utils"
 )
 
 // SkipUnlessWildcardListenerAccepts skips the current test or benchmark when
@@ -34,7 +35,7 @@ func SkipUnlessWildcardListenerAccepts(tb testing.TB, host string) {
 // restricted environments, as long as the address family itself is
 // available.
 func SkipUnlessLoopbackListenerAccepts(tb testing.TB, host string) {
-	skipUnlessListenerAccepts(tb, net.JoinHostPort(host, "0"), host)
+	skipUnlessListenerAccepts(tb, utils.JoinHostPort(host, 0), host)
 }
 
 func skipUnlessListenerAccepts(tb testing.TB, listenAddr, host string) {
@@ -45,7 +46,7 @@ func skipUnlessListenerAccepts(tb testing.TB, listenAddr, host string) {
 	}
 	defer listener.Close()
 	port := listener.Addr().(*net.TCPAddr).Port
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), time.Second)
+	conn, err := net.DialTimeout("tcp", utils.JoinHostPort(host, port), time.Second)
 	if err != nil {
 		tb.Skipf("TCP listener on %q does not accept %s connections "+
 			"(single-stack or otherwise restricted network environment): %v", listenAddr, host, err)
@@ -54,7 +55,7 @@ func skipUnlessListenerAccepts(tb testing.TB, listenAddr, host string) {
 }
 
 func FreeTCPPortOn(host string) (int, error) {
-	listener, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	listener, err := net.Listen("tcp", utils.JoinHostPort(host, 0))
 	if err != nil {
 		return 0, err
 	}
