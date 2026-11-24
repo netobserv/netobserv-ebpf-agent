@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	test2 "github.com/mariomac/guara/pkg/test"
-	"github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
+	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +22,7 @@ const timeout = 5 * time.Second
 
 func TestGRPCCommunication(t *testing.T) {
 	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut)
@@ -101,7 +100,7 @@ func TestGRPCCommunication(t *testing.T) {
 
 func TestConstructorOptions(t *testing.T) {
 	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	intercepted := make(chan struct{})
 	// Override the default GRPC collector to verify that StartCollector is applying the
@@ -136,7 +135,7 @@ func TestConstructorOptions(t *testing.T) {
 
 func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 	test.SkipUnlessWildcardListenerAccepts(b, "127.0.0.1")
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
 	collector, err := StartCollector(port, serverOut)
@@ -188,7 +187,7 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 	for i := 0; i < 100; i++ {
 		records.Entries = append(records.Entries, f)
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := client.Send(context.Background(), records); err != nil {
 			require.Fail(b, "error", err)
 		}
@@ -198,7 +197,7 @@ func BenchmarkIPv4GRPCCommunication(b *testing.B) {
 
 func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 	test.SkipUnlessWildcardListenerAccepts(b, "::1")
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(b, err)
 	serverOut := make(chan *pbflow.Records, 1000)
 	collector, err := StartCollector(port, serverOut)
@@ -252,7 +251,7 @@ func BenchmarkIPv6GRPCCommunication(b *testing.B) {
 	for i := 0; i < 100; i++ {
 		records.Entries = append(records.Entries, f)
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := client.Send(context.Background(), records); err != nil {
 			require.Fail(b, "error", err)
 		}
@@ -268,7 +267,7 @@ func TestGRPCCommunication_TLS(t *testing.T) {
 	opts, err := buildTLSServerOptions(cert, key, "")
 	require.NoError(t, err)
 
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))
@@ -320,7 +319,7 @@ func TestGRPCCommunication_MutualTLS(t *testing.T) {
 	opts, err := buildTLSServerOptions(cert, key, clCA)
 	require.NoError(t, err)
 
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))
@@ -373,7 +372,7 @@ func TestGRPCCommunication_MutualTLS_InvalidCert(t *testing.T) {
 	opts, err := buildTLSServerOptions(cert, key, ca)
 	require.NoError(t, err)
 
-	port, err := test2.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	_, err = StartCollector(port, serverOut, WithGRPCServerOptions(opts...))

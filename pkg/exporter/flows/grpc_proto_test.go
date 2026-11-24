@@ -13,9 +13,8 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	pbflow "github.com/netobserv/netobserv-ebpf-agent/pkg/pb/flow"
-	test2 "github.com/netobserv/netobserv-ebpf-agent/pkg/test"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/test"
 
-	"github.com/mariomac/guara/pkg/test"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,9 +24,9 @@ import (
 const timeout = 2 * time.Second
 
 func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
-	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
-	port, err := test.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	coll, err := grpcflow.StartCollector(port, serverOut)
@@ -58,12 +57,12 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	}
 	go exporter.ExportFlows(flows)
 
-	rs := test2.ReceiveTimeout(t, serverOut, timeout)
+	rs := test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r := rs.Entries[0]
 	assert.EqualValues(t, 0x0a090807, r.GetAgentIp().GetIpv4())
 
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	rs = test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r = rs.Entries[0]
 	assert.EqualValues(t, net.ParseIP("8888::1111"), r.GetAgentIp().GetIpv6())
@@ -77,9 +76,9 @@ func TestIPv4GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 }
 
 func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
-	test2.SkipUnlessWildcardListenerAccepts(t, "::1")
+	test.SkipUnlessWildcardListenerAccepts(t, "::1")
 	// start remote ingestor
-	port, err := test.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	coll, err := grpcflow.StartCollector(port, serverOut)
@@ -110,12 +109,12 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 	}
 	go exporter.ExportFlows(flows)
 
-	rs := test2.ReceiveTimeout(t, serverOut, timeout)
+	rs := test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r := rs.Entries[0]
 	assert.EqualValues(t, 0x0a0b0c0d, r.GetAgentIp().GetIpv4())
 
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	rs = test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r = rs.Entries[0]
 	assert.EqualValues(t, net.ParseIP("9999::2222"), r.GetAgentIp().GetIpv6())
@@ -136,9 +135,9 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP(t *testing.T) {
 // single-stack hosts nor in restricted environments such as some sandboxes;
 // this variant keeps the IPv6 transport covered in those environments too.
 func TestIPv6GRPCProto_ExportFlows_AgentIP_ExplicitIPv6Listener(t *testing.T) {
-	test2.SkipUnlessLoopbackListenerAccepts(t, "::1")
+	test.SkipUnlessLoopbackListenerAccepts(t, "::1")
 	// start remote ingestor
-	port, err := test.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("::1")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	coll, err := grpcflow.StartCollector(port, serverOut, grpcflow.WithListenHost("::1"))
@@ -169,12 +168,12 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP_ExplicitIPv6Listener(t *testing.T) {
 	}
 	go exporter.ExportFlows(flows)
 
-	rs := test2.ReceiveTimeout(t, serverOut, timeout)
+	rs := test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r := rs.Entries[0]
 	assert.EqualValues(t, 0x0a0b0c0d, r.GetAgentIp().GetIpv4())
 
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	rs = test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 1)
 	r = rs.Entries[0]
 	assert.EqualValues(t, net.ParseIP("9999::2222"), r.GetAgentIp().GetIpv6())
@@ -188,9 +187,9 @@ func TestIPv6GRPCProto_ExportFlows_AgentIP_ExplicitIPv6Listener(t *testing.T) {
 }
 
 func TestGRPCProto_SplitLargeMessages(t *testing.T) {
-	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
-	port, err := test.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 	coll, err := grpcflow.StartCollector(port, serverOut)
@@ -222,11 +221,11 @@ func TestGRPCProto_SplitLargeMessages(t *testing.T) {
 	go exporter.ExportFlows(flows)
 
 	// expect that the submitted message is split in chunks no longer than msgMaxLen
-	rs := test2.ReceiveTimeout(t, serverOut, timeout)
+	rs := test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, cfg.Flows.GRPCMessageMaxFlows)
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	rs = test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, cfg.Flows.GRPCMessageMaxFlows)
-	rs = test2.ReceiveTimeout(t, serverOut, timeout)
+	rs = test.ReceiveTimeout(t, serverOut, timeout)
 	assert.Len(t, rs.Entries, 5000)
 
 	// after all the operation, no more flows are sent
@@ -260,9 +259,9 @@ func (c *collectorAPI) Send(ctx context.Context, records *pbflow.Records) (*pbfl
 }
 
 func TestConnectionReset(t *testing.T) {
-	test2.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
+	test.SkipUnlessWildcardListenerAccepts(t, "127.0.0.1")
 	// start remote ingestor
-	port, err := test.FreeTCPPort()
+	port, err := test.FreeTCPPortOn("")
 	require.NoError(t, err)
 	serverOut := make(chan *pbflow.Records)
 
@@ -302,7 +301,7 @@ func TestConnectionReset(t *testing.T) {
 	}()
 
 	for i := 0; i < nFlows; i++ {
-		rs := test2.ReceiveTimeout(t, serverOut, timeout)
+		rs := test.ReceiveTimeout(t, serverOut, timeout)
 		assert.Len(t, rs.Entries, 1)
 		r := rs.Entries[0]
 		assert.EqualValues(t, 0x0a090800+i, r.GetAgentIp().GetIpv4())
