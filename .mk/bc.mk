@@ -37,7 +37,7 @@ define FLOW_MAPS
 {
 	"direct_flows":"ringbuf",
 	"aggregated_flows":"hash",
-	"aggregated_flows_dns":"per_cpu_hash",
+	"aggregated_flows_dns":"hash",
 	"aggregated_flows_pkt_drop":"per_cpu_hash",
 	"aggregated_flows_network_events":"per_cpu_hash",
 	"aggregated_flows_xlat":"per_cpu_hash",
@@ -49,7 +49,7 @@ define FLOW_MAPS
 	"ipsec_ingress_map":"hash",
 	"ipsec_egress_map":"hash",
 	"dns_name_map":"per_cpu_array",
-	"quic_flows":"per_cpu_hash"
+	"quic_flows":"hash"
 }
 endef
 

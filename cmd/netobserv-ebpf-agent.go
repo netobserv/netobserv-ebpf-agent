@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
-	"github.com/caarlos0/env/v11"
+	cilium "github.com/cilium/ebpf"
 	"github.com/sirupsen/logrus"
 
 	flowsagent "github.com/netobserv/netobserv-ebpf-agent/pkg/agent/flows"
@@ -41,11 +42,11 @@ func terminateAgent() (ctx context.Context) {
 
 func main() {
 	logrus.Infof("starting NetObserv eBPF Agent [build version: %s, build date: %s]", buildVersion, buildDate)
-	config := config.Agent{}
-	if err := env.Parse(&config); err != nil {
+	config, err := config.FromEnv(possibleCPUs())
+	if err != nil {
 		logrus.WithError(err).Fatal("can't load configuration from environment")
 	}
-	setLoggerVerbosity(&config)
+	setLoggerVerbosity(config)
 
 	if config.PprofAddr != "" {
 		go func() {
@@ -64,7 +65,7 @@ func main() {
 		if err := config.ValidateForPackets(); err != nil {
 			logrus.WithError(err).Fatal("[PCA] invalid configuration for packet capture mode")
 		}
-		packetsAgent, err := packetsagent.New(&config)
+		packetsAgent, err := packetsagent.New(config)
 		if err != nil {
 			logrus.WithError(err).Fatal("[PCA] can't instantiate NetObserv eBPF Agent")
 		}
@@ -77,7 +78,7 @@ func main() {
 		if err := config.ValidateForFlows(); err != nil {
 			logrus.WithError(err).Fatal("invalid configuration for flow capture mode")
 		}
-		flowsAgent, err := flowsagent.New(&config)
+		flowsAgent, err := flowsagent.New(config)
 
 		if err != nil {
 			logrus.WithError(err).Fatal("can't instantiate NetObserv eBPF Agent")
@@ -97,4 +98,17 @@ func setLoggerVerbosity(cfg *config.Agent) {
 		lvl = logrus.InfoLevel
 	}
 	logrus.SetLevel(lvl)
+}
+
+// possibleCPUs returns the number of CPUs the kernel may allocate per-CPU
+// memory for (including currently offline CPUs). It falls back on the number
+// of usable CPUs when the possible CPU count cannot be read.
+func possibleCPUs() int {
+	cpus, err := cilium.PossibleCPU()
+	if err != nil {
+		logrus.WithError(err).Warn("couldn't read the number of possible CPUs," +
+			" falling back on the number of usable CPUs")
+		return runtime.NumCPU()
+	}
+	return cpus
 }

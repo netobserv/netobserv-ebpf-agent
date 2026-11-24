@@ -7,10 +7,10 @@
 
 #include <bpf_tracing.h>
 
-static inline int rtt_lookup_and_update_flow(flow_id *id, u64 rtt) {
+static inline int rtt_lookup_and_update_flow(flow_id *id, u64 ts, u32 rtt) {
     additional_metrics *extra_metrics = bpf_map_lookup_elem(&additional_flow_metrics, id);
     if (extra_metrics != NULL) {
-        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
+        extra_metrics->mono_time_ts = ts;
         if (extra_metrics->flow_rtt < rtt) {
             extra_metrics->flow_rtt = rtt;
         }
@@ -23,7 +23,7 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     u8 dscp = 0, protocol = 0;
     struct tcp_sock *ts;
     u16 family = 0, flags = 0, eth_protocol = 0;
-    u64 rtt = 0;
+    u32 rtt = 0;
     int ret = 0;
     flow_id id;
 
@@ -51,10 +51,9 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
     // read TCP info
     core_fill_in_tcp(skb, &id, &flags);
 
-    // read TCP socket rtt and store it in nanoseconds
+    // read TCP socket rtt and store it in microseconds
     ts = (struct tcp_sock *)(sk);
     rtt = BPF_CORE_READ(ts, srtt_us) >> 3;
-    rtt *= 1000u;
 
     // check if this packet need to be filtered if filtering feature is enabled
     bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
@@ -62,28 +61,34 @@ static inline int calculate_flow_rtt_tcp(struct sock *sk, struct sk_buff *skb) {
         return 0;
     }
 
+    u64 current_time = bpf_ktime_get_ns();
+
     // update flow with rtt info
-    ret = rtt_lookup_and_update_flow(&id, rtt);
+    ret = rtt_lookup_and_update_flow(&id, current_time, rtt);
     if (ret == 0) {
         return 0;
     }
 
-    u64 current_time = bpf_ktime_get_ns();
     additional_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
-    new_flow.start_mono_time_ts = current_time;
-    new_flow.end_mono_time_ts = current_time;
+    new_flow.mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.flow_rtt = rtt;
     ret = bpf_map_update_elem(&additional_flow_metrics, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error rtt track creating flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
+            if (trace_messages) {
+                bpf_printk("error rtt track creating flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
-            ret = rtt_lookup_and_update_flow(&id, rtt);
-            if (trace_messages && ret != 0) {
-                bpf_printk("error rtt track updating an existing flow %d\n", ret);
+            ret = rtt_lookup_and_update_flow(&id, current_time, rtt);
+            if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_ADDITIONAL);
+                if (trace_messages) {
+                    bpf_printk("error rtt track updating an existing flow %d\n", ret);
+                }
             }
         }
     }

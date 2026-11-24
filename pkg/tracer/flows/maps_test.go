@@ -7,11 +7,34 @@ import (
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/config"
 	configflows "github.com/netobserv/netobserv-ebpf-agent/pkg/config/flows"
 	ebpf "github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf/flows"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/metrics"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/tracer/attach"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReportMapCapacity(t *testing.T) {
+	met := metrics.NoOp()
+	readGauge := func(label string) float64 {
+		var metric dto.Metric
+		require.NoError(t, met.MapCapacityGauge.WithName(label).Write(&metric))
+		return metric.GetGauge().GetValue()
+	}
+
+	// each map with an associated metric name reports its capacity
+	for mapName, label := range mapToMetricName {
+		reportMapCapacity(met, mapName, 1234)
+		assert.Equal(t, float64(1234), readGauge(label), mapName)
+	}
+
+	// maps without an associated metric name are ignored
+	reportMapCapacity(met, ebpf.FlowsBpfMapDirectFlows, 4321)
+	for _, label := range mapToMetricName {
+		assert.Equal(t, float64(1234), readGauge(label), label)
+	}
+}
 
 func TestConfigureFlowMaps(t *testing.T) {
 	for _, tc := range []struct {
@@ -54,14 +77,22 @@ func TestConfigureFlowMaps(t *testing.T) {
 				expected.Maps[name].MaxEntries = spec.Maps[name].MaxEntries
 			}
 			cfg := &tracer.FetcherConfig{Agent: config.Agent{
-				Common: config.Common{CacheMaxFlows: 5000},
-				Flows:  tc.features,
+				Common: config.Common{
+					CacheMaxFlows:             5000,
+					CacheMaxDNSFlows:          5000,
+					CacheMaxPktDropsFlows:     5000,
+					CacheMaxNetworkEventFlows: 5000,
+					CacheMaxXlatFlows:         5000,
+					CacheMaxQUICFlows:         5000,
+					CacheMaxAdditionalFlows:   5000,
+				},
+				Flows: tc.features,
 			}}
 			var filter *attach.Filter
 			if tc.filter {
 				filter = attach.NewFilter([]*attach.FilterConfig{{Action: "Accept"}})
 			}
-			configureFlowMaps(spec, cfg, filter)
+			configureFlowMaps(spec, cfg, filter, metrics.NoOp())
 			// Check capacities, unrelated maps, and the ABI/flags required by the BPF object.
 			for name, before := range expected.Maps {
 				after := spec.Maps[name]
@@ -74,4 +105,24 @@ func TestConfigureFlowMaps(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfigureFlowMapsPerCPUCapacities(t *testing.T) {
+	spec, err := ebpf.LoadFlowsBpf()
+	require.NoError(t, err)
+	cfg := &tracer.FetcherConfig{Agent: config.Agent{
+		Common: config.Common{CacheMaxFlows: 5000},
+		Flows:  configflows.Features{EnablePktDrops: true, EnableNetworkEventsMonitoring: true},
+	}}
+	cfg.Normalize(4)
+	configureFlowMaps(spec, cfg, nil, metrics.NoOp())
+
+	// enabled per-CPU maps get the capacity defaulted by Normalize (5000/4)
+	assert.Equal(t, 1250, cfg.CacheMaxPktDropsFlows)
+	assert.Equal(t, uint32(1250), spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsPktDrop].MaxEntries)
+	assert.Equal(t, 1250, cfg.CacheMaxNetworkEventFlows)
+	assert.Equal(t, uint32(1250), spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsNetworkEvents].MaxEntries)
+	// disabled maps keep the minimum size
+	assert.EqualValues(t, 1, int(spec.Maps[ebpf.FlowsBpfMapAggregatedFlowsXlat].MaxEntries))
+	assert.EqualValues(t, 1, int(spec.Maps[ebpf.FlowsBpfMapAdditionalFlowMetrics].MaxEntries))
 }

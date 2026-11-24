@@ -98,8 +98,9 @@ static __always_inline void update_existing_flow(flow_metrics *aggregate_flow, p
 }
 
 static inline void update_dns(dns_metrics *dns_metrics, pkt_info *pkt, int dns_errno) {
+    bpf_spin_lock(&dns_metrics->lock);
     if (pkt->dns_id != 0) {
-        dns_metrics->end_mono_time_ts = pkt->current_ts;
+        dns_metrics->mono_time_ts = pkt->current_ts;
         dns_metrics->id = pkt->dns_id;
         dns_metrics->flags = pkt->dns_flags;
         dns_metrics->latency = pkt->dns_latency;
@@ -110,6 +111,7 @@ static inline void update_dns(dns_metrics *dns_metrics, pkt_info *pkt, int dns_e
     if (dns_errno != 0) {
         dns_metrics->errno = dns_errno;
     }
+    bpf_spin_unlock(&dns_metrics->lock);
 }
 
 static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
@@ -245,8 +247,7 @@ static inline int flow_monitor(struct __sk_buff *skb, u8 direction) {
         } else {
             dns_metrics new_metrics;
             __builtin_memset(&new_metrics, 0, sizeof(new_metrics));
-            new_metrics.start_mono_time_ts = pkt.current_ts;
-            new_metrics.end_mono_time_ts = pkt.current_ts;
+            new_metrics.mono_time_ts = pkt.current_ts;
             new_metrics.eth_protocol = eth_protocol;
             new_metrics.id = pkt.dns_id;
             new_metrics.flags = pkt.dns_flags;

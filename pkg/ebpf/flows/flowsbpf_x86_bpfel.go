@@ -15,14 +15,36 @@ import (
 
 type FlowsBpfAdditionalMetrics struct {
 	_                 structs.HostLayout
-	StartMonoTimeTs   uint64
-	EndMonoTimeTs     uint64
-	FlowRtt           uint64
+	MonoTimeTs        uint64
+	FlowRtt           uint32
 	IpsecEncryptedRet int32
 	EthProtocol       uint16
 	IpsecEncrypted    bool
-	_                 [1]byte
+	_                 [5]byte
 }
+
+type FlowsBpfCountersKeyT uint32
+
+const (
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_FLOW            FlowsBpfCountersKeyT = 0
+	FlowsBpfCountersKeyTHASHMAP_FAIL_CREATE_FLOW            FlowsBpfCountersKeyT = 1
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_DNS             FlowsBpfCountersKeyT = 2
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_NETWORK_EVENT   FlowsBpfCountersKeyT = 3
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_PKT_DROP        FlowsBpfCountersKeyT = 4
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_XLAT            FlowsBpfCountersKeyT = 5
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_QUIC            FlowsBpfCountersKeyT = 6
+	FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_ADDITIONAL      FlowsBpfCountersKeyT = 7
+	FlowsBpfCountersKeyTFILTER_REJECT                       FlowsBpfCountersKeyT = 8
+	FlowsBpfCountersKeyTFILTER_ACCEPT                       FlowsBpfCountersKeyT = 9
+	FlowsBpfCountersKeyTFILTER_NOMATCH                      FlowsBpfCountersKeyT = 10
+	FlowsBpfCountersKeyTNETWORK_EVENTS_ERR                  FlowsBpfCountersKeyT = 11
+	FlowsBpfCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH FlowsBpfCountersKeyT = 12
+	FlowsBpfCountersKeyTNETWORK_EVENTS_OVERFLOW             FlowsBpfCountersKeyT = 13
+	FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       FlowsBpfCountersKeyT = 14
+	FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_MISSING       FlowsBpfCountersKeyT = 15
+	FlowsBpfCountersKeyTOBSERVED_INTF_MISSED                FlowsBpfCountersKeyT = 16
+	FlowsBpfCountersKeyTMAX_COUNTERS                        FlowsBpfCountersKeyT = 17
+)
 
 type FlowsBpfDirectionT uint32
 
@@ -46,16 +68,19 @@ type FlowsBpfDnsFlowId struct {
 type FlowsBpfDnsMetrics FlowsBpfDnsMetricsT
 
 type FlowsBpfDnsMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Latency         uint64
-	Id              uint16
-	Flags           uint16
-	EthProtocol     uint16
-	Errno           uint8
-	Name            [32]int8
-	_               [1]byte
+	_          structs.HostLayout
+	MonoTimeTs uint64
+	Latency    uint64
+	Lock       struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	Id          uint16
+	Flags       uint16
+	EthProtocol uint16
+	Errno       uint8
+	Name        [32]int8
+	_           [5]byte
 }
 
 type FlowsBpfDnsNameBuffer struct {
@@ -158,31 +183,11 @@ type FlowsBpfFlowRecordT struct {
 	Metrics FlowsBpfFlowMetrics
 }
 
-type FlowsBpfGlobalCountersKeyT uint32
-
-const (
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW            FlowsBpfGlobalCountersKeyT = 0
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW            FlowsBpfGlobalCountersKeyT = 1
-	FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS             FlowsBpfGlobalCountersKeyT = 2
-	FlowsBpfGlobalCountersKeyTFILTER_REJECT                       FlowsBpfGlobalCountersKeyT = 3
-	FlowsBpfGlobalCountersKeyTFILTER_ACCEPT                       FlowsBpfGlobalCountersKeyT = 4
-	FlowsBpfGlobalCountersKeyTFILTER_NOMATCH                      FlowsBpfGlobalCountersKeyT = 5
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  FlowsBpfGlobalCountersKeyT = 6
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH FlowsBpfGlobalCountersKeyT = 7
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS FlowsBpfGlobalCountersKeyT = 8
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 FlowsBpfGlobalCountersKeyT = 9
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW             FlowsBpfGlobalCountersKeyT = 10
-	FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG       FlowsBpfGlobalCountersKeyT = 11
-	FlowsBpfGlobalCountersKeyTOBSERVED_INTF_MISSED                FlowsBpfGlobalCountersKeyT = 12
-	FlowsBpfGlobalCountersKeyTMAX_COUNTERS                        FlowsBpfGlobalCountersKeyT = 13
-)
-
 type FlowsBpfNetworkEventsMetrics FlowsBpfNetworkEventsMetricsT
 
 type FlowsBpfNetworkEventsMetricsT struct {
 	_                structs.HostLayout
-	StartMonoTimeTs  uint64
-	EndMonoTimeTs    uint64
+	MonoTimeTs       uint64
 	NetworkEvents    [4][8]uint8
 	Bytes            [4]uint16
 	Packets          [4]uint16
@@ -195,8 +200,7 @@ type FlowsBpfPktDropMetrics FlowsBpfPktDropMetricsT
 
 type FlowsBpfPktDropMetricsT struct {
 	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
+	MonoTimeTs      uint64
 	Bytes           uint16
 	Packets         uint16
 	LatestDropCause uint32
@@ -217,13 +221,17 @@ const (
 type FlowsBpfQuicMetrics FlowsBpfQuicMetricsT
 
 type FlowsBpfQuicMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Version         uint32
-	EthProtocol     uint16
-	SeenLongHdr     uint8
-	SeenShortHdr    uint8
+	_          structs.HostLayout
+	MonoTimeTs uint64
+	Version    uint32
+	Lock       struct {
+		_   structs.HostLayout
+		Val uint32
+	}
+	EthProtocol  uint16
+	SeenLongHdr  uint8
+	SeenShortHdr uint8
+	_            [4]byte
 }
 
 type FlowsBpfTcpFlagsT uint32
@@ -245,15 +253,14 @@ const (
 type FlowsBpfXlatMetrics FlowsBpfXlatMetricsT
 
 type FlowsBpfXlatMetricsT struct {
-	_               structs.HostLayout
-	StartMonoTimeTs uint64
-	EndMonoTimeTs   uint64
-	Saddr           [16]uint8
-	Daddr           [16]uint8
-	Sport           uint16
-	Dport           uint16
-	ZoneId          uint16
-	EthProtocol     uint16
+	_           structs.HostLayout
+	MonoTimeTs  uint64
+	Saddr       [16]uint8
+	Daddr       [16]uint8
+	Sport       uint16
+	Dport       uint16
+	ZoneId      uint16
+	EthProtocol uint16
 }
 
 // Names of all BPF objects in the ELF.

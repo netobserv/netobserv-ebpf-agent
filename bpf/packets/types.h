@@ -15,15 +15,15 @@ typedef struct payload_meta_t {
 } payload_meta;
 
 // Enum to define global counters keys and share it with userspace
-typedef enum global_counters_key_t {
+typedef enum counters_key_t {
     FILTER_REJECT,
     FILTER_ACCEPT,
     FILTER_NOMATCH,
     MAX_COUNTERS,
-} global_counters_key;
+} counters_key;
 
 // Force emitting enums/structs into the ELF
-const enum global_counters_key_t *unused_counters __attribute__((unused));
+const enum counters_key_t *unused_counters __attribute__((unused));
 // SSL data event
 struct ssl_data_event_t {
     u64 timestamp_ns;

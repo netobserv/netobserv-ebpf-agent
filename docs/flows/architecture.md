@@ -18,14 +18,17 @@ flowchart TD
     D{If DNS} -->|Req: store req info| MD(Global map: dns_flows)
     D -->|Resp: compute latency| MD
     A -->D
-    D -->|Store DNS info| M2(PerCPU map: additional_flow_metrics)
-    B[Drops Hook: kfree_skb] -->|Accumulate drop data| M2(PerCPU map: additional_flow_metrics)
+    D -->|Store DNS info| M3(Global map: aggregated_flows_dns)
+    B[Drops Hook: kfree_skb] -->|Accumulate drop data| M4(PerCPU map: aggregated_flows_pkt_drop)
     C[RTT Hook: tcp_rcv_established] -->|Extract & store sRTT| M2(PerCPU map: additional_flow_metrics)
-    E[Events Hook: psample_sample_packet] -->|Accumulate net events| M2(PerCPU map: additional_flow_metrics)
+    E[Events Hook: psample_sample_packet] -->|Accumulate net events| M5(PerCPU map: aggregated_flows_network_events)
     A -->F{If busy map / error}
     F -->|Single-packet flow| RB(RingBuffer: direct_flows)
     M1 --> |Polling|U[User space]
     M2 --> |Polling|U
+    M3 --> |Polling|U
+    M4 --> |Polling|U
+    M5 --> |Polling|U
     RB --> |Push|U
     style A fill:#FBB
     style B fill:#FBB

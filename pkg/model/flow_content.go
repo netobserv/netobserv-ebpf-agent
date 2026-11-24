@@ -60,13 +60,13 @@ func AccumulateBase(p *ebpf.FlowsBpfFlowMetrics, other *ebpf.FlowsBpfFlowMetrics
 	return p
 }
 
-func (p *BpfFlowContent) buildBaseFromAdditional(start, end uint64, ethProto uint16) {
+func (p *BpfFlowContent) buildBaseFromAdditional(ts uint64, ethProto uint16) {
 	// Accumulate time into base metrics if unset
-	if p.FlowsBpfFlowMetrics.StartMonoTimeTs == 0 || (p.FlowsBpfFlowMetrics.StartMonoTimeTs > start && start != 0) {
-		p.FlowsBpfFlowMetrics.StartMonoTimeTs = start
+	if p.FlowsBpfFlowMetrics.StartMonoTimeTs == 0 || (p.FlowsBpfFlowMetrics.StartMonoTimeTs > ts && ts != 0) {
+		p.FlowsBpfFlowMetrics.StartMonoTimeTs = ts
 	}
-	if p.FlowsBpfFlowMetrics.EndMonoTimeTs == 0 || p.FlowsBpfFlowMetrics.EndMonoTimeTs < end {
-		p.FlowsBpfFlowMetrics.EndMonoTimeTs = end
+	if p.FlowsBpfFlowMetrics.EndMonoTimeTs == 0 || p.FlowsBpfFlowMetrics.EndMonoTimeTs < ts {
+		p.FlowsBpfFlowMetrics.EndMonoTimeTs = ts
 	}
 	if p.FlowsBpfFlowMetrics.EthProtocol == 0 {
 		p.FlowsBpfFlowMetrics.EthProtocol = ethProto
@@ -77,7 +77,7 @@ func (p *BpfFlowContent) AccumulateDNS(other *ebpf.FlowsBpfDnsMetrics) {
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.DNSMetrics == nil {
 		p.DNSMetrics = other
 		return
@@ -99,7 +99,7 @@ func (p *BpfFlowContent) AccumulateDrops(other *ebpf.FlowsBpfPktDropMetrics) {
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.PktDropMetrics == nil {
 		p.PktDropMetrics = other
 		return
@@ -120,7 +120,7 @@ func (p *BpfFlowContent) AccumulateNetworkEvents(other *ebpf.FlowsBpfNetworkEven
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.NetworkEventsMetrics == nil {
 		p.NetworkEventsMetrics = other
 		return
@@ -140,7 +140,7 @@ func (p *BpfFlowContent) AccumulateXlat(other *ebpf.FlowsBpfXlatMetrics) {
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.XlatMetrics == nil {
 		p.XlatMetrics = other
 		return
@@ -155,7 +155,7 @@ func (p *BpfFlowContent) AccumulateAdditional(other *ebpf.FlowsBpfAdditionalMetr
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.AdditionalMetrics == nil {
 		p.AdditionalMetrics = other
 		return
@@ -180,7 +180,7 @@ func (p *BpfFlowContent) AccumulateQuic(other *ebpf.FlowsBpfQuicMetrics) {
 	if other == nil {
 		return
 	}
-	p.buildBaseFromAdditional(other.StartMonoTimeTs, other.EndMonoTimeTs, other.EthProtocol)
+	p.buildBaseFromAdditional(other.MonoTimeTs, other.EthProtocol)
 	if p.QuicMetrics == nil {
 		p.QuicMetrics = other
 		return
