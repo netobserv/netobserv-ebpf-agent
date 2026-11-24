@@ -14,7 +14,7 @@ import (
 func BenchmarkNewRecord(b *testing.B) {
 	// Use a realistic interface namer (returns a stable string per ifindex)
 	// rather than the default fmt.Sprintf-based placeholder.
-	SetInterfaceNamer(func(ifIndex int, _ MacAddr) string {
+	SetInterfaceNamer(func(ifIndex int, _ uint64, _ MacAddr) string {
 		switch ifIndex {
 		case 2:
 			return "eth0"

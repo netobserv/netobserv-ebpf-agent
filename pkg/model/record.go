@@ -41,14 +41,16 @@ type Direction uint8
 // (same behavior as Go's net.IP type)
 type IPAddr [net.IPv6len]uint8
 
-type InterfaceNamer func(ifIndex int, mac MacAddr) string
+type InterfaceNamer func(ifIndex int, netnsCookie uint64, mac MacAddr) string
 type SampleDecoder interface {
 	DecodeCookie8Bytes(cookie [8]byte) (ovnmodel.NetworkEvent, error)
 }
 
 var (
 	agentIP        net.IP
-	interfaceNamer InterfaceNamer = func(ifIndex int, _ MacAddr) string { return fmt.Sprintf("[namer unset] %d", ifIndex) }
+	interfaceNamer InterfaceNamer = func(ifIndex int, _ uint64, _ MacAddr) string {
+		return fmt.Sprintf("[namer unset] %d", ifIndex)
+	}
 )
 
 func SetGlobalIP(ip net.IP) {
@@ -120,13 +122,14 @@ func NewRecordInto(
 	if metrics.DirectionFirstSeen == 0 {
 		lMAC = metrics.DstMac
 	}
-	dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(interfaceNamer(int(metrics.IfIndexFirstSeen), lMAC),
+	dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(
+		interfaceNamer(int(metrics.IfIndexFirstSeen), metrics.NetnsCookieFirstSeen, lMAC),
 		int(metrics.DirectionFirstSeen),
 		udnsCache))
 
 	for i := uint8(0); i < dst.Metrics.NbObservedIntf; i++ {
 		dst.Interfaces = append(dst.Interfaces, NewIntfDirUdn(
-			interfaceNamer(int(metrics.ObservedIntf[i]), lMAC),
+			interfaceNamer(int(metrics.ObservedIntf[i]), metrics.ObservedNetnsCookie[i], lMAC),
 			int(metrics.ObservedDirection[i]),
 			udnsCache,
 		))
