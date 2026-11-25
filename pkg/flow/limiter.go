@@ -15,13 +15,15 @@ const maxLogPeriod = time.Hour
 var cllog = logrus.WithField("component", "capacity.Limiter")
 
 // CapacityLimiter forwards flow batches while bounding estimated bytes retained
-// by the exporter queue and active exporter call. It never waits for the
-// exporter: a batch that does not fit the byte budget or queue is dropped.
+// by the exporter queue and active exporter call. It applies backpressure when
+// the byte budget is exhausted and drops only batches that cannot fit by
+// themselves or when the exporter queue is full.
 type CapacityLimiter struct {
 	droppedFlows    int
 	metrics         *metrics.Metrics
 	maxBytes        uint64
 	mu              sync.Mutex
+	budgetAvailable *sync.Cond
 	inFlight        uint64
 	inFlightBatches uint64
 }
@@ -32,32 +34,50 @@ func NewCapacityLimiter(m *metrics.Metrics, maxBytes uint64) *CapacityLimiter {
 		// through envDefault processing.
 		maxBytes = 64 << 20
 	}
-	return &CapacityLimiter{metrics: m, maxBytes: maxBytes}
+	limiter := &CapacityLimiter{metrics: m, maxBytes: maxBytes}
+	limiter.budgetAvailable = sync.NewCond(&limiter.mu)
+	return limiter
 }
 
 func (c *CapacityLimiter) Limit(in <-chan []*model.Record, out chan<- *model.FlowBatch) {
 	go c.logDroppedFlows()
 	for records := range in {
 		size := model.EstimateFlowBatchBytes(records)
-		if !c.tryReserve(size) {
-			c.drop(records, "byte_budget")
-			continue
+		parts := []model.FlowBatchPart{{Records: records, EstimatedBytes: size}}
+		if size > c.maxBytes {
+			// Keep several chunks admissible at once so a large map flush can
+			// progress through the exporter without either retaining the whole
+			// flush or dropping it as one oversized batch.
+			chunkBudget := c.maxBytes / 8
+			if chunkBudget == 0 {
+				chunkBudget = c.maxBytes
+			}
+			parts = model.SplitFlowBatchRecords(records, chunkBudget)
 		}
-		batch := model.NewFlowBatch(records, size, func() { c.release(size) })
-		select {
-		case out <- batch:
-		default:
-			batch.Release()
-			c.drop(records, "exporter_queue_full")
+		for _, part := range parts {
+			if !c.reserve(part.EstimatedBytes) {
+				c.drop(part.Records, "byte_budget")
+				continue
+			}
+			batch := model.NewFlowBatch(part.Records, part.EstimatedBytes, func() { c.release(part.EstimatedBytes) })
+			select {
+			case out <- batch:
+			default:
+				batch.Release()
+				c.drop(part.Records, "exporter_queue_full")
+			}
 		}
 	}
 }
 
-func (c *CapacityLimiter) tryReserve(size uint64) bool {
+func (c *CapacityLimiter) reserve(size uint64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if size > c.maxBytes || c.inFlight > c.maxBytes-size {
+	if size > c.maxBytes {
 		return false
+	}
+	for c.inFlight > c.maxBytes-size {
+		c.budgetAvailable.Wait()
 	}
 	c.inFlight += size
 	c.inFlightBatches++
@@ -79,6 +99,7 @@ func (c *CapacityLimiter) release(size uint64) {
 	}
 	c.metrics.FlowBatchInFlightBytes.Set(float64(c.inFlight))
 	c.metrics.FlowBatchInFlightBatches.Set(float64(c.inFlightBatches))
+	c.budgetAvailable.Broadcast()
 }
 
 func (c *CapacityLimiter) drop(records []*model.Record, reason string) {

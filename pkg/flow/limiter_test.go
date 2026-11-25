@@ -142,20 +142,21 @@ func TestCapacityLimiter_BoundsVariableSizedBatchesWithSlowExporter(t *testing.T
 	in <- small
 	in <- large
 	close(in)
-	<-done
-	close(out)
 
 	assert.Equal(t, float64(2*smallBytes), metricFloat(t, m.FlowBatchInFlightBytes))
 	assert.Equal(t, float64(2), metricFloat(t, m.FlowBatchInFlightBatches))
-	assert.Equal(t, float64(1), metricFloat(t, m.DroppedFlowBatches.WithLabelValues("byte_budget")))
+	assert.Zero(t, metricFloat(t, m.DroppedFlowBatches.WithLabelValues("byte_budget")))
 
 	// The slow exporter holds one batch while the other remains queued.
 	assert.LessOrEqual(t, metricFloat(t, m.FlowBatchInFlightBytes), float64(budget))
 	assert.Equal(t, float64(2), metricFloat(t, m.FlowBatchInFlightBatches))
 	close(releaseExporter)
+	<-done
+	close(out)
 	<-exporterDone
 	assert.Zero(t, metricFloat(t, m.FlowBatchInFlightBytes))
 	assert.Zero(t, metricFloat(t, m.FlowBatchInFlightBatches))
+	assert.Zero(t, metricFloat(t, m.DroppedFlowBatches.WithLabelValues("byte_budget")))
 }
 
 func metricFloat(t *testing.T, metric interface{ Write(*dto.Metric) error }) float64 {

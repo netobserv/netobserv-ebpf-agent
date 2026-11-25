@@ -46,9 +46,10 @@ The following environment variables are available to configure the NetObserv eBP
   that flows are kept in the accounting cache before being flushed to the collector.
 * `FLOW_BATCH_BUFFER_BYTES` (default: `67108864`, or 64 MiB). Maximum estimated memory held by
   flow batches waiting for or being processed by the exporter. The agent estimates each batch's
-  retained Go memory, including variable-sized interface and event metadata. A batch that would
-  exceed the shared budget is dropped immediately so map draining can continue. Batches larger
-  than the complete budget are also dropped. The `flow_batch_in_flight_bytes` and
+  retained Go memory, including variable-sized interface and event metadata. Map flushes larger
+  than the budget are split into smaller record groups and admitted under the shared limit. If
+  the queue and active exporter already use the available budget, remaining groups are dropped
+  so map draining can continue. The `flow_batch_in_flight_bytes` and
   `flow_batch_in_flight_batches` metrics report current queue and exporter usage;
   `dropped_flow_batches_total{reason=...}` reports rejected batches. These names use the
   configured `METRICS_PREFIX`.
@@ -129,8 +130,9 @@ so no user should need to change them.
   processing stages.
 * `EXPORTER_BUFFER_LENGTH` (default: value of `BUFFERS_LENGTH`) establishes the maximum number of
   flow batches (not individual flows) queued before the exporter. The shared byte budget also
-  limits this queue and the batch currently being exported. When either limit is reached, incoming
-  flow batches are dropped and counted. If unset, its value is the same as `BUFFERS_LENGTH`.
+  limits this queue and the batch currently being exported. Oversized map flushes are divided into
+  smaller batches; parts that cannot fit the queue or byte budget are dropped and counted. If
+  unset, its value is the same as `BUFFERS_LENGTH`.
 * `KAFKA_ASYNC` (default: `true`). Enables an agent-owned asynchronous Kafka queue. The queue is
   finite and its batches remain charged to the shared flow-batch byte budget until the synchronous
   Kafka write completes. If the queue and budget fill, new batches are dropped and counted rather

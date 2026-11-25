@@ -55,7 +55,7 @@ flowchart TD
 
 The fetcher returns the full flow map so it can join secondary per-flow maps. The atomic lookup-and-delete path also holds a temporary list of flow IDs while building that map.
 
-`MapTracer` creates full-eviction record, interface, and pointer slices, then forwards them as one batch. This preserves the `CapacityLimiter` contract: it forwards or drops a whole batch according to downstream queue capacity. Reducing those allocations requires preserving that all-or-nothing behavior across smaller chunks.
+`MapTracer` creates full-eviction record, interface, and pointer slices. The capacity limiter splits an oversized flush into bounded views over the original record slice, reserves each part against the shared byte budget, and forwards parts to the exporter. Parts that cannot fit the active budget or exporter queue are dropped and counted.
 
 The gRPC exporter converts and sends protobuf records in `GRPC_MESSAGE_MAX_FLOWS` chunks. Each chunk is consumed before converting the next, while the input `[]*model.Record` batch remains live until export completes.
 

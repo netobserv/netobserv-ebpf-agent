@@ -132,7 +132,7 @@ type Common struct {
 	// its value is the same as the BUFFERS_LENGTH property.
 	ExporterBufferLength int `env:"EXPORTER_BUFFER_LENGTH"`
 	// FlowBatchBufferBytes bounds estimated retained memory in queued and actively exported
-	// flow batches. Batches that would exceed the budget are dropped before enqueueing.
+	// flow batches. Oversized map flushes are split into smaller parts before enqueueing.
 	FlowBatchBufferBytes uint64 `env:"FLOW_BATCH_BUFFER_BYTES" envDefault:"67108864"`
 	// CacheMaxFlows specifies how many flows can be accumulated in the accounting cache before
 	// being flushed for its later export
