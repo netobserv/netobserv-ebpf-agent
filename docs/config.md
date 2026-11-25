@@ -42,7 +42,7 @@ The following environment variables are available to configure the NetObserv eBP
   collector.
 * `CACHE_MAX_FLOWS` (default: `5000`): specifies how many flows can be accumulated in the BPF flows maps between evictions.
 * `CACHE_MAX_DNS_FLOWS`: specifies how many flows can be accumulated in the BPF DNS maps between evictions.
-  It defaults to CACHE_MAX_FLOWS / 10.
+  It defaults to CACHE_MAX_FLOWS / 5.
 * `CACHE_MAX_NETWORK_EVENT_FLOWS`: specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
   It defaults to CACHE_MAX_FLOWS / possible CPUs.
 * `CACHE_MAX_PKT_DROPS_FLOWS`: specifies how many flows can be accumulated in the BPF PktDrops maps between evictions.

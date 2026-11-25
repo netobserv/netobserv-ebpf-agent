@@ -11,7 +11,7 @@ func TestNormalize(t *testing.T) {
 	cfg := &Agent{Common: Common{CacheMaxFlows: 100}}
 	cfg.Normalize(8)
 
-	assert.Equal(t, 10, cfg.CacheMaxDNSFlows)
+	assert.Equal(t, 20, cfg.CacheMaxDNSFlows)
 	assert.Equal(t, 50, cfg.CacheMaxQUICFlows)
 	// per-CPU maps: 100 / 8 CPUs
 	assert.Equal(t, 12, cfg.CacheMaxNetworkEventFlows)

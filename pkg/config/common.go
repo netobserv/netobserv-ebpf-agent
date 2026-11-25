@@ -134,7 +134,7 @@ type Common struct {
 	// CacheMaxFlows specifies how many flows can be accumulated in the BPF flows maps between evictions.
 	CacheMaxFlows int `env:"CACHE_MAX_FLOWS" envDefault:"5000"`
 	// CacheMaxDNSFlows specifies how many flows can be accumulated in the BPF DNS maps between evictions.
-	// It defaults to CacheMaxFlows / 10.
+	// It defaults to CacheMaxFlows / 5.
 	CacheMaxDNSFlows int `env:"CACHE_MAX_DNS_FLOWS"`
 	// CacheMaxNetworkEventFlows specifies how many flows can be accumulated in the BPF maps for Network Events between evictions.
 	// It defaults to CacheMaxFlows / possible CPUs.

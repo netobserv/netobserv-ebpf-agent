@@ -27,7 +27,7 @@ func (a *Agent) Normalize(cpus int) {
 
 	// Special defaults
 	if a.CacheMaxDNSFlows <= 0 {
-		a.CacheMaxDNSFlows = max(a.CacheMaxFlows/10, 1)
+		a.CacheMaxDNSFlows = max(a.CacheMaxFlows/5, 1)
 	}
 	if a.CacheMaxQUICFlows <= 0 {
 		a.CacheMaxQUICFlows = max(a.CacheMaxFlows/2, 1)
