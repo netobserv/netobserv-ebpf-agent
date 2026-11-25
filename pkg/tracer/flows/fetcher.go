@@ -85,7 +85,7 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 			return nil, fmt.Errorf("loading BPF data: %w", err)
 		}
 
-		configureFlowMaps(spec, cfg, filter)
+		configureFlowMaps(spec, cfg, filter, m)
 
 		// remove pinning from all maps
 		for _, m := range []string{
@@ -208,11 +208,13 @@ func NewFetcher(cfg *tracer.FetcherConfig, m *metrics.Metrics) (*Fetcher, error)
 		loadPinnedMapInto := func(msg, mapName string, dst **cilium.Map) error {
 			log.Infof("BPFManager mode: loading %s pinned maps", msg)
 			mPath := path.Join(pinDir, mapName)
-			m, err := cilium.LoadPinnedMap(mPath, opts)
+			mp, err := cilium.LoadPinnedMap(mPath, opts)
 			if err != nil {
 				return fmt.Errorf("failed to load %s: %w", mPath, err)
 			}
-			*dst = m
+			*dst = mp
+			// report the capacity of the maps managed by the eBPF manager
+			reportMapCapacity(m, mapName, int(mp.MaxEntries()))
 			return nil
 		}
 
@@ -984,76 +986,86 @@ func (m *Fetcher) lookupAndDeleteAggregatedFlows(met *metrics.Metrics) (map[ebpf
 		}
 		flows[id] = model.NewBpfFlowContent(baseMetrics)
 	}
-	met.FlowBufferSizeGauge.WithBufferName("flowmap").Set(float64(countMain))
+	met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameFlows).Set(float64(countMain))
 	return flows, true
 }
 
 // accumulateSecondaryMaps merges per-CPU / secondary eBPF map metrics into the main flow map.
 func (m *Fetcher) accumulateSecondaryMaps(flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent, met *metrics.Metrics) {
 	if m.config.Flows.EnableDNSTracking {
-		var dns []ebpf.FlowsBpfDnsMetrics
-		countDNS := lookupAndDeletePerCPUMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
-			for i := range dns {
-				flow.AccumulateDNS(&dns[i])
-			}
+		// Global map => use single receiver
+		var dns ebpf.FlowsBpfDnsMetrics
+		countDNS := lookupAndDeleteSecondaryMap(flows, &dns, m.objects.AggregatedFlowsDns, met, func(flow *model.BpfFlowContent) {
+			// copy receiver to not share memory slot across calls
+			entry := dns
+			flow.AccumulateDNS(&entry)
 		})
-		met.FlowBufferSizeGauge.WithBufferName("dnsmap").Set(float64(countDNS))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDNS).Set(float64(countDNS))
 	}
 	if m.config.Flows.EnablePktDrops {
+		// Per-CPU map => use slice receiver
 		var pktDrops []ebpf.FlowsBpfPktDropMetrics
-		countDrops := lookupAndDeletePerCPUMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+		countDrops := lookupAndDeleteSecondaryMap(flows, &pktDrops, m.objects.AggregatedFlowsPktDrop, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range pktDrops {
 				flow.AccumulateDrops(&pktDrops[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("pktdropsmap").Set(float64(countDrops))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameDrops).Set(float64(countDrops))
 	}
 	if m.config.Flows.EnableNetworkEventsMonitoring {
+		// Per-CPU map => use slice receiver
 		var netev []ebpf.FlowsBpfNetworkEventsMetrics
-		countNetEv := lookupAndDeletePerCPUMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+		countNetEv := lookupAndDeleteSecondaryMap(flows, &netev, m.objects.AggregatedFlowsNetworkEvents, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range netev {
 				flow.AccumulateNetworkEvents(&netev[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("networkeventsmap").Set(float64(countNetEv))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameNetEvents).Set(float64(countNetEv))
 	}
 	if m.config.Flows.EnablePktTranslationTracking {
+		// Per-CPU map => use slice receiver
 		var xlat []ebpf.FlowsBpfXlatMetrics
-		countXlat := lookupAndDeletePerCPUMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+		countXlat := lookupAndDeleteSecondaryMap(flows, &xlat, m.objects.AggregatedFlowsXlat, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range xlat {
 				flow.AccumulateXlat(&xlat[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("xlatmap").Set(float64(countXlat))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameXlat).Set(float64(countXlat))
 	}
 	if m.config.Flows.EnableRTT || m.config.Flows.EnableIPsecTracking {
+		// Per-CPU map => use slice receiver
 		var addit []ebpf.FlowsBpfAdditionalMetrics
-		countAddit := lookupAndDeletePerCPUMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+		countAddit := lookupAndDeleteSecondaryMap(flows, &addit, m.objects.AdditionalFlowMetrics, met, func(flow *model.BpfFlowContent) {
+			// skip copying receivers, because cilium does it under the hood for PerCPU
 			for i := range addit {
 				flow.AccumulateAdditional(&addit[i])
 			}
 		})
-		met.FlowBufferSizeGauge.WithBufferName("additionalmap").Set(float64(countAddit))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameAdditional).Set(float64(countAddit))
 		if m.config.Flows.EnableIPsecTracking {
 			// Correlate IPsec partials (inner xfrm 5-tuple) with on-wire ESP/NAT-T flows.
 			mergeIPsecOrphans(flows)
 		}
 	}
 	if m.config.Flows.QUICTrackingMode != 0 {
-		var quic []ebpf.FlowsBpfQuicMetrics
-		countQuic := lookupAndDeletePerCPUMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
-			for i := range quic {
-				flow.AccumulateQuic(&quic[i])
-			}
+		// Global map => use single receiver
+		var quic ebpf.FlowsBpfQuicMetrics
+		countQuic := lookupAndDeleteSecondaryMap(flows, &quic, m.objects.QuicFlows, met, func(flow *model.BpfFlowContent) {
+			// copy receiver to not share memory slot across calls
+			entry := quic
+			flow.AccumulateQuic(&entry)
 		})
-		met.FlowBufferSizeGauge.WithBufferName("quicmap").Set(float64(countQuic))
+		met.FlowBufferSizeGauge.WithBufferName(metrics.MapNameQUIC).Set(float64(countQuic))
 	}
 	met.FlowBufferSizeGauge.WithBufferName("merged-maps").Set(float64(len(flows)))
 }
 
-func lookupAndDeletePerCPUMap(
+func lookupAndDeleteSecondaryMap(
 	flows map[ebpf.FlowsBpfFlowId]model.BpfFlowContent,
-	perCPUReceiver any,
+	receiver any,
 	bpfMap *cilium.Map,
 	met *metrics.Metrics,
 	accumulator func(flow *model.BpfFlowContent),
@@ -1062,11 +1074,11 @@ func lookupAndDeletePerCPUMap(
 	ids := []ebpf.FlowsBpfFlowId{}
 
 	it := bpfMap.Iterate()
-	for it.Next(&id, perCPUReceiver) {
+	for it.Next(&id, receiver) {
 		ids = append(ids, id)
 	}
 	for _, id := range ids {
-		if err := bpfMap.LookupAndDelete(&id, perCPUReceiver); err != nil {
+		if err := bpfMap.LookupAndDelete(&id, receiver); err != nil {
 			log.WithError(err).WithField("flowId", id).Warnf("couldn't lookup/delete secondary map entry")
 			met.Errors.WithErrorName("flow-fetcher", "CannotDeleteSecondaryMetric", metrics.HighSeverity).Inc()
 			continue
@@ -1084,23 +1096,27 @@ func lookupAndDeletePerCPUMap(
 // ReadGlobalCounter reads the global counter and updates drop flows counter metrics
 func (m *Fetcher) ReadGlobalCounter(met *metrics.Metrics) {
 	var allCPUValue []uint32
-	globalCounters := map[ebpf.FlowsBpfGlobalCountersKeyT]prometheus.Counter{
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_CREATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotCreateFlowsHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_REJECT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterReject"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_ACCEPT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterAccept"),
-		ebpf.FlowsBpfGlobalCountersKeyTFILTER_NOMATCH:                      met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterNoMatch"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR:                  met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrors"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsFlowMapUpdate"),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_GOOD:                 met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsGoodEvent"),
-		ebpf.FlowsBpfGlobalCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_OVERFLOW:             met.Errors.WithErrorName("network-events", "EventsOverflow", metrics.MediumSeverity),
-		ebpf.FlowsBpfGlobalCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG:       met.Errors.WithErrorName("network-events", "CookieTooBig", metrics.MediumSeverity),
+	globalCounters := map[ebpf.FlowsBpfCountersKeyT]prometheus.Counter{
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_CREATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotCreateFlowsHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_FLOW:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateFlowsHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_DNS:             met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateDNSHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_PKT_DROP:        met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdatePktDropHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_NETWORK_EVENT:   met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateNetworkEventHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_QUIC:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateQuicHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_XLAT:            met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateXlatHashMap"),
+		ebpf.FlowsBpfCountersKeyTHASHMAP_FAIL_UPDATE_ADDITIONAL:      met.DroppedFlowsCounter.WithSourceAndReason("flow-fetcher", "CannotUpdateAdditionalHashMap"),
+		ebpf.FlowsBpfCountersKeyTFILTER_REJECT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterReject"),
+		ebpf.FlowsBpfCountersKeyTFILTER_ACCEPT:                       met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterAccept"),
+		ebpf.FlowsBpfCountersKeyTFILTER_NOMATCH:                      met.FilteredPacketsCounter.WithSourceAndReason("packet-filtering", "FilterNoMatch"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_ERR:                  met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrors"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH: met.NetworkEventsCounter.WithSourceAndReason("network-events", "NetworkEventsErrorsGroupIDMismatch"),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_OVERFLOW:             met.Errors.WithErrorName("network-events", "EventsOverflow", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_TOO_BIG:       met.Errors.WithErrorName("network-events", "CookieTooBig", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTNETWORK_EVENTS_COOKIE_MISSING:       met.Errors.WithErrorName("network-events", "CookieMissing", metrics.MediumSeverity),
+		ebpf.FlowsBpfCountersKeyTOBSERVED_INTF_MISSED:                met.Errors.WithErrorName("flow-fetcher", "MaxObservedInterfacesReached", metrics.LowSeverity),
 	}
 	zeroCounters := make([]uint32, cilium.MustPossibleCPU())
-	for key := ebpf.FlowsBpfGlobalCountersKeyT(0); key < ebpf.FlowsBpfGlobalCountersKeyTMAX_COUNTERS; key++ {
+	for key := ebpf.FlowsBpfCountersKeyT(0); key < ebpf.FlowsBpfCountersKeyTMAX_COUNTERS; key++ {
 		if err := m.objects.GlobalCounters.Lookup(key, &allCPUValue); err != nil {
 			log.WithError(err).Warnf("couldn't read global counter")
 			return

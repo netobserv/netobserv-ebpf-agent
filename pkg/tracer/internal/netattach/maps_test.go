@@ -32,7 +32,7 @@ func TestResizeMaps(t *testing.T) {
 		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
 			spec := sizingTestSpec()
 			original := spec.Copy()
-			ResizeMaps(spec, enabled, 5000, "first", "second")
+			ResizeMaps(spec, enabled, 5000, nil, "first", "second")
 			expected := uint32(1)
 			if enabled {
 				expected = 5000

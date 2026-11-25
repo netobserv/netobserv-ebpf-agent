@@ -16,39 +16,50 @@ static inline int md_already_exists(u8 network_events[MAX_NETWORK_EVENTS][MAX_EV
     return -1;
 }
 
+// returns -1 if not found, 0 otherwise (including when found but overflowing, or cookie is too big)
 static inline int lookup_and_update_existing_flow_network_events(flow_id *id, u8 md_len, u8 *user_cookie, u64 len) {
     u8 cookie[MAX_EVENT_MD];
 
     bpf_probe_read_kernel(cookie, md_len, user_cookie);
 
     network_events_metrics *extra_metrics = bpf_map_lookup_elem(&aggregated_flows_network_events, id);
-    if (extra_metrics != NULL) {
-        u8 idx = extra_metrics->network_events_idx;
-        extra_metrics->end_mono_time_ts = bpf_ktime_get_ns();
-        // Needed to check length here again to keep JIT verifier happy
-        if (idx < MAX_NETWORK_EVENTS && md_len <= MAX_EVENT_MD) {
-            int exist = md_already_exists(extra_metrics->network_events, (u8 *)cookie);
-            if (exist < 0) {
-                __builtin_memcpy(extra_metrics->network_events[idx], cookie, MAX_EVENT_MD);
-                extra_metrics->packets[idx] = 1;
-                extra_metrics->bytes[idx] = add_len_u16(0, len);
-                extra_metrics->network_events_idx = (idx + 1) % MAX_NETWORK_EVENTS;
-                if (extra_metrics->network_events_idx == 0) {
-                    increase_counter(NETWORK_EVENTS_OVERFLOW);
-                }
-            } else {
-                extra_metrics->packets[exist] = add_len_u16(extra_metrics->packets[exist], 1);
-                extra_metrics->bytes[exist] = add_len_u16(extra_metrics->bytes[exist], len);
-            }
-            return 0;
-        } else {
-            increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
+    if (extra_metrics == NULL) {
+        return -1;
+    }
+
+    // modulo MAX_NETWORK_EVENTS is purely defensive, network_events_idx is supposed to be bounded already
+    u8 next_idx = extra_metrics->network_events_idx % MAX_NETWORK_EVENTS;
+    // Needed to check length here again to keep JIT verifier happy
+    if (md_len > MAX_EVENT_MD) {
+        increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
+        return 0;
+    }
+    u64 ts = bpf_ktime_get_ns();
+    int idx = md_already_exists(extra_metrics->network_events, (u8 *)cookie);
+    bool exists = (idx >= 0);
+    if (!exists) {
+        // bump next idx
+        idx = next_idx;
+        next_idx = (next_idx + 1) % MAX_NETWORK_EVENTS;
+        if (next_idx == 0) {
+            increase_counter(NETWORK_EVENTS_OVERFLOW);
         }
     }
-    return -1;
+
+    extra_metrics->mono_time_ts = ts;
+    if (!exists) {
+        __builtin_memcpy(extra_metrics->network_events[idx], cookie, MAX_EVENT_MD);
+        extra_metrics->packets[idx] = 1;
+        extra_metrics->bytes[idx] = add_len_u16(0, len);
+        extra_metrics->network_events_idx = next_idx;
+    } else {
+        extra_metrics->packets[idx] = add_len_u16(extra_metrics->packets[idx], 1);
+        extra_metrics->bytes[idx] = add_len_u16(extra_metrics->bytes[idx], len);
+    }
+    return 0;
 }
 
-static inline int trace_network_events(struct sk_buff *skb, struct psample_metadata *md) {
+static inline void trace_network_events(struct sk_buff *skb, struct psample_metadata *md) {
     u8 dscp = 0, protocol = 0, md_len = 0;
     u16 family = 0, flags = 0, eth_protocol = 0;
     u8 *user_cookie = NULL;
@@ -60,8 +71,13 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
 
     md_len = BPF_CORE_READ(md, user_cookie_len);
     user_cookie = (u8 *)BPF_CORE_READ(md, user_cookie);
-    if (md_len == 0 || md_len > MAX_EVENT_MD || user_cookie == NULL) {
-        return -1;
+    if (md_len > MAX_EVENT_MD) {
+        increase_counter(NETWORK_EVENTS_COOKIE_TOO_BIG);
+        return;
+    }
+    if (md_len == 0 || user_cookie == NULL) {
+        increase_counter(NETWORK_EVENTS_COOKIE_MISSING);
+        return;
     }
 
     // read L2 info
@@ -94,22 +110,21 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     // check if this packet need to be filtered if filtering feature is enabled
     bool skip = check_and_apply_filter(&id, flags, 0, eth_protocol, NULL, 0);
     if (skip) {
-        return 0;
+        return;
     }
 
     len = BPF_CORE_READ(skb, len);
 
     ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
     if (ret == 0) {
-        return ret;
+        return;
     }
 
     // there is no matching flows so lets create new one and add the network event metadata
     u64 current_time = bpf_ktime_get_ns();
     network_events_metrics new_flow;
     __builtin_memset(&new_flow, 0, sizeof(new_flow));
-    new_flow.start_mono_time_ts = current_time;
-    new_flow.end_mono_time_ts = current_time;
+    new_flow.mono_time_ts = current_time;
     new_flow.eth_protocol = eth_protocol;
     new_flow.network_events_idx = 0;
     bpf_probe_read_kernel(new_flow.network_events[0], md_len, user_cookie);
@@ -118,17 +133,22 @@ static inline int trace_network_events(struct sk_buff *skb, struct psample_metad
     new_flow.network_events_idx++;
     ret = bpf_map_update_elem(&aggregated_flows_network_events, &id, &new_flow, BPF_NOEXIST);
     if (ret != 0) {
-        if (trace_messages && ret != -EEXIST) {
-            bpf_printk("error network events creating new flow %d\n", ret);
+        if (ret != -EEXIST) {
+            increase_counter(HASHMAP_FAIL_UPDATE_NETWORK_EVENT);
+            if (trace_messages) {
+                bpf_printk("error network events creating new flow %d\n", ret);
+            }
         }
         if (ret == -EEXIST) {
             ret = lookup_and_update_existing_flow_network_events(&id, md_len, user_cookie, len);
-            if (ret != 0 && trace_messages) {
-                bpf_printk("error network events failed to update an existing flow %d\n", ret);
+            if (ret != 0) {
+                increase_counter(HASHMAP_FAIL_UPDATE_NETWORK_EVENT);
+                if (trace_messages) {
+                    bpf_printk("error network events failed to update an existing flow %d\n", ret);
+                }
             }
         }
     }
-    return ret;
 }
 
 SEC("kprobe/psample_sample_packet")
@@ -147,12 +167,7 @@ int BPF_KPROBE(network_events_monitoring, struct psample_group *group, struct sk
         increase_counter(NETWORK_EVENTS_ERR_GROUPID_MISMATCH);
         return 0;
     }
-    long ret = 0;
-    if ((ret = trace_network_events(skb, md)) != 0) {
-        increase_counter(NETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS);
-        return 0;
-    }
-    increase_counter(NETWORK_EVENTS_GOOD);
+    trace_network_events(skb, md);
     return 0;
 }
 
