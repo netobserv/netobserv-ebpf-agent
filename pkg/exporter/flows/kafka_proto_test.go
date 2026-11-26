@@ -28,7 +28,7 @@ func TestProtoConversion(t *testing.T) {
 	m := metrics.NoOp()
 
 	kj := KafkaProto{Writer: &wc, Metrics: m}
-	input := make(chan []*model.Record, 11)
+	input := make(chan *model.FlowBatch, 11)
 	record := model.Record{
 		TimeFlowStart: time.Now().Add(-5 * time.Second),
 		TimeFlowEnd:   time.Now(),
@@ -54,7 +54,7 @@ func TestProtoConversion(t *testing.T) {
 		Interfaces: []model.IntfDirUdn{model.NewIntfDirUdn("veth0", 0, nil), model.NewIntfDirUdn("abcde", 1, nil)},
 	}
 
-	input <- []*model.Record{&record}
+	input <- model.NewFlowBatch([]*model.Record{&record}, 0, nil)
 	close(input)
 	kj.ExportFlows(input)
 
@@ -83,6 +83,71 @@ func TestProtoConversion(t *testing.T) {
 	assert.EqualValues(t, uint16(1), r.Flags)
 	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("127.3.2.1")), wc.messages[0].Key[0:16])
 	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("192.1.2.3")), wc.messages[0].Key[16:])
+}
+
+func TestKafkaProto_BoundsSerializedBatches(t *testing.T) {
+	writer := &writerCapturer{}
+	exporter := KafkaProto{Writer: writer, Metrics: metrics.NoOp(), BatchMessages: 2, BatchSize: 1 << 20}
+	records := make([]*model.Record, 5)
+	for i := range records {
+		records[i] = &model.Record{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}}
+	}
+	exporter.batchAndSubmit(records)
+	assert.Len(t, writer.calls, 3)
+	assert.Equal(t, []int{2, 2, 1}, writer.calls)
+	assert.Len(t, writer.messages, 5)
+}
+
+func TestKafkaProto_AsyncRetainsBatchBudgetUntilWriteCompletes(t *testing.T) {
+	writer := &blockingKafkaWriter{started: make(chan struct{}), continueWrite: make(chan struct{})}
+	exporter := KafkaProto{
+		Writer:        writer,
+		Metrics:       metrics.NoOp(),
+		Async:         true,
+		QueueCapacity: 1,
+	}
+	input := make(chan *model.FlowBatch, 1)
+	released := make(chan struct{}, 1)
+	input <- model.NewFlowBatch([]*model.Record{{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}}}, 100, func() { released <- struct{}{} })
+	close(input)
+	done := make(chan struct{})
+	go func() {
+		exporter.ExportFlows(input)
+		close(done)
+	}()
+
+	select {
+	case <-writer.started:
+	case <-time.After(time.Second):
+		t.Fatal("Kafka write did not start")
+	}
+	select {
+	case <-released:
+		t.Fatal("batch reservation released before Kafka write completed")
+	default:
+	}
+	close(writer.continueWrite)
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("batch reservation was not released after Kafka write completed")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Kafka exporter did not stop after input closed")
+	}
+}
+
+type blockingKafkaWriter struct {
+	started       chan struct{}
+	continueWrite chan struct{}
+}
+
+func (w *blockingKafkaWriter) WriteMessages(context.Context, ...kafkago.Message) error {
+	w.started <- struct{}{}
+	<-w.continueWrite
+	return nil
 }
 
 func TestIdenticalKeys(t *testing.T) {
@@ -123,9 +188,11 @@ func TestIdenticalKeys(t *testing.T) {
 
 type writerCapturer struct {
 	messages []kafkago.Message
+	calls    []int
 }
 
 func (w *writerCapturer) WriteMessages(_ context.Context, msgs ...kafkago.Message) error {
 	w.messages = append(w.messages, msgs...)
+	w.calls = append(w.calls, len(msgs))
 	return nil
 }

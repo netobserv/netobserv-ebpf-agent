@@ -361,11 +361,11 @@ func (ipf *IPFIX) sendDataRecord(_ *logrus.Entry, record *model.Record, v6 bool)
 
 // ExportFlows accepts slices of *model.Record by its input channel, converts them
 // to IPFIX Records, and submits them to the collector.
-func (ipf *IPFIX) ExportFlows(input <-chan []*model.Record) {
+func (ipf *IPFIX) ExportFlows(input <-chan *model.FlowBatch) {
 	socket := utils.GetSocket(ipf.hostIP, ipf.hostPort)
 	log := ilog.WithField("collector", socket)
-	for inputRecords := range input {
-		for _, record := range inputRecords {
+	for batch := range input {
+		for _, record := range batch.Records {
 			if record.Metrics.EthProtocol == model.IPv6Type {
 				err := ipf.sendDataRecord(log, record, true)
 				if err != nil {
@@ -378,6 +378,7 @@ func (ipf *IPFIX) ExportFlows(input <-chan []*model.Record) {
 				}
 			}
 		}
+		batch.Release()
 	}
 	ipf.exporter.CloseConnToCollector()
 }

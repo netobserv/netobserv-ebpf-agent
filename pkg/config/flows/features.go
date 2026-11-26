@@ -27,8 +27,8 @@ type Features struct {
 	// KafkaBatchSize sets the limit, in bytes, of the maximum size of a request before being sent
 	// to a partition.
 	KafkaBatchSize int `env:"KAFKA_BATCH_SIZE" envDefault:"1048576"`
-	// KafkaAsync. If it's true, the message writing process will never block. It also means that
-	// errors are ignored since the caller will not receive the returned value.
+	// KafkaAsync enables a bounded agent-owned queue for asynchronous Kafka writes. The
+	// underlying Kafka writer remains synchronous so queued batches stay within the byte budget.
 	KafkaAsync bool `env:"KAFKA_ASYNC" envDefault:"true"`
 	// KafkaCompression sets the compression codec to be used to compress messages. The accepted
 	// values are: none (default), gzip, snappy, lz4, zstd.

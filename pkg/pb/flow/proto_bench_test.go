@@ -60,10 +60,11 @@ func BenchmarkFlowToPB(b *testing.B) {
 	_ = sink
 }
 
-// BenchmarkFlowsToPB measures the full batch conversion of a realistic eviction
-// batch (many records -> chunked *Records messages), matching sendBatch.
-func BenchmarkFlowsToPB(b *testing.B) {
-	const n = 10000
+// BenchmarkForEachFlowBatchLargeEviction measures conversion of an eviction at a
+// configured map capacity. ReportAllocs records total allocations per
+// eviction, and peak-pb-records records the maximum protobuf batch length.
+func BenchmarkForEachFlowBatchLargeEviction(b *testing.B) {
+	const n = 120000
 	batch := make([]*model.Record, n)
 	for i := range batch {
 		batch[i] = benchRecord(i)
@@ -71,9 +72,14 @@ func BenchmarkFlowsToPB(b *testing.B) {
 	const maxPerMsg = 10000 // GRPCMessageMaxFlows default
 	b.ReportAllocs()
 
-	var sink []*Records
+	var sink *Record
+	peakBatchRecords := 0
 	for b.Loop() {
-		sink = FlowsToPB(batch, maxPerMsg)
+		ForEachFlowBatch(batch, maxPerMsg, func(records *Records) {
+			peakBatchRecords = max(peakBatchRecords, len(records.Entries))
+			sink = records.Entries[len(records.Entries)-1]
+		})
 	}
 	_ = sink
+	b.ReportMetric(float64(peakBatchRecords), "peak-pb-records")
 }

@@ -92,7 +92,7 @@ func BenchmarkEvictFlows(b *testing.B) {
 
 	for _, interfacesPerFlow := range []int{1, 3} {
 		b.Run(interfaceCountName(interfacesPerFlow), func(b *testing.B) {
-			for _, n := range []int{1000, 10000, 100000} {
+			for _, n := range []int{1000, 10000, 100000, 120000} {
 				b.Run(sizeName(n), func(b *testing.B) {
 					fetcher.flows = benchBuildFlowMap(n, interfacesPerFlow)
 					out := make(chan []*model.Record, 1)

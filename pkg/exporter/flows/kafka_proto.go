@@ -23,15 +23,50 @@ type kafkaWriter interface {
 // KafkaProto exports flows over Kafka, encoded as a protobuf that is understandable by the
 // Flowlogs-Pipeline collector
 type KafkaProto struct {
-	Writer  kafkaWriter
-	Metrics *metrics.Metrics
+	Writer        kafkaWriter
+	Metrics       *metrics.Metrics
+	Async         bool
+	QueueCapacity int
+	BatchMessages int
+	BatchSize     int
 }
 
-func (kp *KafkaProto) ExportFlows(input <-chan []*model.Record) {
+func (kp *KafkaProto) ExportFlows(input <-chan *model.FlowBatch) {
 	klog.Info("starting Kafka exporter")
-	for records := range input {
-		kp.batchAndSubmit(records)
+	if kp.Async {
+		kp.exportFlowsAsync(input)
+		return
 	}
+	for batch := range input {
+		kp.batchAndSubmit(batch.Records)
+		batch.Release()
+	}
+}
+
+// exportFlowsAsync keeps asynchronous handoff inside the agent's byte budget.
+// The worker uses synchronous Kafka writes and releases each batch only after
+// WriteMessages returns. The queue has a finite capacity; if it fills, reading
+// from the upstream exporter channel pauses and the shared limiter rejects new
+// batches instead of allowing Kafka's internal async queue to grow unbounded.
+func (kp *KafkaProto) exportFlowsAsync(input <-chan *model.FlowBatch) {
+	queueCapacity := kp.QueueCapacity
+	if queueCapacity < 1 {
+		queueCapacity = 1
+	}
+	queue := make(chan *model.FlowBatch, queueCapacity)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		for batch := range queue {
+			kp.batchAndSubmit(batch.Records)
+			batch.Release()
+		}
+	}()
+	for batch := range input {
+		queue <- batch
+	}
+	close(queue)
+	<-workerDone
 }
 
 func getFlowKey(record *model.Record) []byte {
@@ -48,7 +83,16 @@ func getFlowKey(record *model.Record) []byte {
 
 func (kp *KafkaProto) batchAndSubmit(records []*model.Record) {
 	klog.Debugf("sending %d records", len(records))
-	msgs := make([]kafkago.Message, 0, len(records))
+	batchMessages := kp.BatchMessages
+	if batchMessages < 1 {
+		batchMessages = len(records)
+	}
+	batchSize := kp.BatchSize
+	if batchSize < 1 {
+		batchSize = 1 << 20
+	}
+	msgs := make([]kafkago.Message, 0, min(batchMessages, len(records)))
+	messageBytes := 0
 	for _, record := range records {
 		pbBytes, err := proto.Marshal(pbflow.FlowToPB(record))
 		if err != nil {
@@ -56,15 +100,28 @@ func (kp *KafkaProto) batchAndSubmit(records []*model.Record) {
 			kp.Metrics.Errors.WithErrorName(componentKafka, "CannotEncodeMessage", metrics.HighSeverity).Inc()
 			continue
 		}
-		msgs = append(msgs, kafkago.Message{Value: pbBytes, Key: getFlowKey(record)})
+		message := kafkago.Message{Value: pbBytes, Key: getFlowKey(record)}
+		messageSize := len(pbBytes) + len(message.Key)
+		if len(msgs) > 0 && (len(msgs) >= batchMessages || messageBytes+messageSize > batchSize) {
+			kp.writeMessages(msgs)
+			msgs = msgs[:0]
+			messageBytes = 0
+		}
+		msgs = append(msgs, message)
+		messageBytes += messageSize
 	}
-
-	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
-		klog.WithError(err).Error("can't write messages into Kafka")
-		kp.Metrics.Errors.WithErrorName(componentKafka, "CannotWriteMessage", metrics.HighSeverity).Inc()
+	if len(msgs) > 0 {
+		kp.writeMessages(msgs)
 	}
 	kp.Metrics.EvictionCounter.WithSource(componentKafka).Inc()
 	kp.Metrics.EvictedFlowsCounter.WithSource(componentKafka).Add(float64(len(records)))
+}
+
+func (kp *KafkaProto) writeMessages(msgs []kafkago.Message) {
+	if err := kp.Writer.WriteMessages(context.TODO(), msgs...); err != nil {
+		klog.WithError(err).Error("can't write flow messages into Kafka")
+		kp.Metrics.Errors.WithErrorName(componentKafka, "CannotWriteMessage", metrics.HighSeverity).Inc()
+	}
 }
 
 type JSONRecord struct {
