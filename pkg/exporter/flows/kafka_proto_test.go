@@ -85,6 +85,19 @@ func TestProtoConversion(t *testing.T) {
 	assert.Equal(t, ByteArrayFromNetIP(net.ParseIP("192.1.2.3")), wc.messages[0].Key[16:])
 }
 
+func TestKafkaProto_BoundsSerializedBatches(t *testing.T) {
+	writer := &writerCapturer{}
+	exporter := KafkaProto{Writer: writer, Metrics: metrics.NoOp(), BatchMessages: 2, BatchSize: 1 << 20}
+	records := make([]*model.Record, 5)
+	for i := range records {
+		records[i] = &model.Record{Metrics: model.BpfFlowContent{FlowsBpfFlowMetrics: &ebpf.FlowsBpfFlowMetrics{}}}
+	}
+	exporter.batchAndSubmit(records)
+	assert.Len(t, writer.calls, 3)
+	assert.Equal(t, []int{2, 2, 1}, writer.calls)
+	assert.Len(t, writer.messages, 5)
+}
+
 func TestKafkaProto_AsyncRetainsBatchBudgetUntilWriteCompletes(t *testing.T) {
 	writer := &blockingKafkaWriter{started: make(chan struct{}), continueWrite: make(chan struct{})}
 	exporter := KafkaProto{
@@ -175,9 +188,11 @@ func TestIdenticalKeys(t *testing.T) {
 
 type writerCapturer struct {
 	messages []kafkago.Message
+	calls    []int
 }
 
 func (w *writerCapturer) WriteMessages(_ context.Context, msgs ...kafkago.Message) error {
 	w.messages = append(w.messages, msgs...)
+	w.calls = append(w.calls, len(msgs))
 	return nil
 }

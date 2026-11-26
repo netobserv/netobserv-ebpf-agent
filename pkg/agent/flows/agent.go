@@ -263,6 +263,8 @@ func buildKafkaExporter(cfg *config.Agent, m *metrics.Metrics) (node.TerminalFun
 	return (&exporterflows.KafkaProto{
 		Async:         cfg.Flows.KafkaAsync,
 		QueueCapacity: queueCapacity,
+		BatchMessages: cfg.Flows.KafkaBatchMessages,
+		BatchSize:     cfg.Flows.KafkaBatchSize,
 		Writer: &kafkago.Writer{
 			Addr:      kafkago.TCP(cfg.Flows.KafkaBrokers...),
 			Topic:     cfg.Flows.KafkaTopic,
